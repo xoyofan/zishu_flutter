@@ -1,0 +1,7 @@
+{
+  "appTitle": "紫薯直播",
+  "streamApiBaseUrl": "http://106.14.46.209:8080",
+  "dataApiBaseUrl": "http://106.14.46.209:8765",
+  "requestTimeoutMs": 20000,
+  "comment": "streamApiBaseUrl 指向 streaming-server；本地 sidecar 时改为 http://127.0.0.1:<port>。编译期 --dart-define=STREAM_API_URL= 优先于本文件。"
+}
