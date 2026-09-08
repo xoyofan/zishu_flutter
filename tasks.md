@@ -40,7 +40,7 @@ U1(设计token) ─► U2(app壳) ─► U3(首页) ┐            │
 | E4 | danmaku 通道：SSE 客户端（EventSource /api/{site}/danmaku/stream）+ douyu WS 直连（web_socket_channel，复用 pure_live douyu 协议）；通道矩阵 = server /api/config/playback 优先 | E2 | [x]（复验：37/37 例全绿） | 单测：SSE 帧解析 + douyu 帧解码 |
 | E6 | playback：Web 播放后端（hls.js/mpegts.js 互操作）+ WebVideoPlayerAdapter + generation fence；web/index.html 注内核；headers 含 Referer 的线路 → {base}/api/live-stream?url= | E2 | [x]（复验：29/29 例全绿，analyze 0 issue；手测项待 E7） | 纯逻辑单测 + Web 播 douyu(flv)/bilibili(hls) 手测 |
 | E5 | engine 测试补齐：真实响应 fixtures（room 三态/categories 双形态/search/danmaku 帧） | E3,E4 | [ ] | flutter test 全绿 |
-| E7 | **douyu E2E 无头验证**：本地起 streaming-server → 取在播房间（/api/rooms?site=douyu&recommend=1）→ build web（--dart-define=STREAM_API_URL=本地）→ playwright 无头进 /douyu/play/<roomId> → 断言 ①无错误态 ②video.readyState≥2 且 videoWidth>0 ③currentTime 持续增长（或 canvas 采样非黑帧）④弹幕通道收到首条消息 | E3,E4,E6 | [ ] | 工具：tool/smoke_play.mjs（playwright），结果追加到「已验证记录」 |
+| E7 | **douyu E2E 无头验证 ✅ PASS**：本地起 streaming-server → 取在播房间（/api/rooms?site=douyu&recommend=1）→ build web（--dart-define=STREAM_API_URL=本地）→ playwright 无头进 /douyu/play/<roomId> → 断言 ①无错误态 ②video.readyState≥2 且 videoWidth>0 ③currentTime 持续增长（或 canvas 采样非黑帧）④弹幕通道收到首条消息 | E3,E4,E6 | [x] | tool/e7_run.mjs 全部断言 PASS（video 1920×1080 readyState=4、currentTime 0.17→4.21s/4s、弹幕 25 条、无错误态） |
 
 ## 轨道 U — ui：复刻 SFVideoLive web（与 E 并行，吃 engine barrel）
 
@@ -62,7 +62,7 @@ U1(设计token) ─► U2(app壳) ─► U3(首页) ┐            │
 | Q1 | playwright 冒烟脚本（路由→列表→播放→弹幕→设置） | [ ] |
 | Q2 | 契约 fixtures 测试（capture 自 streaming-server 真实响应） | [~]（3/多 例） |
 | Q3 | 门禁：pub get→analyze→test→build web（G4 脚本） | [ ] |
-| Q4 | douyu 播放链路无头验证（=E7 的工具化落盘） | [ ] |
+| Q4 | douyu 播放链路无头验证（=E7 的工具化落盘） | [x] |
 
 ## 架构决议（2026-09-08 用户确认）
 - 解析在 streaming-server 定义（单一真源），客户端（engine）只是薄消费层。
@@ -78,6 +78,7 @@ U1(设计token) ─► U2(app壳) ─► U3(首页) ┐            │
 | 2026-09-08 | flutter analyze | No issues |
 | 2026-09-08 | flutter build web | OK（84.7s） |
 | 2026-09-08 | tool/check.ps1 全量门禁 | pub get/analyze/test(79)/build web(124.7s) 全绿 |
+| 2026-09-08 | tool/e7_run.mjs douyu/63136 E2E | PASS：1080p 播放 4s currentTime 连续增长 + 25 条弹幕 + 无错误态 |
 
 ## 执行模板（派发 agent 时附带）
 

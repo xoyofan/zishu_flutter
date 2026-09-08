@@ -13,6 +13,7 @@ Future<void> main() async {
   final config = await StreamApiConfig.resolve();
   streamApi = StreamApiClient(config: config);
   Get.put<StreamApiClient>(streamApi, permanent: true);
+  SiteRegistry.init(streamApi);
 
   runApp(const ZishuApp());
 }

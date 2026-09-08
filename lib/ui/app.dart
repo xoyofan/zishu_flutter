@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:get/get.dart';
 
 import 'theme/design_tokens.dart';
+import 'views/play_smoke_view.dart';
 import 'views/placeholder_view.dart';
 
 class ZishuApp extends StatelessWidget {
@@ -57,7 +58,7 @@ final List<GetPage> _routes = [
   ),
   GetPage(
     name: '/:site/play/:roomId',
-    page: () => const _PlayPlaceholder(),
+    page: () => const ZishuShell(child: PlaySmokeView()),
   ),
   GetPage(
     name: '/time',
@@ -134,26 +135,10 @@ class _SiteCategoryPlaceholder extends StatelessWidget {
   }
 }
 
-/// 占位页：播放页。
-class _PlayPlaceholder extends StatelessWidget {
-  const _PlayPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    final site = Get.parameters['site'] ?? '';
-    final roomId = Get.parameters['roomId'] ?? '';
-    return ZishuShell(
-      child: PlaceholderView(
-        title: '直播间',
-        detail: 'site=$site roomId=$roomId（U5 实现）',
-      ),
-    );
-  }
-}
-
 /// 兜底路由：
 /// 1. roomId 含 `/` 等穿段字符时 Get 的段内正则不命中，这里从 URL 手工解析出
-///    `/{site}/play/{roomId(.+)}` 再渲染播放占位（对标 router.js 的 `:id(.+)`）；
+///    `/{site}/play/{roomId(.+)}` 再渲染播放页（对标 router.js 的 `:id(.+)`），
+///    site/roomId 的解析与参数缺失提示由 PlaySmokeView 内部兜底处理；
 /// 2. 其余未匹配地址展示「未找到」。
 class _FallbackRouter extends StatelessWidget {
   const _FallbackRouter();
@@ -161,16 +146,11 @@ class _FallbackRouter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final path = ModalRoute.of(context)?.settings.name ?? '/';
-    final play = RegExp(r'^/([^/]+)/play/(.+)$').firstMatch(path);
+    final play = RegExp(r'^/([^/]+)/play/(.+)$').hasMatch(path);
 
     final Widget child;
-    if (play != null) {
-      final site = Uri.decodeComponent(play[1] ?? '');
-      final roomId = Uri.decodeComponent(play[2] ?? '');
-      child = PlaceholderView(
-        title: '直播间',
-        detail: 'site=$site roomId=$roomId（U5 实现，深链兜底）',
-      );
+    if (play) {
+      child = const PlaySmokeView();
     } else {
       child = PlaceholderView(
         title: '未找到',

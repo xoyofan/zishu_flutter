@@ -149,6 +149,8 @@ class WebVideoSurfaceImpl implements WebVideoSurface {
     final el = web.HTMLVideoElement();
     el.controls = false;
     el.playsInline = true;
+    // E7 冒烟脚本（tool/smoke_play.mjs）以此 id 定位 <video> 做断言。
+    el.id = 'smoke-video';
     el.setAttribute('playsinline', '');
     el.setAttribute('webkit-playsinline', '');
     el.setAttribute('disablepictureinpicture', '');
