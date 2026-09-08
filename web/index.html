@@ -20,6 +20,20 @@
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
   <meta name="description" content="A new Flutter project.">
 
+  <!--
+    播放内核注入（E6）：与 lib/engine/playback/js_media_loader.dart 的兜底重注入一致。
+    - hls.js 1.x（对齐 SFVideoLive web 依赖 ^1.6.2）：HLS(m3u8) 播放内核，挂载 window.Hls
+    - mpegts.js 1.x（对齐 SFVideoLive web 依赖 ^1.8.2，flv.js 的维护分支）：
+      FLV(斗鱼/虎牙等)与 IPTV TS 直链内核，挂载 window.mpegts
+    CDN 使用 jsDelivr；如需完全离线，可将两个 min.js 落到本地并改为相对路径引用。
+  -->
+  <script defer src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mpegts.js@1/dist/mpegts.min.js"></script>
+
+  <!-- 直连 CDN（未走 /api/live-stream 代理）时浏览器默认带本站 Referer 会导致部分
+       平台防盗链拒绝；与 SFVideoLive web/index.html 一致禁用自动 Referer。 -->
+  <meta name="referrer" content="no-referrer">
+
   <!-- iOS meta tags & icons -->
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
