@@ -7,7 +7,7 @@ param(
     [string] $StreamApiUrl = ''
 )
 
-# Build build/web (release by default, mirroring "flutter build web").
+# Build the isolated legacy Web UI into build/web (release by default).
 
 $ErrorActionPreference = 'Stop'
 
@@ -26,7 +26,7 @@ if (-not (Test-Path -LiteralPath $Flutter)) {
     exit 1
 }
 
-$buildArgs = @('build', 'web', '--release')
+$buildArgs = @('build', 'web', '--release', '--target', 'lib/legacy/main_web.dart')
 if ($StreamApiUrl) {
     $buildArgs += "--dart-define=STREAM_API_URL=$StreamApiUrl"
 }

@@ -3,7 +3,7 @@
 > 规则：状态 `[x]` 完成 / `[~]` 进行中 / `[ ]` 未开始 / `[!]` 阻塞。
 > 每张卡限制修改范围；完成即更新本文件状态并写验证结果。
 > 并行纪律：①同一时刻只有一个任务改 `pubspec.yaml` / `lib/main.dart` / `tasks.md`；
-> ②`ui/` 只许 import `engine/engine.dart` barrel，禁止深入 engine 内部；
+> ②新 UI 位于 `src/apps/windows/`，通过 `src/shared/` 公共接口与平台 adapter 访问能力；禁止依赖 `legacy/`；
 > ③每张卡自带验证命令，验证不过不得标记完成。
 
 ## 当前里程碑：M0 骨架 → M1 数据闭环 → M2 播放 → M3 核心闭环 UI
@@ -24,7 +24,7 @@ U1(设计token) ─► U2(app壳) ─► U3(首页) ┐            │
 
 | 卡 | 内容 | 状态 | 验证 |
 |---|---|---|---|
-| G1 | flutter create（web 平台）+ 目录骨架 engine/ui | [x] | pub get ✓ |
+| G1 | flutter create（Web + Windows 平台）+ `app/core/platforms/apps` 分层骨架 | [x] | pub get ✓ |
 | G2 | tasks.md 看板 | [x] | — |
 | G3 | git init + 首提交 + GitHub private 仓库推送 | [x] | trianglestrip/zishu_flutter master 已推送 ✓ |
 | G4 | tool/build-web.ps1 + tool/check.ps1（pub get→analyze→test→build web 一键门禁） | [x]（实测：四步门禁全绿，失败传播正确） |
@@ -67,7 +67,7 @@ U1(设计token) ─► U2(app壳) ─► U3(首页) ┐            │
 ## 架构决议（2026-09-08 用户确认）
 - 解析在 streaming-server 定义（单一真源），客户端（engine）只是薄消费层。
 - **验证策略：先拿 douyu 一个直播间在 Web 跑通「有画面」，playwright 无头验证（=E7）**；通过后此解析链路视为成立。
-- **engine 封装为库的决议**：`lib/engine/` 本身就是库的形状——contracts+remote+danmaku 为纯 Dart（HTTP 消费，天然三端通用），playback 按端换后端（Web=hls.js/mpegts.js 互操作；Windows/Android=media_kit/fvp，接口已按 UnifiedPlayer 语义留好）。后续把 engine 抽成独立 package 供 app/桌面/移动三端复用。
+- **核心封装决议**：新代码使用 `lib/src/shared/` 保存三端共享模型、解析接口与用例，`lib/src/platforms/` 保存 Web/Windows/Android adapters，`lib/src/apps/` 保存三端 Flutter UI；旧 contracts/remote/sites、弹幕和 JS Web 播放统一归档到 `lib/legacy/`。客户端播放核心为 Flutter + media-kit，解析核心保持纯 Dart。
 
 ## 已验证记录（追加式）
 

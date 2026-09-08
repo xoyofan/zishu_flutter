@@ -4,7 +4,7 @@ param(
     [string] $Flutter = 'D:\flutter-sdk\flutter-3.47.0\flutter\bin\flutter.bat'
 )
 
-# One-shot gate: pub get -> analyze -> test -> build web.
+# One-shot gate: pub get -> analyze -> test -> build legacy web.
 # Any step failing stops the run immediately with that step's exit code.
 
 $ErrorActionPreference = 'Stop'
@@ -29,7 +29,7 @@ $steps = @(
     @{ Title = 'flutter pub get';   Args = @('pub', 'get') },
     @{ Title = 'flutter analyze';   Args = @('analyze') },
     @{ Title = 'flutter test';      Args = @('test') },
-    @{ Title = 'flutter build web'; Args = @('build', 'web') }
+    @{ Title = 'flutter build web (legacy UI)'; Args = @('build', 'web', '--target', 'lib/legacy/main_web.dart') }
 )
 
 $failed = $false
@@ -67,5 +67,5 @@ Pop-Location
 if ($failed) { exit $exitCode }
 
 Write-Host ''
-Write-Host 'check: all gates passed (pub get / analyze / test / build web)' -ForegroundColor Green
+Write-Host 'check: all gates passed (pub get / analyze / test / legacy web build)' -ForegroundColor Green
 exit 0

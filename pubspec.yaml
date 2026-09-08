@@ -1,5 +1,5 @@
 name: zishu_flutter
-description: "紫薯直播 Flutter 客户端：engine（解析+播放+弹幕数据面）与 ui（复刻 SFVideoLive web）双 package。"
+description: "紫薯直播 Flutter 客户端：核心解析、平台适配与 Windows/Web UI 宿主分层。"
 publish_to: 'none'
 version: 0.1.0+1
 
@@ -15,7 +15,9 @@ dependencies:
   video_player: ^2.9.2
   web_socket_channel: ^3.0.1
   web: ^1.1.1
-
+  media_kit: ^1.2.6
+  media_kit_video: ^2.0.1
+  media_kit_libs_windows_video: ^1.0.11
 dev_dependencies:
   flutter_test:
     sdk: flutter

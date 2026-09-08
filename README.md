@@ -1,42 +1,32 @@
 # zishu_flutter（紫薯直播 Flutter 客户端）
 
-全新 Flutter 工程（Web 平台优先），对齐 `D:\SFVideoLive\web`（Vue3 + Element Plus）的样式与交互；
-解析能力复用 SFVideoLive 的 streaming-server（HTTP API，CORS 已开）。
+目标平台为 Web、Windows、Android，客户端技术核心是 **Flutter + media-kit**。
 
-## 结构约定（双 package）
+- Web：Flutter UI 通过 `streaming-server` HTTP API 使用解析能力。
+- Windows / Android：可直接调用纯 Dart 解析源码。
+- 三端共享业务模型、解析接口和用例；解析源码不依赖 Flutter Widget、media-kit 或具体平台。
+- 旧实现已统一归档到 `lib/legacy/`，新功能只在 `lib/src/` 开发。
 
-```
-lib/
-├─ engine/        # 第一部分：解析 + 播放 + 弹幕数据面（不 import ui）
-│  ├─ contracts/  # streaming-server 契约模型（对齐 SFVideoLive/contracts/*.schema.json）
-│  ├─ remote/     # HTTP 客户端（Dio）+ 弹幕通道
-│  ├─ sites/      # LiveSite/LiveDanmaku 契约（M1 自 pure_live 移植）
-│  ├─ playback/   # 播放器抽象 + Web 适配器（M2）
-│  ├─ danmaku/    # SSE/WS 通道 + 渲染调度（M2/M3）
-│  └─ engine.dart # barrel：ui 只许 import 这个
-└─ ui/            # 第二部分：复刻 web 视觉与交互（只 import engine.dart）
-   ├─ theme/      # design_tokens（#f3d04e 主色、暗色默认、断点 640/768/1024/1366/1920）
-   ├─ views/  widgets/  controllers/
-   └─ ui.dart
-```
+详细目录和依赖规则见 [`docs/architecture.md`](docs/architecture.md)。
 
 ## 运行
 
-```bash
-# 需 Flutter 3.47.0（本机 D:\flutter-sdk\flutter-3.47.0\flutter）
-flutter pub get
-flutter run -d chrome            # 开发
-flutter build web                # 发布产物 build/web
+```powershell
+# 新 Windows 客户端
+flutter run -d windows -t lib/main.dart
 
-# 指定解析服务（可选，默认读 assets/config/config.json）
-flutter run --dart-define=STREAM_API_URL=http://127.0.0.1:8766
+# 旧 Web 回归
+flutter run -d chrome -t lib/legacy/main_web.dart
+flutter build web -t lib/legacy/main_web.dart
 ```
 
-## 契约来源
+## 验证
 
-- `SFVideoLive/contracts/room.schema.json`、`browse.schema.json`、`search.schema.json`
-- 端点参数对齐 `SFVideoLive/web/src/api/{room,browse,search}.ts`
-- 设计 token 对齐 `SFVideoLive/web/src/styles/{theme,main}.css`
+```powershell
+flutter analyze
+flutter test
+.\tool\build-web.ps1
+```
 
 ## 许可
 
