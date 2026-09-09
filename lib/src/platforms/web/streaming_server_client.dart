@@ -20,6 +20,48 @@ class StreamingServerClient {
   final String baseUrl;
   final Dio _dio;
 
+  Future<List<LiveRoomCandidate>> fetchRecommendedRooms({
+    String site = 'douyu',
+    int page = 1,
+  }) async {
+    final response = await _dio.get<dynamic>(
+      '/api/rooms',
+      queryParameters: {'site': site, 'recommend': '1', 'page': page},
+    );
+    final json = _jsonObject(response.data);
+    final list = json['list'];
+    if (json['ok'] != true || list is! List) return const [];
+    return list
+        .whereType<Map>()
+        .map(
+          (item) => LiveRoomCandidate.fromJson(Map<String, dynamic>.from(item)),
+        )
+        .where((room) => room.isLive && room.roomId.isNotEmpty)
+        .toList(growable: false);
+  }
+
+  /// 从推荐列表逐个验证，返回当前确实在播且带播放地址的房间。
+  Future<ResolvedLiveRoom> resolveRecommendedLiveRoom({
+    String site = 'douyu',
+    int maxAttempts = 8,
+  }) async {
+    final rooms = await fetchRecommendedRooms(site: site);
+    Object? lastError;
+    for (final room in rooms.take(maxAttempts)) {
+      try {
+        final resolved = await resolveRoom(site: site, roomId: room.roomId);
+        if (resolved.ok && resolved.isLive && resolved.playUrl.isNotEmpty) {
+          return resolved;
+        }
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw StateError(
+      lastError == null ? '推荐列表中没有可播放的在播房间' : '未找到可播放房间：$lastError',
+    );
+  }
+
   Future<ResolvedLiveRoom> resolveRoom({
     required String site,
     required String roomId,
@@ -33,14 +75,41 @@ class StreamingServerClient {
         'mode': 'lazy',
       },
     );
-    final raw = response.data;
-    final json = raw is String
-        ? jsonDecode(raw) as Map<String, dynamic>
-        : Map<String, dynamic>.from(raw as Map);
+    final json = _jsonObject(response.data);
     return ResolvedLiveRoom.fromJson(json);
   }
 
+  Map<String, dynamic> _jsonObject(dynamic raw) {
+    if (raw is String) {
+      return jsonDecode(raw) as Map<String, dynamic>;
+    }
+    return Map<String, dynamic>.from(raw as Map);
+  }
+
   void dispose() => _dio.close();
+}
+
+class LiveRoomCandidate {
+  const LiveRoomCandidate({
+    required this.roomId,
+    required this.title,
+    required this.anchorName,
+    required this.isLive,
+  });
+
+  final String roomId;
+  final String title;
+  final String anchorName;
+  final bool isLive;
+
+  factory LiveRoomCandidate.fromJson(Map<String, dynamic> json) {
+    return LiveRoomCandidate(
+      roomId: json['roomId']?.toString() ?? '',
+      title: json['title']?.toString() ?? '',
+      anchorName: json['nickname']?.toString() ?? '',
+      isLive: json['status'] == true,
+    );
+  }
 }
 
 class ResolvedLiveRoom {

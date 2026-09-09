@@ -38,7 +38,7 @@ class DouyuPlayerPage extends StatefulWidget {
 }
 
 class _DouyuPlayerPageState extends State<DouyuPlayerPage> {
-  static const _initialRoomId = '36252';
+  static const _fallbackRoomId = '24422';
 
   late final Player _player;
   late final VideoController _videoController;
@@ -57,12 +57,32 @@ class _DouyuPlayerPageState extends State<DouyuPlayerPage> {
     _player = Player();
     _videoController = VideoController(_player);
     _resolver = StreamingServerClient();
-    _roomController = TextEditingController(text: _initialRoomId);
+    _roomController = TextEditingController(text: _fallbackRoomId);
     _errorSubscription = _player.stream.error.listen((error) {
       if (!mounted || error.isEmpty) return;
       setState(() => _status = '播放错误：$error');
     });
-    unawaited(_loadRoom());
+    unawaited(_loadRecommendedRoom());
+  }
+
+  Future<void> _loadRecommendedRoom() async {
+    if (_loading) return;
+    setState(() {
+      _loading = true;
+      _status = '正在寻找当前在播的斗鱼房间…';
+    });
+    try {
+      final room = await _resolver.resolveRecommendedLiveRoom();
+      _roomController.text = room.roomId;
+      await _playResolvedRoom(room);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _status = '自动选房失败，正在尝试 $_fallbackRoomId：$error');
+      _roomController.text = _fallbackRoomId;
+      await _resolveAndPlay(_fallbackRoomId);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Future<void> _loadRoom() async {
@@ -73,24 +93,31 @@ class _DouyuPlayerPageState extends State<DouyuPlayerPage> {
       _status = '正在解析斗鱼房间 $roomId…';
     });
     try {
-      final room = await _resolver.resolveRoom(site: 'douyu', roomId: roomId);
-      if (!room.ok) throw StateError(room.error.isEmpty ? '解析失败' : room.error);
-      if (!room.isLive) throw StateError('当前房间未开播');
-      if (room.playUrl.isEmpty) throw StateError('解析结果没有可播放地址');
-
-      await _player.open(Media(room.playUrl), play: true);
-      if (!mounted) return;
-      setState(() {
-        _title = room.title.isEmpty ? '斗鱼房间 ${room.roomId}' : room.title;
-        _anchor = room.anchorName;
-        _status = 'media-kit 正在播放 HLS';
-      });
+      await _resolveAndPlay(roomId);
     } catch (error) {
       if (!mounted) return;
       setState(() => _status = '加载失败：$error');
     } finally {
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  Future<void> _resolveAndPlay(String roomId) async {
+    final room = await _resolver.resolveRoom(site: 'douyu', roomId: roomId);
+    if (!room.ok) throw StateError(room.error.isEmpty ? '解析失败' : room.error);
+    if (!room.isLive) throw StateError('当前房间未开播');
+    if (room.playUrl.isEmpty) throw StateError('解析结果没有可播放地址');
+    await _playResolvedRoom(room);
+  }
+
+  Future<void> _playResolvedRoom(ResolvedLiveRoom room) async {
+    await _player.open(Media(room.playUrl), play: true);
+    if (!mounted) return;
+    setState(() {
+      _title = room.title.isEmpty ? '斗鱼房间 ${room.roomId}' : room.title;
+      _anchor = room.anchorName;
+      _status = '房间 ${room.roomId} · media-kit 正在播放 HLS';
+    });
   }
 
   @override
