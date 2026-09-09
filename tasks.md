@@ -1,90 +1,108 @@
 # tasks.md — zishu_flutter 并行执行看板
 
-> 规则：状态 `[x]` 完成 / `[~]` 进行中 / `[ ]` 未开始 / `[!]` 阻塞。
-> 每张卡限制修改范围；完成即更新本文件状态并写验证结果。
-> 并行纪律：①同一时刻只有一个任务改 `pubspec.yaml` / `lib/main.dart` / `tasks.md`；
-> ②新 UI 位于 `src/apps/windows/`，通过 `src/shared/` 公共接口与平台 adapter 访问能力；禁止依赖 `legacy/`；
-> ③每张卡自带验证命令，验证不过不得标记完成。
+> 规则:状态 `[x]` 完成 / `[~]` 进行中 / `[ ]` 未开始 / `[!]` 阻塞。
+> 完成即更新本文件状态并写验证结果;验证不过不得标记完成。
 
-## 当前里程碑：M0 骨架 → M1 数据闭环 → M2 播放 → M3 核心闭环 UI
+## 并行分工(2026-09-09 起,双会话)
 
-依赖 DAG：
-
-```
-G1(G 工程) ────────────────► G3(git/远端)
-E1(契约模型) ─► E2(API client) ─► E3(RemoteSite+LiveSite 移植) ─► E5(engine 测试)
-                          ├──► E4(弹幕通道 SSE/WS) ──┐
-E2 ─► E6(播放适配器+JS内核+代理) ────────────────────┼──► U5(播放页)
-U1(设计token) ─► U2(app壳) ─► U3(首页) ┐            │
-                          ├──► U6(分类页) ├─► U7(设置) ─► Q1(冒烟)
-                          └──► U4(控制器) ┘
-```
-
-## 轨道 G — 工程与基建（串行基座，改动共享文件）
-
-| 卡 | 内容 | 状态 | 验证 |
+| 会话 | 轨道 | 独占修改范围 | 验证命令 |
 |---|---|---|---|
-| G1 | flutter create（Web + Windows 平台）+ `app/core/platforms/apps` 分层骨架 | [x] | pub get ✓ |
-| G2 | tasks.md 看板 | [x] | — |
-| G3 | git init + 首提交 + GitHub private 仓库推送 | [x] | trianglestrip/zishu_flutter master 已推送 ✓ |
-| G4 | tool/build-web.ps1 + tool/check.ps1（pub get→analyze→test→build web 一键门禁） | [x]（实测：四步门禁全绿，失败传播正确） |
-| G5 | CI（GitHub Actions：analyze/test/build web） | [ ] | CI 绿（后置） |
+| UI 会话 | U 轨 + 接线 | `lib/src/**`、`lib/main.dart`、根 `pubspec.yaml`、`docs/**` | `flutter analyze` / `flutter test` / `flutter build windows --debug -t lib/main.dart`(仓库根) |
+| 解析会话 | P 轨 | `packages/live_parser/**`(含该包自身 pubspec) | `cd packages/live_parser && dart analyze && dart test` |
 
-## 轨道 E — engine：解析 + 播放 + 弹幕（可与 U 全并行）
+- 两个范围**零交集**;`tasks.md` 更新由 UI 会话统一维护(解析会话把结果写在回复里带回)。
+- 解析会话必须保持 `dart analyze` 随时全绿,否则 UI 会话的 `flutter analyze` 会被连坐。
+- 根 `pubspec.yaml` 的 `live_parser` path 依赖已由 UI 会话接好,解析会话无需且禁改。
 
-| 卡 | 内容 | 依赖 | 状态 | 验证 |
-|---|---|---|---|---|
-| E1 | contracts：room/browse/search 模型（手写 fromJson，对齐 schema） | — | [x] | test/contracts_test.dart 3 例 ✓ |
-| E2 | remote/stream_api_client.dart（Dio；端点对齐 web/src/api/*.ts；dart-define+config.json 双配置） | E1 | [x] | analyze ✓（build web ✓） |
-| E3 | 从 pure_live 移植 LiveSite/LiveDanmaku 契约 + LiveRoom 等模型（去 GetX）→ remote_site_source implements LiveSite（缓存 RoomPayload 供 getPlayQualites/getPlayUrls）→ site 注册（douyu/huya/bilibili/douyin/kuaishou/twitch/yy/soop/youtube/xhs，iptv 按 server 能力） | E1,E2 | [x]（复验：13/13 例全绿） | flutter test：fixture 驱动的 source 单测 |
-| E4 | danmaku 通道：SSE 客户端（EventSource /api/{site}/danmaku/stream）+ douyu WS 直连（web_socket_channel，复用 pure_live douyu 协议）；通道矩阵 = server /api/config/playback 优先 | E2 | [x]（复验：37/37 例全绿） | 单测：SSE 帧解析 + douyu 帧解码 |
-| E6 | playback：Web 播放后端（hls.js/mpegts.js 互操作）+ WebVideoPlayerAdapter + generation fence；web/index.html 注内核；headers 含 Referer 的线路 → {base}/api/live-stream?url= | E2 | [x]（复验：29/29 例全绿，analyze 0 issue；手测项待 E7） | 纯逻辑单测 + Web 播 douyu(flv)/bilibili(hls) 手测 |
-| E5 | engine 测试补齐：真实响应 fixtures（room 三态/categories 双形态/search/danmaku 帧） | E3,E4 | [ ] | flutter test 全绿 |
-| E7 | **douyu E2E 无头验证 ✅ PASS**：本地起 streaming-server → 取在播房间（/api/rooms?site=douyu&recommend=1）→ build web（--dart-define=STREAM_API_URL=本地）→ playwright 无头进 /douyu/play/<roomId> → 断言 ①无错误态 ②video.readyState≥2 且 videoWidth>0 ③currentTime 持续增长（或 canvas 采样非黑帧）④弹幕通道收到首条消息 | E3,E4,E6 | [x] | tool/e7_run.mjs 全部断言 PASS（video 1920×1080 readyState=4、currentTime 0.17→4.21s/4s、弹幕 25 条、无错误态） |
+## 当前里程碑:M0(架构冻结)→ M1(Windows 斗鱼最小闭环)→ M2(斗鱼完整闭环)
 
-## 轨道 U — ui：复刻 SFVideoLive web（与 E 并行，吃 engine barrel）
+对应 `docs/implementation-plan.md` §9;Gate 验收见 §8.3。
+
+## 解析轨 P(Parser)
 
 | 卡 | 内容 | 依赖 | 状态 | 验证 |
 |---|---|---|---|---|
-| U1 | theme/design_tokens.dart（#f3d04e、平台品牌色、fluent-radius、断点 640/768/1024/1366/1920、暗色默认） | — | [x] | analyze ✓ |
-| U2 | app.dart：GetMaterialApp + 70px NavigationRail + 路由表（/all、/all/category/:key、/:site/play/:id、/settings）+ URL 同步 | U1 | [x]（70px 导航壳+8 条路由+穿段深链兜底；前进后退手测并入 Q1） | analyze ✓；浏览器前进后退手测 |
-| U3 | views/home_view + widgets/room_card：平台筛选 chips + 房间网格 + 分页 + 平台品牌角标（对标 HomeView.vue） | U2,E3 | [ ] | 冒烟：起 streaming-server 后卡片>0 |
-| U4 | controllers：home/play/category/settings GetXController（对标 usePlayer/useDanmaku 语义：generation fence、切房取消） | U2,E3 | [ ] | 控制器单测（fake client） |
-| U5 | views/play_view + player_panel/player_controls/play_side_panel/danmaku_overlay（328px 侧栏、画质/线路切换、弹幕 canvas） | U4,E4,E6 | [ ] | 手测：切档/切线/弹幕滚动 |
-| U6 | views/category_view：分组 chips + 分类房间网格（对标 CategoryRoomsView.vue） | U2,E3 | [ ] | 冒烟 |
-| U7 | views/settings_view 最小集：主题/弹幕开关/服务器地址（持久化→shared_preferences） | U2 | [ ] | 改配置后请求生效 |
-| U8 | 错误/空态组件 + toast（对标 useToast） | U2 | [ ] | 断网场景降级提示 |
+| P0 | package 骨架 + 契约层:models(RoomPayload/StreamQuality/StreamLine/RoomSummary/CategoryResult/SearchResult/SiteCapabilities)+ contracts(RoomResolver/BrowseRepository/SearchRepository/SiteRegistry)+ ParserHttp(可注入 client) | — | [x] 契约层已建(UI 会话产出,解析会话只读续建) | `dart analyze` 0 issue ✓ |
+| P1 | 斗鱼完整链路:URL/房间号归一、betard、getEncryption 白名单 md5 auth(TTL 缓存)、getH5PlayV1 多 CDN 多画质、hlsH5Preview、三态判定、registry 注册 | P0 | [ ] | dart test(fixtures) |
+| P2 | 斗鱼 browse:cate/list 分类 + rkc/directory/mixList 首页/分类房间列表 | P1 | [ ] | dart test |
+| P3 | 斗鱼 search:searchUser + searchShow | P1 | [ ] | dart test |
+| P4 | cross browse + catalog(全平台聚合首页数据) | P1-P3 | [ ] | dart test |
+| P5 | IPTV(M3U 解析,验证非直播站点型数据源) | P0 | [ ] | dart test |
+| P6 | 抖音(a_bogus/SM3、Cookie、protobuf) | P1 | [ ] | dart test |
+| P7 | 长尾平台:虎牙、B站、YY、Twitch、快手、SOOP、YouTube、小红书 | P4 | [ ] | dart test + 平台完成定义(implementation-plan 5.2) |
+| P8 | Dart streaming-server(live_server:shelf + SSE/WS,snake_case 兼容层) | P4 | [ ] | dart test + flutter build web |
+| P9 | 弹幕协议 codec 与会话(douyu WS 等) | P1 | [ ] | dart test |
 
-## 轨道 Q — 验证（每卡完成即跑）
+> P1-P3 即"Windows 第一阶段平台"的斗鱼部分(implementation-plan 5.1);虎牙/B站随 P7,但 M3 里程碑要求其与 P1 同等主链路。
 
-| 卡 | 内容 | 状态 |
-|---|---|---|
-| Q1 | playwright 冒烟脚本（路由→列表→播放→弹幕→设置） | [ ] |
-| Q2 | 契约 fixtures 测试（capture 自 streaming-server 真实响应） | [~]（3/多 例） |
-| Q3 | 门禁：pub get→analyze→test→build web（G4 脚本） | [ ] |
-| Q4 | douyu 播放链路无头验证（=E7 的工具化落盘） | [x] |
+## UI 轨 U(UI)
 
-## 架构决议（2026-09-08 用户确认）
-- 解析在 streaming-server 定义（单一真源），客户端（engine）只是薄消费层。
-- **验证策略：先拿 douyu 一个直播间在 Web 跑通「有画面」，playwright 无头验证（=E7）**；通过后此解析链路视为成立。
-- **核心封装决议**：新代码使用 `lib/src/shared/` 保存三端共享模型、解析接口与用例，`lib/src/platforms/` 保存 Web/Windows/Android adapters，`lib/src/apps/` 保存三端 Flutter UI；旧 contracts/remote/sites、弹幕和 JS Web 播放统一归档到 `lib/legacy/`。客户端播放核心为 Flutter + media-kit，解析核心保持纯 Dart。
+| 卡 | 内容 | 依赖 | 状态 | 验证 |
+|---|---|---|---|---|
+| U0 | design tokens + ZishuTheme:`ZishuTokens` ThemeExtension(深/浅)+ AppSpacing/AppRadius/AppTypography/AppBreakpoints/AppMotion + PlatformBrandCatalog | — | [x] | analyze 0 issue |
+| U1 | AppShell:44px 顶部导航、平台 tabs、右侧工具区,go_router 导航(context.go) | U0 | [x] | analyze;nav-* 锚点测试进行中 |
+| U2 | RoomCard + RoomGrid 自适应网格(CachedNetworkImage + tokens 化)+ fixture 数据源 | U1 | [x] | analyze;room-card 锚点测试进行中 |
+| U3 | 分类页(分组 tabs + 子分类网格 + 分类房间分页) | U2 | [x] category_view 已建(测试进行中) | 冒烟 |
+| U4 | Riverpod 接线:BrowseController(分页/refresh)/PlayController(generation fence)/SearchController(防抖+直达)/Follow/Settings/Anchor/Timeline 全部 AsyncNotifier 化 | U2 | [x] | 各 feature provider 已落 |
+| U5 | 播放页:LivePlayer 抽象 + MediaKitLivePlayer + 四态舞台(解析中/失败/fixture 占位/真实画面)+ 控制条 + 画质/线路条 + 328px 侧栏 | U4 | [x] 布局与编排完成;真实播放接线在 G1 | 手测:切档/切线(G1 后) |
+| U6 | 弹幕 overlay + 聊天侧栏(静态样例已入侧栏;真弹幕等 P9/G2) | U4 | [~] fixture 版 | 手测 |
+| U7 | 关注页(三密度/批量/特别关注)+ 设置页(shared_preferences 持久化) | U4 | [x] | follow/settings 锚点测试进行中 |
+| U8 | 搜索(防抖/直达/键盘)+ 主播页 + 时间线 + ErrorView/EmptyView/AsyncValueView 通用组件 | U4 | [x] | search/anchor/timeline 锚点测试进行中 |
+| U9 | 响应式 Web/Android 适配(底部导航、窄屏布局、平台 tab icon-only 收缩) | U1-U8 | [~] 部分落地:顶导航收缩(<640 仅 Logo 图标 + 隐藏「分类」,平台 tab <768 仅色点)、播放页 <768 侧栏堆叠、控制条窄屏/大字体收缩已完成;底部导航、chips Wrap、横屏 sheet 仍为 W12 占位 skip | W9/W11 已转绿;W12 仍 skip |
 
-## 已验证记录（追加式）
+## 测试轨 W(workflows)
+
+平台 workflow(参数化)+ 全局 UI workflow + 移动设备矩阵的并行执行看板独立维护在 `tasks-workflows.md`;W0(锚点+基线测试)进行中,批次 1-3 待派发。
+
+## 接线(Gate)
+
+| 卡 | 内容 | 依赖 | 状态 | 验证 |
+|---|---|---|---|---|
+| G1 | Windows direct gateway:DirectLiveParserGateway(BrowseSource/RoomSource 的 live_parser 实现)替换 fixture;首页斗鱼卡片→点击→media-kit 播放→切画质/线路 | P1,U4,U5 | [ ] | 断开远程 server 后 Windows 浏览+播放斗鱼(implementation-plan M1 验收) |
+| G2 | 斗鱼搜索/弹幕接入 UI | P3,P9,U6 | [ ] | Windows 斗鱼功能闭环(M2) |
+
+## 技术栈决议(2026-09-09 用户确认)
+
+- 立即采用:Material 3、ThemeExtension 视觉系统、Riverpod、go_router、cached_network_image(dio/media-kit 沿用)。
+- 按里程碑引入:Drift(M4)、shared_preferences(U7)、window_manager/file_picker(M4)、logging facade(M2)、Widgetbook 暂缓、golden test 样式稳定后。
+- **freezed/json_serializable 不进 `live_parser`**:契约模型手写(纯 Dart 包、三端单一真源、避免 build_runner 链路);UI 侧 union 状态由 Riverpod `AsyncValue` 承载,本地实体 M4 引 Drift 时再评估。
+- 详见 `docs/implementation-plan.md` §7.0。
+
+## 架构决议(2026-09-08 用户确认)
+
+- 解析在 streaming-server 定义(单一真源)的历史决议已被 **live_parser 直连架构**取代:Windows/Android 直连纯 Dart 解析 package,Web 经 Dart streaming-server;旧 Node server 仅迁移期 fallback。
+- 新代码使用 `lib/src/shared/`(共享模型/接口/用例)、`lib/src/platforms/`(adapter)、`lib/src/apps/`(三端 UI);旧代码归档 `lib/legacy/`,禁止反向依赖。
+
+## 已验证记录(追加式)
 
 | 日期 | 命令 | 结果 |
 |---|---|---|
-| 2026-09-08 | flutter pub get | OK（43 deps） |
+| 2026-09-08 | flutter pub get | OK(43 deps) |
 | 2026-09-08 | flutter test | 3/3 passed |
 | 2026-09-08 | flutter analyze | No issues |
-| 2026-09-08 | flutter build web | OK（84.7s） |
+| 2026-09-08 | flutter build web | OK(84.7s) |
 | 2026-09-08 | tool/check.ps1 全量门禁 | pub get/analyze/test(79)/build web(124.7s) 全绿 |
-| 2026-09-08 | tool/e7_run.mjs douyu/63136 E2E | PASS：1080p 播放 4s currentTime 连续增长 + 25 条弹幕 + 无错误态 |
+| 2026-09-08 | tool/e7_run.mjs douyu/63136 E2E | PASS:1080p 播放 4s currentTime 连续增长 + 25 条弹幕 + 无错误态 |
+| 2026-09-09 | UI 样式基线落盘后 flutter analyze | No issues(0 issue) |
+| 2026-09-09 | flutter test | 80/80 passed |
+| 2026-09-09 | W13 门禁 flutter analyze | No issues(0 issue) |
+| 2026-09-09 | W13 门禁 flutter test 全量 | 147 passed / 6 skipped(W12 占位) / 0 failed |
+| 2026-09-09 | W13 门禁 flutter build windows --debug -t lib/main.dart | OK(47.6s) |
+| 2026-09-09 | W9 mobile_phones + W11 mobile_accessibility(修复后) | 8/8 passed(修复前 W9 4/4 失败、W11 2/4 失败) |
 
-## 执行模板（派发 agent 时附带）
+### W13 修复明细(2026-09-09)
 
-```text
-你只执行任务卡 <ID>，不要顺手做其他卡。
-开始前：读 tasks.md 该卡 + 对标文件（表内标注）。
-规则：只改该卡允许文件；ui 不 import engine 内部路径；验证不过不算完成。
-结束输出：改动文件、验证命令与结果、遗留问题；并更新 tasks.md 该卡状态。
-```
+三处固定宽度是 W9/W11 失败的共同根因,按 `AppBreakpoints` 收缩后转绿:
+
+| 位置 | 问题 | 修复 |
+|---|---|---|
+| `lib/src/app/app_shell.dart` `_TopNav` | 固定内容约 420dp(Logo+首页+分类+3 工具按钮+padding),360/375/393/412 宽分别溢出 60/45/27/8dp,并把右侧工具按钮挤出视口 | <640:Logo 仅图标、隐藏「分类」;平台 tab <768 仅品牌色点;锚点 nav-home/follow/search/settings 全断点保留 |
+| `lib/src/features/play/views/play_view.dart` | Row + 固定 328dp 侧栏把视频区压到 3dp(360dp 下),控制条随之溢出 230-285dp | <768 改 Column 堆叠:视频区 flex 3 + 侧栏 flex 2 |
+| `lib/src/features/play/widgets/player_controls.dart` | 4 按钮(192)+ 音量滑杆(96)= 288dp 固定需求,窄屏必然溢出 | <768 隐藏滑杆与延迟文案,用 Spacer 保持按钮右对齐 |
+| `lib/src/shared/presentation/design_tokens.dart`(新增 `metaHeightFor`)+ 两处网格 | 卡片元信息区高度预算固定,大字体 1.15/1.3 下纵向溢出 1dp/5.5dp | 文本区预算按 `MediaQuery.textScalerOf` 同步放大,卡片在网格中变高 |
+
+已知遗留:横屏 `follow@iPhone15Landscape(852×393)` 仍有 lib 溢出,W10 以 drain 方式容忍(用例通过),待 U9 横屏 sheet 落地后修。
+
+## 历史归档
+
+旧 engine/ui 双 package 时代的 G/E/U/Q 轨道卡与记录见 git 历史(tasks.md @ 32465d3 及之前);其中 E1-E4/E7、U1/U2 的成果已被新架构吸收(live_parser 契约层、design tokens、AppShell)。

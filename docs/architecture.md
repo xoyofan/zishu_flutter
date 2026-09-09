@@ -1,7 +1,15 @@
 # 项目目录架构
 
 客户端技术栈为 **Flutter + media-kit**，目标平台为 Web、Windows、Android。
-直播站点解析与 UI/播放器分离：Web 经 `streaming-server` 调用解析库；Windows、Android 可直接调用同一套纯 Dart 解析源码。
+直播站点解析与 UI/播放器分离：解析核心规划为独立纯 Dart package；Web 经 Dart `streaming-server` 调用该 package；Windows、Android 直接 import 同一 package。
+
+## 技术栈（2026-09-09 确认，详见 implementation-plan 7.0）
+
+- UI：Flutter Material 3；视觉系统 ThemeData + ThemeExtension（`ZishuTokens`）
+- 状态：Riverpod；路由：go_router；图片：cached_network_image
+- 播放：media-kit（`LivePlayer` 抽象）；HTTP：dio（客户端侧）
+- 解析 package（`live_parser`）：纯 Dart，仅 `http` + `crypto`，手写模型，无 codegen
+- 后置引入：Drift / shared_preferences / window_manager / file_picker（按里程碑）
 
 ## 新代码目录
 
@@ -12,7 +20,7 @@ lib/
 │  ├─ shared/
 │  │  ├─ domain/                     # 三端共享实体、值对象、解析接口
 │  │  ├─ application/                # 三端共享用例
-│  │  └─ parsing/                    # 纯 Dart 解析源码（后续从解析库接入/迁入）
+│  │  └─ parsing/                    # 解析 package 的客户端接口/过渡代码，不存第二套站点解析
 │  ├─ features/                      # 按业务功能组织的 presentation/application
 │  ├─ platforms/
 │  │  ├─ web/                        # Web API adapter + media-kit Web 播放适配
@@ -41,11 +49,11 @@ shared/domain  <- shared/application
        |                                |
 platforms/web                     platforms/windows|android
 StreamingServerParserAdapter      DirectDartParserAdapter
-HTTP -> streaming-server          直接调用 shared/parsing 或解析 package
+HTTP -> Dart streaming-server     直接 import packages/live_parser
 ```
 
 Web、Windows、Android 对 application 暴露同一个解析 gateway；差异只发生在 adapter。
-解析源码可以暂放 `lib/src/shared/parsing/`，未来无痛抽成独立 Dart package。
+站点解析源码统一位于 `packages/live_parser/`，禁止在 `lib/src/`、Dart server 或三端 adapter 中复制第二套实现。
 
 ## 播放器方向
 
@@ -59,8 +67,8 @@ Flutter UI -> player abstraction -> media-kit -> platform libs
 
 1. 新代码禁止 import `package:zishu_flutter/legacy/...`。
 2. `src/shared/domain`、`src/shared/application`、`src/shared/parsing` 禁止依赖 Flutter Widget、`media-kit`、JS 和具体平台 API。
-3. Web 解析 adapter 只消费 `streaming-server` HTTP API，不在 Flutter Web 内运行站点解析源码。
-4. Windows/Android adapter 可直接调用 Dart 解析源码，不必绕行 `streaming-server`。
+3. Web 解析 adapter 只消费 Dart `streaming-server` HTTP API，不在 Flutter Web 内运行站点解析源码。
+4. Windows/Android adapter 直接 import `packages/live_parser/`，不绕行 `streaming-server`。
 5. UI 放在 `src/apps`/`src/features`；播放器、HTTP、文件系统等实现放在 `src/platforms`。
 6. `legacy/` 只允许修复旧 Web 回归链路，不向其中添加新产品功能。
 

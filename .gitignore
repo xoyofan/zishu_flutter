@@ -47,3 +47,7 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# WorkBuddy 本地会话数据与本机 MCP 配置(含本机端口,不入库)
+.workbuddy/
+.mcp.json
