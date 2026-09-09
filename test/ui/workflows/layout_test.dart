@@ -81,8 +81,12 @@ void main() {
   /// 平台 tabs(水平 ListView)与首页网格(GridView.builder)均按视口惰性
   /// 挂载:放大 surface 保证全部锚点挂载,几何断言才有意义。
   Future<GoRouter> pumpApp(WidgetTester tester) async {
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.binding.setSurfaceSize(const Size(1600, 1200));
+    // 断点几何直接写 tester.view(dpr=1):setSurfaceSize 只更新渲染 surface,
+    // MediaQuery 仍报默认 800×600,U9 断点(>=1024 平台 tab 显示文字)会误判。
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(1600, 1200);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [playerProvider.overrideWithValue(FakeLivePlayer())],

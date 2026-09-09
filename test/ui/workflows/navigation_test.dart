@@ -147,7 +147,7 @@ void main() {
     // 1. /all 全平台首页:导航锚点 + 平台 chips + 房间网格。
     await goAndStabilize(tester, router, '/all');
     expectTopNavAnchors('/all');
-    expect(find.byKey(const Key('platform-tab-all')), findsOneWidget);
+    expect(find.byKey(const Key('home-platform-chip-all')), findsOneWidget);
     expect(find.byKey(const Key('room-card-douyu-63136')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
@@ -184,7 +184,7 @@ void main() {
     expectTopNavAnchors('/douyu');
     expect(
       tester.widget<FilterChip>(
-        find.byKey(const Key('platform-tab-douyu')),
+        find.byKey(const Key('home-platform-chip-douyu')),
       ).selected,
       isTrue,
       reason: '/douyu 页斗鱼平台 chip 应为选中态',
@@ -291,40 +291,40 @@ void main() {
     // 起点 /all:全平台 chip 选中。
     expect(
       tester.widget<FilterChip>(
-        find.byKey(const Key('platform-tab-all')),
+        find.byKey(const Key('home-platform-chip-all')),
       ).selected,
       isTrue,
     );
 
     // 点 platform-tab-huya → 路由切到 /huya,虎牙 chip 选中、全平台取消。
-    await tester.tap(find.byKey(const Key('platform-tab-huya')));
+    await tester.tap(find.byKey(const Key('home-platform-chip-huya')));
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
     expect(router.routeInformationProvider.value.uri.path, '/huya');
     expect(
       tester.widget<FilterChip>(
-        find.byKey(const Key('platform-tab-huya')),
+        find.byKey(const Key('home-platform-chip-huya')),
       ).selected,
       isTrue,
     );
     expect(
       tester.widget<FilterChip>(
-        find.byKey(const Key('platform-tab-all')),
+        find.byKey(const Key('home-platform-chip-all')),
       ).selected,
       isFalse,
     );
     expect(tester.takeException(), isNull);
 
     // 点 platform-tab-all → 回 /all,全平台 chip 恢复选中,房间网格可用。
-    await tester.tap(find.byKey(const Key('platform-tab-all')));
+    await tester.tap(find.byKey(const Key('home-platform-chip-all')));
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
     expect(router.routeInformationProvider.value.uri.path, '/all');
     expect(
       tester.widget<FilterChip>(
-        find.byKey(const Key('platform-tab-all')),
+        find.byKey(const Key('home-platform-chip-all')),
       ).selected,
       isTrue,
     );
@@ -347,10 +347,10 @@ void main() {
     expect(find.byKey(const Key('room-card-douyu-63136')), findsOneWidget);
 
     // 平台 chips 仍渲染,但没有任何一个被选中('nonexistent' 不在品牌目录中)。
-    expect(find.byKey(const Key('platform-tab-all')), findsOneWidget);
+    expect(find.byKey(const Key('home-platform-chip-all')), findsOneWidget);
     expect(
       tester.widget<FilterChip>(
-        find.byKey(const Key('platform-tab-all')),
+        find.byKey(const Key('home-platform-chip-all')),
       ).selected,
       isFalse,
     );

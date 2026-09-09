@@ -27,23 +27,33 @@ class _HomeViewState extends ConsumerState<HomeView> {
     final query = BrowseRoomQuery(site: widget.site);
     final roomsAsync = ref.watch(browseRoomsProvider(query));
     final controller = ref.read(browseRoomsProvider(query).notifier);
+    // U9:内容区平台筛选 chips 用 Wrap 多行(360 宽两行,全部挂载不裁切)。
+    // platform-tab-{site} 契约 key 在 <768 由本组件持有(顶导航已隐藏);
+    // >=768 时让位给顶导航 tabs,改用 home-platform-chip-{site} 保证 key 全树唯一。
+    final chipKeyPrefix =
+        MediaQuery.sizeOf(context).width < AppBreakpoints.phone
+        ? 'platform-tab-'
+        : 'home-platform-chip-';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        SizedBox(
-          height: AppSpacing.topNavHeight,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.lg,
+            AppSpacing.sm,
+            AppSpacing.lg,
+            AppSpacing.xs,
+          ),
+          child: Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
             children: [
               for (final brand in PlatformBrandCatalog.navPlatforms)
-                Padding(
-                  padding: const EdgeInsets.only(right: AppSpacing.sm),
-                  child: _PlatformChip(
-                    brand: brand,
-                    selected: brand.id == widget.site,
-                  ),
+                _PlatformChip(
+                  brand: brand,
+                  selected: brand.id == widget.site,
+                  keyPrefix: chipKeyPrefix,
                 ),
             ],
           ),
@@ -116,10 +126,18 @@ class _HomeViewState extends ConsumerState<HomeView> {
 
 /// 平台筛选 chip:选中态使用平台品牌色。
 class _PlatformChip extends StatelessWidget {
-  const _PlatformChip({required this.brand, required this.selected});
+  const _PlatformChip({
+    required this.brand,
+    required this.selected,
+    required this.keyPrefix,
+  });
 
   final PlatformBrand brand;
   final bool selected;
+
+  /// 契约 key 前缀:<768 为 platform-tab-(U9,W12 验收),>=768 为
+  /// home-platform-chip-(顶导航 tabs 持有 platform-tab-*)。
+  final String keyPrefix;
 
   @override
   Widget build(BuildContext context) {
@@ -136,8 +154,8 @@ class _PlatformChip extends StatelessWidget {
         shape: RoundedRectangleBorder(borderRadius: AppRadius.allSm),
       ),
       child: FilterChip(
-        // 测试锚点:定位/点击平台筛选 chip。
-        key: Key('platform-tab-${brand.id}'),
+        // 测试锚点:定位/点击平台筛选 chip(前缀随断点,见 [keyPrefix])。
+        key: Key('$keyPrefix${brand.id}'),
         selected: selected,
         label: Text(brand.name),
         onSelected: (_) =>

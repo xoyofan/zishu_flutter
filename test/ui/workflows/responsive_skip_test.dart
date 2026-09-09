@@ -101,11 +101,15 @@ void main() {
 
   /// pump 真实路由宿主并固定逻辑视口为 [surface],返回 router。
   ///
-  /// 平台 tabs/chips(水平 ListView)与首页网格(GridView.builder)按视口
-  /// 惰性挂载:断言前先按用例需要设定 surface,几何断言才有意义。
+  /// 断点几何直接写 [tester.view](physicalSize + dpr=1):`setSurfaceSize`
+  /// 只更新渲染 surface,MediaQuery 仍报默认 800×600,会让 AppShell/HomeView/
+  /// PlayView 的断点判定全部失灵;写 view 才能让 MediaQuery 同步,U9 各
+  /// 断点(底部导航 / icon-only / 堆叠 / Wrap)才有意义。
   Future<GoRouter> pumpApp(WidgetTester tester, Size surface) async {
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.binding.setSurfaceSize(surface);
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = surface;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [playerProvider.overrideWithValue(FakeLivePlayer())],
@@ -141,7 +145,7 @@ void main() {
         (widget.decoration as BoxDecoration).color == brand.color,
   );
 
-  group('U9 底部导航', skip: 'U9 待实现', () {
+  group('U9 底部导航', () {
     testWidgets('<768(360×640):顶部 44px 导航不渲染,底部 56px 导航含 首页/关注/设置', (
       tester,
     ) async {
@@ -149,22 +153,26 @@ void main() {
       await pumpApp(tester, const Size(360, 640));
       final size = viewport(tester);
 
-      // 顶部 44px 导航不渲染:logo 与顶部主导航入口均消失。
+      // 顶部 44px 导航不渲染:logo 文案消失(<768 顶导航整体不渲染)。
       expect(
         find.text('紫薯直播'),
         findsNothing,
         reason: '窄屏下顶部导航(含 logo)不应渲染',
       );
-      expect(
-        find.byKey(const Key('nav-home')),
-        findsNothing,
-        reason: '窄屏下顶部主导航「首页」不应渲染'
-            '(若 U9 将 nav-home 键复用于底部导航,请同步调整本断言)',
-      );
 
       // 底部 56px 导航渲染:三个主导航入口文本存在,且中心点全部落在
       // 视口底部 56px 带内(bottomNavHeight 对齐 AppSpacing 规范)。
+      // nav-* 锚点由顶部导航迁移至底部导航(实现复用同 key,与文件头
+      // 注释的调整指引一致),nav-home 额外做底部带内断言。
       final bandTop = size.height - AppSpacing.bottomNavHeight;
+      final navHome = find.byKey(const Key('nav-home'));
+      expect(navHome, findsOneWidget, reason: 'nav-home 锚点应迁移至底部导航');
+      final navHomeCenter = tester.getCenter(navHome);
+      expect(
+        navHomeCenter.dy,
+        greaterThan(bandTop),
+        reason: 'nav-home 应位于底部导航带内',
+      );
       for (final label in const ['首页', '关注', '设置']) {
         final item = find.text(label);
         expect(item, findsOneWidget, reason: '底部导航缺少「$label」入口');
@@ -185,7 +193,7 @@ void main() {
     });
   });
 
-  group('U9 平台tab收缩', skip: 'U9 待实现', () {
+  group('U9 平台tab收缩', () {
     testWidgets('768–1023(820×1180 iPad Air):平台 tab icon-only,色点在、文字无、Tooltip=平台名', (
       tester,
     ) async {
@@ -244,7 +252,7 @@ void main() {
     });
   });
 
-  group('U9 播放页侧栏堆叠', skip: 'U9 待实现', () {
+  group('U9 播放页侧栏堆叠', () {
     testWidgets('竖屏 360×640:视频全宽,侧栏堆叠在视频下方且可滚达', (tester) async {
       final router = await pumpApp(tester, const Size(360, 640));
       // 丢弃首页在窄屏测试环境的既有 overflow 噪音,只验证播放页布局。
@@ -313,7 +321,7 @@ void main() {
     });
   });
 
-  group('U9 chips换行', skip: 'U9 待实现', () {
+  group('U9 chips换行', () {
     testWidgets('360 宽:首页平台 chips 为 Wrap 多行(第二行存在),全部挂载不横向裁切', (
       tester,
     ) async {

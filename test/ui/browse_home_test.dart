@@ -20,9 +20,13 @@ void main() {
   ///
   /// 网格(GridView.builder)按视口惰性挂载卡片:默认 800x600 只渲染 4 张,
   /// 放大 surface 保证 10 个 fixture 卡片全部挂载,断言锚点总数才有意义。
+  /// 断点几何直接写 tester.view(dpr=1):setSurfaceSize 只更新渲染 surface,
+  /// MediaQuery 仍报默认 800×600,U9 后首页 chips key 随断点切换会误判。
   Future<GoRouter> pumpApp(WidgetTester tester) async {
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.binding.setSurfaceSize(const Size(1600, 1200));
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(1600, 1200);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(const ProviderScope(child: WindowsApp()));
     // 两帧:首页(/all)骨架渲染 + fixture 数据落地。
     await tester.pump(const Duration(milliseconds: 50));
@@ -65,7 +69,7 @@ void main() {
       (tester) async {
     final router = await pumpApp(tester);
 
-    await tester.tap(find.byKey(const Key('platform-tab-bilibili')));
+    await tester.tap(find.byKey(const Key('home-platform-chip-bilibili')));
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -80,7 +84,7 @@ void main() {
     }
     // 当前平台 chip 为选中态(非 all 聚合时不显示平台角标,由实现内部处理)。
     final chip = tester.widget<FilterChip>(
-      find.byKey(const Key('platform-tab-bilibili')),
+      find.byKey(const Key('home-platform-chip-bilibili')),
     );
     expect(chip.selected, isTrue);
   });

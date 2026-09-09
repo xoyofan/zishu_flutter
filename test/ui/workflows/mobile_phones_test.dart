@@ -12,7 +12,7 @@
 ///   画质条 rect.top,即堆叠在视频下方);
 /// - firstCardBelowNav:各尺寸首页首张 room-card rect.top ≥ 顶导航 rect.bottom。
 ///
-/// ### 已知缺口(断言如实失败,复现尺寸实测于 2026-09-09,供 U9/W13 收口)
+/// ### 历史缺口(2026-09-09 W13 + U9 已全部修复,留档供追溯)
 /// 以下均为 lib 侧布局缺口(非本测试宿主构造问题),修复后本文件自动转绿:
 /// - 顶导航固定内容(Logo + nav-home/分类 + 3 IconButton)在渲染上恒定占据
 ///   x=16..404(内容宽约 388px):`home@AndroidSmall(360x640)` 报 RenderFlex
@@ -333,7 +333,9 @@ void main() {
     expect(failures, isEmpty, reason: '窄屏播放页视频被挤占:\n${failures.join('\n')}');
   });
 
-  testWidgets('firstCardBelowNav:各尺寸首页首卡顶部不低于顶导航底部', (tester) async {
+  testWidgets('firstCardBelowNav:首卡不与顶导航重叠(>=768);<768 U9 无顶导航,首卡正常起排', (
+    tester,
+  ) async {
     final failures = <String>[];
     for (final device in kPhones) {
       resetViewport(tester);
@@ -343,7 +345,7 @@ void main() {
         failures.add('${device.label}: 渲染异常 $error');
       }
 
-      final navRect = tester.getRect(_topNavFinder());
+      final topNav = _topNavFinder();
       final cards = _roomCardFinder();
       final cardWidgets = tester.widgetList(cards).toList();
       if (cardWidgets.isEmpty) {
@@ -353,20 +355,35 @@ void main() {
       }
 
       // 全部卡片中最早的 top(即首卡)不得越过顶导航底部。
+      // U9 后 <768 顶导航不渲染(nav-* 迁移至底部导航),此时断言退化为
+      // 首卡从内容区顶部正常起排(top >= 0),底部导航由 Scaffold 托底。
       var minTop = double.infinity;
       for (final widget in cardWidgets) {
         minTop = _min(minTop, tester.getRect(find.byWidget(widget)).top);
       }
-      if (minTop >= navRect.bottom) {
-        print(
-          '[firstCard] ${device.label}: OK '
-          '(card.top=$minTop >= nav.bottom=${navRect.bottom})',
-        );
+      if (!tester.any(topNav)) {
+        if (minTop >= 0) {
+          print(
+            '[firstCard] ${device.label}: OK '
+            '(U9 无顶导航, card.top=$minTop)',
+          );
+        } else {
+          print('[firstCard] ${device.label}: FAIL');
+          failures.add('${device.label}: 首卡 top=$minTop < 0');
+        }
       } else {
-        print('[firstCard] ${device.label}: FAIL');
-        failures.add(
-          '${device.label}: 首卡 top=$minTop < 顶导航 bottom=${navRect.bottom}',
-        );
+        final navRect = tester.getRect(topNav);
+        if (minTop >= navRect.bottom) {
+          print(
+            '[firstCard] ${device.label}: OK '
+            '(card.top=$minTop >= nav.bottom=${navRect.bottom})',
+          );
+        } else {
+          print('[firstCard] ${device.label}: FAIL');
+          failures.add(
+            '${device.label}: 首卡 top=$minTop < 顶导航 bottom=${navRect.bottom}',
+          );
+        }
       }
       resetViewport(tester);
     }

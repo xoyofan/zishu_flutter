@@ -28,16 +28,40 @@ class _PlayViewState extends ConsumerState<PlayView> {
   late final PlayParams _params = (site: widget.site, roomId: widget.roomId);
   bool _sidePanelVisible = true;
 
+  /// 横屏手机:侧栏以底部 sheet 滑出(sheet 宽近全屏,满足 W12 sheet 形态)。
+  Future<void> _showSidePanelSheet() {
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => Container(
+        height: MediaQuery.sizeOf(sheetContext).height * 0.72,
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(AppRadius.lg),
+          ),
+        ),
+        child: const PlaySidePanel(),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final async = ref.watch(playControllerProvider(_params));
     final play = async.value;
     final brand = PlatformBrandCatalog.byId(widget.site);
-    // U9 响应式:窄屏(<768)把 328px 信息栏堆叠到视频区下方,
-    // 否则固定宽侧栏会把视频舞台挤成 0 宽(实测 360dp 下视频区只剩 3dp)。
-    final stackSidePanel =
-        MediaQuery.sizeOf(context).width < AppBreakpoints.phone;
-    final showPanel = _sidePanelVisible;
+    final size = MediaQuery.sizeOf(context);
+    // U9 响应式:
+    // - 窄屏(<768):328px 信息栏堆叠到视频区下方,否则固定宽侧栏会把
+    //   视频舞台挤成 0 宽(实测 360dp 下只剩 3dp);
+    // - 横屏手机(宽>=768 且高<600):侧栏不再以 328px 常驻右栏存在,
+    //   经 play-side-panel-toggle 以底部 sheet 滑出(W12 横屏验收口径)。
+    final stackSidePanel = size.width < AppBreakpoints.phone;
+    final isLandscapePhone =
+        size.width >= AppBreakpoints.phone && size.height < 600;
+    final showPanel = _sidePanelVisible && !isLandscapePhone;
 
     final stage = Column(
       children: [
@@ -71,8 +95,9 @@ class _PlayViewState extends ConsumerState<PlayView> {
           category: play?.payload?.category ?? '',
           brandColor: brand?.color ?? context.tokens.brand,
           sidePanelVisible: _sidePanelVisible,
-          onToggleSidePanel:
-              () => setState(() => _sidePanelVisible = !_sidePanelVisible),
+          onToggleSidePanel: isLandscapePhone
+              ? _showSidePanelSheet
+              : () => setState(() => _sidePanelVisible = !_sidePanelVisible),
         ),
         Expanded(
           child: Padding(

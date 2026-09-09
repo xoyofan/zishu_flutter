@@ -94,3 +94,20 @@ W0 锚点基线(外部前置)
 修复前:W9 4/4 失败、W11 2/4 失败;修复后 8/8 通过。根因为三处固定宽度(顶导航约 420dp、播放页侧栏 328dp、控制条 288dp)与卡片文本区高度预算未随字体缩放。
 
 遗留:`follow@iPhone15Landscape(852×393)` 横屏仍有 lib 溢出,W10 以 drain 容忍(用例通过),待 U9 横屏 sheet 落地后修。
+
+## 执行记录(2026-09-09 U9 收口,W12 转绿)
+
+W12 占位组 6 用例全部移除 skip 转绿,U9 验收完成(见 `tasks.md`「U9 落地明细」):
+
+| 用例 | 结果 |
+|---|---|
+| 底部导航 <768(360×640):顶导航不渲染、底部 56px 含 首页/关注/设置 | ✅ |
+| 平台 tab 收缩 768–1023(820×1180):icon-only + Tooltip(平台名) | ✅ |
+| 平台 tab 收缩 >=1024(1600×1200):色点+文字 | ✅ |
+| 播放页堆叠 竖屏 360×640:视频全宽、侧栏堆叠下方 | ✅ |
+| 播放页堆叠 横屏 852×393:侧栏隐藏/sheet 化 | ✅ |
+| chips 换行 360 宽:Wrap 多行、全部挂载 | ✅ |
+
+全量门禁:flutter analyze 0 issue;flutter test **153 passed / 0 skipped / 0 failed**;build windows --debug 14.7s。
+
+配套测试基建修正:`responsive_skip_test`/`layout_test`/`browse_home_test`/`platform_workflow` 的 pump 从 `setSurfaceSize` 改为直接写 `tester.view`(physicalSize + dpr=1)——`setSurfaceSize` 不更新 MediaQuery(恒报 800×600),任何断点相关断言必须写 view 才有意义;`mobile_tablets_test` landscapePlayPriority 第 4 步按 U9 口径修订(旧断言"328 常驻同排"与新验收矛盾,以 W12 为准)。

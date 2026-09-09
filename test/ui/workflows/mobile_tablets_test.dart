@@ -12,8 +12,9 @@
 ///    聚类数行数(≥2 行证明网格换行铺开),首行同 top 卡数即列数;
 /// 4. landscapePlayPriority:852×393 横屏播放页专项——play-quality 锚点
 ///    仍可见可点(控制区不被挤出视口)、视频主区宽 > 视口 50%(经 play-back
-///    祖先定位 PlayView 后读 play_view 几何)、侧栏 328 与视频同排时
-///    视频 + 间距 + 侧栏总宽 ≤ 视口宽(无横向溢出,由矩阵 sweep 佐证)。
+///    祖先定位 PlayView 后读 play_view 几何);侧栏按 U9 横屏口径取消
+///    328px 常驻右栏,初始隐藏、经 play-side-panel-toggle 以底部 sheet
+///    滑出(sheet 宽近全屏)。
 ///
 /// 已知 lib 侧问题(W13 收口):FollowEntryCard 元信息区固定约 68px 预算,
 /// VM 测试字体下 Material 3 IconButton 最小 40px 高必现 ~13px 垂直溢出
@@ -304,7 +305,7 @@ void main() {
   );
 
   testWidgets(
-    'landscapePlayPriority:852×393 横屏播放页——画质锚点可达、视频区 >50%、视频+侧栏同排无溢出',
+    'landscapePlayPriority:852×393 横屏播放页——画质锚点可达、视频区 >50%、侧栏隐藏可 sheet 滑出',
     (tester) async {
       const device = kIphone15Landscape;
       const viewport = Size(852, 393);
@@ -359,8 +360,7 @@ void main() {
       // ignore: avoid_print
       print(
         '[play-landscape] viewport=${viewport.width}x${viewport.height} '
-        'videoWidth=${qualityBarRect.width} '
-        'panelWidth=${AppSpacing.playSidePanelWidth}',
+        'videoWidth=${qualityBarRect.width} panelWidth=hidden(sheet)',
       );
       expect(
         qualityBarRect.width,
@@ -368,24 +368,39 @@ void main() {
         reason: '横屏播放页视频主区应占视口宽度过半',
       );
 
-      // 4) 侧栏 328 与视频同排:视频 + 间距(md) + 侧栏 ≤ 视口宽,
-      //    侧栏完整落在视口内且与视频列不重叠(无横向溢出,sweep 佐证)。
-      final panelRect = tester.getRect(find.byType(PlaySidePanel));
-      expect(panelRect.width, AppSpacing.playSidePanelWidth);
+      // 4) U9 横屏口径(W12 对齐):328px 常驻右栏取消——侧栏初始隐藏,
+      //    经 play-side-panel-toggle 以底部 sheet 滑出(sheet 宽近全屏)。
       expect(
-        panelRect.right,
-        lessThanOrEqualTo(viewport.width),
-        reason: '侧栏越出视口右缘',
+        find.byType(PlaySidePanel),
+        findsNothing,
+        reason: '横屏下侧栏不应以 328px 常驻右栏存在',
       );
+      await tester.tap(find.byKey(const Key('play-side-panel-toggle')));
+      await tester.pump(_kFrame);
+      await tester.pump(_kFrame);
       expect(
-        qualityBarRect.width + AppSpacing.md + panelRect.width,
-        lessThanOrEqualTo(viewport.width),
-        reason: '视频 + 间距 + 侧栏总宽超过视口宽(横向溢出)',
+        find.byType(PlaySidePanel),
+        findsOneWidget,
+        reason: '点击 play-side-panel-toggle 应以 sheet 滑出侧栏',
       );
+      final sheetRect = tester.getRect(find.byType(PlaySidePanel));
       expect(
-        panelRect.left,
-        greaterThanOrEqualTo(qualityBarRect.right),
-        reason: '侧栏应与视频列同排且不重叠',
+        sheetRect.width,
+        greaterThan(AppSpacing.playSidePanelWidth),
+        reason: '侧栏 sheet 宽度应近全屏(sheet 形态,非常驻右栏)',
+      );
+      // 关闭 sheet 恢复无侧栏布局(弹层退出动画约 250ms,pump 6 帧确保移除)。
+      tester.state<NavigatorState>(find.byType(Navigator).first).pop();
+      await tester.pump(_kFrame);
+      await tester.pump(_kFrame);
+      await tester.pump(_kFrame);
+      await tester.pump(_kFrame);
+      await tester.pump(_kFrame);
+      await tester.pump(_kFrame);
+      expect(
+        find.byType(PlaySidePanel),
+        findsNothing,
+        reason: 'sheet 关闭后侧栏应从树上移除',
       );
 
       // 5) 数据落地 + 交互后帧无渲染异常(与 overflowSweep 窗口互补)。

@@ -48,7 +48,7 @@
 | U6 | 弹幕 overlay + 聊天侧栏(静态样例已入侧栏;真弹幕等 P9/G2) | U4 | [~] fixture 版 | 手测 |
 | U7 | 关注页(三密度/批量/特别关注)+ 设置页(shared_preferences 持久化) | U4 | [x] | follow/settings 锚点测试进行中 |
 | U8 | 搜索(防抖/直达/键盘)+ 主播页 + 时间线 + ErrorView/EmptyView/AsyncValueView 通用组件 | U4 | [x] | search/anchor/timeline 锚点测试进行中 |
-| U9 | 响应式 Web/Android 适配(底部导航、窄屏布局、平台 tab icon-only 收缩) | U1-U8 | [~] 部分落地:顶导航收缩(<640 仅 Logo 图标 + 隐藏「分类」,平台 tab <768 仅色点)、播放页 <768 侧栏堆叠、控制条窄屏/大字体收缩已完成;底部导航、chips Wrap、横屏 sheet 仍为 W12 占位 skip | W9/W11 已转绿;W12 仍 skip |
+| U9 | 响应式 Web/Android 适配(底部导航、窄屏布局、平台 tab icon-only 收缩) | U1-U8 | [x] 全部落地:<768 底部导航(顶导航不渲染,nav-* 迁移)、平台 tab 768-1023 icon-only+Tooltip / >=1024 点+文字、首页 chips Wrap 多行、播放页 <768 侧栏堆叠 + 横屏手机 sheet 化、控制条窄屏收缩;W12 六用例全部转绿 | flutter test 153 passed / 0 skipped |
 
 ## 测试轨 W(workflows)
 
@@ -89,6 +89,9 @@
 | 2026-09-09 | W13 门禁 flutter test 全量 | 147 passed / 6 skipped(W12 占位) / 0 failed |
 | 2026-09-09 | W13 门禁 flutter build windows --debug -t lib/main.dart | OK(47.6s) |
 | 2026-09-09 | W9 mobile_phones + W11 mobile_accessibility(修复后) | 8/8 passed(修复前 W9 4/4 失败、W11 2/4 失败) |
+| 2026-09-09 | U9 门禁 flutter analyze | No issues(0 issue) |
+| 2026-09-09 | U9 门禁 flutter test 全量 | 153 passed / 0 skipped(W12 六用例转绿) / 0 failed |
+| 2026-09-09 | U9 门禁 flutter build windows --debug -t lib/main.dart | OK(14.7s) |
 
 ### W13 修复明细(2026-09-09)
 
@@ -102,6 +105,16 @@
 | `lib/src/shared/presentation/design_tokens.dart`(新增 `metaHeightFor`)+ 两处网格 | 卡片元信息区高度预算固定,大字体 1.15/1.3 下纵向溢出 1dp/5.5dp | 文本区预算按 `MediaQuery.textScalerOf` 同步放大,卡片在网格中变高 |
 
 已知遗留:横屏 `follow@iPhone15Landscape(852×393)` 仍有 lib 溢出,W10 以 drain 方式容忍(用例通过),待 U9 横屏 sheet 落地后修。
+
+### U9 落地明细(2026-09-09,W12 六用例转绿,U9 验收完成)
+
+| 模块 | 实现 |
+|---|---|
+| `app_shell.dart` | <768 顶导航不渲染,新增 56px `_BottomNav`(首页/关注/搜索/设置,nav-* 锚点迁移);平台 tab 768-1023 icon-only + Tooltip(平台名)、>=1024 色点+文字;顶导航 tab 持有 W12 契约 key `platform-tab-{site}` |
+| `home_view.dart` | 平台筛选 chips 横向 ListView → `Wrap` 多行(360 宽全部挂载);key 按断点切换:<768 用 `platform-tab-*`,>=768 用 `home-platform-chip-*`(与顶导航 tabs 不冲突) |
+| `play_view.dart` | 横屏手机(宽>=768 且高<600)取消 328px 常驻右栏,`play-side-panel-toggle` 改为底部 sheet 滑出(sheet 宽近全屏) |
+| 测试同步 | `responsive_skip_test` 移除 4 组 skip 并调整 nav-home 断言(迁移底部);`navigation_test`/`browse_home_test` 首页 chips key 改 `home-platform-chip-*`;`mobile_tablets_test` landscapePlayPriority 第 4 步改 U9 口径(隐藏 + sheet 交互验证);`layout_test`/`browse_home_test`/`platform_workflow` 的 pump 改为直接写 `tester.view`(**关键修复**:`setSurfaceSize` 只改渲染 surface,MediaQuery 仍报 800×600,断点判定全失灵) |
+| 横屏 follow 溢出遗留 | U9 横屏 sheet 已落地,但 `follow@iPhone15Landscape` 的 follow_entry_card 溢出仍存在(W10 drain 容忍),待 follow 三密度在横屏的布局优化 |
 
 ## 历史归档
 

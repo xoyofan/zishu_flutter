@@ -106,8 +106,12 @@ class _FakeLivePlayer implements LivePlayer {
 ///
 /// 对应卡:W2/W3/W4 全部用例的统一入口(W6/W7 如需真实宿主亦可复用)。
 Future<GoRouter> pumpPlatformApp(WidgetTester tester, String location) async {
-  addTearDown(() => tester.binding.setSurfaceSize(null));
-  await tester.binding.setSurfaceSize(const Size(1600, 1200));
+  // 断点几何直接写 tester.view(dpr=1):setSurfaceSize 只更新渲染 surface,
+  // MediaQuery 仍报默认 800×600,U9 断点(icon-only tabs / chips key 切换)会误判。
+  tester.view.devicePixelRatio = 1.0;
+  tester.view.physicalSize = const Size(1600, 1200);
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(
     ProviderScope(
       overrides: [playerProvider.overrideWithValue(_FakeLivePlayer())],
