@@ -24,3 +24,8 @@
 - 总体实施基线见 `docs/implementation-plan.md`，架构概要见 `docs/architecture.md`。
 - UI 与解析双轨通过稳定 Dart models/interfaces 和 JSON fixtures 解耦，禁止 UI 直接消费松散 `Map<String, dynamic>`。
 - 每次结构性修改至少运行 `flutter analyze` 和相关测试；Windows 主链路修改还需运行 `flutter build windows --debug -t lib/main.dart`。
+
+## GitHub 提交与推送
+- GitHub 侧操作**优先使用 github MCP**（统一网关 `http://127.0.0.1:8800/mcp/github`，工具前缀 `mcp__github__`）：查询提交/远程状态、PR、issue，以及小规模文件提交（`push_files` / `create_or_update_file`）。
+- 本地大批量提交仍用 `git commit`；若 `git push` 缺少已存凭据，用 MCP 网关 `gateway.env.cmd` 中的 `GITHUB_PERSONAL_ACCESS_TOKEN` 做一次性凭据（临时 remote URL 或一次性 credential helper），**禁止把 token 写入仓库文件、`.git/config` 持久化或任何输出**。
+- 不同轨道分开提交：UI 轨（`lib/src/**`、`test/ui/**`、看板）与解析轨（`packages/live_parser/**`）各自独立提交，不混在一个 commit 里。
