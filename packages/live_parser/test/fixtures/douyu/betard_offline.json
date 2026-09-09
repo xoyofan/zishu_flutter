@@ -1,0 +1,14 @@
+{
+  "room": {
+    "room_id": 9528,
+    "nickname": "下播主播",
+    "show_status": 2,
+    "room_name": "下播中的房间",
+    "room_pic": "",
+    "room_src": "live_cover/offline_240x135.jpg",
+    "videoLoop": 0,
+    "cate_id": 2,
+    "cate_name": "DNF",
+    "avatar": "http://shf1-ali-douyucdn.cn/avatar/offline.jpg"
+  }
+}

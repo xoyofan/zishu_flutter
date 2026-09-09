@@ -1,0 +1,36 @@
+{
+  "code": 0,
+  "data": {
+    "rl": [
+      {
+        "rid": 111,
+        "rn": "房间A标题",
+        "nn": "主播A",
+        "rs16": "//rpic.douyucdn.cn/a.jpg",
+        "c2name": "英雄联盟",
+        "cid2": "1",
+        "ol": 102400,
+        "roomLabel": ["官方赛况", "帧率拉满"]
+      },
+      {
+        "rid": 222,
+        "rn": "房间B标题",
+        "nn": "主播B",
+        "rs1": "//rpic.douyucdn.cn/b.jpg",
+        "c2name_display": "英雄联盟",
+        "cid2": "1",
+        "ol": 999,
+        "vipId": 3
+      },
+      {
+        "rid": 333,
+        "rn": "其他分类房",
+        "nn": "主播C",
+        "rs16": "//rpic.douyucdn.cn/c.jpg",
+        "c2name": "王者荣耀",
+        "cid2": "2",
+        "ol": 50
+      }
+    ]
+  }
+}

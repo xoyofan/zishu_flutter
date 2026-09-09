@@ -1,0 +1,10 @@
+{
+  "code": 0,
+  "data": {
+    "token": "danmaku-token-abc",
+    "host_list": [
+      { "host": "broadcastlv-chat-1.bilivideo.com", "wss_port": 443, "port": 2245 },
+      { "host": "broadcastlv-chat-2.bilivideo.com", "wss_port": 4443 }
+    ]
+  }
+}

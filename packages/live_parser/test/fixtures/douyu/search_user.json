@@ -1,0 +1,37 @@
+{
+  "data": {
+    "relateUser": [
+      {
+        "type": 1,
+        "anchorInfo": {
+          "rid": 9527,
+          "nickName": "测试主播",
+          "avatar": "http://shf1-ali-douyucdn.cn/avatar.jpg",
+          "roomSrc": "//shf1-ali-douyucdn.cn/roomsrc.jpg",
+          "cateName": "英雄联盟",
+          "isLive": 1,
+          "videoLoop": 0,
+          "followerCount": "128万",
+          "room_name": "测试主播的房间"
+        }
+      },
+      {
+        "anchorInfo": {
+          "rid": 3001,
+          "nickName": "轮播姬",
+          "isLive": 1,
+          "videoLoop": 1,
+          "cateName": "二次元"
+        }
+      },
+      {
+        "anchorInfo": {
+          "rid": 3002,
+          "nickName": "下播的测试员",
+          "isLive": 0
+        }
+      },
+      { "anchorInfo": {} }
+    ]
+  }
+}

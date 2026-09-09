@@ -1,0 +1,21 @@
+{
+  "code": 0,
+  "data": {
+    "result": [
+      {
+        "type": "bili_user",
+        "uname": "测试主播",
+        "upic": "http://i0.hdslb.com/upic.jpg",
+        "fans": 123456,
+        "is_live": 1,
+        "room_id": 9527,
+        "usign": "签名简介"
+      },
+      {
+        "type": "bili_user",
+        "uname": "没房间的UP",
+        "room_id": 0
+      }
+    ]
+  }
+}

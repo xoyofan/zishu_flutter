@@ -1,0 +1,8 @@
+{
+  "error": 0,
+  "data": {
+    "rtmp_url": "https://tct-h5.douyucdn.cn/live",
+    "rtmp_live": "9527tct_2_1000.flv",
+    "rtmp_cdn": "tct-h5"
+  }
+}

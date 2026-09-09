@@ -1,0 +1,8 @@
+{
+  "error": 0,
+  "data": {
+    "rtmp_url": "https://ali-h5.douyucdn.cn/live",
+    "rtmp_live": "9527ali_0_3000.flv",
+    "rtmp_cdn": "ali-h5"
+  }
+}

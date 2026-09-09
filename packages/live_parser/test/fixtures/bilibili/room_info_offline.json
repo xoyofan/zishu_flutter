@@ -1,0 +1,15 @@
+{
+  "code": 0,
+  "data": {
+    "room_id": 9528,
+    "uid": 11111,
+    "live_status": 0,
+    "title": "下播的房间",
+    "uname": "B站主播",
+    "face": "",
+    "user_cover": "",
+    "keyframe": "https://i0.hdslb.com/bfs/keyframe/offline.jpg",
+    "parent_area_name": "网游",
+    "area_name": "英雄联盟"
+  }
+}

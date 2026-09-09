@@ -1,0 +1,19 @@
+{
+  "code": 0,
+  "data": {
+    "result": {
+      "live_room": [
+        {
+          "roomid": 4444,
+          "title": "<em class=\"keyword\">测试</em>赛况",
+          "uname": "在播的测试房",
+          "cover": "//i0.hdslb.com/room.jpg",
+          "uface": "//i0.hdslb.com/u.jpg",
+          "online": 85000,
+          "live_status": 1,
+          "cate_name": "英雄联盟"
+        }
+      ]
+    }
+  }
+}

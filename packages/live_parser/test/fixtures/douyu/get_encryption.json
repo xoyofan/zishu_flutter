@@ -1,0 +1,10 @@
+{
+  "error": 0,
+  "data": {
+    "key": "aKey123",
+    "rand_str": "randStrXYZ",
+    "enc_time": 1,
+    "enc_data": "encDataToken",
+    "is_special": false
+  }
+}

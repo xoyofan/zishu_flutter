@@ -1,0 +1,23 @@
+{
+  "data": {
+    "relateShow": [
+      {
+        "rid": 9527,
+        "nickName": "测试主播",
+        "roomName": "斗鱼测试房间",
+        "avatar": "//shf1-ali-douyucdn.cn/a.jpg",
+        "roomSrc": "//shf1-ali-douyucdn.cn/s.jpg",
+        "cateName": "英雄联盟",
+        "isLive": 1,
+        "hot": 95270
+      },
+      {
+        "rid": 4444,
+        "nickName": "另一场",
+        "roomName": "测试赛况",
+        "isLive": 0,
+        "hot": 85000
+      }
+    ]
+  }
+}

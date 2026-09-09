@@ -1,0 +1,18 @@
+{
+  "code": 0,
+  "data": [
+    {
+      "id": 2,
+      "name": "网游",
+      "list": [
+        { "id": 325, "name": "英雄联盟", "pic": "//i0.hdslb.com/bfs/area/lol.jpg" },
+        { "id": 862, "name": "CS2", "pic": "" }
+      ]
+    },
+    {
+      "id": 6,
+      "name": "手游",
+      "list": []
+    }
+  ]
+}

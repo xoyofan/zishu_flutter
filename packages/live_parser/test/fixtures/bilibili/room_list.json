@@ -1,0 +1,27 @@
+{
+  "code": 0,
+  "data": [
+    {
+      "roomid": 111,
+      "title": "房间A标题",
+      "uname": "主播A",
+      "online": 102400,
+      "live_status": 1,
+      "area_id": 325,
+      "area_name": "英雄联盟",
+      "user_cover": "https://i0.hdslb.com/a.jpg",
+      "verify": { "desc": "bilibili 知名游戏UP主" }
+    },
+    {
+      "roomid": 222,
+      "title": "房间B标题",
+      "uname": "主播B",
+      "online": 999,
+      "live_status": 1,
+      "area_v2_id": 862,
+      "area_v2_name": "CS2",
+      "cover": "//i0.hdslb.com/b.jpg",
+      "pk_id": 5
+    }
+  ]
+}

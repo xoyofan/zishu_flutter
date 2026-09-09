@@ -1,0 +1,31 @@
+{
+  "status": 200,
+  "data": {
+    "profileInfo": {
+      "nick": "虎牙主播",
+      "yyid": 12345678901234,
+      "avatar180": "http://huyaimg.msstatic.com/avatar.jpg"
+    },
+    "liveStatus": "ON",
+    "realLiveStatus": "ON",
+    "liveData": {
+      "introduction": "虎牙测试房间",
+      "roomName": "虎牙粉丝团",
+      "screenshot": "https://cover.huya.com/cover.jpg"
+    },
+    "stream": {
+      "baseSteamInfoList": [
+        {
+          "lChannelId": 2650134,
+          "lPresenterUid": 12345678901234,
+          "sCdnType": "TX",
+          "sStreamName": "9527-2650134-5195-2650134-10057-A-0-1-image",
+          "sFlvUrl": "https://txflv.huya.com/src",
+          "sFlvAntiCode": "wsSecret=deadbeef&wsTime=65f0a1b0&fm=MTEzN194eXo=&ctype=tars_mp&fs=bhct",
+          "sHlsUrl": "https://txhls.huya.com/src",
+          "sHlsAntiCode": "wsSecret=deadbeef&wsTime=65f0a1b0&fm=MTEzN194eXo=&ctype=tars_mp&fs=bhct"
+        }
+      ]
+    }
+  }
+}

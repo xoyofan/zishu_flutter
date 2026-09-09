@@ -1,0 +1,17 @@
+{
+  "code": 0,
+  "data": [
+    {
+      "roomid": 333,
+      "title": "推荐位房间",
+      "uname": "主播C",
+      "online": 5000,
+      "live_status": 1,
+      "area_name": "一起看"
+    },
+    {
+      "roomid": 111,
+      "title": "重复房间"
+    }
+  ]
+}

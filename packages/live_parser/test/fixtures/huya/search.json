@@ -1,0 +1,43 @@
+{
+  "response": {
+    "1": {
+      "docs": [
+        {
+          "room_id": 9527,
+          "game_nick": "测试主播",
+          "game_avatarUrl180": "http://huyaimg.msstatic.com/avatar.jpg",
+          "gameLiveOn": true,
+          "live_intro": "测试主播的房间",
+          "game_name": "英雄联盟",
+          "game_total_count": 150000,
+          "game_activityCount": 123456,
+          "game_screenshot": "https://img.huya.com/s.jpg"
+        },
+        {
+          "room_id": 3002,
+          "game_nick": "下播的测试员",
+          "gameLiveOn": false,
+          "game_name": "户外"
+        }
+      ]
+    },
+    "3": {
+      "docs": [
+        {
+          "room_id": 4444,
+          "game_nick": "在播的测试房",
+          "game_introduction": "测试赛况直播中",
+          "game_imgUrl": "//huyaimg.msstatic.com/c.jpg",
+          "game_screenshot": "https://img.huya.com/c.jpg",
+          "gameName": "英雄联盟",
+          "game_total_count": 85000
+        },
+        {
+          "room_id": 9527,
+          "game_nick": "测试主播",
+          "game_introduction": "重复房间被去重"
+        }
+      ]
+    }
+  }
+}

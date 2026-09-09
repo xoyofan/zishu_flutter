@@ -1,0 +1,25 @@
+{
+  "code": 0,
+  "data": {
+    "rl": [
+      {
+        "rid": 444,
+        "rn": "首页房1",
+        "nn": "主播D",
+        "rs16": "https://rpic.douyucdn.cn/d.jpg",
+        "c2name": "户外",
+        "cid2": "9",
+        "ol": 66666,
+        "copilotLabel": "高能时刻"
+      },
+      {
+        "rid": 555,
+        "rn": "首页房2",
+        "nn": "主播E",
+        "c2name": "烟雨阁",
+        "cid2": "10",
+        "ol": 123456789
+      }
+    ]
+  }
+}

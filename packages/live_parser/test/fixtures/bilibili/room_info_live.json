@@ -1,0 +1,16 @@
+{
+  "code": 0,
+  "data": {
+    "room_id": 9527,
+    "uid": 11111,
+    "live_status": 1,
+    "title": "B站测试房间",
+    "uname": "B站主播",
+    "face": "http://i0.hdslb.com/bfs/face/a.jpg",
+    "user_cover": "https://i0.hdslb.com/bfs/cover/b.jpg",
+    "keyframe": "https://i0.hdslb.com/bfs/keyframe/c.jpg",
+    "parent_area_name": "网游",
+    "area_name": "英雄联盟",
+    "area_id": 325
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "data": {
+    "cate1Info": [
+      { "cate1Id": 1, "cate1Name": "网游竞技" },
+      { "cate1Id": 8, "cate1Name": "娱乐天地" }
+    ],
+    "cate2Info": [
+      { "cate1Id": 1, "cate2Id": 1, "cate2Name": "英雄联盟", "pic": "//shf1-ali-douyucdn.cn/cate/1.jpg" },
+      { "cate1Id": 1, "cate2Id": 2, "cate2Name": "DNF", "pic": "" },
+      { "cate1Id": 8, "cate2Id": 100, "cate2Name": "二次元", "icon": "//shf1-ali-douyucdn.cn/cate/100.jpg" }
+    ]
+  }
+}

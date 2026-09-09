@@ -1,0 +1,27 @@
+{
+  "data": {
+    "list": [
+      {
+        "rid": 777,
+        "roomName": "移动端房",
+        "nickname": "主播F",
+        "cate2Name": "主机游戏",
+        "cate2Id": 3,
+        "roomSrc": "https://rpic.douyucdn.cn/f.jpg",
+        "hn": "1.2万",
+        "online": 0
+      },
+      {
+        "rid": 888,
+        "roomName": "无分类名房",
+        "nickname": "主播G",
+        "cate2Id": 2,
+        "verticalSrc": "https://rpic.douyucdn.cn/g.jpg",
+        "hn": "",
+        "online": 850
+      }
+    ],
+    "pageCount": 5,
+    "nowPage": 1
+  }
+}

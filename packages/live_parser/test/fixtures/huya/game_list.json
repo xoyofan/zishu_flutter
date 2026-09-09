@@ -1,0 +1,10 @@
+{
+  "status": 200,
+  "data": [
+    { "gid": 1, "gameFullName": "英雄联盟", "bussType": 1 },
+    { "gid": 2, "gameFullName": "DNF", "bussType": 1 },
+    { "gid": 2336, "gameFullName": "王者荣耀", "bussType": 3 },
+    { "gid": 2135, "gameFullName": "一起看", "bussType": 8, "isHide": 1 },
+    { "gid": 0, "gameFullName": "", "bussType": 2 }
+  ]
+}

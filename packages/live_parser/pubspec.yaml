@@ -1,0 +1,15 @@
+name: live_parser
+description: 纯 Dart 直播站点解析核心:标准模型、稳定契约与各站点解析实现。禁止依赖 Flutter、Widget、media-kit 与任何 Web API。
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  http: ^1.2.2
+  crypto: ^3.0.6
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.0

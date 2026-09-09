@@ -1,0 +1,19 @@
+{
+  "error": 0,
+  "msg": "ok",
+  "data": {
+    "rtmp_url": "https://hw-tct.douyucdn.cn/live",
+    "rtmp_live": "9527probe_0_0.flv",
+    "rtmp_cdn": "hw-h5",
+    "is_mixed": false,
+    "multirates": [
+      { "name": "蓝光8M", "rate": 0, "bit": 8000 },
+      { "name": "超清", "rate": 2, "bit": 2000 }
+    ],
+    "cdnsWithName": [
+      { "name": "线路1", "cdn": "hw-h5", "re-weight": 100 },
+      { "name": "线路2", "cdn": "tct-h5", "reWeight": 80 },
+      { "name": "线路3", "cdn": "ali-h5", "re-weight": 60 }
+    ]
+  }
+}

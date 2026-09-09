@@ -1,0 +1,17 @@
+{
+  "room": {
+    "room_id": 9527,
+    "nickname": "测试主播",
+    "show_status": 1,
+    "room_name": "斗鱼测试房间",
+    "room_pic": "https://rpic.douyucdn.cn/live_cover/240x135.jpg",
+    "videoLoop": 0,
+    "cate_id": 1,
+    "cate_name": "英雄联盟",
+    "avatar": {
+      "big": "//shf1-ali-douyucdn.cn/avatar/big.jpg",
+      "middle": "",
+      "small": ""
+    }
+  }
+}

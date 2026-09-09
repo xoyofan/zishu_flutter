@@ -1,0 +1,16 @@
+{
+  "status": 200,
+  "data": {
+    "profileInfo": {
+      "nick": "下播主播",
+      "yyid": 12345678901234,
+      "avatar180": ""
+    },
+    "liveStatus": "OFF",
+    "realLiveStatus": "OFF",
+    "liveData": {},
+    "stream": {
+      "baseSteamInfoList": []
+    }
+  }
+}

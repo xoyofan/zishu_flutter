@@ -1,0 +1,24 @@
+{
+  "vList": [
+    {
+      "lProfileRoom": 111,
+      "sIntroduction": "房间A标题",
+      "sNick": "主播A",
+      "iGid": 1,
+      "sGameFullName": "英雄联盟",
+      "lTotalCount": 102400,
+      "sScreenshot": "https://img.huya.com/a.jpg",
+      "sRecommendTagName": "官方赛况"
+    },
+    {
+      "lProfileRoom": 222,
+      "sRoomName": "房间B标题",
+      "sNick": "主播B",
+      "iGid": 2,
+      "sGameFullName": "DNF",
+      "lUserCount": 999,
+      "sScreenshot": "//img.huya.com/b.jpg"
+    }
+  ],
+  "iTotalPage": 3
+}
