@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 
 import 'src/apps/windows/windows_app.dart';
@@ -7,5 +8,5 @@ import 'src/apps/windows/windows_app.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
-  runApp(const WindowsApp());
+  runApp(const ProviderScope(child: WindowsApp()));
 }

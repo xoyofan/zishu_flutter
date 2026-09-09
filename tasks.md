@@ -23,15 +23,17 @@
 | 卡 | 内容 | 依赖 | 状态 | 验证 |
 |---|---|---|---|---|
 | P0 | package 骨架 + 契约层:models(RoomPayload/StreamQuality/StreamLine/RoomSummary/CategoryResult/SearchResult/SiteCapabilities)+ contracts(RoomResolver/BrowseRepository/SearchRepository/SiteRegistry)+ ParserHttp(可注入 client) | — | [x] 契约层已建(UI 会话产出,解析会话只读续建) | `dart analyze` 0 issue ✓ |
-| P1 | 斗鱼完整链路:URL/房间号归一、betard、getEncryption 白名单 md5 auth(TTL 缓存)、getH5PlayV1 多 CDN 多画质、hlsH5Preview、三态判定、registry 注册 | P0 | [ ] | dart test(fixtures) |
-| P2 | 斗鱼 browse:cate/list 分类 + rkc/directory/mixList 首页/分类房间列表 | P1 | [ ] | dart test |
-| P3 | 斗鱼 search:searchUser + searchShow | P1 | [ ] | dart test |
-| P4 | cross browse + catalog(全平台聚合首页数据) | P1-P3 | [ ] | dart test |
-| P5 | IPTV(M3U 解析,验证非直播站点型数据源) | P0 | [ ] | dart test |
-| P6 | 抖音(a_bogus/SM3、Cookie、protobuf) | P1 | [ ] | dart test |
-| P7 | 长尾平台:虎牙、B站、YY、Twitch、快手、SOOP、YouTube、小红书 | P4 | [ ] | dart test + 平台完成定义(implementation-plan 5.2) |
-| P8 | Dart streaming-server(live_server:shelf + SSE/WS,snake_case 兼容层) | P4 | [ ] | dart test + flutter build web |
-| P9 | 弹幕协议 codec 与会话(douyu WS 等) | P1 | [ ] | dart test |
+| P1 | 斗鱼完整链路:URL/房间号归一、betard、getEncryption 白名单 md5 auth(TTL 缓存)、getH5PlayV1 多 CDN 多画质、hlsH5Preview、三态判定、registry 注册 | P0 | [x] 解析会话产出,2026-09-09 盘点入库 | dart test(fixtures) ✓ |
+| P2 | 斗鱼 browse:cate/list 分类 + rkc/directory/mixList 首页/分类房间列表 | P1 | [x] 同上 | dart test ✓ |
+| P3 | 斗鱼 search:searchUser + searchShow | P1 | [x] 同上 | dart test ✓ |
+| P4 | cross browse + catalog(全平台聚合首页数据) | P1-P3 | [x] 同上 | dart test ✓ |
+| P5 | IPTV(M3U 解析,验证非直播站点型数据源) | P0 | [x] 同上 | dart test ✓ |
+| P6 | 抖音(a_bogus/SM3、Cookie、protobuf) | P1 | [ ] 未开始 | dart test |
+| P7 | 长尾平台:虎牙、B站、YY、Twitch、快手、SOOP、YouTube、小红书 | P4 | [~] 虎牙(tars/anti_code)/B站(wbi)/Twitch 已实现;YY/快手/SOOP/YouTube/小红书未做 | dart test + 平台完成定义(implementation-plan 5.2) |
+| P8 | Dart streaming-server(live_server:shelf + SSE/WS,snake_case 兼容层) | P4 | [ ] 未开始 | dart test + flutter build web |
+| P9 | 弹幕协议 codec 与会话(douyu WS 等) | P1 | [~] douyu/bilibili codec 已实现;会话管理待验 | dart test |
+
+> 2026-09-09 盘点:`packages/live_parser` 实测 dart analyze 0 issue、dart test 167 passed + 5 skipped(fixtures 全离线),P 轨状态按实际产出同步(解析会话此前未回写看板)。
 
 > P1-P3 即"Windows 第一阶段平台"的斗鱼部分(implementation-plan 5.1);虎牙/B站随 P7,但 M3 里程碑要求其与 P1 同等主链路。
 
