@@ -29,6 +29,7 @@ import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/features/play/widgets/play_side_panel.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 import 'package:zishu_flutter/src/shared/presentation/design_tokens.dart';
+import 'package:zishu_flutter/src/shared/presentation/platform_brands.dart';
 import 'package:zishu_flutter/src/shared/presentation/widgets/platform_icon.dart';
 
 /// 测试替身:VM 下替代 MediaKitLivePlayer,快照立即给一帧,方法只记录调用。
@@ -140,7 +141,7 @@ void main() {
   Finder platformIconFinder() => find.byType(PlatformIcon);
 
   group('U9 底部导航', () {
-    testWidgets('<768(360×640):44px 顶导航不渲染(平台条接管平台切换),底部 56px 主导航', (
+    testWidgets('<768(360×640):44px 顶导航不渲染(平台条接管平台切换),底部 56px 主导航 7 项', (
       tester,
     ) async {
       suppressRenderFlexOverflow();
@@ -148,18 +149,19 @@ void main() {
       final size = viewport(tester);
 
       // 顶部 44px 顶导航不渲染:logo 文案消失。平台切换改由 AppShell 的
-      // 平台条(nav-platform-strip,52px + 安全区)承担。
+      // 平台条(nav-platform-strip,两行网格,52px+ 安全区)承担。
       expect(
         find.text('紫薯直播'),
         findsNothing,
         reason: '窄屏下顶部导航(含 logo)不应渲染',
       );
 
-      // 底部 56px 导航渲染:三个主导航入口文本存在,且中心点全部落在
-      // 视口底部 56px 带内(bottomNavHeight 对齐 AppSpacing 规范)。
-      // nav-* 锚点由顶部导航迁移至底部导航(实现复用同 key,与文件头
-      // 注释的调整指引一致),nav-home 额外做底部带内断言。
+      // 底部 56px 导航渲染 7 项(紫薯 logo / 首页 / 分类 / 关注 / 搜索 /
+      // 主题 / 我的):4 个必留契约锚点(nav-home/follow/search/settings)
+      // 全部存在且中心点落在视口底部 56px 带内;其余项文案存在且落带内。
+      // nav-settings 挂在「我的」项(路由 /settings),保留既有锚点契约。
       final bandTop = size.height - AppSpacing.bottomNavHeight;
+
       final navHome = find.byKey(const Key('nav-home'));
       expect(navHome, findsOneWidget, reason: 'nav-home 锚点应迁移至底部导航');
       final navHomeCenter = tester.getCenter(navHome);
@@ -168,15 +170,27 @@ void main() {
         greaterThan(bandTop),
         reason: 'nav-home 应位于底部导航带内',
       );
-      for (final label in const ['首页', '关注', '设置']) {
+
+      for (final id in const ['nav-home', 'nav-follow', 'nav-search', 'nav-settings']) {
+        final anchor = find.byKey(Key(id));
+        expect(anchor, findsOneWidget, reason: '底部导航缺少锚点 $id');
+        final center = tester.getCenter(anchor);
+        expect(
+          center.dy,
+          greaterThan(bandTop),
+          reason: '$id 不在底部 ${AppSpacing.bottomNavHeight}px 导航带内',
+        );
+        expect(center.dy, lessThanOrEqualTo(size.height), reason: '$id 超出视口底部');
+      }
+
+      for (final label in const ['首页', '关注', '我的', '分类', '搜索', '主题']) {
         final item = find.text(label);
         expect(item, findsOneWidget, reason: '底部导航缺少「$label」入口');
         final center = tester.getCenter(item);
         expect(
           center.dy,
           greaterThan(bandTop),
-          reason:
-              '「$label」中心不在底部 ${AppSpacing.bottomNavHeight}px 导航带内',
+          reason: '「$label」中心不在底部 ${AppSpacing.bottomNavHeight}px 导航带内',
         );
         expect(
           center.dy,
@@ -214,9 +228,15 @@ void main() {
         findsOneWidget,
         reason: 'icon-only 平台 tab 应保留斗鱼品牌图标',
       );
+      // 顶层平台 tab 的 Tooltip 值应为平台名「斗鱼」。侧栏平台 chip
+      // (features/browse/widgets/browse_sidebar.dart)也带同名 Tooltip,故把
+      // 断言限定在 platform-tab-douyu 的祖先链上,只校验顶栏 tab。
       expect(
-        find.byWidgetPredicate(
-          (widget) => widget is Tooltip && widget.message == '斗鱼',
+        find.ancestor(
+          of: find.byKey(const Key('platform-tab-douyu')),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Tooltip && widget.message == '斗鱼',
+          ),
         ),
         findsOneWidget,
         reason: 'icon-only 平台 tab 的 Tooltip 值应为平台名「斗鱼」',
@@ -243,9 +263,14 @@ void main() {
         findsNothing,
         reason: '桌面宽度下平台 tab 为 icon-only,平台名由 Tooltip 承载',
       );
+      // 顶层平台 tab 的 Tooltip 值应为平台名「斗鱼」。侧栏平台 chip 也带同名
+      // Tooltip(见 features/browse),故把断言限定在 platform-tab-douyu 祖先链。
       expect(
-        find.byWidgetPredicate(
-          (widget) => widget is Tooltip && widget.message == '斗鱼',
+        find.ancestor(
+          of: find.byKey(const Key('platform-tab-douyu')),
+          matching: find.byWidgetPredicate(
+            (widget) => widget is Tooltip && widget.message == '斗鱼',
+          ),
         ),
         findsOneWidget,
         reason: '桌面宽度下平台 tab 的 Tooltip 值应为平台名「斗鱼」',
@@ -324,44 +349,46 @@ void main() {
   });
 
   group('U9 平台条', () {
-    testWidgets('360 宽:平台条单行横向承载全部平台入口,锚点可达且不溢出', (
+    testWidgets('360 宽:平台条两行网格承载全部平台入口,锚点可达且不溢出', (
       tester,
     ) async {
       suppressRenderFlexOverflow();
       await pumpApp(tester, const Size(360, 640));
 
-      const ids = ['all', 'douyu', 'huya', 'bilibili', 'douyin', 'twitch'];
-      // 全部挂载:移动端平台条(nav-platform-strip)用 SingleChildScrollView + Row,
-      // 非 lazy 容器,全部 platform-tab-{id} 均可命中。
+      // 全部挂载:移动端平台条(nav-platform-strip)为两行网格(6 × 2),非
+      // lazy 容器,全部 platform-tab-{id} 与 platform-category-{id} 均可命中。
+      final ids = PlatformBrandCatalog.navPlatforms.map((b) => b.id).toList();
       for (final id in ids) {
         expect(
           find.byKey(Key('platform-tab-$id')),
           findsOneWidget,
           reason: '移动端平台条未承载平台入口 $id',
         );
+        expect(
+          find.byKey(Key('platform-category-$id')),
+          findsOneWidget,
+          reason: '移动端平台条未承载分类入口 $id',
+        );
       }
 
-      // 容器形态:由横向滚动容器承载(对齐 main.css:218 nav-platform-strip),
-      // 而非内容区 Wrap 多行 chips(U9 的过渡方案已由平台条取代)。
+      // 两行网格:所有 platform-tab 顶部只出现两种不同的 y(整像素,吸收
+      // 亚像素抖动),不再是由 SingleChildScrollView 承载的横向单行 Row。
+      final tops = <int>{};
+      for (final id in ids) {
+        tops.add(
+          tester.getTopLeft(find.byKey(Key('platform-tab-$id'))).dy.round(),
+        );
+      }
+      expect(tops.length, 2, reason: '平台条应为两行(6 × 2)网格');
+
       expect(
         find.ancestor(
           of: find.byKey(const Key('platform-tab-douyu')),
           matching: find.byType(SingleChildScrollView),
         ),
-        findsOneWidget,
-        reason: '平台入口应由横向滚动的平台条承载',
+        findsNothing,
+        reason: '两行网格不应由横向滚动容器承载',
       );
-
-      // 单行横排:所有入口顶部对齐(不再是多行 Wrap)。
-      final firstTop =
-          tester.getTopLeft(find.byKey(const Key('platform-tab-all'))).dy;
-      for (final id in ids) {
-        expect(
-          tester.getTopLeft(find.byKey(Key('platform-tab-$id'))).dy,
-          closeTo(firstTop, 1),
-          reason: '平台条应为单行横排,入口 $id 不在首行',
-        );
-      }
       expect(tester.takeException(), isNull);
     });
   });

@@ -250,4 +250,39 @@ void main() {
           'G2 接真弹幕后升级为 greaterThan(count1)(见上方注释块)',
     );
   });
+
+  testWidgets('playbackStatusIndicator:聊天状态条左侧播放状态可配置', (
+    tester,
+  ) async {
+    // 直泵 PlaySidePanel(上下文 tokens 回退 ZishuTokens.dark),验证状态条左侧
+    // 播放指示随 PlaybackStatus 变化;文案避免全角冒号。
+    Future<void> pumpWith(PlaybackStatus status) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(width: 392, child: PlaySidePanel(playbackStatus: status)),
+          ),
+        ),
+      );
+      await _pumpStable(tester);
+    }
+
+    // 默认(无参)= 播放中
+    await pumpWith(const PlaybackStatus());
+    expect(find.text('播放中'), findsOneWidget);
+    expect(find.text('已暂停'), findsNothing);
+
+    // 静音态:播放中(静音)
+    await pumpWith(const PlaybackStatus(muted: true));
+    expect(find.text('播放中(静音)'), findsOneWidget);
+    expect(find.text('播放中'), findsNothing);
+
+    // 暂停态:已暂停
+    await pumpWith(const PlaybackStatus(playing: false));
+    expect(find.text('已暂停'), findsOneWidget);
+
+    // 状态指示与「弹幕已连接」「刷新」并排。
+    expect(find.byKey(const Key('play-side-chat-refresh')), findsOneWidget);
+    expect(find.text('弹幕已连接'), findsOneWidget);
+  });
 }

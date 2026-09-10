@@ -4,13 +4,15 @@ import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 
 import '../../../shared/presentation/design_tokens.dart';
-import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../application/browse_provider.dart';
+import '../widgets/browse_sidebar.dart';
 import '../widgets/room_grid.dart';
 
-/// 全平台/平台首页:顶部平台筛选 chips + 房间自适应网格。
-/// 数据由 [browseRoomsProvider] 持有,本 Widget 只渲染并转发用户操作。
+/// 全平台/平台首页:宽屏渲染「左侧栏 + 房间网格」,窄屏仅房间网格。
+///
+/// 平台入口锚点 [home-platform-chip-{id}] 已迁至左侧栏(见 [BrowseSidebar]),
+/// 此处内容区不再重复渲染横向 chips 行(窄屏平台切换由 AppShell 平台条承担)。
 class HomeView extends ConsumerStatefulWidget {
   const HomeView({super.key, required this.site});
 
@@ -27,52 +29,32 @@ class _HomeViewState extends ConsumerState<HomeView> {
     final query = BrowseRoomQuery(site: widget.site);
     final roomsAsync = ref.watch(browseRoomsProvider(query));
     final controller = ref.read(browseRoomsProvider(query).notifier);
-    // >=768:内容区平台筛选 chips 用 Wrap 多行,key 取 home-platform-chip-{site}
-    // 以让位给顶导航 tabs 的 platform-tab-{site}(保证 key 全树唯一)。
-    // <768:平台切换已由 AppShell 的平台条(nav-platform-strip)承担,
-    // 内容区不再重复渲染 chips。
+    // 断点沿用 AppBreakpoints.phone(768):与旧 chips 行同档,避免 768–1365
+    // 区间出现平台入口真空;左栏在此档出现,内容区不再渲染 chips。
+    // <768:平台切换由 AppShell 平台条(nav-platform-strip)承担。
     final isPhone = MediaQuery.sizeOf(context).width < AppBreakpoints.phone;
-    const chipKeyPrefix = 'home-platform-chip-';
+    final tokens = context.tokens;
 
-    return Column(
+    // 房间网格主体(下拉刷新 + 滚动加载 + 空态/错误)。
+    final body = switch (roomsAsync) {
+      AsyncValue(:final value?) => _body(
+          context,
+          rooms: value.rooms,
+          hasMore: value.hasMore,
+        ),
+      AsyncValue(:final error?) => _ErrorRetry(
+          message: '房间列表加载失败：$error',
+          onRetry: controller.refresh,
+        ),
+      _ => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+    };
+
+    return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        if (!isPhone)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg,
-              AppSpacing.sm,
-              AppSpacing.lg,
-              AppSpacing.xs,
-            ),
-            child: Wrap(
-              spacing: AppSpacing.sm,
-              runSpacing: AppSpacing.sm,
-              children: [
-                for (final brand in PlatformBrandCatalog.navPlatforms)
-                  _PlatformChip(
-                    brand: brand,
-                    selected: brand.id == widget.site,
-                    keyPrefix: chipKeyPrefix,
-                  ),
-              ],
-            ),
-          ),
-        Expanded(
-          child: switch (roomsAsync) {
-            // 刷新中保留旧数据渲染(value 非 null 即有数据)。
-            AsyncValue(:final value?) => _body(
-                context,
-                rooms: value.rooms,
-                hasMore: value.hasMore,
-              ),
-            AsyncValue(:final error?) => _ErrorRetry(
-                message: '房间列表加载失败：$error',
-                onRetry: controller.refresh,
-              ),
-            _ => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-          },
-        ),
+        if (!isPhone) BrowseSidebar(site: widget.site),
+        if (!isPhone) Container(width: 1, color: tokens.border),
+        Expanded(child: body),
       ],
     );
   }
@@ -119,49 +101,6 @@ class _HomeViewState extends ConsumerState<HomeView> {
         // 跨站聚合时才展示平台角标(对齐 Vue 版行为)。
         showPlatformBadge: widget.site == 'all',
         onRoomTap: (room) => context.push('/${room.site}/play/${room.roomId}'),
-      ),
-    );
-  }
-}
-
-/// 平台筛选 chip:选中态使用平台品牌色。
-class _PlatformChip extends StatelessWidget {
-  const _PlatformChip({
-    required this.brand,
-    required this.selected,
-    required this.keyPrefix,
-  });
-
-  final PlatformBrand brand;
-  final bool selected;
-
-  /// 契约 key 前缀:<768 为 platform-tab-(U9,W12 验收),>=768 为
-  /// home-platform-chip-(顶导航 tabs 持有 platform-tab-*)。
-  final String keyPrefix;
-
-  @override
-  Widget build(BuildContext context) {
-    return ChipTheme(
-      data: ChipTheme.of(context).copyWith(
-        backgroundColor: context.tokens.surface,
-        selectedColor: brand.color.withValues(alpha: 0.22),
-        checkmarkColor: brand.color,
-        labelStyle: AppTypography.body.copyWith(
-          color: selected ? brand.color : context.tokens.textSecondary,
-          fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-        ),
-        side: BorderSide(color: selected ? brand.color : context.tokens.border),
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.allSm),
-      ),
-      child: FilterChip(
-        // 测试锚点:定位/点击平台筛选 chip(前缀随断点,见 [keyPrefix])。
-        key: Key('$keyPrefix${brand.id}'),
-        selected: selected,
-        label: Text(brand.name),
-        onSelected: (_) =>
-            context.go(brand.id == 'all' ? '/all' : '/${brand.id}'),
-        showCheckmark: false,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
       ),
     );
   }

@@ -70,26 +70,47 @@ class _PlayViewState extends ConsumerState<PlayView> {
     // 侧栏宽度按视口分档(268/328/392/425),对齐 main.css:228-244。
     final sidePanelWidth = AppSpacing.playSidePanelWidthFor(size.width);
 
-    final stage = Column(
+    final stage = Stack(
+      fit: StackFit.expand,
       children: [
-        Expanded(
-          child: _VideoStage(
-            async: async,
-            onRetry: () =>
-                ref.read(playControllerProvider(_params).notifier).retry(),
-          ),
+        _VideoStage(
+          async: async,
+          onRetry: () =>
+              ref.read(playControllerProvider(_params).notifier).retry(),
         ),
-        PlayerControlsBar(site: widget.site, roomId: widget.roomId),
-        QualityLineBar(
-          payload: play?.payload,
-          activeQuality: play?.quality,
-          activeLine: play?.line,
-          onQualityTap: (quality) => ref
-              .read(playControllerProvider(_params).notifier)
-              .switchQuality(quality),
-          onLineTap: (line) => ref
-              .read(playControllerProvider(_params).notifier)
-              .switchLine(line),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  AppColors.background.withValues(alpha: 0.0),
+                  AppColors.background.withValues(alpha: 0.72),
+                ],
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                PlayerControlsBar(site: widget.site, roomId: widget.roomId),
+                QualityLineBar(
+                  payload: play?.payload,
+                  activeQuality: play?.quality,
+                  activeLine: play?.line,
+                  onQualityTap: (quality) => ref
+                      .read(playControllerProvider(_params).notifier)
+                      .switchQuality(quality),
+                  onLineTap: (line) => ref
+                      .read(playControllerProvider(_params).notifier)
+                      .switchLine(line),
+                ),
+              ],
+            ),
+          ),
         ),
       ],
     );
@@ -107,49 +128,41 @@ class _PlayViewState extends ConsumerState<PlayView> {
               : () => setState(() => _sidePanelVisible = !_sidePanelVisible),
         ),
         Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.lg,
-              0,
-              AppSpacing.lg,
-              AppSpacing.lg,
-            ),
-            child: stackSidePanel
-                ? Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(flex: 3, child: stage),
-                      if (showPanel) ...[
-                        const SizedBox(height: AppSpacing.md),
-                        Expanded(
-                          flex: 2,
-                          child: PlaySidePanel(
-                            site: widget.site,
-                            roomId: widget.roomId,
-                            payload: play?.payload,
-                          ),
+          child: stackSidePanel
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(flex: 3, child: stage),
+                    if (showPanel) ...[
+                      const SizedBox(height: AppSpacing.md),
+                      Expanded(
+                        flex: 2,
+                        child: PlaySidePanel(
+                          site: widget.site,
+                          roomId: widget.roomId,
+                          payload: play?.payload,
                         ),
-                      ],
+                      ),
                     ],
-                  )
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(child: stage),
-                      if (showPanel) ...[
-                        const SizedBox(width: AppSpacing.md),
-                        SizedBox(
-                          width: sidePanelWidth,
-                          child: PlaySidePanel(
-                            site: widget.site,
-                            roomId: widget.roomId,
-                            payload: play?.payload,
-                          ),
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(child: stage),
+                    if (showPanel) ...[
+                      const SizedBox(width: AppSpacing.md),
+                      SizedBox(
+                        width: sidePanelWidth,
+                        child: PlaySidePanel(
+                          site: widget.site,
+                          roomId: widget.roomId,
+                          payload: play?.payload,
                         ),
-                      ],
+                      ),
                     ],
-                  ),
-          ),
+                  ],
+                ),
         ),
       ],
     );
@@ -207,11 +220,13 @@ class _RoomHeader extends StatelessWidget {
           ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
-            child: Text(
-              [if (category.isNotEmpty) category, title].join(' · '),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTypography.title.copyWith(fontSize: 14),
+            child: Center(
+              child: Text(
+                [if (category.isNotEmpty) category, title].join(' · '),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.title.copyWith(fontSize: 14),
+              ),
             ),
           ),
           IconButton(
@@ -242,7 +257,6 @@ class _VideoStage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = context.tokens;
     final play = async.value;
     final snapshot =
         ref.watch(playerSnapshotProvider).value ?? const PlayerSnapshot();
@@ -289,12 +303,6 @@ class _VideoStage extends ConsumerWidget {
     }
 
     return Container(
-      decoration: BoxDecoration(
-        color: tokens.surfaceSoft,
-        borderRadius: AppRadius.allLg,
-        border: Border.all(color: tokens.border),
-      ),
-      clipBehavior: Clip.antiAlias,
       alignment: Alignment.center,
       padding: payload == null || payload.source == 'fixture'
           ? const EdgeInsets.all(AppSpacing.xl)

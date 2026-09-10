@@ -144,6 +144,33 @@
 | 2026-09-10 | 真实解析开关核查(启动 Debug exe + 窗口取证) | 首页 10 房间与 `kFixtureRooms` 逐条一致 → **当前构建仍是 fixture 模式**;`useRealParser` 默认 false 且为编译期常量 |
 | 2026-09-10 | P 轨 A13 门禁 `dart analyze` / `dart test` | No issues(0 issue);187 passed / 6 skipped / 0 failed(183 → +4 单测) |
 | 2026-09-10 | P 轨 A13 斗鱼在线 smoke(`--run-skipped --plain-name 斗鱼`) | PASS:首页 36252 live → qualities[原画1080P60,蓝光4M,超清,高清] → startedAt=2026-09-10T16:29:28 → 搜索 5 条(修复前 0 条) → 分类 5 组 → 弹幕 29 条/30s |
+| 2026-09-10 | UI 复刻(顶栏/平台条/播放侧栏/首页左栏)门禁 `flutter analyze` | No issues(0 issue) |
+| 2026-09-10 | UI 复刻门禁 `flutter test` 全量 | 156 passed / 2 failed(latency_test 并行负载抖动)/ 0 skipped |
+| 2026-09-10 | `latency_test` 单独复跑 | 5/5 passed(bilibili median=591ms、douyu reentry 433ms ≤ budget 1678ms)→ 全量 2 失败确认为负载抖动非回归 |
+| 2026-09-10 | UI 复刻门禁 `flutter build windows --debug -t lib/main.dart` | OK |
+
+### UI 复刻收口明细(2026-09-10)
+
+在 `241c163`(顶栏/平台条/播放侧栏 1:1)基础上按对比截图补齐 P0-P2 缺口,4 条文件级互斥轨并行:
+
+| 轨 | 文件 | 内容 |
+|---|---|---|
+| T1 顶栏/底栏 | `lib/src/app/app_shell.dart` | 桌面 `_TopNav` 居中平台 tab(34×34 品牌色描边+阴影)、右侧工具区(关注/搜索/主题/设置/头像);移动 `_PlatformStrip` 6×2 图标网格;`_BottomNav` 扩为 7 项 |
+| T2 播放页沉浸 | `lib/src/features/play/views/play_view.dart` | 去掉外层 padding/圆角边框,视频区 `Stack` 全幅;`PlayerControlsBar`+`QualityLineBar` 作为底部渐变叠层;`_RoomHeader` 居中标题 |
+| T3 侧栏 | `lib/src/features/play/widgets/play_side_panel.dart` | 新增 `PlaybackStatus`(播放中/静音/已暂停)状态条(半角括号、禁全角冒号);信息头高度按 `MediaQuery.textScalerOf` 缩放防大字体溢出 |
+| T4 首页左栏 | `lib/src/features/browse/views/home_view.dart` + 新增 `widgets/browse_sidebar.dart` | 桌面常驻左栏(平台图标网格 + 分类树),锚点 `home-platform-chip-{id}`;窄屏不渲染 |
+
+收口修复(跨轨破坏):
+
+- **网格列数改按视口断点**:`room_grid.dart` 原按 `LayoutBuilder` 容器宽取列,左栏使 800 视口内容区退到 640 档 → 3 列,与参考 `RoomGrid.vue:120-157` 的 `@media`(视口)口径不符。改为列数取 `MediaQuery.sizeOf(context).width`,卡片物理宽仍按容器算 → 800→4、1024→5(对齐 `mobile_tablets_test.gridColumnsScale`)。
+- **左栏宽度对齐**:参考 `drawerPref` 默认 `open:true`(`--directory-drawer-width: 220px`),`BrowseSidebar.width` 140→220。
+- **重复 Tooltip**:`browse_sidebar.dart` 的平台 chip 与顶栏 tab 同名 Tooltip,U9 收缩用例断言已限定 `platform-tab-douyu` 祖先链,无需改代码。
+
+遗留(未纳入本轮):
+
+- 首页左栏为固定 220px,未实装参考的可折叠 rail(52px↔220px,`drawer-toggle`);
+- 左栏平台图标布局为 3 列,参考为 2 列;
+- 真实截图复核受阻:本环境下 GUI 进程落在**非交互 window station**,`PrintWindow` 返回白帧、全屏 `ImageGrab` 只见桌面壁纸(见 `.workbuddy/memory`),故改以测试契约(gridColumnsScale / browse_sidebar / responsive_skip)作为验收证据。
 
 ### W13 修复明细(2026-09-09)
 

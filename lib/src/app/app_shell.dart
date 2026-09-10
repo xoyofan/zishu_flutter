@@ -36,113 +36,119 @@ class AppShell extends StatelessWidget {
   }
 }
 
-/// 移动端平台条:对齐 SFVideoLive `NavPlatformStrip.vue`。
+/// 移动端平台条:竖屏(X < 768)两行网格,对齐 SFVideoLive
+/// `responsive-chrome.css:265-369`(`nav-platform-strip__item` flex 1 1 15% →
+/// 12 项平分两行、隐藏平台文字、图标 1.75rem、箭头列 1.8rem、不滚动)。
 ///
-/// 每个平台是「品牌图标入口 + 分类箭头」的组合卡片,入口本身使用
-/// `platform-tab-{site}` 锚点;分类箭头单独跳转到该平台分类页,避免把两个
-/// 语义动作塞进同一个点击区域。
+/// 每格 = 品牌图标入口(锚点 `platform-tab-{site}`)+ 独立分类箭头(锚点
+/// `platform-category-{site}`),各自语义动作分离;平台清单来自
+/// `PlatformBrandCatalog.navPlatforms`(每行 6 项,共 2 行)。
 class _PlatformStrip extends StatelessWidget {
   const _PlatformStrip({required this.currentSite});
 
   final String currentSite;
 
-  static const double contentHeight = 52;
+  /// 图标尺寸(对齐 CSS 1.75rem,16px 基准 ≈ 28px)。
+  static const double _kIconSize = 28;
+
+  /// 分类箭头列宽(对齐 CSS 1.8rem ≈ 28.8px)。
+  static const double _kArrowWidth = 28.8;
+
+  /// 单行高度:图标 + 上下内边距。
+  static const double _kRowHeight = 44;
+
+  /// 两行内容高度(单行高 × 2 + 行距)。
+  static const double _kContentHeight = _kRowHeight * 2 + 8;
+
+  /// 每行平台数:12 项 → 6 × 2。
+  static const int _kColumns = 6;
 
   @override
   Widget build(BuildContext context) {
     final safeTop = MediaQuery.paddingOf(context).top;
+    final platforms = PlatformBrandCatalog.navPlatforms;
+    final rows = <Widget>[
+      for (int r = 0;
+          r < ((platforms.length / _kColumns).ceil());
+          r++)
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            child: Row(
+              children: [
+                for (int c = 0; c < _kColumns; c++)
+                  if (r * _kColumns + c < platforms.length)
+                    _StripGridCell(
+                      brand: platforms[r * _kColumns + c],
+                      selected: platforms[r * _kColumns + c].id == currentSite,
+                    ),
+              ],
+            ),
+          ),
+        ),
+    ];
     return Container(
-      height: contentHeight + safeTop,
       padding: EdgeInsets.only(top: safeTop),
       decoration: const BoxDecoration(
         color: AppColors.surfaceSoft,
         border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
-        child: Row(
-          children: [
-            for (final brand in PlatformBrandCatalog.navPlatforms)
-              _StripTab(
-                brand: brand,
-                selected: brand.id == currentSite,
-              ),
-          ],
-        ),
+      child: SizedBox(
+        height: _kContentHeight,
+        child: Column(children: rows),
       ),
     );
   }
 }
 
-class _StripTab extends StatelessWidget {
-  const _StripTab({required this.brand, required this.selected});
+/// 平台条单格:图标入口(点击跳平台首页)+ 分类箭头(点击跳平台分类页)。
+class _StripGridCell extends StatelessWidget {
+  const _StripGridCell({required this.brand, required this.selected});
 
   final PlatformBrand brand;
   final bool selected;
 
   @override
   Widget build(BuildContext context) {
-    final width = MediaQuery.sizeOf(context).width;
-    final showLabel = width >= AppBreakpoints.tablet;
-    final borderColor = selected ? brand.color : AppColors.border;
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 2),
-      height: 36,
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: borderColor),
-        borderRadius: AppRadius.allSm,
-      ),
-      clipBehavior: Clip.antiAlias,
+    return Expanded(
       child: Row(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Tooltip(
-            message: brand.name,
-            child: InkWell(
-              key: Key('platform-tab-${brand.id}'),
-              onTap: () => context.go(_platformRoute(brand.id)),
-              hoverColor: AppColors.surfaceRaised,
-              child: Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: showLabel ? AppSpacing.sm : AppSpacing.xs,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    PlatformIcon(id: brand.id, size: 28),
-                    if (showLabel) ...[
-                      const SizedBox(width: AppSpacing.xs),
-                      Text(
-                        brand.name,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: selected
-                              ? AppColors.textPrimary
-                              : AppColors.textSecondary,
-                          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                        ),
-                      ),
-                    ],
-                  ],
+          Expanded(
+            child: Tooltip(
+              message: brand.name,
+              child: InkWell(
+                key: Key('platform-tab-${brand.id}'),
+                onTap: () => context.go(_platformRoute(brand.id)),
+                hoverColor: AppColors.surfaceRaised,
+                child: Container(
+                  margin: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? brand.color.withValues(alpha: 0.16)
+                        : Colors.transparent,
+                    border: Border.all(
+                      color: selected ? brand.color : Colors.transparent,
+                    ),
+                    borderRadius: AppRadius.allSm,
+                  ),
+                  child: Center(
+                    child: PlatformIcon(id: brand.id, size: _PlatformStrip._kIconSize),
+                  ),
                 ),
               ),
             ),
           ),
-          Container(width: 1, height: 24, color: AppColors.border),
           Tooltip(
             message: '${brand.name}分类',
             child: InkWell(
               key: Key('platform-category-${brand.id}'),
               onTap: () => context.go(_categoryRoute(brand.id)),
               hoverColor: AppColors.surfaceRaised,
-              child: const SizedBox(
-                width: 24,
-                height: 34,
-                child: Icon(
+              child: SizedBox(
+                width: _PlatformStrip._kArrowWidth,
+                child: const Icon(
                   Icons.keyboard_arrow_down_rounded,
-                  size: 16,
+                  size: 20,
                   color: AppColors.textSecondary,
                 ),
               ),
@@ -281,14 +287,62 @@ class _TopNavTools extends StatelessWidget {
           route: '/settings',
           showLabel: showLabels,
         ),
-        _NavAction(
-          key: const Key('nav-user'),
-          icon: Icons.person_outline_rounded,
-          label: '登录',
-          tooltip: '登录',
-          showLabel: showLabels,
-        ),
+        _UserAvatar(showLabels: showLabels),
       ],
+    );
+  }
+}
+
+/// 顶栏右侧账号区:对齐 SFVideoLive `NavSidebar.vue` 登录态的头像 + 用户名。
+///
+/// 当前无真实登录态,渲染圆形头像占位(人形图标),保留 `nav-user` 锚点,
+/// hover 有反馈;`showLabels` 时附带「登录」文案。
+class _UserAvatar extends StatelessWidget {
+  const _UserAvatar({required this.showLabels});
+
+  final bool showLabels;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: '账号',
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: const Key('nav-user'),
+          borderRadius: AppRadius.allPill,
+          hoverColor: AppColors.surfaceSoft,
+          onTap: () {},
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircleAvatar(
+                  radius: 14,
+                  backgroundColor: AppColors.brand,
+                  child: Icon(
+                    Icons.person_outline_rounded,
+                    size: 16,
+                    color: Colors.black87,
+                  ),
+                ),
+                if (showLabels) ...[
+                  const SizedBox(width: 5),
+                  const Text(
+                    '登录',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -483,6 +537,10 @@ String _categoryRoute(String site) => site == 'all' || site.isEmpty
     : '/$site/category';
 
 /// 手机(<768)底部主导航:56px 高,保留既有 nav-* 锚点契约。
+///
+/// 7 项对齐 SFVideoLive 移动端底部栏:紫薯 logo / 首页 / 分类 / 关注 / 搜索 /
+/// 主题 / 我的。其中 `nav-home`/`nav-follow`/`nav-search`/`nav-settings` 锚点
+/// 必须保留(`nav-settings` 挂在「我的」项上,该路由到 `/settings`)。
 class _BottomNav extends StatelessWidget {
   const _BottomNav({required this.currentSite});
 
@@ -499,30 +557,78 @@ class _BottomNav extends StatelessWidget {
       child: Row(
         children: [
           _BottomItem(
+            key: const Key('nav-brand'),
+            leading: SizedBox(
+              width: 26,
+              height: 26,
+              child: Image.asset(
+                'assets/ui/logo/logo-128.png',
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => Container(
+                  width: 26,
+                  height: 26,
+                  alignment: Alignment.center,
+                  decoration: const BoxDecoration(
+                    color: AppColors.brand,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Text(
+                    '薯',
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            label: '',
+            route: '/all',
+            active: currentSite == 'all',
+          ),
+          _BottomItem(
             key: const Key('nav-home'),
-            icon: Icons.home_rounded,
+            leading: _bottomIcon(Icons.home_rounded, currentSite == 'all'),
             label: '首页',
             route: '/all',
             active: currentSite == 'all',
           ),
           _BottomItem(
+            key: const Key('nav-category'),
+            leading: _bottomIcon(Icons.grid_view_rounded, false),
+            label: '分类',
+            route: _categoryRoute(currentSite),
+            active: false,
+          ),
+          _BottomItem(
             key: const Key('nav-follow'),
-            icon: Icons.star_border_rounded,
+            leading: _bottomIcon(Icons.star_border_rounded, currentSite == 'follow'),
             label: '关注',
             route: '/follow',
             active: currentSite == 'follow',
           ),
           _BottomItem(
             key: const Key('nav-search'),
-            icon: Icons.search_rounded,
+            leading: _bottomIcon(Icons.search_rounded, false),
             label: '搜索',
             route: '/search',
             active: false,
           ),
           _BottomItem(
+            key: const Key('nav-theme'),
+            leading: _bottomIcon(Icons.dark_mode_outlined, false),
+            label: '主题',
+            onTap: () {},
+            active: false,
+          ),
+          _BottomItem(
             key: const Key('nav-settings'),
-            icon: Icons.settings_outlined,
-            label: '设置',
+            leading: _bottomIcon(
+              Icons.person_outline_rounded,
+              currentSite == 'settings',
+            ),
+            label: '我的',
             route: '/settings',
             active: currentSite == 'settings',
           ),
@@ -532,19 +638,25 @@ class _BottomNav extends StatelessWidget {
   }
 }
 
+/// 底部导航图标(按选中态着色)。
+Widget _bottomIcon(IconData icon, bool active) =>
+    Icon(icon, size: 20, color: active ? AppColors.brand : AppColors.textSecondary);
+
 class _BottomItem extends StatelessWidget {
   const _BottomItem({
     super.key,
-    required this.icon,
+    required this.leading,
     required this.label,
-    required this.route,
+    this.route,
     required this.active,
+    this.onTap,
   });
 
-  final IconData icon;
+  final Widget leading;
   final String label;
-  final String route;
+  final String? route;
   final bool active;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -552,13 +664,15 @@ class _BottomItem extends StatelessWidget {
     return Expanded(
       child: InkWell(
         hoverColor: AppColors.surface,
-        onTap: () => context.go(route),
+        onTap: onTap ?? (route == null ? null : () => context.go(route!)),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 20, color: color),
-            const SizedBox(height: 2),
-            Text(label, style: TextStyle(fontSize: 11, color: color)),
+            leading,
+            if (label.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Text(label, style: TextStyle(fontSize: 11, color: color)),
+            ],
           ],
         ),
       ),

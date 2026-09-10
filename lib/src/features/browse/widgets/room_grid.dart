@@ -71,9 +71,15 @@ class _RoomGridState extends State<RoomGrid> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        final columns = AppRoomGrid.columnsFor(width);
-        // 卡片实际宽 = 内容宽均分(扣列间距),卡高比例必须按实际宽算;
-        // 用固定值会在列数>1 或内容区窄于该值时令文本区溢出。
+        // 列数由 **视口宽** 决定,对齐 SFVideoLive RoomGrid.vue:120-157 的 @media
+        // 媒体查询(CSS 媒体查询只看视口,看不到容器宽)。桌面首页常驻左栏 rail 会
+        // 收窄内容区,但参考实现里列数仍只跟视口走:如 768 视口 + 220px 抽屉开
+        // 仍是 4 列,卡片按容器均分自然收窄。若改成按容器宽取列,800 视口会被
+        // 左栏挤到 640 档退成 3 列,与参考断点不符。
+        final viewportWidth = MediaQuery.sizeOf(context).width;
+        final columns = AppRoomGrid.columnsFor(viewportWidth);
+        // 卡片实际宽 = 内容区宽(containerWidth)均分(扣列间距),卡高比例必须按
+        // 实际宽算;用视口宽会导致左栏存在时卡片溢出。
         final cardWidth =
             (width - AppSpacing.gridCrossAxisSpacing * (columns - 1)) / columns;
         return GridView.builder(

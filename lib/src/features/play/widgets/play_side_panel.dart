@@ -24,6 +24,7 @@ class PlaySidePanel extends StatefulWidget {
     this.payload,
     this.onToggleFollow,
     this.onToggleSuperFollow,
+    this.playbackStatus = const PlaybackStatus(),
   });
 
   final String? site;
@@ -31,6 +32,10 @@ class PlaySidePanel extends StatefulWidget {
   final RoomPayload? payload;
   final VoidCallback? onToggleFollow;
   final VoidCallback? onToggleSuperFollow;
+
+  /// 聊天状态条左侧的播放状态指示(播放中/已暂停/静音)。
+  /// 默认构造即可表达「播放中」,不引入 provider 依赖。
+  final PlaybackStatus playbackStatus;
 
   @override
   State<PlaySidePanel> createState() => _PlaySidePanelState();
@@ -115,10 +120,10 @@ class _PlaySidePanelState extends State<PlaySidePanel> {
               splashFactory: NoSplash.splashFactory,
               overlayColor: const WidgetStatePropertyAll(Colors.transparent),
             ),
-            const Expanded(
+            Expanded(
               child: TabBarView(
                 children: [
-                  _ChatSampleList(),
+                  _ChatSampleList(playbackStatus: widget.playbackStatus),
                   _FollowPanel(),
                   _RecommendPanel(),
                   _SettingsPanel(),
@@ -556,8 +561,24 @@ const List<_ChatSample> _chatSamples = [
   _ChatSample('一只小海豹', '来了来了，老规矩先点个关注'),
 ];
 
+/// 播放状态指示:聊天状态条左侧「播放中/已暂停/静音」文案 + 图标。
+///
+/// 组件内可配置参数,默认表达「播放中」;不引入 provider 依赖。状态文案
+/// 一律避免全角冒号(见文件头硬约束),用半角括号区分静音态。
+class PlaybackStatus {
+  const PlaybackStatus({this.playing = true, this.muted = false});
+
+  final bool playing;
+  final bool muted;
+
+  String get label =>
+      playing ? (muted ? '播放中(静音)' : '播放中') : '已暂停';
+}
+
 class _ChatSampleList extends StatelessWidget {
-  const _ChatSampleList();
+  const _ChatSampleList({required this.playbackStatus});
+
+  final PlaybackStatus playbackStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -574,9 +595,35 @@ class _ChatSampleList extends StatelessWidget {
           ),
           child: Row(
             children: [
+              Icon(
+                playbackStatus.playing
+                    ? Icons.play_arrow_rounded
+                    : Icons.pause_rounded,
+                size: 11,
+                color: playbackStatus.playing
+                    ? tokens.liveBadge
+                    : tokens.textSecondary,
+              ),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  playbackStatus.label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption,
+                ),
+              ),
+              const SizedBox(width: 12),
               Icon(Icons.circle, size: 7, color: tokens.liveBadge),
               const SizedBox(width: 5),
-              Text('弹幕已连接', style: AppTypography.caption),
+              Flexible(
+                child: Text(
+                  '弹幕已连接',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption,
+                ),
+              ),
               const Spacer(),
               Tooltip(
                 message: '重新连接弹幕',
