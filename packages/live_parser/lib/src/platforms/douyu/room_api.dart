@@ -31,6 +31,7 @@ class BetardRoom {
     required this.videoLoop,
     required this.cateId,
     required this.cateName,
+    required this.showTime,
   });
 
   final String roomId;
@@ -45,6 +46,14 @@ class BetardRoom {
   final String cateId;
   final String cateName;
 
+  /// 本场开播时间(betard `show_time`,秒级 Unix 时间戳)。0 / 缺失 = 未知。
+  final int showTime;
+
+  /// 开播时间;未知时为 null(UI 侧以占位符呈现,不伪造)。
+  DateTime? get startedAt => showTime <= 0
+      ? null
+      : DateTime.fromMillisecondsSinceEpoch(showTime * 1000);
+
   static BetardRoom fromJson(Map<String, dynamic> json) {
     return BetardRoom(
       roomId: jsonText(json['room_id']),
@@ -56,6 +65,7 @@ class BetardRoom {
       videoLoop: jsonInt(json['videoLoop']),
       cateId: jsonText(json['cate_id']),
       cateName: jsonText(json['cate_name']),
+      showTime: jsonInt(json['show_time']),
     );
   }
 

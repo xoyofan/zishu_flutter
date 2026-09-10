@@ -217,4 +217,48 @@ void main() {
       );
     });
   });
+
+  group('契约:档位与 streams 严格同源', () {
+    Object betard({int showTime = 0}) => {
+      'room': {
+        'room_id': 9527,
+        'nickname': '测试主播',
+        'show_status': 1,
+        'room_name': '斗鱼测试房间',
+        if (showTime > 0) 'show_time': showTime,
+      },
+    };
+
+    test('某档整档取流失败:该档从画质列表中整体消失(死键回归)', () async {
+      final (resolver, fake) = await _makeResolver(betardResponse: betard());
+      // rate=2(超清)的全部 CDN 都失败 —— 历史上该档仍留在 availableQualities 里,
+      // UI 点 chip 后找不到同名 stream,表现为静默无反应的死键。
+      fake.failRates.add('2');
+
+      final payload = await resolver.resolveRoom(_request('9527'));
+
+      expect(payload.streams.map((s) => s.name), ['蓝光8M'], reason: '超清整档失败后被丢弃');
+      expect(
+        payload.availableQualities.map((q) => q.name),
+        payload.streams.map((s) => s.name),
+        reason: '列出来的档 == 点得动的档',
+      );
+      // 每个 chip 都能在 streams 里精确命中同名项(qualityByName 有兜底,故比对名字)
+      for (final quality in payload.availableQualities) {
+        expect(payload.qualityByName(quality.name)?.name, quality.name);
+      }
+    });
+
+    test('startedAt 取自 betard show_time;缺失时为 null', () async {
+      final (withTime, _) = await _makeResolver(
+        betardResponse: betard(showTime: 1789023402),
+      );
+      final live = await withTime.resolveRoom(_request('9527'));
+      expect(live.startedAt, DateTime.fromMillisecondsSinceEpoch(1789023402 * 1000));
+
+      final (noTime, _) = await _makeResolver(betardResponse: betard());
+      final unknown = await noTime.resolveRoom(_request('9527'));
+      expect(unknown.startedAt, isNull, reason: '平台未提供时不得伪造');
+    });
+  });
 }

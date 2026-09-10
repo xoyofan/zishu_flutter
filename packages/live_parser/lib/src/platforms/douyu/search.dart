@@ -2,6 +2,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:math';
 
 import '../../http/parser_http.dart';
 import '../../utils/format_online.dart';
@@ -15,6 +16,28 @@ import 'room_api.dart';
 
 const Map<String, String> _douyuWebHeaders = {
   'Referer': 'https://www.douyu.com/',
+};
+
+/// 斗鱼搜索接口要求携带设备标识 cookie `dy_did`。
+///
+/// 实测:不带该 cookie 时 `japi/search/api/searchShow` 与 `searchUser` 一律返回
+/// `{"data":{},"error":9,"msg":"搜索过于频繁，请稍后再试"}` —— 文案像是限流,
+/// 实际是缺设备标识;补一个**随机 32 位十六进制**的 `dy_did` 即可稳定拿到真实结果。
+/// 进程内生成一次并复用,保持同一「设备」身份。
+final String _douyuDid = _randomDouyuDid();
+
+String _randomDouyuDid() {
+  final random = Random.secure();
+  final buffer = StringBuffer();
+  for (var i = 0; i < 16; i++) {
+    buffer.write(random.nextInt(256).toRadixString(16).padLeft(2, '0'));
+  }
+  return buffer.toString();
+}
+
+Map<String, String> get _searchHeaders => {
+  ..._douyuWebHeaders,
+  'Cookie': 'dy_did=$_douyuDid',
 };
 
 class DouyuSearchRepository implements SearchRepository {
@@ -45,10 +68,9 @@ class DouyuSearchRepository implements SearchRepository {
         'https://www.douyu.com/japi/search/api/searchUser'
         '?kw=${Uri.encodeQueryComponent(kw)}&page=1&pageSize=$pageSize',
       ),
-      headers: _douyuWebHeaders,
+      headers: _searchHeaders,
     );
-    final payload = jsonMapOf(jsonDecode(utf8.decode(response.bodyBytes)));
-    final data = jsonMapOf(payload['data']);
+    final data = _searchData(response.bodyBytes);
 
     final hits = <SearchHit>[];
     for (final item in jsonListOf(data['relateUser']).whereType<Map<String, dynamic>>()) {
@@ -86,10 +108,9 @@ class DouyuSearchRepository implements SearchRepository {
         'https://www.douyu.com/japi/search/api/searchShow'
         '?kw=${Uri.encodeQueryComponent(kw)}&page=1&pageSize=$limit',
       ),
-      headers: _douyuWebHeaders,
+      headers: _searchHeaders,
     );
-    final payload = jsonMapOf(jsonDecode(utf8.decode(response.bodyBytes)));
-    final data = jsonMapOf(payload['data']);
+    final data = _searchData(response.bodyBytes);
 
     final hits = <SearchHit>[];
     for (final item in jsonListOf(data['relateShow']).whereType<Map<String, dynamic>>()) {
@@ -112,3 +133,17 @@ class DouyuSearchRepository implements SearchRepository {
   }
 }
 
+/// 解析 japi 响应体并取出 `data`;上游 `error != 0` 时抛出带 msg 的异常。
+///
+/// 不抛异常的话,缺失设备标识 / 真限流时上游会返回 `data` 为空的响应,
+/// 调用方只会看到「搜索到 0 条」——语义完全不同的假绿。这里显式失败,
+/// 让上层能区分「没搜到」与「搜索接口不可用」。
+Map<String, dynamic> _searchData(List<int> bodyBytes) {
+  final payload = jsonMapOf(jsonDecode(utf8.decode(bodyBytes)));
+  final error = jsonInt(payload['error']);
+  if (error != 0) {
+    final msg = jsonText(payload['msg']).trim();
+    throw ParserHttpException(msg.isEmpty ? '斗鱼搜索上游错误($error)' : msg);
+  }
+  return jsonMapOf(payload['data']);
+}

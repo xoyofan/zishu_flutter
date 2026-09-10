@@ -88,4 +88,36 @@ void main() {
     final trimmed = trimSearchHits([hitA, hitA], 2);
     expect(trimmed, hasLength(1));
   });
+
+  test('搜索请求必带 dy_did cookie(缺失时上游返回 error 9)', () async {
+    await search.search(const SearchRequest(site: 'douyu', query: '测试', limit: 5));
+
+    final searchCalls = fake.requests
+        .where((r) => r.url.contains('japi/search/api/'))
+        .toList();
+    expect(searchCalls, isNotEmpty);
+    for (final call in searchCalls) {
+      expect(
+        call.header('cookie'),
+        startsWith('dy_did='),
+        reason: '${call.url} 缺 dy_did 时上游会返回 error 9(搜索过于频繁)',
+      );
+      expect(call.header('referer'), 'https://www.douyu.com/');
+    }
+  });
+
+  test('上游 error != 0 抛异常,不静默返回空结果', () async {
+    fake.searchResponse = {'error': 9, 'msg': '搜索过于频繁，请稍后再试'};
+
+    await expectLater(
+      search.search(const SearchRequest(site: 'douyu', query: '测试', limit: 5)),
+      throwsA(
+        isA<ParserHttpException>().having(
+          (e) => e.message,
+          'message',
+          '搜索过于频繁，请稍后再试',
+        ),
+      ),
+    );
+  });
 }

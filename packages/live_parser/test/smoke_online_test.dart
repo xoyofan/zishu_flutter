@@ -32,11 +32,20 @@ void main() {
       // ignore: avoid_print
       print(
         '解析: room=${payload.roomId} state=${payload.roomState.name} '
-        'qualities=${payload.availableQualities.map((q) => q.name).toList()}',
+        'qualities=${payload.availableQualities.map((q) => q.name).toList()} '
+        'startedAt=${payload.startedAt?.toIso8601String() ?? "(未知)"}',
       );
       if (payload.isLive) {
         expect(payload.streams, isNotEmpty);
         expect(payload.playUrl, isNotEmpty);
+        // 契约:列出来的档 == 点得动的档(否则 UI chip 是死键)
+        expect(
+          payload.availableQualities.map((q) => q.name),
+          payload.streams.map((s) => s.name),
+          reason: 'availableQualities 必须与 streams 严格同源',
+        );
+        // 在播房间应能拿到开播时间(betard show_time)
+        expect(payload.startedAt, isNotNull, reason: '斗鱼 betard 提供 show_time');
         // ignore: avoid_print
         print('播放地址(截断): ${payload.playUrl.substring(0, 60)}...');
       }

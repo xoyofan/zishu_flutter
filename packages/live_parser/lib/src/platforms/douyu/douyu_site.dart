@@ -166,7 +166,8 @@ class DouyuRoomResolver implements RoomResolver {
       cid: room.cateId,
       roomState: RoomState.live,
       streams: streams,
-      availableQualities: douyuAvailableQualities(multirates),
+      availableQualities: douyuAvailableQualities(streams),
+      startedAt: room.startedAt,
       source: kDouyuSource,
       fetchedAt: DateTime.now(),
     );

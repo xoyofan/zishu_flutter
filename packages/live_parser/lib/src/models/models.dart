@@ -106,6 +106,7 @@ class RoomPayload {
     required this.source,
     required this.fetchedAt,
     this.error,
+    this.startedAt,
   });
 
   final String site;
@@ -127,6 +128,12 @@ class RoomPayload {
   final String source;
   final DateTime fetchedAt;
   final String? error;
+
+  /// 本场开播时间(平台真实返回时才有值)。
+  ///
+  /// 斗鱼取 betard 的 `show_time`;其余平台暂未提供,保持 null,
+  /// 由 UI 侧以占位符呈现。**不得伪造**:拿不到就留空。
+  final DateTime? startedAt;
 
   bool get isLive => roomState == RoomState.live;
 
@@ -163,6 +170,7 @@ class RoomPayload {
     'source': source,
     'fetchedAt': fetchedAt.toIso8601String(),
     if (error != null) 'error': error,
+    if (startedAt != null) 'startedAt': startedAt!.toIso8601String(),
   };
 
   factory RoomPayload.fromJson(Map<String, dynamic> json) => RoomPayload(
@@ -190,6 +198,7 @@ class RoomPayload {
     source: json['source']?.toString() ?? '',
     fetchedAt: DateTime.tryParse(json['fetchedAt']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0),
     error: json['error']?.toString(),
+    startedAt: DateTime.tryParse(json['startedAt']?.toString() ?? ''),
   );
 
   String encode() => jsonEncode(toJson());

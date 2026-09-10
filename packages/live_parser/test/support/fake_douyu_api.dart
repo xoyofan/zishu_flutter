@@ -9,13 +9,28 @@ import 'dart:io';
 import 'package:http/http.dart' as http;
 
 class RecordedRequest {
-  const RecordedRequest(this.method, this.url, this.body);
+  const RecordedRequest(
+    this.method,
+    this.url,
+    this.body, [
+    this.headers = const {},
+  ]);
 
   final String method;
   final String url;
   final String body;
+  final Map<String, String> headers;
 
   Map<String, String> get formBody => Uri(query: body).queryParameters;
+
+  /// 大小写无关的请求头读取。
+  String? header(String name) {
+    final lower = name.toLowerCase();
+    for (final entry in headers.entries) {
+      if (entry.key.toLowerCase() == lower) return entry.value;
+    }
+    return null;
+  }
 }
 
 class FakeDouyuApi extends http.BaseClient {
@@ -37,12 +52,27 @@ class FakeDouyuApi extends http.BaseClient {
   /// 覆盖 rate=0/hw-h5 探测响应(默认走 play_v1_probe.json fixture)。
   Object? playV1ProbeOverride;
 
+  /// 这些画质档的所有 CDN 请求都返回上游 error,
+  /// 用于验证「整档取流失败 → 该档从 streams 与 availableQualities 中整体消失」。
+  final Set<String> failRates = {};
+
+  /// 搜索接口(searchUser/searchShow)返回体;非 null 时覆盖 fixture,
+  /// 用于验证上游 `error != 0` 时抛出异常而非静默返回空结果。
+  Object? searchResponse;
+
   final List<RecordedRequest> requests = [];
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest baseRequest) async {
     final request = baseRequest as http.Request;
-    requests.add(RecordedRequest(request.method, request.url.toString(), request.body));
+    requests.add(
+      RecordedRequest(
+        request.method,
+        request.url.toString(),
+        request.body,
+        Map<String, String>.from(request.headers),
+      ),
+    );
     final response = _route(request);
     final bytes = utf8.encode(response.body);
     return http.StreamedResponse(
@@ -67,6 +97,9 @@ class FakeDouyuApi extends http.BaseClient {
       final formBody = Uri(query: request.body).queryParameters;
       final rate = formBody['rate'] ?? '0';
       final cdn = formBody['cdn'] ?? 'hw-h5';
+      if (failRates.contains(rate)) {
+        return _json({'error': 500, 'msg': 'rate $rate unavailable'});
+      }
       if (rate == '0' && cdn == 'hw-h5' && playV1ProbeOverride != null) {
         return _json(playV1ProbeOverride);
       }
@@ -95,9 +128,11 @@ class FakeDouyuApi extends http.BaseClient {
       return _json(configured);
     }
     if (path == '/japi/search/api/searchUser') {
+      if (searchResponse != null) return _json(searchResponse);
       return _fixture('search_user.json');
     }
     if (path == '/japi/search/api/searchShow') {
+      if (searchResponse != null) return _json(searchResponse);
       return _fixture('search_show.json');
     }
     return http.Response('fake route missing: $url', 500);
