@@ -80,8 +80,8 @@
 | 卡 | 内容 | 依赖 | 状态 | 验证 |
 |---|---|---|---|---|
 | A0 | 拆播放页装配:`play_side_panel.dart` 拆出 `play_side_header.dart`/`play_side_chat_tab.dart`/`play_side_follow_tab.dart`/`play_side_recommend_tab.dart`/`play_side_settings_tab.dart`(仅留 TabBar 装配);`play_view.dart` 拆出 `play_stage.dart`(舞台+错误卡+占位)/`play_room_header.dart`;新增 `play_contracts.dart` 冻结跨轨接口(弹幕会话、播放器能力、侧栏回调签名) | — | [ ] | analyze + 既有用例全绿 |
-| A1 | 搜索接真实解析:新增 `SearchSource` + `searchSourceProvider`;`search_provider.dart` 走 `SearchRepository`(房间 t=120 + 主播 t=1 合并去重),`kFixtureRooms` 降级为开关关闭时的兜底;保留房间号/douyu 链接直达 | A0 | [ ] | 注入 fake 的 widget test |
-| A2 | 弹幕叠加层:`features/danmaku/` canvas 叠加层(多轨道分配、O(1) 碰撞防重叠、速度随画布宽度、颜色归一+描边、富文本) | A0,P9 | [ ] | 单测 + 手测 |
+| A1 | 搜索接真实解析(已完成,worktree 分支 `feat/A1-search` @ `82ba432`):新增 `SearchSource` 端口(+`ParserSearchSource`/`FixtureSearchSource`)+ `search_source_provider.dart`(`useRealParserSearch`,与 `providers.dart` 的 `useRealParser` 同源同定义,A12 合并);`search_provider.dart` 改**异步**走端口并保留 300ms 防抖 + generation fence;`SearchState.hits` 类型 `List<SearchHit>` → `List<SearchHitItem>`(显式携带 `site`,**删除 `siteOf`** —— 真实数据下 fixture 反查必然失效);查询失败置 `error` 并保留上次结果(不抛到 widget);`site='all'` 并发聚合 douyu/huya/bilibili 且**单站失败隔离** | A0 | [x] | `flutter analyze lib test/search` 0 issue + `test/search` 8/8 |
+| A2 | 弹幕(已完成**纯逻辑半**,worktree 分支 `feat/A2-danmaku` @ `a568579`):`features/danmaku/` 落地 `danmaku_settings.dart`(clamp 模型)、`danmaku_track_allocator.dart`(注入 `MeasureText` 的纯 Dart 多轨道调度:随机起点扫描 + O(1) 不重叠/不追尾 + 速度随画布宽线性)、`danmaku_session_controller.dart`(200 条环形缓冲 + generation fence + 不支持站点空态 + `autoDispose` 释放会话)、`danmaku_settings_controller.dart`(`SharedPreferencesAsync`,前缀 `zishu.danmaku.`)。**canvas 叠加层渲染与侧栏聊天接会话仍待 A0 挂载点** | A0,P9 | [~] | `test/danmaku` 23/23 passed + analyze 0 issue |
 | A3 | 弹幕设置面板:显示开关 / 透明度 10-100 / 字号 12-36 / 速度 1-10 / 显示区域 5 档;持久化 | A2 | [ ] | 单测 |
 | A4 | 侧栏聊天接真实弹幕:消费同一 `DanmakuSession`,含连接状态、自动滚底、N 条新消息跳底、重连;**把 `danmaku_test` 从"断言硬编码 `_chatSamples`"改为断言真实会话**(消除假绿) | A2 | [ ] | `danmaku_test` 改后仍绿 |
 | A5 | 全屏:`MediaKitLivePlayer.toggleFullscreen` 实装(现为空实现)+ 控制条状态联动 | A0 | [ ] | 手测 + 用例 |
@@ -148,6 +148,11 @@
 | 2026-09-10 | UI 复刻门禁 `flutter test` 全量 | 156 passed / 2 failed(latency_test 并行负载抖动)/ 0 skipped |
 | 2026-09-10 | `latency_test` 单独复跑 | 5/5 passed(bilibili median=591ms、douyu reentry 433ms ≤ budget 1678ms)→ 全量 2 失败确认为负载抖动非回归 |
 | 2026-09-10 | UI 复刻门禁 `flutter build windows --debug -t lib/main.dart` | OK |
+| 2026-09-10 | A1 轨门禁 `flutter analyze lib test/search` / `flutter test test/search` | 0 issue;8/8 passed(worktree `feat/A1-search` @ `82ba432`) |
+| 2026-09-10 | A2 轨门禁 `flutter analyze lib/src/features/danmaku test/danmaku` / `flutter test test/danmaku` | 0 issue;23/23 passed(worktree `feat/A2-danmaku` @ `a568579`) |
+| 2026-09-10 | A1/A2 worktree 全量 `flutter test` | 174~175 passed / 2 failed;失败**全部**为 `test/ui/workflows/latency_test.dart` 性能阈值用例(样本 1257~4056ms 跨 1500ms 线、单跑复现不固定、douyu/huya/bilibili 轮流失败)→ 环境抖动,非回归 |
+
+> ⚠️ **worktree 陷阱**:`git worktree` 新开的工作树里,`packages/live_parser` **必须单独跑一次 `dart pub get`**。只跑根目录 `flutter pub get` 不会生成 `packages/live_parser/.dart_tool/package_config.json`,于是 `flutter analyze` 会把该包 test 目录下所有 `package:test` 导入判为未解析,**虚报 1443 条 issue** —— 纯工具链假报警,补跑 pub get 后立刻 0 issue。
 
 ### UI 复刻收口明细(2026-09-10)
 
