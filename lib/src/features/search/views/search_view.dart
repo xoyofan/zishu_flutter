@@ -50,6 +50,24 @@ class _SearchViewState extends ConsumerState<SearchView> {
     }
   }
 
+  /// 进入直播间:仅直播中可进,未开播给出提示。
+  void _openRoom(SearchHitItem item) {
+    if (item.hit.state != SearchHitState.live) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text('「${item.hit.anchor}」当前未开播')));
+      return;
+    }
+    _inputFocus.unfocus();
+    context.push('/${item.site}/play/${item.hit.id}');
+  }
+
+  /// 头像/昵称进入主播主页。
+  void _openAnchor(SearchHitItem item) {
+    _inputFocus.unfocus();
+    context.push('/${item.site}/anchor/${item.hit.id}');
+  }
+
   /// 打开直达项:链接直达固定 douyu;房间号直达跟随当前所选平台。
   void _openDirect(DirectTarget target) {
     final site = target.kind == DirectKind.link
@@ -57,26 +75,6 @@ class _SearchViewState extends ConsumerState<SearchView> {
         : ref.read(searchProvider).site;
     _inputFocus.unfocus();
     context.push('/$site/play/${target.roomId}');
-  }
-
-  /// 进入直播间:仅直播中可进,未开播给出提示。
-  void _openRoom(SearchHit hit) {
-    if (hit.state != SearchHitState.live) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text('「${hit.anchor}」当前未开播')));
-      return;
-    }
-    _inputFocus.unfocus();
-    final site = ref.read(searchProvider.notifier).siteOf(hit);
-    context.push('/$site/play/${hit.id}');
-  }
-
-  /// 头像/昵称进入主播主页。
-  void _openAnchor(SearchHit hit) {
-    _inputFocus.unfocus();
-    final site = ref.read(searchProvider.notifier).siteOf(hit);
-    context.push('/$site/anchor/${hit.id}');
   }
 
   @override
@@ -192,13 +190,13 @@ class _SearchViewState extends ConsumerState<SearchView> {
                     ),
                   ),
                 ),
-              for (final (index, hit) in search.hits.indexed)
+              for (final (index, item) in search.hits.indexed)
                 SearchResultTile(
                   // 测试锚点:定位第 index 条搜索结果行。
                   key: Key('search-result-$index'),
-                  hit: hit,
-                  onRowTap: () => _openRoom(hit),
-                  onAnchorTap: () => _openAnchor(hit),
+                  hit: item.hit,
+                  onRowTap: () => _openRoom(item),
+                  onAnchorTap: () => _openAnchor(item),
                 ),
               if (!search.searching && direct == null && search.hits.isEmpty)
                 _EmptyHint(
