@@ -9,6 +9,7 @@ import 'package:test/test.dart';
 void main() {
   iptvSmoke();
   twitchSmoke();
+  yySmoke();
   test(
     '斗鱼真实链路:首页 → 房间解析 → 搜索',
     () async {
@@ -302,6 +303,54 @@ void twitchSmoke() {
     },
     timeout: const Timeout(Duration(minutes: 2)),
     skip: '需真实网络;本地运行: dart test --run-skipped --plain-name Twitch test/smoke_online_test.dart',
+  );
+}
+
+void yySmoke() {
+  test(
+    'YY 真实链路：首页 → 分类 → 房间解析 → 搜索',
+    () async {
+      final registry = buildSiteRegistry();
+      final yy = registry['yy']!;
+
+      final rooms = await yy.browse!.fetchRooms(
+        const RoomListRequest(site: 'yy', page: 1, limit: 5),
+      );
+      expect(rooms.rooms, isNotEmpty, reason: 'YY 首页应有在播房间');
+      final first = rooms.rooms.first;
+      // ignore: avoid_print
+      print('YY 首页示例: ${first.roomId} ${first.title} (${first.online})');
+
+      final payload = await yy.resolver.resolveRoom(
+        RoomRequest(site: 'yy', roomIdOrUrl: first.roomId),
+      );
+      // ignore: avoid_print
+      print(
+        'YY 解析: room=${payload.roomId} state=${payload.roomState.name} '
+        'qualities=${payload.availableQualities.map((q) => q.name).toList()}',
+      );
+      expect(payload.roomState, anyOf(RoomState.live, RoomState.offline));
+      if (payload.isLive) {
+        expect(payload.streams, isNotEmpty);
+        expect(payload.playUrl, isNotEmpty);
+        // ignore: avoid_print
+        print('YY 播放地址(截断): ${payload.playUrl.substring(0, 70)}...');
+      }
+
+      final categories = await yy.browse!.fetchCategories('yy');
+      expect(categories.groups, isNotEmpty);
+      // ignore: avoid_print
+      print('YY 分类: ${categories.groups.map((g) => g.name).toList()}');
+
+      final search = await yy.search!.search(
+        const SearchRequest(site: 'yy', query: '电子', limit: 5),
+      );
+      // ignore: avoid_print
+      print('YY 搜索命中: ${search.hits.length} 条');
+      expect(search.hits, isNotEmpty);
+    },
+    timeout: const Timeout(Duration(minutes: 2)),
+    skip: '需真实网络;本地运行: dart test --run-skipped --plain-name YY test/smoke_online_test.dart',
   );
 }
 

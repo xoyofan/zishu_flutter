@@ -62,6 +62,25 @@ void main() {
     expect(bilibili.capabilities.multiLine, isTrue);
   });
 
+  test('buildSiteRegistry 注册 YY 并声明能力', () {
+    final registry = buildSiteRegistry();
+
+    expect(registry.supportedSites, contains('yy'));
+    final yy = registry['yy']!;
+    expect(yy.id, 'yy');
+    expect(yy.name, 'YY');
+    expect(yy.resolver, isA<RoomResolver>());
+    expect(yy.browse, isA<BrowseRepository>());
+    expect(yy.search, isA<SearchRepository>());
+    expect(yy.capabilities.browse, isTrue);
+    expect(yy.capabilities.roomSearch, isTrue);
+    expect(yy.capabilities.anchorSearch, isTrue);
+    expect(yy.capabilities.multiQuality, isTrue);
+    expect(yy.capabilities.multiLine, isTrue);
+    expect(yy.capabilities.danmaku, isFalse, reason: 'YY 弹幕协议尚未接入 live_parser');
+    expect(yy.danmaku, isNull);
+  });
+
   test('buildSiteRegistry 注册全平台聚合(斗鱼+虎牙+B站)', () async {
     final registry = buildSiteRegistry();
 
