@@ -34,3 +34,5 @@ flutter:
   uses-material-design: true
   assets:
     - assets/config/
+    - assets/ui/logo/
+    - assets/ui/platform-icons/

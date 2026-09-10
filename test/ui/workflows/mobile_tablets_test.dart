@@ -266,17 +266,18 @@ void main() {
   );
 
   testWidgets(
-    'gridColumnsScale:首页网格列数随宽度增长(800 宽 ≥2 列、1024 宽 ≥3 列)',
+    'gridColumnsScale:首页网格列数对齐 SFVideo 断点固定列数(800→4、1024→5)',
     (tester) async {
-      // Android 平板 800 宽:可用宽 / maxCardWidth(280) → 2 列。
+      // 对齐 RoomGrid.vue:120-155 的断点固定列数,而非按列宽连续推算。
+      // Android 平板 800 宽:≥768 → 4 列。
       await _pumpPageOnDevice(tester, _homePage(), kAndroidTablet);
       final (columns800, rows800) = _gridShape(tester);
       // ignore: avoid_print
       print('[grid] AndroidTablet(800): columns=$columns800 rows=$rows800');
       expect(
         columns800,
-        greaterThanOrEqualTo(2),
-        reason: '800 宽(Android 平板)首页网格至少 2 列',
+        AppRoomGrid.columnsFor(800),
+        reason: '800 宽(Android 平板)首页网格应为 4 列',
       );
       expect(
         rows800,
@@ -284,15 +285,15 @@ void main() {
         reason: '网格应换行铺开成多行(单行说明视口内卡片未构成多列网格)',
       );
 
-      // iPad Pro 12.9 1024 宽:可用宽 / 280 → 3 列。
+      // iPad Pro 12.9 1024 宽:≥1024 → 5 列。
       await _pumpPageOnDevice(tester, _homePage(), kIpadPro129);
       final (columns1024, rows1024) = _gridShape(tester);
       // ignore: avoid_print
       print('[grid] iPadPro129(1024): columns=$columns1024 rows=$rows1024');
       expect(
         columns1024,
-        greaterThanOrEqualTo(3),
-        reason: '1024 宽(iPad Pro)首页网格至少 3 列',
+        AppRoomGrid.columnsFor(1024),
+        reason: '1024 宽(iPad Pro)首页网格应为 5 列',
       );
       expect(rows1024, greaterThanOrEqualTo(2));
 

@@ -2,11 +2,18 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:live_parser/live_parser.dart';
 
+import '../../../shared/presentation/category_colors.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 
-/// SFVideoLive 风格房间卡片:16:9 封面 + 平台角标 + 在线人数 + 促销角标 + 标题/主播/分类。
+/// SFVideoLive 风格房间卡片:16:9 封面 + 四象限徽章 + 标题/主播。
+///
+/// 封面徽章采用参考实现的「四象限」模板:
+/// - 左上:分类色块(配色见 [CategoryColors]);
+/// - 左下:平台 pill(圆角 999);
+/// - 右上:促销/画质标签;
+/// - 右下:热度。
 class RoomCard extends StatelessWidget {
   const RoomCard({
     super.key,
@@ -53,31 +60,12 @@ class RoomCard extends StatelessWidget {
                     style: AppTypography.title.copyWith(fontSize: 14),
                   ),
                   const SizedBox(height: AppSpacing.sm),
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          room.anchorName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.bodySecondary,
-                        ),
-                      ),
-                      if (room.category.isNotEmpty) ...[
-                        const SizedBox(width: AppSpacing.sm),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: AppSpacing.sm,
-                            vertical: 1,
-                          ),
-                          decoration: BoxDecoration(
-                            color: tokens.surfaceRaised,
-                            borderRadius: AppRadius.allSm,
-                          ),
-                          child: Text(room.category, style: AppTypography.caption),
-                        ),
-                      ],
-                    ],
+                  // 分类已由封面左上角色块承载,文本区只保留主播名。
+                  Text(
+                    room.anchorName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppTypography.bodySecondary,
                   ),
                 ],
               ),
@@ -120,23 +108,31 @@ class _Cover extends StatelessWidget {
                     errorWidget: (_, _, _) => _CoverPlaceholder(room: room),
                   ),
           ),
-          if (showPlatformBadge)
+          // 左上:分类色块(配色取自 CategoryColors)。
+          if (room.category.isNotEmpty)
             Positioned(
               left: AppSpacing.sm,
               top: AppSpacing.sm,
+              child: _CategoryBadge(category: room.category, site: room.site),
+            ),
+          // 左下:平台 pill(单平台网格可关闭)。
+          if (showPlatformBadge)
+            Positioned(
+              left: AppSpacing.sm,
+              bottom: AppSpacing.sm,
               child: _PlatformBadge(site: room.site, color: brandColor),
             ),
-          Positioned(
-            right: AppSpacing.sm,
-            bottom: AppSpacing.sm,
-            child: _OnlineTag(online: room.online),
-          ),
           if (room.promoTag != null)
             Positioned(
               right: AppSpacing.sm,
               top: AppSpacing.sm,
               child: _PromoTag(tag: room.promoTag!),
             ),
+          Positioned(
+            right: AppSpacing.sm,
+            bottom: AppSpacing.sm,
+            child: _OnlineTag(online: room.online),
+          ),
         ],
       ),
     );
@@ -162,6 +158,7 @@ class _CoverPlaceholder extends StatelessWidget {
   }
 }
 
+/// 左下平台角标:胶囊圆角(对齐 `border-radius: 999px`)。
 class _PlatformBadge extends StatelessWidget {
   const _PlatformBadge({required this.site, required this.color});
 
@@ -177,13 +174,41 @@ class _PlatformBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: (color ?? tokens.brand).withValues(alpha: 0.92),
-        borderRadius: AppRadius.allSm,
+        borderRadius: AppRadius.allPill,
       ),
       child: Text(
         label,
         // 平台色底上用深色 token 文字保证可读。
         style: AppTypography.caption.copyWith(
           color: tokens.surfaceSoft,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+/// 左上分类角标:底色/文字色由 [CategoryColors] 计算,未命中时退化为空。
+class _CategoryBadge extends StatelessWidget {
+  const _CategoryBadge({required this.category, required this.site});
+
+  final String category;
+  final String site;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = CategoryColors.opaqueFor(category: category, site: site);
+    if (style == null) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: style.background,
+        borderRadius: AppRadius.allSm,
+      ),
+      child: Text(
+        category,
+        style: AppTypography.caption.copyWith(
+          color: style.foreground,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -206,13 +231,9 @@ class _OnlineTag extends StatelessWidget {
         color: tokens.background.withValues(alpha: 0.55),
         borderRadius: AppRadius.allSm,
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.visibility_rounded, size: 10, color: tokens.textSecondary),
-          const SizedBox(width: 3),
-          Text(online, style: AppTypography.caption),
-        ],
+      child: Text(
+        online,
+        style: AppTypography.caption.copyWith(color: tokens.textPrimary),
       ),
     );
   }

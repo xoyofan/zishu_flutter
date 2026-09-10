@@ -6,12 +6,12 @@
 ///
 /// 断言引用的真实锚点契约:
 /// - 顶部导航:nav-home / nav-follow / nav-search / nav-settings(app_shell)。
-/// - 平台 tab/chip:platform-tab-{site}(FilterChip,品牌色点为
-///   BoxDecoration(shape: BoxShape.circle, color: brand.color))。
+/// - 平台 tab:platform-tab-{site}(InkWell 锚点,内部为 SFVideo 风格品牌
+///   图标 `PlatformIcon`,34px 命中区,Tooltip=平台名)。
 /// - 播放页:play-back / play-side-panel-toggle / play-quality-{name} /
 ///   PlaySidePanel。
-/// - 收缩规范:>=1024 平台 tab=色点+文字;768–1023 仅色点(icon-only)+
-///   Tooltip(平台名);<768 主导航转底部 56px、平台列表顶部横向 strip;
+/// - 收缩规范:桌面(>=768)平台 tab 为品牌图标 icon-only,平台名走
+///   Tooltip;<768 主导航转底部 56px、平台列表顶部横向 strip;
 ///   内容区筛选 chips 用 Wrap 多行。
 ///
 /// media_kit 禁止在 VM 初始化:统一注入 FakeLivePlayer,误入播放路径也不
@@ -29,7 +29,7 @@ import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/features/play/widgets/play_side_panel.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 import 'package:zishu_flutter/src/shared/presentation/design_tokens.dart';
-import 'package:zishu_flutter/src/shared/presentation/platform_brands.dart';
+import 'package:zishu_flutter/src/shared/presentation/widgets/platform_icon.dart';
 
 /// 测试替身:VM 下替代 MediaKitLivePlayer,快照立即给一帧,方法只记录调用。
 class FakeLivePlayer implements LivePlayer {
@@ -136,24 +136,19 @@ void main() {
   Size viewport(WidgetTester tester) =>
       tester.view.physicalSize / tester.view.devicePixelRatio;
 
-  /// 平台 tab 内的圆形品牌色点(填充色 == brand.color,尺寸不限定)。
-  Finder platformDotFinder(PlatformBrand brand) => find.byWidgetPredicate(
-    (widget) =>
-        widget is Container &&
-        widget.decoration is BoxDecoration &&
-        (widget.decoration as BoxDecoration).shape == BoxShape.circle &&
-        (widget.decoration as BoxDecoration).color == brand.color,
-  );
+  /// 平台 tab 内的 SFVideo 风格品牌图标(`PlatformIcon`,真实素材)。
+  Finder platformIconFinder() => find.byType(PlatformIcon);
 
   group('U9 底部导航', () {
-    testWidgets('<768(360×640):顶部 44px 导航不渲染,底部 56px 导航含 首页/关注/设置', (
+    testWidgets('<768(360×640):44px 顶导航不渲染(平台条接管平台切换),底部 56px 主导航', (
       tester,
     ) async {
       suppressRenderFlexOverflow();
       await pumpApp(tester, const Size(360, 640));
       final size = viewport(tester);
 
-      // 顶部 44px 导航不渲染:logo 文案消失(<768 顶导航整体不渲染)。
+      // 顶部 44px 顶导航不渲染:logo 文案消失。平台切换改由 AppShell 的
+      // 平台条(nav-platform-strip,52px + 安全区)承担。
       expect(
         find.text('紫薯直播'),
         findsNothing,
@@ -194,7 +189,7 @@ void main() {
   });
 
   group('U9 平台tab收缩', () {
-    testWidgets('768–1023(820×1180 iPad Air):平台 tab icon-only,色点在、文字无、Tooltip=平台名', (
+    testWidgets('768–1023(820×1180 iPad Air):平台 tab icon-only,品牌图标在、文字无、Tooltip=平台名', (
       tester,
     ) async {
       suppressRenderFlexOverflow();
@@ -210,14 +205,14 @@ void main() {
         reason: '768–1023 宽度下平台 tab 应 icon-only,不渲染「斗鱼」文字',
       );
 
-      // icon-only 后仍保留品牌色点,并以 Tooltip 承载平台名。
+      // icon-only 后仍保留品牌图标,并以 Tooltip 承载平台名。
       expect(
         find.descendant(
           of: find.byKey(douyuTab),
-          matching: platformDotFinder(PlatformBrandCatalog.douyu),
+          matching: platformIconFinder(),
         ),
         findsOneWidget,
-        reason: 'icon-only 平台 tab 应保留斗鱼品牌色点',
+        reason: 'icon-only 平台 tab 应保留斗鱼品牌图标',
       );
       expect(
         find.byWidgetPredicate(
@@ -229,24 +224,31 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('>=1024(1600×1200):平台 tab 为色点+文字', (tester) async {
+    testWidgets('>=1024(1600×1200):平台 tab 为品牌图标(icon-only)', (tester) async {
       suppressRenderFlexOverflow();
       await pumpApp(tester, const Size(1600, 1200));
 
       const douyuTab = Key('platform-tab-douyu');
       expect(find.byKey(douyuTab), findsOneWidget);
       expect(
-        find.descendant(of: find.byKey(douyuTab), matching: find.text('斗鱼')),
-        findsOneWidget,
-        reason: '桌面宽度下平台 tab 应显示「斗鱼」文字',
-      );
-      expect(
         find.descendant(
           of: find.byKey(douyuTab),
-          matching: platformDotFinder(PlatformBrandCatalog.douyu),
+          matching: platformIconFinder(),
         ),
         findsOneWidget,
-        reason: '桌面宽度下平台 tab 应保留斗鱼品牌色点',
+        reason: '桌面宽度下平台 tab 应显示斗鱼品牌图标',
+      );
+      expect(
+        find.descendant(of: find.byKey(douyuTab), matching: find.text('斗鱼')),
+        findsNothing,
+        reason: '桌面宽度下平台 tab 为 icon-only,平台名由 Tooltip 承载',
+      );
+      expect(
+        find.byWidgetPredicate(
+          (widget) => widget is Tooltip && widget.message == '斗鱼',
+        ),
+        findsOneWidget,
+        reason: '桌面宽度下平台 tab 的 Tooltip 值应为平台名「斗鱼」',
       );
       expect(tester.takeException(), isNull);
     });
@@ -321,43 +323,45 @@ void main() {
     });
   });
 
-  group('U9 chips换行', () {
-    testWidgets('360 宽:首页平台 chips 为 Wrap 多行(第二行存在),全部挂载不横向裁切', (
+  group('U9 平台条', () {
+    testWidgets('360 宽:平台条单行横向承载全部平台入口,锚点可达且不溢出', (
       tester,
     ) async {
       suppressRenderFlexOverflow();
       await pumpApp(tester, const Size(360, 640));
 
       const ids = ['all', 'douyu', 'huya', 'bilibili', 'douyin', 'twitch'];
-      // 全部挂载:横向裁切的水平 ListView 在 360 宽只挂载首屏 2~3 个 chip,
-      // 全部 findsOneWidget 即证明非横向裁切。
+      // 全部挂载:移动端平台条(nav-platform-strip)用 SingleChildScrollView + Row,
+      // 非 lazy 容器,全部 platform-tab-{id} 均可命中。
       for (final id in ids) {
         expect(
           find.byKey(Key('platform-tab-$id')),
           findsOneWidget,
-          reason: '平台 chip $id 未挂载,chips 仍被横向裁切',
+          reason: '移动端平台条未承载平台入口 $id',
         );
       }
 
-      // 容器形态:chips 由 Wrap 承载(多行自适应),而非横向 ListView。
+      // 容器形态:由横向滚动容器承载(对齐 main.css:218 nav-platform-strip),
+      // 而非内容区 Wrap 多行 chips(U9 的过渡方案已由平台条取代)。
       expect(
         find.ancestor(
           of: find.byKey(const Key('platform-tab-douyu')),
-          matching: find.byType(Wrap),
+          matching: find.byType(SingleChildScrollView),
         ),
         findsOneWidget,
-        reason: '内容区筛选 chips 应使用 Wrap 布局',
+        reason: '平台入口应由横向滚动的平台条承载',
       );
 
-      // 第二行存在:至少一个 chip 的顶部低于首行 chip 顶部(多行换行)。
-      final firstRowTop =
+      // 单行横排:所有入口顶部对齐(不再是多行 Wrap)。
+      final firstTop =
           tester.getTopLeft(find.byKey(const Key('platform-tab-all'))).dy;
-      final hasSecondRow = ids.any(
-        (id) =>
-            tester.getTopLeft(find.byKey(Key('platform-tab-$id'))).dy >
-            firstRowTop + 1,
-      );
-      expect(hasSecondRow, isTrue, reason: 'chips 应换行为多行,而非单行横向排布');
+      for (final id in ids) {
+        expect(
+          tester.getTopLeft(find.byKey(Key('platform-tab-$id'))).dy,
+          closeTo(firstTop, 1),
+          reason: '平台条应为单行横排,入口 $id 不在首行',
+        );
+      }
       expect(tester.takeException(), isNull);
     });
   });

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:live_parser/live_parser.dart' show RoomPayload;
 
 import '../../../platforms/common/playback/live_player.dart' show PlayerSnapshot;
 import '../../../shared/presentation/design_tokens.dart';
@@ -29,7 +30,7 @@ class _PlayViewState extends ConsumerState<PlayView> {
   bool _sidePanelVisible = true;
 
   /// 横屏手机:侧栏以底部 sheet 滑出(sheet 宽近全屏,满足 W12 sheet 形态)。
-  Future<void> _showSidePanelSheet() {
+  Future<void> _showSidePanelSheet(RoomPayload? payload) {
     return showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -42,7 +43,11 @@ class _PlayViewState extends ConsumerState<PlayView> {
             top: Radius.circular(AppRadius.lg),
           ),
         ),
-        child: const PlaySidePanel(),
+        child: PlaySidePanel(
+          site: widget.site,
+          roomId: widget.roomId,
+          payload: payload,
+        ),
       ),
     );
   }
@@ -62,6 +67,8 @@ class _PlayViewState extends ConsumerState<PlayView> {
     final isLandscapePhone =
         size.width >= AppBreakpoints.phone && size.height < 600;
     final showPanel = _sidePanelVisible && !isLandscapePhone;
+    // 侧栏宽度按视口分档(268/328/392/425),对齐 main.css:228-244。
+    final sidePanelWidth = AppSpacing.playSidePanelWidthFor(size.width);
 
     final stage = Column(
       children: [
@@ -96,7 +103,7 @@ class _PlayViewState extends ConsumerState<PlayView> {
           brandColor: brand?.color ?? context.tokens.brand,
           sidePanelVisible: _sidePanelVisible,
           onToggleSidePanel: isLandscapePhone
-              ? _showSidePanelSheet
+              ? () => _showSidePanelSheet(play?.payload)
               : () => setState(() => _sidePanelVisible = !_sidePanelVisible),
         ),
         Expanded(
@@ -114,7 +121,14 @@ class _PlayViewState extends ConsumerState<PlayView> {
                       Expanded(flex: 3, child: stage),
                       if (showPanel) ...[
                         const SizedBox(height: AppSpacing.md),
-                        const Expanded(flex: 2, child: PlaySidePanel()),
+                        Expanded(
+                          flex: 2,
+                          child: PlaySidePanel(
+                            site: widget.site,
+                            roomId: widget.roomId,
+                            payload: play?.payload,
+                          ),
+                        ),
                       ],
                     ],
                   )
@@ -124,9 +138,13 @@ class _PlayViewState extends ConsumerState<PlayView> {
                       Expanded(child: stage),
                       if (showPanel) ...[
                         const SizedBox(width: AppSpacing.md),
-                        const SizedBox(
-                          width: AppSpacing.playSidePanelWidth,
-                          child: PlaySidePanel(),
+                        SizedBox(
+                          width: sidePanelWidth,
+                          child: PlaySidePanel(
+                            site: widget.site,
+                            roomId: widget.roomId,
+                            payload: play?.payload,
+                          ),
                         ),
                       ],
                     ],

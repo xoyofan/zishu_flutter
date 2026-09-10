@@ -39,8 +39,8 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     textPrimary: Color(0xDEFFFFFF),
     textSecondary: Color(0x8CFFFFFF),
     border: Color(0xFF3A3A3A),
-    liveBadge: Color(0xFFE64B3D),
-    error: Color(0xFFF56C6C),
+    liveBadge: Color(0xFF32C874),
+    error: Color(0xFFE55050),
     success: Color(0xFF67C23A),
   );
 
@@ -54,8 +54,8 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     textPrimary: Color(0xE6121212),
     textSecondary: Color(0x99616161),
     border: Color(0xFFD9D9D9),
-    liveBadge: Color(0xFFE64B3D),
-    error: Color(0xFFD64541),
+    liveBadge: Color(0xFF32C874),
+    error: Color(0xFFE55050),
     success: Color(0xFF4CA83D),
   );
 

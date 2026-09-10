@@ -13,8 +13,8 @@
 /// - 弹幕条目 = PlaySidePanel 内含「全角冒号」的 RichText。条目由
 ///   `Text.rich(TextSpan(children: [用户名, '：', 消息]))` 构建;Flutter 的
 ///   Text.build 会再包一层默认样式 wrapper span(剥壳见 [_danmakuRowSpan]);
-/// - tab 标签(聊天/关注/推荐)、粉丝徽章(「粉丝 N」)、底部说明与占位提示
-///   文案均不含全角冒号,不会误计;
+/// - tab 标签(聊天/关注/推荐)、粉丝徽章(「粉丝 N」)、面板标题与提示文案、
+///   侧栏信息头(「关注 —」「开播 —」)均不含全角冒号,不会误计;
 /// - 粉丝团徽章 = 纯 `Text('粉丝 {level}')` 色块;12 条样例中 6 条带徽章,
 ///   等级(12/7/23/5/9/31)互不相同。
 ///
@@ -199,18 +199,21 @@ void main() {
     final countBefore = captureDanmakuCount(tester);
     expect(countBefore, greaterThan(0));
 
-    // 切「关注」:占位提示出现(tab 内容切换生效)。
-    await tester.tap(find.text('关注'));
+    // 切「关注」:关注面板出现(tab 内容切换生效)。侧栏信息头已有「关注」
+    // 操作按钮,故按 tab 锚点定位,避免与按钮文案歧义。
+    await tester.tap(find.byKey(const Key('play-side-tab-follow')));
     await _pumpStable(tester);
-    expect(find.text('关注/特别关注/开播提醒(M4)'), findsOneWidget);
+    expect(find.byKey(const Key('play-side-follow-panel')), findsOneWidget);
+    expect(find.text('我的关注'), findsOneWidget);
 
-    // 切「推荐」:占位提示出现。
-    await tester.tap(find.text('推荐'));
+    // 切「推荐」:推荐面板出现。
+    await tester.tap(find.byKey(const Key('play-side-tab-recommend')));
     await _pumpStable(tester);
-    expect(find.text('关注房间推荐(M4)'), findsOneWidget);
+    expect(find.byKey(const Key('play-side-recommend-panel')), findsOneWidget);
+    expect(find.text('相关推荐'), findsOneWidget);
 
     // 切回「聊天」:弹幕条目数与切换前一致——侧栏 tab 状态独立,样例流不丢。
-    await tester.tap(find.text('聊天'));
+    await tester.tap(find.byKey(const Key('play-side-tab-chat')));
     await _pumpStable(tester);
     expect(
       captureDanmakuCount(tester),

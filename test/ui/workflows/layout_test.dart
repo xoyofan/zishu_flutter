@@ -21,6 +21,7 @@ import 'package:zishu_flutter/src/features/play/widgets/play_side_panel.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 import 'package:zishu_flutter/src/shared/presentation/design_tokens.dart';
 import 'package:zishu_flutter/src/shared/presentation/platform_brands.dart';
+import 'package:zishu_flutter/src/shared/presentation/widgets/platform_icon.dart';
 
 /// 测试替身:VM 下替代 MediaKitLivePlayer,快照立即给一帧,方法只记录调用。
 class FakeLivePlayer implements LivePlayer {
@@ -118,18 +119,8 @@ void main() {
         (widget.key as ValueKey<String>).value.startsWith('room-card-'),
   );
 
-  /// 平台 tab 内的 8x8 圆形品牌色点(填充色 == brand.color)。
-  Finder platformDotFinder(PlatformBrand brand) => find.byWidgetPredicate(
-    (widget) {
-      if (widget is! Container) return false;
-      final decoration = widget.decoration;
-      return widget.constraints?.minWidth == 8 &&
-          widget.constraints?.maxWidth == 8 &&
-          decoration is BoxDecoration &&
-          decoration.shape == BoxShape.circle &&
-          decoration.color == brand.color;
-    },
-  );
+  /// 平台 tab 内的 SFVideo 风格品牌图标(`PlatformIcon`,含真实素材)。
+  Finder platformIconFinder() => find.byType(PlatformIcon);
 
   /// pump 到 /douyu/play/63136 播放页(fixture 数据落地)。
   Future<void> pumpPlayRoute(WidgetTester tester, GoRouter router) async {
@@ -152,33 +143,29 @@ void main() {
     expect(navRect.height, AppSpacing.topNavHeight);
     expect(navRect.top, 0);
 
-    // 2) 平台 tabs 顺序 == navPlatforms 跳过 all:逐个「色点 + 文字」定位,
-    //    色点在文字左侧且为品牌色,tabs 从左到右按目录顺序排列。
-    var previousTextLeft = -double.infinity;
+    // 2) 平台 tabs 顺序 == navPlatforms 跳过 all:每个平台以
+    //    `platform-tab-{id}` 锚点定位,内部为 SFVideo 风格品牌图标
+    //    (`PlatformIcon`,真实素材),tabs 从左到右按目录顺序排列并落在
+    //    44px 顶栏内。
+    var previousTabLeft = -double.infinity;
     for (final brand in PlatformBrandCatalog.navPlatforms.skip(1)) {
-      final tabText = find.descendant(
-        of: topNav,
-        matching: find.text(brand.name),
+      final tab = find.byKey(Key('platform-tab-${brand.id}'));
+      expect(tab, findsOneWidget, reason: '顶导航缺少平台 tab ${brand.name}');
+      expect(
+        find.descendant(of: tab, matching: platformIconFinder()),
+        findsOneWidget,
+        reason: '平台 tab ${brand.name} 缺少品牌图标',
       );
-      expect(tabText, findsOneWidget, reason: '顶导航缺少平台 tab ${brand.name}');
-      final textRect = tester.getRect(tabText);
-
-      final dot = find.descendant(
-        of: topNav,
-        matching: platformDotFinder(brand),
-      );
-      expect(dot, findsOneWidget, reason: '平台 tab ${brand.name} 缺少品牌色点');
-      final dotRect = tester.getRect(dot);
-      expect(dotRect.right, lessThanOrEqualTo(textRect.left));
+      final tabRect = tester.getRect(tab);
 
       expect(
-        textRect.left,
-        greaterThanOrEqualTo(previousTextLeft),
+        tabRect.left,
+        greaterThanOrEqualTo(previousTabLeft),
         reason: '平台 tab ${brand.name} 未按 navPlatforms 顺序从左到右排列',
       );
-      expect(textRect.top, greaterThanOrEqualTo(navRect.top));
-      expect(textRect.bottom, lessThanOrEqualTo(navRect.bottom));
-      previousTextLeft = textRect.left;
+      expect(tabRect.top, greaterThanOrEqualTo(navRect.top));
+      expect(tabRect.bottom, lessThanOrEqualTo(navRect.bottom));
+      previousTabLeft = tabRect.left;
     }
 
     // 3) 工具区 4 个 nav 锚点横排(从左到右)且完整落在视口内。
@@ -229,32 +216,41 @@ void main() {
     expect(minTop, greaterThanOrEqualTo(navRect.bottom));
   });
 
-  testWidgets('playPageShellFree:播放页不套 AppShell,侧栏宽 328', (tester) async {
-    final router = await pumpApp(tester);
-    await pumpPlayRoute(tester, router);
+  testWidgets(
+    'playPageShellFree:播放页不套 AppShell,侧栏宽按视口分档',
+    (tester) async {
+      final router = await pumpApp(tester);
+      await pumpPlayRoute(tester, router);
 
-    // 播放页无壳:顶导航锚点与 AppShell 均不存在。
-    expect(find.byKey(const Key('nav-home')), findsNothing);
-    expect(find.byType(AppShell), findsNothing);
+      // 播放页无壳:顶导航锚点与 AppShell 均不存在。
+      expect(find.byKey(const Key('nav-home')), findsNothing);
+      expect(find.byType(AppShell), findsNothing);
 
-    // 播放页自身锚点可用。
-    expect(find.byKey(const Key('play-back')), findsOneWidget);
-    expect(find.byKey(const Key('play-side-panel-toggle')), findsOneWidget);
+      // 播放页自身锚点可用。
+      expect(find.byKey(const Key('play-back')), findsOneWidget);
+      expect(find.byKey(const Key('play-side-panel-toggle')), findsOneWidget);
 
-    // 右侧信息栏宽度 == AppSpacing.playSidePanelWidth。
-    final panelRect = tester.getRect(find.byType(PlaySidePanel));
-    expect(panelRect.width, AppSpacing.playSidePanelWidth);
-  });
+      // 右侧信息栏宽度 == 视口分档值(1600 档 = 392,
+      // 对齐 SFVideoLive main.css:236-240)。
+      const viewportWidth = 1600.0;
+      final panelRect = tester.getRect(find.byType(PlaySidePanel));
+      expect(
+        panelRect.width,
+        AppSpacing.playSidePanelWidthFor(viewportWidth),
+      );
+    },
+  );
 
   testWidgets('sidePanelToggle:点 toggle 侧栏消失,再点恢复且宽度不变', (tester) async {
     final router = await pumpApp(tester);
     await pumpPlayRoute(tester, router);
 
-    // 初始侧栏可见(宽 328)。
+    // 初始侧栏可见,宽度为视口分档值(1600 档 = 392)。
+    const viewportWidth = 1600.0;
     expect(find.byType(PlaySidePanel), findsOneWidget);
     expect(
       tester.getRect(find.byType(PlaySidePanel)).width,
-      AppSpacing.playSidePanelWidth,
+      AppSpacing.playSidePanelWidthFor(viewportWidth),
     );
 
     // 第一次点击:侧栏收起。
@@ -262,13 +258,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.byType(PlaySidePanel), findsNothing);
 
-    // 第二次点击:侧栏恢复,宽度仍为 328。
+    // 第二次点击:侧栏恢复,宽度与首次一致(同一视口分档)。
     await tester.tap(find.byKey(const Key('play-side-panel-toggle')));
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.byType(PlaySidePanel), findsOneWidget);
     expect(
       tester.getRect(find.byType(PlaySidePanel)).width,
-      AppSpacing.playSidePanelWidth,
+      AppSpacing.playSidePanelWidthFor(viewportWidth),
     );
     expect(tester.takeException(), isNull);
   });

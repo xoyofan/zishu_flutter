@@ -51,3 +51,7 @@ app.*.map.json
 # WorkBuddy 本地会话数据与本机 MCP 配置(含本机端口,不入库)
 .workbuddy/
 .mcp.json
+
+# 本机截图/会话产物(含登录态 session,不入库)
+/outputs/
+tool/screenshots/

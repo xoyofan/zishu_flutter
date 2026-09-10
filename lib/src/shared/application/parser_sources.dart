@@ -1,0 +1,61 @@
+/// live_parser 真实数据源适配层。
+///
+/// 通过 `--dart-define=ZISHU_REAL_PARSER=true` 启用；默认仍使用 fixture，
+/// 保证 widget 测试不依赖公网和站点接口状态。
+library;
+
+import 'package:live_parser/live_parser.dart';
+
+import 'browse_source.dart';
+
+class ParserBrowseSource implements BrowseSource {
+  ParserBrowseSource({SiteRegistry? registry})
+    : _registry = registry ?? buildSiteRegistry();
+
+  final SiteRegistry _registry;
+
+  @override
+  Future<CategoryResult> fetchCategories(String site) async {
+    final browse = _registry[site]?.browse;
+    if (browse == null) {
+      throw StateError('站点 $site 不支持分类浏览');
+    }
+    return browse.fetchCategories(site);
+  }
+
+  @override
+  Future<RoomListResult> fetchRooms({
+    required String site,
+    String? cid,
+    int page = 1,
+  }) async {
+    final browse = _registry[site]?.browse;
+    if (browse == null) {
+      throw StateError('站点 $site 不支持房间浏览');
+    }
+    return browse.fetchRooms(
+      RoomListRequest(site: site, cid: cid, page: page, limit: 30),
+    );
+  }
+}
+
+class ParserRoomSource implements RoomSource {
+  ParserRoomSource({SiteRegistry? registry})
+    : _registry = registry ?? buildSiteRegistry();
+
+  final SiteRegistry _registry;
+
+  @override
+  Future<RoomPayload> resolveRoom({
+    required String site,
+    required String roomIdOrUrl,
+  }) async {
+    final registration = _registry[site];
+    if (registration == null) {
+      throw StateError('未注册站点 $site');
+    }
+    return registration.resolver.resolveRoom(
+      RoomRequest(site: site, roomIdOrUrl: roomIdOrUrl),
+    );
+  }
+}

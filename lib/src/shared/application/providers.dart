@@ -6,9 +6,21 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'browse_source.dart';
 import 'fixture_sources.dart';
+import 'parser_sources.dart';
+
+/// 通过 `--dart-define=ZISHU_REAL_PARSER=true` 启用真实 live_parser。
+/// 默认 fixture，避免 widget 测试和离线开发依赖公网。
+const bool useRealParser = bool.fromEnvironment(
+  'ZISHU_REAL_PARSER',
+  defaultValue: false,
+);
 
 /// 栏目浏览数据源(首页/分类/搜索底卡)。
-final browseSourceProvider = Provider<BrowseSource>((ref) => const FixtureBrowseSource());
+final browseSourceProvider = Provider<BrowseSource>(
+  (ref) => useRealParser ? ParserBrowseSource() : const FixtureBrowseSource(),
+);
 
 /// 房间解析数据源(播放页)。
-final roomSourceProvider = Provider<RoomSource>((ref) => const FixtureRoomSource());
+final roomSourceProvider = Provider<RoomSource>(
+  (ref) => useRealParser ? ParserRoomSource() : const FixtureRoomSource(),
+);

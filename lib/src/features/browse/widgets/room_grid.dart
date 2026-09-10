@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import 'package:live_parser/live_parser.dart';
 
@@ -7,7 +5,9 @@ import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import 'room_card.dart';
 
-/// 自适应房间网格:对齐 SFVideoLive `repeat(auto-fill, minmax(240px, 1fr))`。
+/// 自适应房间网格:对齐 SFVideoLive `RoomGrid.vue:120-155` 的**断点固定列数**
+/// (<640→2、≥640→3、≥768→4、≥1024→5、≥1536→6、≥2560→7),
+/// 而非 `auto-fill` 连续推算。列数由 [AppRoomGrid.columnsFor] 统一决定。
 /// 支持滚动接近底部时触发 [onLoadMore](由调用方的 controller 防重入),
 /// [hasMore] 为 true 时在末尾渲染加载指示 footer。
 class RoomGrid extends StatefulWidget {
@@ -15,7 +15,6 @@ class RoomGrid extends StatefulWidget {
     super.key,
     required this.rooms,
     this.onRoomTap,
-    this.maxCardWidth = 280,
     this.padding = const EdgeInsets.all(AppSpacing.lg),
     this.hasMore = false,
     this.onLoadMore,
@@ -24,7 +23,6 @@ class RoomGrid extends StatefulWidget {
 
   final List<RoomSummary> rooms;
   final void Function(RoomSummary room)? onRoomTap;
-  final double maxCardWidth;
   final EdgeInsetsGeometry padding;
 
   /// 是否还有下一页;true 时网格末尾显示加载 footer。
@@ -73,18 +71,18 @@ class _RoomGridState extends State<RoomGrid> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final width = constraints.maxWidth;
-        final columns = math.max(1, (width / widget.maxCardWidth).floor());
-        // 卡片实际宽 = 内容宽均分(扣间距),卡高比例必须按实际宽算;
-        // 用 maxCardWidth 会在列数>1 或内容区窄于 maxCardWidth 时令文本区溢出。
+        final columns = AppRoomGrid.columnsFor(width);
+        // 卡片实际宽 = 内容宽均分(扣列间距),卡高比例必须按实际宽算;
+        // 用固定值会在列数>1 或内容区窄于该值时令文本区溢出。
         final cardWidth =
-            (width - AppSpacing.md * (columns - 1)) / columns;
+            (width - AppSpacing.gridCrossAxisSpacing * (columns - 1)) / columns;
         return GridView.builder(
           controller: _controller,
           padding: widget.padding,
           gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: columns,
-            mainAxisSpacing: AppSpacing.md,
-            crossAxisSpacing: AppSpacing.md,
+            mainAxisSpacing: AppSpacing.gridMainAxisSpacing,
+            crossAxisSpacing: AppSpacing.gridCrossAxisSpacing,
             // 80 = 文本区预算(标题 18.9 + 间距 8 + 主播行 16.8 + padding 24 = 67.7)
             // + 12px 余量,覆盖测试字体(Ahem)与真实字体的行高差,防止 2~6px 级溢出;
             // 大字体下再按 metaHeightFor 同步放大,避免纵向溢出(W11)。

@@ -3,10 +3,12 @@ import 'package:go_router/go_router.dart';
 
 import '../shared/presentation/design_tokens.dart';
 import '../shared/presentation/platform_brands.dart';
+import '../shared/presentation/widgets/platform_icon.dart';
 
-/// 应用壳层:桌面/平板(>=768)为 44px 顶部导航(Logo + 平台 tabs + 工具区);
-/// 手机(<768,U9)顶部导航不渲染,主导航转为 56px 底部导航,平台切换由
-/// 首页内容区顶部的平台筛选 chips(Wrap)承担。播放页不套壳。
+/// 应用壳层:桌面/平板(>=768)为 44px 顶部导航;
+/// 手机(<768)为平台条 + 56px 底部主导航。结构对齐 SFVideoLive
+/// `NavSidebar.vue` 的品牌区、中心平台区与右侧工具区。
+/// 播放页不套壳。
 class AppShell extends StatelessWidget {
   const AppShell({super.key, required this.site, required this.child});
 
@@ -22,7 +24,10 @@ class AppShell extends StatelessWidget {
       body: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (!isPhone) _TopNav(currentSite: site),
+          if (isPhone)
+            _PlatformStrip(currentSite: site)
+          else
+            _TopNav(currentSite: site),
           Expanded(child: child),
         ],
       ),
@@ -31,6 +36,129 @@ class AppShell extends StatelessWidget {
   }
 }
 
+/// 移动端平台条:对齐 SFVideoLive `NavPlatformStrip.vue`。
+///
+/// 每个平台是「品牌图标入口 + 分类箭头」的组合卡片,入口本身使用
+/// `platform-tab-{site}` 锚点;分类箭头单独跳转到该平台分类页,避免把两个
+/// 语义动作塞进同一个点击区域。
+class _PlatformStrip extends StatelessWidget {
+  const _PlatformStrip({required this.currentSite});
+
+  final String currentSite;
+
+  static const double contentHeight = 52;
+
+  @override
+  Widget build(BuildContext context) {
+    final safeTop = MediaQuery.paddingOf(context).top;
+    return Container(
+      height: contentHeight + safeTop,
+      padding: EdgeInsets.only(top: safeTop),
+      decoration: const BoxDecoration(
+        color: AppColors.surfaceSoft,
+        border: Border(bottom: BorderSide(color: AppColors.border)),
+      ),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+        child: Row(
+          children: [
+            for (final brand in PlatformBrandCatalog.navPlatforms)
+              _StripTab(
+                brand: brand,
+                selected: brand.id == currentSite,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StripTab extends StatelessWidget {
+  const _StripTab({required this.brand, required this.selected});
+
+  final PlatformBrand brand;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    final showLabel = width >= AppBreakpoints.tablet;
+    final borderColor = selected ? brand.color : AppColors.border;
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 2),
+      height: 36,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: borderColor),
+        borderRadius: AppRadius.allSm,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Tooltip(
+            message: brand.name,
+            child: InkWell(
+              key: Key('platform-tab-${brand.id}'),
+              onTap: () => context.go(_platformRoute(brand.id)),
+              hoverColor: AppColors.surfaceRaised,
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: showLabel ? AppSpacing.sm : AppSpacing.xs,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    PlatformIcon(id: brand.id, size: 28),
+                    if (showLabel) ...[
+                      const SizedBox(width: AppSpacing.xs),
+                      Text(
+                        brand.name,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: selected
+                              ? AppColors.textPrimary
+                              : AppColors.textSecondary,
+                          fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Container(width: 1, height: 24, color: AppColors.border),
+          Tooltip(
+            message: '${brand.name}分类',
+            child: InkWell(
+              key: Key('platform-category-${brand.id}'),
+              onTap: () => context.go(_categoryRoute(brand.id)),
+              hoverColor: AppColors.surfaceRaised,
+              child: const SizedBox(
+                width: 24,
+                height: 34,
+                child: Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 16,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 桌面顶栏:品牌/主导航在左,平台图标居中,工具区在右。
+///
+/// SFVideoLive 的桌面 `NavSidebar.vue` 使用 44px 高度、30px 品牌图标、
+/// 34px 平台 tab 与 36px 级工具点击目标;平台 tab 默认只显示真实品牌图标,
+/// 平台名通过 Tooltip 提供,避免 12 个平台文字把中心区域挤变形。
 class _TopNav extends StatelessWidget implements PreferredSizeWidget {
   const _TopNav({required this.currentSite});
 
@@ -42,62 +170,125 @@ class _TopNav extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
-    // 响应式收缩(U9/W12 断点规范):
-    // - 平台 tab:>=1024 色点+文字;768–1023 仅色点(icon-only),平台名由
-    //   Tooltip 承载;
-    // - <1024 的 768+ 段同时收敛 Logo 文案与「分类」,保持 800×600 小窗可用;
-    // - nav-home/nav-follow/nav-search/nav-settings 为测试锚点,任何断点保留。
-    final compact = width < AppBreakpoints.tablet;
-    final tabsWithLabel = width >= AppBreakpoints.tablet;
-
+    final showLabels = width >= AppBreakpoints.desktop;
     return Container(
       height: AppSpacing.topNavHeight,
       decoration: const BoxDecoration(
-        color: AppColors.surfaceSoft,
+        color: AppColors.surface,
         border: Border(bottom: BorderSide(color: AppColors.border)),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
       child: Row(
         children: [
-          _Logo(showLabel: !compact),
-          SizedBox(width: compact ? AppSpacing.sm : AppSpacing.xl),
-          // 测试锚点:左侧「首页」入口(nav-home)。
-          _NavItem(
-            key: const Key('nav-home'),
-            label: '首页',
-            route: '/all',
-            active: currentSite == 'all',
+          _TopNavLeading(
+            currentSite: currentSite,
+            showLabels: showLabels,
           ),
-          if (!compact)
-            _NavItem(label: '分类', route: '/all/category', active: false),
-          SizedBox(width: compact ? AppSpacing.xs : AppSpacing.lg),
           Expanded(
-            child: _PlatformTabs(
-              currentSite: currentSite,
-              showLabel: tabsWithLabel,
+            child: Center(
+              child: _PlatformTabs(currentSite: currentSite),
             ),
           ),
-          // 测试锚点:右侧工具区按钮(nav-follow / nav-search / nav-settings)。
-          _IconTool(
-            key: const Key('nav-follow'),
-            icon: Icons.favorite_border_rounded,
-            tooltip: '我的关注',
-            route: '/follow',
-          ),
-          _IconTool(
-            key: const Key('nav-search'),
-            icon: Icons.search_rounded,
-            tooltip: '搜索',
-            route: '/search',
-          ),
-          _IconTool(
-            key: const Key('nav-settings'),
-            icon: Icons.settings_outlined,
-            tooltip: '设置',
-            route: '/settings',
-          ),
+          _TopNavTools(showLabels: showLabels),
         ],
       ),
+    );
+  }
+}
+
+class _TopNavLeading extends StatelessWidget {
+  const _TopNavLeading({required this.currentSite, required this.showLabels});
+
+  final String currentSite;
+  final bool showLabels;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _Logo(showLabel: showLabels),
+        const SizedBox(width: AppSpacing.xs),
+        _NavAction(
+          key: const Key('nav-home'),
+          icon: Icons.home_rounded,
+          label: '首页',
+          tooltip: '首页',
+          route: '/all',
+          active: currentSite == 'all',
+          showLabel: showLabels,
+        ),
+        _NavAction(
+          icon: Icons.grid_view_rounded,
+          label: '分类',
+          tooltip: '分类',
+          route: _categoryRoute(currentSite),
+          active: false,
+          showLabel: showLabels,
+        ),
+        _NavAction(
+          key: const Key('nav-my-category'),
+          icon: Icons.star_border_rounded,
+          label: '我的分类',
+          tooltip: '我的分类',
+          route: '/time',
+          active: false,
+          showLabel: showLabels,
+        ),
+      ],
+    );
+  }
+}
+
+class _TopNavTools extends StatelessWidget {
+  const _TopNavTools({required this.showLabels});
+
+  final bool showLabels;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _NavAction(
+          key: const Key('nav-follow'),
+          icon: Icons.star_border_rounded,
+          label: '我的关注',
+          tooltip: '我的关注',
+          route: '/follow',
+          showLabel: showLabels,
+        ),
+        _NavAction(
+          key: const Key('nav-search'),
+          icon: Icons.search_rounded,
+          label: '搜索',
+          tooltip: '搜索进房',
+          route: '/search',
+          showLabel: showLabels,
+        ),
+        _NavAction(
+          key: const Key('nav-theme'),
+          icon: Icons.dark_mode_outlined,
+          label: '深色',
+          tooltip: '切换主题',
+          showLabel: showLabels,
+        ),
+        _NavAction(
+          key: const Key('nav-settings'),
+          icon: Icons.settings_outlined,
+          label: '设置',
+          tooltip: '设置',
+          route: '/settings',
+          showLabel: showLabels,
+        ),
+        _NavAction(
+          key: const Key('nav-user'),
+          icon: Icons.person_outline_rounded,
+          label: '登录',
+          tooltip: '登录',
+          showLabel: showLabels,
+        ),
+      ],
     );
   }
 }
@@ -105,64 +296,116 @@ class _TopNav extends StatelessWidget implements PreferredSizeWidget {
 class _Logo extends StatelessWidget {
   const _Logo({this.showLabel = true});
 
-  /// 窄视口(<1024)只保留图标,避免 Logo 文案挤占主导航。
   final bool showLabel;
 
   @override
   Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Container(
-          width: 22,
-          height: 22,
-          decoration: BoxDecoration(
-            color: AppColors.brand,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          alignment: Alignment.center,
-          child: const Text(
-            '薯',
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w900,
-              color: Colors.black87,
-            ),
+    return Tooltip(
+      message: '紫薯直播',
+      child: InkWell(
+        key: const Key('nav-brand'),
+        borderRadius: AppRadius.allMd,
+        hoverColor: AppColors.surfaceSoft,
+        onTap: () => context.go('/all'),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Image.asset(
+                'assets/ui/logo/logo-128.png',
+                width: 30,
+                height: 30,
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => Container(
+                  width: 30,
+                  height: 30,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: AppColors.brand,
+                    borderRadius: AppRadius.allMd,
+                  ),
+                  child: const Text(
+                    '薯',
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+              if (showLabel) ...[
+                const SizedBox(width: AppSpacing.xs),
+                const Text(
+                  '紫薯直播',
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ],
           ),
         ),
-        const SizedBox(width: AppSpacing.sm),
-        if (showLabel)
-          const Text(
-            '紫薯直播',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
-          ),
-      ],
+      ),
     );
   }
 }
 
-class _NavItem extends StatelessWidget {
-  const _NavItem({super.key, required this.label, required this.route, required this.active});
+/// 桌面主导航动作:36px 级点击目标,hover/active 由 InkWell 负责,
+/// 小窗口自动切换为 icon-only,平台名和动作名由 Tooltip 承载。
+class _NavAction extends StatelessWidget {
+  const _NavAction({
+    super.key,
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+    this.route,
+    this.active = false,
+    this.showLabel = false,
+  });
 
+  final IconData icon;
   final String label;
-  final String route;
+  final String tooltip;
+  final String? route;
   final bool active;
+  final bool showLabel;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: AppSpacing.lg),
-      child: InkWell(
-        borderRadius: AppRadius.allSm,
-        onTap: () => context.go(route),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: active ? FontWeight.w700 : FontWeight.w400,
-              color: active ? AppColors.brand : AppColors.textSecondary,
+    final color = active ? AppColors.brand : AppColors.textSecondary;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: AppRadius.allMd,
+          hoverColor: AppColors.surfaceSoft,
+          onTap: route == null ? null : () => context.go(route!),
+          child: Padding(
+            padding: EdgeInsets.symmetric(
+              horizontal: showLabel ? AppSpacing.sm : AppSpacing.xs,
+              vertical: 3,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 18, color: color),
+                if (showLabel) ...[
+                  const SizedBox(width: 5),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                      color: color,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ),
@@ -172,94 +415,74 @@ class _NavItem extends StatelessWidget {
 }
 
 class _PlatformTabs extends StatelessWidget {
-  const _PlatformTabs({required this.currentSite, required this.showLabel});
+  const _PlatformTabs({required this.currentSite});
 
   final String currentSite;
 
-  /// >=1024 显示平台名;768–1023 仅品牌色点(U9 icon-only 收缩)。
-  final bool showLabel;
-
   @override
   Widget build(BuildContext context) {
-    return ListView(
+    return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
-      children: [
-        for (final brand in PlatformBrandCatalog.navPlatforms.skip(1))
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
-            child: Tooltip(
-              // U9:icon-only 断点下平台名由 Tooltip 承载(显示文字时同样保留,
-              // 无副作用)。W12 验收断言 Tooltip(message == 平台名)。
-              message: brand.name,
-              child: InkWell(
-                // 测试锚点:顶导航平台 tab。W12 契约 key platform-tab-{site}
-                // 由本组件持有;首页内容区 chips 在 >=768 时改用
-                // home-platform-chip-{site},保证该 key 全树唯一。
-                key: Key('platform-tab-${brand.id}'),
-                borderRadius: AppRadius.allSm,
-                onTap: () => context.go('/${brand.id}'),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final brand in PlatformBrandCatalog.navPlatforms)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 1),
+              child: Tooltip(
+                message: brand.name,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    key: Key('platform-tab-${brand.id}'),
                     borderRadius: AppRadius.allSm,
-                    border: Border(
-                      bottom: BorderSide(
-                        color: currentSite == brand.id ? brand.color : Colors.transparent,
-                        width: 2,
-                      ),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(color: brand.color, shape: BoxShape.circle),
-                      ),
-                      if (showLabel) ...[
-                        const SizedBox(width: 5),
-                        Text(
-                          brand.name,
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: currentSite == brand.id
-                                ? AppColors.textPrimary
-                                : AppColors.textSecondary,
-                          ),
+                    hoverColor: AppColors.surfaceSoft,
+                    onTap: () => context.go(_platformRoute(brand.id)),
+                    child: AnimatedContainer(
+                      duration: AppMotion.fast,
+                      width: 34,
+                      height: 34,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: currentSite == brand.id
+                            ? AppColors.surfaceRaised
+                            : Colors.transparent,
+                        border: Border.all(
+                          color: currentSite == brand.id
+                              ? brand.color
+                              : Colors.transparent,
                         ),
-                      ],
-                    ],
+                        borderRadius: AppRadius.allSm,
+                        boxShadow: currentSite == brand.id
+                            ? [
+                                BoxShadow(
+                                  color: brand.color.withValues(alpha: 0.22),
+                                  blurRadius: 8,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: PlatformIcon(id: brand.id, size: 28),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
-      ],
+        ],
+      ),
     );
   }
 }
 
-class _IconTool extends StatelessWidget {
-  const _IconTool({super.key, required this.icon, required this.tooltip, this.route});
+String _platformRoute(String id) => id == 'all' ? '/all' : '/$id';
 
-  final IconData icon;
-  final String tooltip;
-  final String? route;
+String _categoryRoute(String site) => site == 'all' || site.isEmpty
+    ? '/all/category'
+    : '/$site/category';
 
-  @override
-  Widget build(BuildContext context) {
-    return IconButton(
-      tooltip: tooltip,
-      icon: Icon(icon, size: 19, color: AppColors.textSecondary),
-      onPressed: route == null ? null : () => context.go(route!),
-    );
-  }
-}
-
-/// 手机(<768)底部主导航(U9):56px 高,首页/关注/搜索/设置。
-/// nav-* 测试锚点由顶部导航迁移至此(W9 navVisible 断言仍成立:完整在视口内)。
+/// 手机(<768)底部主导航:56px 高,保留既有 nav-* 锚点契约。
 class _BottomNav extends StatelessWidget {
   const _BottomNav({required this.currentSite});
 
@@ -284,7 +507,7 @@ class _BottomNav extends StatelessWidget {
           ),
           _BottomItem(
             key: const Key('nav-follow'),
-            icon: Icons.favorite_border_rounded,
+            icon: Icons.star_border_rounded,
             label: '关注',
             route: '/follow',
             active: currentSite == 'follow',
@@ -328,6 +551,7 @@ class _BottomItem extends StatelessWidget {
     final color = active ? AppColors.brand : AppColors.textSecondary;
     return Expanded(
       child: InkWell(
+        hoverColor: AppColors.surface,
         onTap: () => context.go(route),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

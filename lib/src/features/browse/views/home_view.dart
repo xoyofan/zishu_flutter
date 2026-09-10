@@ -27,37 +27,37 @@ class _HomeViewState extends ConsumerState<HomeView> {
     final query = BrowseRoomQuery(site: widget.site);
     final roomsAsync = ref.watch(browseRoomsProvider(query));
     final controller = ref.read(browseRoomsProvider(query).notifier);
-    // U9:内容区平台筛选 chips 用 Wrap 多行(360 宽两行,全部挂载不裁切)。
-    // platform-tab-{site} 契约 key 在 <768 由本组件持有(顶导航已隐藏);
-    // >=768 时让位给顶导航 tabs,改用 home-platform-chip-{site} 保证 key 全树唯一。
-    final chipKeyPrefix =
-        MediaQuery.sizeOf(context).width < AppBreakpoints.phone
-        ? 'platform-tab-'
-        : 'home-platform-chip-';
+    // >=768:内容区平台筛选 chips 用 Wrap 多行,key 取 home-platform-chip-{site}
+    // 以让位给顶导航 tabs 的 platform-tab-{site}(保证 key 全树唯一)。
+    // <768:平台切换已由 AppShell 的平台条(nav-platform-strip)承担,
+    // 内容区不再重复渲染 chips。
+    final isPhone = MediaQuery.sizeOf(context).width < AppBreakpoints.phone;
+    const chipKeyPrefix = 'home-platform-chip-';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.lg,
-            AppSpacing.sm,
-            AppSpacing.lg,
-            AppSpacing.xs,
+        if (!isPhone)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.lg,
+              AppSpacing.sm,
+              AppSpacing.lg,
+              AppSpacing.xs,
+            ),
+            child: Wrap(
+              spacing: AppSpacing.sm,
+              runSpacing: AppSpacing.sm,
+              children: [
+                for (final brand in PlatformBrandCatalog.navPlatforms)
+                  _PlatformChip(
+                    brand: brand,
+                    selected: brand.id == widget.site,
+                    keyPrefix: chipKeyPrefix,
+                  ),
+              ],
+            ),
           ),
-          child: Wrap(
-            spacing: AppSpacing.sm,
-            runSpacing: AppSpacing.sm,
-            children: [
-              for (final brand in PlatformBrandCatalog.navPlatforms)
-                _PlatformChip(
-                  brand: brand,
-                  selected: brand.id == widget.site,
-                  keyPrefix: chipKeyPrefix,
-                ),
-            ],
-          ),
-        ),
         Expanded(
           child: switch (roomsAsync) {
             // 刷新中保留旧数据渲染(value 非 null 即有数据)。
