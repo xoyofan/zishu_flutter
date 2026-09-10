@@ -13,6 +13,7 @@
 - 两个范围**零交集**;`tasks.md` 更新由 UI 会话统一维护(解析会话把结果写在回复里带回)。
 - 解析会话必须保持 `dart analyze` 随时全绿,否则 UI 会话的 `flutter analyze` 会被连坐。
 - 根 `pubspec.yaml` 的 `live_parser` path 依赖已由 UI 会话接好,解析会话无需且禁改。
+- 2026-09-10 起 UI 侧再按**文件级隔离**拆多轨并行(斗鱼+直播页收敛),分工见下方「收敛轨 A」;其中 `play_view.dart`/`play_side_panel.dart`/`lib/src/shared/application/providers.dart` 三个装配文件**只允许收口人改**。
 
 ## 当前里程碑:M0(架构冻结)→ M1(Windows 斗鱼最小闭环)→ M2(斗鱼完整闭环)
 
@@ -29,7 +30,7 @@
 | P4 | cross browse + catalog(全平台聚合首页数据) | P1-P3 | [x] 同上 | dart test ✓ |
 | P5 | IPTV(M3U 解析,验证非直播站点型数据源) | P0 | [x] 同上 | dart test ✓ |
 | P6 | 抖音(a_bogus/SM3、Cookie、protobuf) | P1 | [ ] 未开始 | dart test |
-| P7 | 长尾平台:虎牙、B站、YY、Twitch、快手、SOOP、YouTube、小红书 | P4 | [~] 虎牙(tars/anti_code)/B站(wbi)/Twitch 已实现;YY/快手/SOOP/YouTube/小红书未做 | dart test + 平台完成定义(implementation-plan 5.2) |
+| P7 | 长尾平台:虎牙、B站、YY、Twitch、快手、SOOP、YouTube、小红书 | P4 | [~] 虎牙(tars/anti_code)/B站(wbi)/Twitch/**YY(resolve+browse+search,提交 e2007a4)** 已实现;YY 弹幕未做;快手/SOOP/YouTube/小红书未做 | dart test + 平台完成定义(implementation-plan 5.2) |
 | P8 | Dart streaming-server(live_server:shelf + SSE/WS,snake_case 兼容层) | P4 | [ ] 未开始 | dart test + flutter build web |
 | P9 | 弹幕协议 codec 与会话(douyu WS 等) | P1 | [~] douyu/bilibili codec 已实现;会话管理待验 | dart test |
 
@@ -51,6 +52,49 @@
 | U7 | 关注页(三密度/批量/特别关注)+ 设置页(shared_preferences 持久化) | U4 | [x] | follow/settings 锚点测试进行中 |
 | U8 | 搜索(防抖/直达/键盘)+ 主播页 + 时间线 + ErrorView/EmptyView/AsyncValueView 通用组件 | U4 | [x] | search/anchor/timeline 锚点测试进行中 |
 | U9 | 响应式 Web/Android 适配(底部导航、窄屏布局、平台 tab icon-only 收缩) | U1-U8 | [x] 全部落地:<768 底部导航(顶导航不渲染,nav-* 迁移)、平台 tab 768-1023 icon-only+Tooltip / >=1024 点+文字、首页 chips Wrap 多行、播放页 <768 侧栏堆叠 + 横屏手机 sheet 化、控制条窄屏收缩;W12 六用例全部转绿 | flutter test 153 passed / 0 skipped |
+
+## 收敛轨 A(斗鱼 + 直播页,2026-09-10 起)
+
+目标:把「斗鱼 + 直播页」从**"能看但数据是假的"**收敛到 M2 真实闭环。前提结论(2026-09-10 实测):
+- 斗鱼读链路已通:分类/房间解析在 `--dart-define=ZISHU_REAL_PARSER=true` 下即可跑;斗鱼是唯一 `capabilities.danmaku=true` 且解析最完整的平台(13 个文件)。
+- 缺口集中在**直播页消费层**,不是斗鱼解析。
+- **当前 exe 实跑 fixture**(首页 10 房间与 `kFixtureRooms` 逐条一致),开关是编译期常量 `useRealParser`,默认 false。
+
+### A 轨文件隔离分工
+
+**A0 是串行前置**:先拆装配文件,之后各轨零交集。冲突红线:`play_view.dart`、`play_side_panel.dart`、`providers.dart`、`main.dart` 只有**收口人**能改。
+
+| 轨 | 独占文件(只改这些) | 卡 | 验证 |
+|---|---|---|---|
+| A0 拆分/冻结(串行前置) | `lib/src/features/play/views/play_view.dart`、`.../widgets/play_side_panel.dart`(+ 其派生新文件) | A0 | `flutter analyze` + 既有 play/layout/danmaku 用例全绿(纯搬迁,行为不变) |
+| A1 搜索接线 | `lib/src/features/search/**`、`lib/src/shared/application/search_source.dart`(新) | A1 | 注入 fake SearchRepository 的 widget test;开关关闭时 fixture 用例仍绿 |
+| A2 弹幕 | `lib/src/features/danmaku/**`(全新目录)、`lib/src/features/play/widgets/play_side_chat_tab.dart` | A2-A4 | 叠加层/设置/聊天单测;`danmaku_test` 改为断言真实会话 |
+| A3 播放器能力 | `lib/src/platforms/common/playback/**`、`.../play/widgets/player_controls.dart`、`.../play/application/play_provider.dart` | A5-A7 | 全屏/沉浸/快捷键/点帧用例 |
+| A4 侧栏信息与设置 | `.../play/widgets/play_side_header.dart`、`play_side_settings_tab.dart`、`play_side_follow_tab.dart`、`play_side_recommend_tab.dart`、`lib/src/features/follow/application/follow_provider.dart` | A8-A10 | 关注落库/设置生效/推荐列表用例 |
+| A5 导航能力过滤 | `lib/src/shared/presentation/platform_brands.dart`、`lib/src/app/app_shell.dart` | A11 | 未实现平台不渲染或不进去 |
+| 集成收口(串行) | `play_view.dart`、`play_side_panel.dart`、`providers.dart`、`lib/main.dart` | A12 | `flutter analyze` + `flutter test` 全量 + `build windows --debug` |
+| P 轨(解析会话) | `packages/live_parser/**` | A13 | `dart analyze` + `dart test` |
+
+### A 轨卡片
+
+| 卡 | 内容 | 依赖 | 状态 | 验证 |
+|---|---|---|---|---|
+| A0 | 拆播放页装配:`play_side_panel.dart` 拆出 `play_side_header.dart`/`play_side_chat_tab.dart`/`play_side_follow_tab.dart`/`play_side_recommend_tab.dart`/`play_side_settings_tab.dart`(仅留 TabBar 装配);`play_view.dart` 拆出 `play_stage.dart`(舞台+错误卡+占位)/`play_room_header.dart`;新增 `play_contracts.dart` 冻结跨轨接口(弹幕会话、播放器能力、侧栏回调签名) | — | [ ] | analyze + 既有用例全绿 |
+| A1 | 搜索接真实解析:新增 `SearchSource` + `searchSourceProvider`;`search_provider.dart` 走 `SearchRepository`(房间 t=120 + 主播 t=1 合并去重),`kFixtureRooms` 降级为开关关闭时的兜底;保留房间号/douyu 链接直达 | A0 | [ ] | 注入 fake 的 widget test |
+| A2 | 弹幕叠加层:`features/danmaku/` canvas 叠加层(多轨道分配、O(1) 碰撞防重叠、速度随画布宽度、颜色归一+描边、富文本) | A0,P9 | [ ] | 单测 + 手测 |
+| A3 | 弹幕设置面板:显示开关 / 透明度 10-100 / 字号 12-36 / 速度 1-10 / 显示区域 5 档;持久化 | A2 | [ ] | 单测 |
+| A4 | 侧栏聊天接真实弹幕:消费同一 `DanmakuSession`,含连接状态、自动滚底、N 条新消息跳底、重连;**把 `danmaku_test` 从"断言硬编码 `_chatSamples`"改为断言真实会话**(消除假绿) | A2 | [ ] | `danmaku_test` 改后仍绿 |
+| A5 | 全屏:`MediaKitLivePlayer.toggleFullscreen` 实装(现为空实现)+ 控制条状态联动 | A0 | [ ] | 手测 + 用例 |
+| A6 | 沉浸模式 + 静音提示:全屏隐藏侧栏、自动隐藏控件、点右热区唤侧栏、横屏锁定 | A5 | [ ] | 手测 |
+| A7 | 播放器细节:Space/M/F 快捷键 + 点帧播放/暂停 + 控制条补「刷新视频」「弹幕开关」「清晰度/线路下拉」+ `settingsProvider.defaultQuality` 生效(现永远选 `streams.first`) | A0 | [ ] | 用例 |
+| A8 | 侧栏关注落库:关注/超关接 follow provider 并持久化(现为页内 `setState`,切页即丢;`PlayView` 未传回调) | A0 | [ ] | 用例 |
+| A9 | 侧栏设置接线:线路格式/聊天开关/透明度/字号接 `settingsProvider` 并真正生效(现全是 `value` 写死 + `onChanged: (_) {}` 死控件) | A0 | [ ] | 用例 |
+| A10 | 推荐 Tab:用 `browse.fetchRooms(cid)` 拉同分类直播间(现为空态提示) | A0 | [ ] | 用例 |
+| A11 | 导航能力过滤:按 `buildSiteRegistry().supportedSites` 过滤 `navPlatforms`,避免真实解析下点抖音/快手/SOOP/小红书/YouTube 抛 `StateError('站点 X 不支持分类浏览')` | A0 | [ ] | 用例 |
+| A12 | 集成收口:装配层接线(把 A1-A11 挂回 `play_view`/`play_side_panel`/`providers`)+ 全量门禁 + 打开 define 的 Windows 真实验收 | A1-A11 | [ ] | analyze + test 全量 + build windows + 真机观感 |
+| A13(P) | 解析侧配合:① `RoomPayload` 增补可空统计字段(关注数/人气/开播时间)并让斗鱼填充——**实测斗鱼 `betard/{id}` 无人气字段,需另找接口**;② 修 `douyu_site.dart` `if (drafts.isEmpty) continue` 导致 `availableQualities` 与 `streams` 不一致、画质 chip 点击静默无反应的死键 | A0 | [ ] | `dart analyze` + `dart test` |
+
+> 假绿警示:`test/ui/workflows/danmaku_test.dart` 断言「弹幕条目 >0」,但数据源是硬编码 `_chatSamples`(12 条),**当前是通过状态但不是真弹幕**;A4 未完成前该用例不能作为弹幕能力证据。
 
 ## 测试轨 W(workflows)
 
@@ -94,6 +138,10 @@
 | 2026-09-09 | U9 门禁 flutter analyze | No issues(0 issue) |
 | 2026-09-09 | U9 门禁 flutter test 全量 | 153 passed / 0 skipped(W12 六用例转绿) / 0 failed |
 | 2026-09-09 | U9 门禁 flutter build windows --debug -t lib/main.dart | OK(14.7s) |
+| 2026-09-10 | P 轨 YY 门禁 `dart analyze` | No issues(0 issue) |
+| 2026-09-10 | P 轨 YY 门禁 `dart test` | 183 passed / 6 skipped / 0 failed(上轮 167+5) |
+| 2026-09-10 | P 轨 YY 真实链路 smoke(`--run-skipped --plain-name YY`) | PASS:首页 22490906 live→qualities[超清,高清,流畅]→分类[娱乐,游戏,其他]→搜索 5 条 |
+| 2026-09-10 | 真实解析开关核查(启动 Debug exe + 窗口取证) | 首页 10 房间与 `kFixtureRooms` 逐条一致 → **当前构建仍是 fixture 模式**;`useRealParser` 默认 false 且为编译期常量 |
 
 ### W13 修复明细(2026-09-09)
 
