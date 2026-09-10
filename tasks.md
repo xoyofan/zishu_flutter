@@ -92,7 +92,7 @@
 | A10 | 推荐 Tab:用 `browse.fetchRooms(cid)` 拉同分类直播间(现为空态提示) | A0 | [ ] | 用例 |
 | A11 | 导航能力过滤:按 `buildSiteRegistry().supportedSites` 过滤 `navPlatforms`,避免真实解析下点抖音/快手/SOOP/小红书/YouTube 抛 `StateError('站点 X 不支持分类浏览')` | A0 | [ ] | 用例 |
 | A12 | 集成收口:装配层接线(把 A1-A11 挂回 `play_view`/`play_side_panel`/`providers`)+ 全量门禁 + 打开 define 的 Windows 真实验收 | A1-A11 | [ ] | analyze + test 全量 + build windows + 真机观感 |
-| A13(P) | 解析侧配合:① `RoomPayload` 增补可空统计字段(关注数/人气/开播时间)并让斗鱼填充——**实测斗鱼 `betard/{id}` 无人气字段,需另找接口**;② 修 `douyu_site.dart` `if (drafts.isEmpty) continue` 导致 `availableQualities` 与 `streams` 不一致、画质 chip 点击静默无反应的死键 | A0 | [ ] | `dart analyze` + `dart test` |
+| A13(P) ✅ | 解析侧配合(已完成,提交 `2f3709d`):① **死键修复**——`availableQualities` 改为从真实 `streams` 反推(此前按 `multirates` 全量生成;某档全部线路取流失败时该档仍留在列表里,但 `streams` 已无同名项 → UI 点该 chip 静默无反应);② `RoomPayload` 增补可空 `startedAt`,斗鱼取 betard `show_time`——**人气/关注数无单房间接口(`ol` 只在分类列表接口),故不提供;拿不到即 null,不伪造**;③ 附带修复**搜索恒 0 条**:斗鱼 japi 搜索缺设备标识 cookie `dy_did` 时返回 `{error:9,"搜索过于频繁"}` 且 `data` 为空,现自动补随机 32 位十六进制 did,并让上游 `error != 0` 抛 `ParserHttpException` 而非静默返回空结果(**搜索聚合层必须按平台 try/catch**) | A0 | [x] | `dart analyze` 0 issue + `dart test` 187 passed + 斗鱼在线 smoke 全绿 |
 
 > 假绿警示:`test/ui/workflows/danmaku_test.dart` 断言「弹幕条目 >0」,但数据源是硬编码 `_chatSamples`(12 条),**当前是通过状态但不是真弹幕**;A4 未完成前该用例不能作为弹幕能力证据。
 
@@ -142,6 +142,8 @@
 | 2026-09-10 | P 轨 YY 门禁 `dart test` | 183 passed / 6 skipped / 0 failed(上轮 167+5) |
 | 2026-09-10 | P 轨 YY 真实链路 smoke(`--run-skipped --plain-name YY`) | PASS:首页 22490906 live→qualities[超清,高清,流畅]→分类[娱乐,游戏,其他]→搜索 5 条 |
 | 2026-09-10 | 真实解析开关核查(启动 Debug exe + 窗口取证) | 首页 10 房间与 `kFixtureRooms` 逐条一致 → **当前构建仍是 fixture 模式**;`useRealParser` 默认 false 且为编译期常量 |
+| 2026-09-10 | P 轨 A13 门禁 `dart analyze` / `dart test` | No issues(0 issue);187 passed / 6 skipped / 0 failed(183 → +4 单测) |
+| 2026-09-10 | P 轨 A13 斗鱼在线 smoke(`--run-skipped --plain-name 斗鱼`) | PASS:首页 36252 live → qualities[原画1080P60,蓝光4M,超清,高清] → startedAt=2026-09-10T16:29:28 → 搜索 5 条(修复前 0 条) → 分类 5 组 → 弹幕 29 条/30s |
 
 ### W13 修复明细(2026-09-09)
 
