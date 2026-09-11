@@ -112,6 +112,23 @@
 | A10 推荐 Tab | [x] | R3:`browseRoomsProvider` 拉同分类 fixture 房间,条目 `go` 跳转(见收口裁决 3) |
 | A0 装配拆分 | [ ] **推迟** | R2/R3/R4 已把 A0 的三个目标文件改写(侧栏 1500+ 行),拆分必须在收口后的树上重排清单后进行,避免与并行轨互踩 |
 | A11 导航能力过滤 / A12 真机验收 | [ ] | 未开始(下一轮) |
+| **A14 轨道调度对齐 SFVideo 参考** | [ ] | 见下方卡片。来源:feat/A2-danmaku 审计(分支已删,代码在 commit `a568579`) |
+
+### A14 轨道调度对齐 SFVideo 参考(2026-09-11 立)
+
+**背景**:A2 轨的 `danmaku_track_allocator.dart`(337 行,commit `a568579`)与主线 `danmaku_track.dart`(124 行)是两套等价核心不变式的实现;A2 版是能力超集,但该轨其余文件(session/settings)已被主线更新的实现取代,故分支不合并、只吸收调度器。
+
+**A2 版独有能力(升级目标)**:
+1. `DanmakuTrackMath`——与 SFVideo 参考 `useDanmaku.ts` **常量 1:1**:`minTrackGap(fontSize)`/`trackHeightFor(fontSize)`/`maxTracksFor(画布高,字号,区域)`/`speedPixelsPerSecond(速度,画布宽)`(速度随画布宽线性)/`durationFor(...)`;
+2. `DanmakuPlacement`——调度器统一产出完整几何(lane/y/起点 x/速度/时长/seq),而非 lane 下标 + overlay 自算;
+3. `update()`——画布尺寸/字号/速度/显示区域变化原地自适应(`_ensureTracks`),主线 laneCount 构造期固定;
+4. 随机起点扫描(注入 `Random`,可确定性单测)均摊轨道负载;主线为顺序扫描 + `allocateReusingEarliest`。
+
+**主线已有、升级时必须保留的能力**:`widthRatio` 按文本宽度折算安全间隙(`gap = gapSeconds + widthRatio * durationSeconds * 0.25`)、`allocateReusingEarliest` 满载复用语义。
+
+**取回代码**:`git show a568579:lib/src/features/danmaku/domain/danmaku_track_allocator.dart`(测试 `git show a568579:test/danmaku/danmaku_track_allocator_test.dart`,148 行)。
+
+**验收**:`DanmakuOverlay` 接线新调度器;既有 `danmaku_track_test`/`danmaku_overlay_test` 迁移或改口径后全绿;全量 analyze/test/build 过门禁;视觉上与 SFVideo 参考的轨道高度/速度/间距一致(离屏截图对比佐证)。
 
 ## 测试轨 W(workflows)
 
