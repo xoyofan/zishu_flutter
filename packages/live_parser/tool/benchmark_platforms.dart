@@ -50,14 +50,14 @@ const Map<String, String> _fallbackRooms = {
 /// 各平台的非 HTTP 阶段说明(报告里标出,便于定位优化点)。
 const Map<String, String> _nonHttpNotes = {
   'douyin': 'a_bogus 签名(SM3+RC4,纯 CPU)在每次带签请求前计算;cookie 引导(300s TTL)',
-  'youtube': 'yt-dlp 子进程(含 Deno/EJS)+ master/变体/首分片三段预校验;解析优先 dlp',
-  'soop': '每档画质 assign+aid 两次请求;批量并发时上游为短连接(已加 Connection: close+重试)',
+  'youtube': 'yt-dlp 子进程(含 Deno/EJS)+ master/变体/首分片三段预校验;解析优先 dlp;20s 结果缓存',
+  'soop': '房间详情 60s 缓存;全档并行取流(每档 assign/aid 并行,封顶 4 档);瞬时错误短重试',
   'kuaishou': '房间页 HTML 解析(__INITIAL_STATE__),feed 弹幕不走解析链路',
   'bilibili': 'WBI 签名(纯 CPU)+ room_info/play_info 两段',
   'huya': 'anti-code(Tars 编码,纯 CPU)+ web-stream 两段',
   'douyu': '白名单加密 md5 auth(TTL 缓存)+ multirates 多 CDN 探测',
   'yy': 'stream-manager 每档一次 POST;失败回退移动 HLS',
-  'twitch': 'GQL POST + playback access token',
+  'twitch': 'GQL POST + playback access token(元数据/token 并行);直播结果 20s 缓存',
 };
 
 class HttpTiming {
@@ -156,6 +156,7 @@ class PlatformReport {
 
   final String site;
   final List<RoundResult> resolveRounds = [];
+  final List<int> warmRounds = [];
   final List<HttpTiming> lastRecords = [];
   String roomId = '';
   String title = '';
@@ -167,6 +168,12 @@ class PlatformReport {
   String streamUrl = '';
   int? dlpMs;
   String? skipReason;
+
+  int? get warmMedianMs {
+    final values = [...warmRounds]..sort();
+    if (values.isEmpty) return null;
+    return values[values.length ~/ 2];
+  }
 
   int? get medianMs {
     final values = resolveRounds
@@ -319,6 +326,24 @@ Future<PlatformReport> _benchmarkSite(String site) async {
     }
   }
   if (livePayload == null) return report;
+
+  /// 热解析(同一实例连续解析):验证 resolver 内缓存(soop 60s / twitch,youtube 20s)
+  /// 与 HTTP 连接复用收益。
+  final warmRegistration = _buildRegistration(site);
+  if (warmRegistration != null) {
+    for (var round = 0; round < 3; round++) {
+      final stopwatch = Stopwatch()..start();
+      try {
+        await warmRegistration.resolver.resolveRoom(
+          RoomRequest(site: site, roomIdOrUrl: chosen),
+        );
+      } on Object {
+        // 热轮失败不计入缓存收益,仅记录耗时。
+      }
+      stopwatch.stop();
+      report.warmRounds.add(stopwatch.elapsedMilliseconds);
+    }
+  }
 
   // 播放就绪探测。
   final line = livePayload.streams.isEmpty
@@ -476,8 +501,11 @@ String _renderMarkdown(List<PlatformReport> reports) {
     '- 环境: Windows 桌面(本机网络,含透明代理;绝对值仅供同环境对比,跨网络需重跑)',
   );
   buffer.writeln(
-    '- 方法: browse 选首个可解析在播房 → `resolveRoom` 7 次(1 预热 + 3 计分 ×最多 4 候选房),'
-    '计分轮取中位;HTTP 请求耗时经注入的计时 `http.Client` 按 `host+path` 聚合',
+    '- 方法: browse 选首个可解析在播房 → `resolveRoom` 预热 1 次 + 计分 3 次取中位;'
+    '「热解析」= 同一实例连续解析 3 次中位(命中 resolver 内 20s/60s 缓存与连接复用)',
+  );
+  buffer.writeln(
+    '- HTTP 请求耗时经注入的计时 `http.Client` 按 `host+path` 聚合(仅最后一轮冷解析)',
   );
   buffer.writeln(
     '- 播放就绪:首选线路首字节探测(HLS = 清单/变体 + 首分片 TTFB;FLV = 首包 TTFB),近似播放器打开等待',
@@ -486,9 +514,9 @@ String _renderMarkdown(List<PlatformReport> reports) {
   buffer.writeln('## 总览');
   buffer.writeln();
   buffer.writeln(
-    '| 平台 | 状态 | 解析中位(ms) | 最快/最慢(ms) | 播放就绪(ms) | 房号 | 档位 |',
+    '| 平台 | 状态 | 解析中位(ms) | 最快/最慢(ms) | 热解析中位(ms) | 播放就绪(ms) | 房号 | 档位 |',
   );
-  buffer.writeln('|---|---|---:|---|---:|---|---|');
+  buffer.writeln('|---|---|---:|---|---:|---:|---|---|');
   for (final report in reports) {
     final state = report.skipReason != null
         ? 'SKIP'
@@ -498,7 +526,7 @@ String _renderMarkdown(List<PlatformReport> reports) {
     final range = min == null || max == null ? '-' : '$min / $max';
     buffer.writeln(
       '| ${report.site} | $state | ${report.medianMs ?? '-'} | $range | '
-      '${report.streamReadyMs ?? '-'} | ${report.roomId} | '
+      '${report.warmMedianMs ?? '-'} | ${report.streamReadyMs ?? '-'} | ${report.roomId} | '
       '${report.qualities.isEmpty ? '-' : report.qualities.join("/")} |',
     );
   }

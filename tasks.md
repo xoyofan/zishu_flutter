@@ -34,11 +34,13 @@
 | P8 | Dart streaming-server(live_server:shelf + SSE/WS,snake_case 兼容层) | P4 | [ ] 未开始 | dart test + flutter build web |
 | P9 | 弹幕协议 codec 与会话(douyu WS 等) | P1 | [~] douyu/bilibili codec 已实现;会话管理待验 | dart test |
 
-> 2026-09-12 基准:`packages/live_parser/tool/benchmark_platforms.dart` 产出九站
-> 「解析 → 播放就绪」耗时分布(见根目录 `benchmark.md`):解析中位 douyu 364 /
-> huya 270 / bilibili 472 / douyin 863 / yy 438 / twitch 4287 / kuaishou 505 /
-> soop 14139 / youtube 7773 ms;首要优化项=SOOP 请求并发与连接复用、YouTube
-> watch/dlp 并发、抖音 cookie 预热、Twitch token 缓存。
+> 2026-09-12 基准+优化:`packages/live_parser/tool/benchmark_platforms.dart` 产出九站
+> 「解析 → 播放就绪」耗时分布(根目录 `benchmark.md`,含冷/热解析与请求级分布)。
+> 对照 SFVideoLive/pure_live 完成三项优化:SOOP 全档并发+S 档 assign/aid 并行+封顶
+> 4 档+详情/档位 60s 缓存;Twitch 元数据与 token 并行+20s 结果缓存+瞬时重试;
+> YouTube watch 页与 dlp 并行+20s 结果缓存。热解析 soop/twitch/youtube 归零;
+> 冷解析 Twitch/SOOP/YouTube 最优路径较基线提升约 2.3×/3.9×/1.6×
+> (rest 平台受单请求 RTT 主导,处于噪声区间)。
 
 > 2026-09-09 盘点:`packages/live_parser` 实测 dart analyze 0 issue、dart test 167 passed + 5 skipped(fixtures 全离线),P 轨状态按实际产出同步(解析会话此前未回写看板)。
 
