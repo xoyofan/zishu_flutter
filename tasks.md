@@ -34,6 +34,12 @@
 | P8 | Dart streaming-server(live_server:shelf + SSE/WS,snake_case 兼容层) | P4 | [ ] 未开始 | dart test + flutter build web |
 | P9 | 弹幕协议 codec 与会话(douyu WS 等) | P1 | [~] douyu/bilibili codec 已实现;会话管理待验 | dart test |
 
+> 2026-09-12 基准:`packages/live_parser/tool/benchmark_platforms.dart` 产出九站
+> 「解析 → 播放就绪」耗时分布(见根目录 `benchmark.md`):解析中位 douyu 364 /
+> huya 270 / bilibili 472 / douyin 863 / yy 438 / twitch 4287 / kuaishou 505 /
+> soop 14139 / youtube 7773 ms;首要优化项=SOOP 请求并发与连接复用、YouTube
+> watch/dlp 并发、抖音 cookie 预热、Twitch token 缓存。
+
 > 2026-09-09 盘点:`packages/live_parser` 实测 dart analyze 0 issue、dart test 167 passed + 5 skipped(fixtures 全离线),P 轨状态按实际产出同步(解析会话此前未回写看板)。
 
 > P1-P3 即"Windows 第一阶段平台"的斗鱼部分(implementation-plan 5.1);虎牙/B站随 P7,但 M3 里程碑要求其与 P1 同等主链路。
