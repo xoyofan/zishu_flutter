@@ -81,12 +81,12 @@
 |---|---|---|---|---|
 | A0 | 拆播放页装配:`play_side_panel.dart` 拆出 `play_side_header.dart`/`play_side_chat_tab.dart`/`play_side_follow_tab.dart`/`play_side_recommend_tab.dart`/`play_side_settings_tab.dart`(仅留 TabBar 装配);`play_view.dart` 拆出 `play_stage.dart`(舞台+错误卡+占位)/`play_room_header.dart`;新增 `play_contracts.dart` 冻结跨轨接口(弹幕会话、播放器能力、侧栏回调签名) | — | [ ] | analyze + 既有用例全绿 |
 | A1 | 搜索接真实解析(已完成,worktree 分支 `feat/A1-search` @ `82ba432`):新增 `SearchSource` 端口(+`ParserSearchSource`/`FixtureSearchSource`)+ `search_source_provider.dart`(`useRealParserSearch`,与 `providers.dart` 的 `useRealParser` 同源同定义,A12 合并);`search_provider.dart` 改**异步**走端口并保留 300ms 防抖 + generation fence;`SearchState.hits` 类型 `List<SearchHit>` → `List<SearchHitItem>`(显式携带 `site`,**删除 `siteOf`** —— 真实数据下 fixture 反查必然失效);查询失败置 `error` 并保留上次结果(不抛到 widget);`site='all'` 并发聚合 douyu/huya/bilibili 且**单站失败隔离** | A0 | [x] | `flutter analyze lib test/search` 0 issue + `test/search` 8/8 |
-| A2 | 弹幕(已完成**纯逻辑半**,worktree 分支 `feat/A2-danmaku` @ `a568579`):`features/danmaku/` 落地 `danmaku_settings.dart`(clamp 模型)、`danmaku_track_allocator.dart`(注入 `MeasureText` 的纯 Dart 多轨道调度:随机起点扫描 + O(1) 不重叠/不追尾 + 速度随画布宽线性)、`danmaku_session_controller.dart`(200 条环形缓冲 + generation fence + 不支持站点空态 + `autoDispose` 释放会话)、`danmaku_settings_controller.dart`(`SharedPreferencesAsync`,前缀 `zishu.danmaku.`)。**canvas 叠加层渲染与侧栏聊天接会话仍待 A0 挂载点** | A0,P9 | [~] | `test/danmaku` 23/23 passed + analyze 0 issue |
+| A2 | 弹幕叠加层(✅ 2026-09-11 canvas 半挂载):`features/danmaku/` 新增 `widgets/danmaku_overlay.dart`(`Key('danmaku-overlay')`,单 Ticker 驱动、速度∝画布宽即总时长恒定 8s、`ParagraphBuilder` 两遍布局描边保「用户名有色+正文白色」分段、maxVisible 200 上限)+ `domain/danmaku_style.dart`(颜色归一 0→白/0xFF000000|(c&0xFFFFFF),hash-HSL 用户名着色)+ `domain/danmaku_track.dart`(每 lane 只存「尾弹幕越出右缘时刻」单标量,O(1) 分配;满时复用最早释放 lane)+ `application/danmaku_session_provider.dart`(见 A4)。**播放页接线已完成**:`play_view.dart` `_DanmakuLayer`(`ref.listenManual` + broadcast StreamController 快照转增量流,与侧栏共用同一会话),位于视频之上、控制条之下。**前 worktree `feat/A2-danmaku` 的纯逻辑半(danmaku_settings 等)与本实现并存待合并取舍** | A0,P9 | [x] | `test/features/danmaku` 17/17 + 全量 188 passed |
 | A3 | 弹幕设置面板:显示开关 / 透明度 10-100 / 字号 12-36 / 速度 1-10 / 显示区域 5 档;持久化 | A2 | [ ] | 单测 |
-| A4 | 侧栏聊天接真实弹幕:消费同一 `DanmakuSession`,含连接状态、自动滚底、N 条新消息跳底、重连;**把 `danmaku_test` 从"断言硬编码 `_chatSamples`"改为断言真实会话**(消除假绿) | A2 | [ ] | `danmaku_test` 改后仍绿 |
+| A4 | 侧栏聊天接真实弹幕(✅ 2026-09-11):`danmakuSessionProvider`(`danmaku_session_provider.dart`,autoDispose family,build 只判定 + microtask connect,onDispose 关会话,200 条环形缓冲,`danmakuRegistryProvider` 受 `ZISHU_REAL_PARSER` 开关控制);`play_side_panel.dart` 硬编码 `_chatSamples` 已删,聊天 tab 改 `_ChatTab`(keepAlive 防 TabBarView dispose 销毁 autoDispose 会话)+连接状态条+跳底+重连;**`danmaku_test` 改为注入 fake connector 断言真实会话,旧硬编码文案断 findsNothing(假绿已消除)** | A2 | [x] | `danmaku_test` 7/7 + analyze 0 issue |
 | A5 | 全屏:`MediaKitLivePlayer.toggleFullscreen` 实装(现为空实现)+ 控制条状态联动 | A0 | [ ] | 手测 + 用例 |
 | A6 | 沉浸模式 + 静音提示:全屏隐藏侧栏、自动隐藏控件、点右热区唤侧栏、横屏锁定 | A5 | [ ] | 手测 |
-| A7 | 播放器细节:Space/M/F 快捷键 + 点帧播放/暂停 + 控制条补「刷新视频」「弹幕开关」「清晰度/线路下拉」+ `settingsProvider.defaultQuality` 生效(现永远选 `streams.first`) | A0 | [ ] | 用例 |
+| A7 | 播放器细节(✅ 2026-09-11 部分,提交见下):Space/M/F 快捷键(`CallbackShortcuts`,`play-stage` 自持 FocusNode 收焦点)✅ + 点帧播放/暂停(`GestureDetector` opaque,不误触控制条)✅ + 控制条弹幕开关(`play-toggle-danmaku`,切 `PlayState.showDanmaku` 会话态,不污染设置总开关)✅ + `settingsProvider.defaultQuality` 生效(`_pickQuality` 命中同名 stream 否则回退首档;restore 白名单滤脏值回退出厂默认)✅;**遗留:「刷新视频」按钮、清晰度/线路下拉增强**(原卡内容未列全的部分) | A0 | [~] | `play_controls_test` 8/8(含快捷键/点帧/默认画质/回退/弹幕开关) |
 | A8 | 侧栏关注落库:关注/超关接 follow provider 并持久化(现为页内 `setState`,切页即丢;`PlayView` 未传回调) | A0 | [ ] | 用例 |
 | A9 | 侧栏设置接线:线路格式/聊天开关/透明度/字号接 `settingsProvider` 并真正生效(现全是 `value` 写死 + `onChanged: (_) {}` 死控件) | A0 | [ ] | 用例 |
 | A10 | 推荐 Tab:用 `browse.fetchRooms(cid)` 拉同分类直播间(现为空态提示) | A0 | [ ] | 用例 |
@@ -148,6 +148,10 @@
 | 2026-09-10 | UI 复刻门禁 `flutter test` 全量 | 156 passed / 2 failed(latency_test 并行负载抖动)/ 0 skipped |
 | 2026-09-10 | `latency_test` 单独复跑 | 5/5 passed(bilibili median=591ms、douyu reentry 433ms ≤ budget 1678ms)→ 全量 2 失败确认为负载抖动非回归 |
 | 2026-09-10 | UI 复刻门禁 `flutter build windows --debug -t lib/main.dart` | OK |
+| 2026-09-11 | 四轨并行(左栏折叠 rail / 弹幕叠加层 / 侧栏真实弹幕 / 播放接线)门禁 `flutter analyze` | No issues(0 issue;期间 6 条 deprecated + 2 处跨轨编译错均已修) |
+| 2026-09-11 | 同上 `flutter test` 全量 | **188 passed / 0 failed / 0 skipped**(含 latency_test 全绿) |
+| 2026-09-11 | 同上 `flutter build windows --debug -t lib/main.dart` | OK(27.2s) |
+| 2026-09-11 | `play_controls_test` 单独复跑(修焦点 + 删键盘 shim 后) | 8/8 passed |
 | 2026-09-10 | A1 轨门禁 `flutter analyze lib test/search` / `flutter test test/search` | 0 issue;8/8 passed(worktree `feat/A1-search` @ `82ba432`) |
 | 2026-09-10 | A2 轨门禁 `flutter analyze lib/src/features/danmaku test/danmaku` / `flutter test test/danmaku` | 0 issue;23/23 passed(worktree `feat/A2-danmaku` @ `a568579`) |
 | 2026-09-10 | A1/A2 worktree 全量 `flutter test` | 174~175 passed / 2 failed;失败**全部**为 `test/ui/workflows/latency_test.dart` 性能阈值用例(样本 1257~4056ms 跨 1500ms 线、单跑复现不固定、douyu/huya/bilibili 轮流失败)→ 环境抖动,非回归 |

@@ -55,3 +55,6 @@ app.*.map.json
 # 本机截图/会话产物(含登录态 session,不入库)
 /outputs/
 tool/screenshots/
+
+# IDE / 工具本机配置(不入库)
+.codebuddy/

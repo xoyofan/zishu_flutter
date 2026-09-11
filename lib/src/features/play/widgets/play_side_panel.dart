@@ -11,12 +11,14 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:live_parser/live_parser.dart';
 
+import '../../danmaku/application/danmaku_session_provider.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 
-class PlaySidePanel extends StatefulWidget {
+class PlaySidePanel extends ConsumerStatefulWidget {
   const PlaySidePanel({
     super.key,
     this.site,
@@ -38,10 +40,10 @@ class PlaySidePanel extends StatefulWidget {
   final PlaybackStatus playbackStatus;
 
   @override
-  State<PlaySidePanel> createState() => _PlaySidePanelState();
+  ConsumerState<PlaySidePanel> createState() => _PlaySidePanelState();
 }
 
-class _PlaySidePanelState extends State<PlaySidePanel> {
+class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
   bool _followed = false;
   bool _superFollowed = false;
 
@@ -123,10 +125,14 @@ class _PlaySidePanelState extends State<PlaySidePanel> {
             Expanded(
               child: TabBarView(
                 children: [
-                  _ChatSampleList(playbackStatus: widget.playbackStatus),
-                  _FollowPanel(),
-                  _RecommendPanel(),
-                  _SettingsPanel(),
+                  _ChatTab(
+                    site: site,
+                    roomId: roomId,
+                    playbackStatus: widget.playbackStatus,
+                  ),
+                  const _FollowPanel(),
+                  const _RecommendPanel(),
+                  const _SettingsPanel(),
                 ],
               ),
             ),
@@ -537,29 +543,29 @@ class _StatValue extends StatelessWidget {
   }
 }
 
-/// 一条样例弹幕:可选粉丝团徽章 + 用户名 + 正文。
-class _ChatSample {
-  const _ChatSample(this.user, this.message, {this.fanLevel});
+/// 一条展示用弹幕行数据:徽章等级(可空) + 用户名 + 正文。
+///
+/// 由真实 [DanmakuMessage] 映射而来(见 [_ChatRowData.fromMessage])。
+/// 保留该轻量视图模型:列表只关心展示字段,不把解析包的整个模型透进 Widget 层。
+class _ChatRowData {
+  const _ChatRowData(this.user, this.message, {this.fanLevel, this.color = 0});
 
   final String user;
   final String message;
   final int? fanLevel;
-}
 
-const List<_ChatSample> _chatSamples = [
-  _ChatSample('星河不入梦', '来了来了，主播这波操作可以', fanLevel: 12),
-  _ChatSample('奶茶三分甜', '晚上好呀，刚下班就来蹲直播'),
-  _ChatSample('皮蛋solo', '这波是教科书级别，学会了吗', fanLevel: 7),
-  _ChatSample('夜色温柔', '画质终于不糊了，表扬'),
-  _ChatSample('风起于青萍之末', '前排围观，顺便签到', fanLevel: 23),
-  _ChatSample('小狮子嗷呜', 'BGM 叫什么名字呀？'),
-  _ChatSample('代码搬运工', '这个走位有点东西', fanLevel: 5),
-  _ChatSample('今天也想摸鱼', '关注了关注了，明天还来'),
-  _ChatSample('山间清风', '主播声音好听，讲解也细', fanLevel: 9),
-  _ChatSample('烤冷面加蛋', '水友赛什么时候安排一下'),
-  _ChatSample('云端漫步', '刚刚那波团战复盘讲得好', fanLevel: 31),
-  _ChatSample('一只小海豹', '来了来了，老规矩先点个关注'),
-];
+  /// 正文颜色(0 = 默认)。当前侧栏按平台主题统一着色,保留字段以备后续。
+  final int color;
+
+  factory _ChatRowData.fromMessage(DanmakuMessage message) {
+    return _ChatRowData(
+      message.userName,
+      message.text,
+      fanLevel: message.badgeLevel > 0 ? message.badgeLevel : null,
+      color: message.color,
+    );
+  }
+}
 
 /// 播放状态指示:聊天状态条左侧「播放中/已暂停/静音」文案 + 图标。
 ///
@@ -575,19 +581,129 @@ class PlaybackStatus {
       playing ? (muted ? '播放中(静音)' : '播放中') : '已暂停';
 }
 
-class _ChatSampleList extends StatelessWidget {
-  const _ChatSampleList({required this.playbackStatus});
+/// 聊天 tab:消费真实弹幕会话([danmakuSessionProvider]),含连接状态条 + 消息列表。
+///
+/// 能力:
+/// - 状态条左侧播放状态指示 + 弹幕连接状态(已连接/连接中/未连接/当前站点不支持);
+/// - 列表随新消息自动滚底;用户上滑离开底部时暂停,并显示「N 条新消息」跳底按钮;
+/// - 状态条右侧「重新连接」按钮触发 [DanmakuSessionController.reconnect]。
+class _ChatTab extends ConsumerStatefulWidget {
+  const _ChatTab({
+    required this.site,
+    required this.roomId,
+    required this.playbackStatus,
+  });
 
+  final String site;
+  final String roomId;
   final PlaybackStatus playbackStatus;
 
   @override
+  ConsumerState<_ChatTab> createState() => _ChatTabState();
+}
+
+class _ChatTabState extends ConsumerState<_ChatTab>
+    with AutomaticKeepAliveClientMixin {
+  final ScrollController _scrollController = ScrollController();
+
+  /// 已「消费」到列表末尾的消息条数(用于统计用户离开底部后到达的新消息)。
+  int _seenCount = 0;
+
+  /// TabBarView 只挂载当前页,切换 tab 会 dispose 离屏子页。若聊天页被销毁,
+  /// `danmakuSessionProvider`(autoDispose)也会一并销毁 → 会话被 close、消息丢失,
+  /// 切回聊天时重新建连从头开始。故聊天页必须 keepAlive,让会话跨 tab 存活。
+  @override
+  bool get wantKeepAlive => true;
+
+  /// 用户当前是否停在底部(容差 24px,避免像素误差导致误判)。
+  bool get _isAtBottom {
+    if (!_scrollController.hasClients) return true;
+    final position = _scrollController.position;
+    return position.pixels >= position.maxScrollExtent - 24;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    // 用户上滑/下滑时刷新「N 条新消息」显隐(滚到底部即清零)。
+    _scrollController.addListener(_onScrollChanged);
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_onScrollChanged);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _onScrollChanged() {
+    if (mounted) setState(() {});
+  }
+
+  void _scrollToBottom({bool animate = true}) {
+    if (!_scrollController.hasClients) return;
+    final target = _scrollController.position.maxScrollExtent;
+    if (animate) {
+      _scrollController.animateTo(
+        target,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOut,
+      );
+    } else {
+      _scrollController.jumpTo(target);
+    }
+  }
+
+  /// 新消息到达后:贴底时自动滚到底;离开底部时仅累计未读。
+  void _syncAutoScroll(int messageCount) {
+    if (!_scrollController.hasClients) {
+      _seenCount = messageCount;
+      return;
+    }
+    final wasAtBottom = _isAtBottom || _seenCount == 0;
+    _seenCount = messageCount;
+    if (!wasAtBottom) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _scrollController.hasClients) _scrollToBottom(animate: false);
+    });
+  }
+
+  String _connectionLabel(DanmakuSessionState connection, bool supported) {
+    if (!supported) return '弹幕不支持';
+    return switch (connection) {
+      DanmakuSessionState.connecting => '弹幕连接中',
+      DanmakuSessionState.connected => '弹幕已连接',
+      DanmakuSessionState.disconnected => '弹幕未连接',
+    };
+  }
+
+  Color _connectionColor(DanmakuSessionState connection, bool supported, ZishuTokens tokens) {
+    if (!supported) return tokens.textSecondary;
+    return connection == DanmakuSessionState.connected
+        ? tokens.liveBadge
+        : tokens.textSecondary;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin 要求
     final tokens = context.tokens;
+    final params = (site: widget.site, roomId: widget.roomId);
+    final chat = ref.watch(danmakuSessionProvider(params));
+    final rows = [
+      for (final message in chat.messages) _ChatRowData.fromMessage(message),
+    ];
+
+    _syncAutoScroll(rows.length);
+
+    final atBottom = _isAtBottom;
+    final pending = atBottom ? 0 : (rows.length - _seenCount).clamp(0, 1 << 30);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
-          height: 31,
+          height: MediaQuery.textScalerOf(context).scale(31),
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
           decoration: BoxDecoration(
             color: AppColors.surfaceSoft,
@@ -596,29 +712,33 @@ class _ChatSampleList extends StatelessWidget {
           child: Row(
             children: [
               Icon(
-                playbackStatus.playing
+                widget.playbackStatus.playing
                     ? Icons.play_arrow_rounded
                     : Icons.pause_rounded,
                 size: 11,
-                color: playbackStatus.playing
+                color: widget.playbackStatus.playing
                     ? tokens.liveBadge
                     : tokens.textSecondary,
               ),
               const SizedBox(width: 4),
               Flexible(
                 child: Text(
-                  playbackStatus.label,
+                  widget.playbackStatus.label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTypography.caption,
                 ),
               ),
               const SizedBox(width: 12),
-              Icon(Icons.circle, size: 7, color: tokens.liveBadge),
+              Icon(
+                Icons.circle,
+                size: 7,
+                color: _connectionColor(chat.connection, chat.supported, tokens),
+              ),
               const SizedBox(width: 5),
               Flexible(
                 child: Text(
-                  '弹幕已连接',
+                  _connectionLabel(chat.connection, chat.supported),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTypography.caption,
@@ -629,28 +749,63 @@ class _ChatSampleList extends StatelessWidget {
                 message: '重新连接弹幕',
                 child: IconButton(
                   key: const Key('play-side-chat-refresh'),
-                  onPressed: () {},
+                  onPressed: chat.supported
+                      ? () => ref
+                            .read(danmakuSessionProvider(params).notifier)
+                            .reconnect()
+                      : null,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
-                  icon: Icon(Icons.refresh_rounded, size: 15, color: tokens.textSecondary),
+                  icon: Icon(
+                    Icons.refresh_rounded,
+                    size: 15,
+                    color: tokens.textSecondary,
+                  ),
                 ),
               ),
             ],
           ),
         ),
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(
-              AppSpacing.sm,
-              AppSpacing.xs,
-              AppSpacing.sm,
-              AppSpacing.sm,
-            ),
+          child: Stack(
             children: [
-              for (final sample in _chatSamples)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
-                  child: _ChatRow(sample: sample),
+              if (rows.isEmpty)
+                Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(AppSpacing.md),
+                    child: Text(
+                      chat.isUnsupported ? '当前站点暂不支持弹幕' : '暂无弹幕，等待水友发言…',
+                      textAlign: TextAlign.center,
+                      style: AppTypography.caption,
+                    ),
+                  ),
+                )
+              else
+                ListView.builder(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.sm,
+                    AppSpacing.xs,
+                    AppSpacing.sm,
+                    AppSpacing.sm,
+                  ),
+                  itemCount: rows.length,
+                  itemBuilder: (context, index) => Padding(
+                    padding: const EdgeInsets.only(bottom: 4),
+                    child: _ChatRow(data: rows[index]),
+                  ),
+                ),
+              if (pending > 0)
+                Positioned(
+                  right: AppSpacing.sm,
+                  bottom: AppSpacing.sm,
+                  child: _NewMessagesButton(
+                    count: pending,
+                    onTap: () {
+                      _seenCount = rows.length;
+                      _scrollToBottom();
+                    },
+                  ),
                 ),
             ],
           ),
@@ -660,14 +815,47 @@ class _ChatSampleList extends StatelessWidget {
   }
 }
 
-class _ChatRow extends StatelessWidget {
-  const _ChatRow({required this.sample});
+/// 「N 条新消息」跳底按钮:用户离开底部且有新消息时浮在列表右下角。
+class _NewMessagesButton extends StatelessWidget {
+  const _NewMessagesButton({required this.count, required this.onTap});
 
-  final _ChatSample sample;
+  final int count;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.brand,
+      borderRadius: AppRadius.allMd,
+      child: InkWell(
+        key: const Key('play-side-chat-jump-bottom'),
+        borderRadius: AppRadius.allMd,
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          child: Text(
+            '$count 条新消息',
+            style: const TextStyle(
+              fontSize: 10,
+              height: 1.1,
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChatRow extends StatelessWidget {
+  const _ChatRow({required this.data});
+
+  final _ChatRowData data;
 
   Color _userColor() {
     var hash = 0;
-    for (final unit in sample.user.codeUnits) {
+    for (final unit in data.user.codeUnits) {
       hash = (hash * 31 + unit) % 360;
     }
     return HSLColor.fromAHSL(1, hash.toDouble(), 0.6, 0.68).toColor();
@@ -679,8 +867,8 @@ class _ChatRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (sample.fanLevel != null) ...[
-          _FanBadge(level: sample.fanLevel!),
+        if (data.fanLevel != null) ...[
+          _FanBadge(level: data.fanLevel!),
           const SizedBox(width: 3),
         ],
         Expanded(
@@ -688,7 +876,7 @@ class _ChatRow extends StatelessWidget {
             TextSpan(
               children: [
                 TextSpan(
-                  text: sample.user,
+                  text: data.user,
                   style: AppTypography.bodySecondary.copyWith(
                     color: _userColor(),
                     fontWeight: FontWeight.w600,
@@ -696,7 +884,7 @@ class _ChatRow extends StatelessWidget {
                 ),
                 TextSpan(text: '：', style: AppTypography.bodySecondary),
                 TextSpan(
-                  text: sample.message,
+                  text: data.message,
                   style: AppTypography.bodySecondary.copyWith(
                     color: tokens.textPrimary,
                   ),

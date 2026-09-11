@@ -197,6 +197,74 @@ void main() {
     expect(minTop, greaterThanOrEqualTo(navRect.bottom));
   });
 
+  /// 左栏当前渲染宽度(取根 Container 的 BoxConstraints 实际生效值)。
+  double sidebarWidth(WidgetTester tester) {
+    final box = tester.renderObject<RenderBox>(find.byType(BrowseSidebar));
+    return box.size.width;
+  }
+
+  testWidgets('collapse:点击 toggle 收起(220→52),平台锚点仍命中,分类树隐藏',
+      (tester) async {
+    await pumpApp(tester, width: 1600, height: 1200);
+    expect(find.byType(BrowseSidebar), findsOneWidget);
+
+    // 默认展开:220px,分类树在;toggle 锚点存在。
+    expect(sidebarWidth(tester), closeTo(BrowseSidebar.width, 0.01));
+    expect(find.byKey(BrowseSidebar.toggleKey), findsOneWidget);
+    expect(find.byKey(const Key('browse-sidebar-cat-1')), findsOneWidget);
+    expect(
+      find.byKey(const Key('home-platform-chip-douyu')),
+      findsOneWidget,
+    );
+
+    // 点击 toggle → 收起为 52px;分类树隐藏,平台锚点仍唯一命中。
+    await tester.tap(find.byKey(BrowseSidebar.toggleKey));
+    await tester.pump();
+    await tester.pump(AppMotion.normal);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(sidebarWidth(tester), closeTo(BrowseSidebar.railWidth, 0.01));
+    expect(find.byKey(const Key('browse-sidebar-cat-1')), findsNothing);
+    expect(find.byKey(const Key('home-platform-chip-douyu')), findsOneWidget);
+    expect(find.byKey(const Key('home-platform-chip-all')), findsOneWidget);
+
+    // 再点一次 → 回到 220px 展开态,分类树恢复。
+    await tester.tap(find.byKey(BrowseSidebar.toggleKey));
+    await tester.pump();
+    await tester.pump(AppMotion.normal);
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(sidebarWidth(tester), closeTo(BrowseSidebar.width, 0.01));
+    expect(find.byKey(const Key('browse-sidebar-cat-1')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('collapse:收起态点平台锚点仍可切换路由', (tester) async {
+    final router = await pumpApp(tester, width: 1600, height: 1200);
+
+    await tester.tap(find.byKey(BrowseSidebar.toggleKey));
+    await tester.pump();
+    await tester.pump(AppMotion.normal);
+    await tester.pump(const Duration(milliseconds: 50));
+
+    await tester.tap(find.byKey(const Key('home-platform-chip-douyu')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(router.routeInformationProvider.value.uri.path, '/douyu');
+    expect(
+      tester
+          .widget<FilterChip>(find.byKey(const Key('home-platform-chip-douyu')))
+          .selected,
+      isTrue,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('narrowScreen:左栏与 toggle 均不渲染', (tester) async {
+    await pumpApp(tester, width: 480, height: 900);
+    expect(find.byType(BrowseSidebar), findsNothing);
+    expect(find.byKey(BrowseSidebar.toggleKey), findsNothing);
+  });
+
   testWidgets('wideScreenCategoryTree:左栏分类树叶子可命中并跳转', (tester) async {
     final router = await pumpApp(tester, width: 1600, height: 1200);
 

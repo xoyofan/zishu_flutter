@@ -1,47 +1,66 @@
-/// 弹幕 workflow test(任务卡 W3)。
+/// 弹幕 workflow test(A4:侧栏聊天接真实弹幕会话,消除「假绿」)。
 ///
-/// 覆盖四条用例:
-/// 1. danmakuRendersOnOpen:深链播放页 → 切「聊天」tab → 弹幕条目 >0;
-/// 2. danmakuVisualIntegrity:条目为「粉丝徽章? + 用户名 + '：' + 消息」富文本,
-///    用户名 hash 着色(w600 + HSL 稳定色相)且与正文颜色区分,粉丝团徽章存在;
-/// 3. danmakuPanelIsolatedFromRoomNav:聊天 → 关注 → 推荐 → 聊天 往返切换,
-///    弹幕条目数保持一致(侧栏 tab 状态独立,不丢样例数据);
-/// 4. danmakuIncrementStub:G2 增量断言接口位(fixture 阶段保持静态断言)。
+/// 历史背景:`test/ui/workflows/danmaku_test.dart` 曾断言「PlaySidePanel 内含
+/// 全角冒号的 RichText > 0」,但数据源是 `play_side_panel.dart` 里硬编码的
+/// `_chatSamples`(12 条样例)——**用例通过,但不是真弹幕**。A4 把侧栏聊天改为
+/// 消费 `danmakuSessionProvider` 的真实 [DanmakuMessage] 流后,本用例同步改为
+/// **注入 fake connector 推送受控弹幕**并断言列表随之变化,以此证明数据来自会话
+/// 而非硬编码。
 ///
-/// 定位约定(读 play_side_panel.dart 得出,与 driver [expectDanmakuEntries]
-/// 一致):
+/// 覆盖用例:
+/// 1. danmakuRendersFromInjectedSession:注入会话推送既定弹幕后,侧栏出现对应
+///    条目(不推就是空态,推什么就出现什么);
+/// 2. danmakuVisualIntegrity:条目为「徽章? + 用户名 + '：' + 正文」富文本,
+///    用户名 hash 着色(w600 + HSL 稳定色相)且与正文颜色区分,粉丝徽章存在;
+/// 3. danmakuIsNotHardcoded:推送内容改变后断言随之变化——旧的硬编码样例
+///    (星河不入梦/来了来了…)不再出现,新推送内容出现;并验证增量(先 2 条后加 1 条);
+/// 4. danmakuPanelIsolatedFromRoomNav:聊天 → 关注 → 推荐 → 聊天 往返,条目数一致;
+/// 5. playbackStatusIndicator:状态条左侧播放状态可配置(不依赖弹幕数据)。
+///
+/// 定位约定(与 driver [expectDanmakuEntries] 一致):
 /// - 弹幕条目 = PlaySidePanel 内含「全角冒号」的 RichText。条目由
-///   `Text.rich(TextSpan(children: [用户名, '：', 消息]))` 构建;Flutter 的
+///   `Text.rich(TextSpan(children: [用户名, '：', 正文]))` 构建;Flutter 的
 ///   Text.build 会再包一层默认样式 wrapper span(剥壳见 [_danmakuRowSpan]);
 /// - tab 标签(聊天/关注/推荐)、粉丝徽章(「粉丝 N」)、面板标题与提示文案、
-///   侧栏信息头(「关注 —」「开播 —」)均不含全角冒号,不会误计;
-/// - 粉丝团徽章 = 纯 `Text('粉丝 {level}')` 色块;12 条样例中 6 条带徽章,
-///   等级(12/7/23/5/9/31)互不相同。
-///
-/// G2 升级路径(接口位预留,用例零重写):
-/// 1. `_ChatSampleList` 替换为真实弹幕流驱动的列表(provider/state),条目保持
-///    「徽章? + 用户名 + '：' + 消息」富文本结构不变;
-/// 2. 本文件 finder 零改动:[captureDanmakuCount]/[expectDanmakuEntries] 均按
-///    「PlaySidePanel 内含全角冒号的 RichText」结构定位,与数据来源解耦;
-/// 3. `danmakuIncrementStub` 中的静态断言按用例内注释块升级为
-///    `expect(captureDanmakuCount(tester), greaterThan(count1))`,pump 窗口
-///    对齐真实弹幕节奏(默认 5s),用例名称与结构保持不变。
+///   侧栏信息头(「关注 —」「开播 —」)均不含全角冒号,不会误计。
 library;
 
-import 'package:flutter/material.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:zishu_flutter/src/features/play/widgets/play_side_panel.dart';
+import 'dart:async';
 
-import 'platform_workflow.dart' show expectDanmakuEntries, pumpPlatformApp;
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:go_router/go_router.dart';
+import 'package:live_parser/live_parser.dart'
+    show
+        DanmakuConnector,
+        DanmakuMessage,
+        DanmakuMessageType,
+        DanmakuSession,
+        DanmakuSessionRequest,
+        DanmakuSessionState,
+        SiteCapabilities,
+        SiteRegistration,
+        SiteRegistry,
+        StreamLine,
+        buildSiteRegistry;
+import 'package:zishu_flutter/src/app/app_router.dart';
+import 'package:zishu_flutter/src/app/app_theme.dart';
+import 'package:zishu_flutter/src/features/danmaku/application/danmaku_session_provider.dart';
+import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
+import 'package:zishu_flutter/src/features/play/widgets/play_side_panel.dart';
+import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 
 /// 播放页深链位置(fixture 样例房间,与 navigation/layout 基线同房间)。
 const String _playLocation = '/douyu/play/63136';
 
-/// 钉死校验用首条样例(与 play_side_panel.dart 的 _chatSamples[0] 对齐;
-/// 其余断言按结构定位不耦合样例数据,仅 hash 着色需钉死一条用户名)。
-const String _pinnedUser = '星河不入梦';
-const String _pinnedMessage = '来了来了，主播这波操作可以';
-const String _pinnedBadge = '粉丝 12';
+/// 固定时长 pump(TabBarView 切换动画 kTabScrollDuration≈300ms,4×100ms 足够),
+/// 遵循 driver 约定不用 pumpAndSettle(封面图在 VM 中不会真正加载)。
+Future<void> _pumpStable(WidgetTester tester) async {
+  for (var i = 0; i < 4; i++) {
+    await tester.pump(const Duration(milliseconds: 100));
+  }
+}
 
 /// 弹幕条目 finder:侧栏内含全角冒号的 RichText(见文件头定位约定)。
 Finder _danmakuEntries() {
@@ -54,7 +73,7 @@ Finder _danmakuEntries() {
 }
 
 /// 从条目 RichText 取业务 TextSpan:剥掉 Text.build 的默认样式 wrapper
-/// (wrapper text == null 且仅 1 个 child),得到「[用户名, '：', 消息]」
+/// (wrapper text == null 且仅 1 个 child),得到「[用户名, '：', 正文]」
 /// 三 child 组合 span。
 TextSpan _danmakuRowSpan(RichText entry) {
   var span = entry.text as TextSpan;
@@ -78,47 +97,304 @@ Color _hashUserColor(String user) {
   return HSLColor.fromAHSL(1, hash.toDouble(), 0.6, 0.68).toColor();
 }
 
-/// 增量断言接口位(W3 预留):统计当前聊天 tab 挂载的弹幕条目数。
-///
-/// G2 接入真弹幕后,在 danmakuIncrementStub 中直接使用:
-/// ```dart
-/// final count1 = captureDanmakuCount(tester);
-/// await tester.pump(const Duration(seconds: 5)); // 真弹幕流持续推送
-/// expect(captureDanmakuCount(tester), greaterThan(count1));
-/// ```
+/// 统计当前聊天 tab 挂载的弹幕条目数。
 int captureDanmakuCount(WidgetTester tester) =>
     tester.widgetList<RichText>(_danmakuEntries()).length;
 
-/// 固定时长 pump(TabBarView 切换动画 kTabScrollDuration≈300ms,4×100ms 足够),
-/// 遵循 driver 约定不用 pumpAndSettle(封面图在 VM 中不会真正加载)。
-Future<void> _pumpStable(WidgetTester tester) async {
-  for (var i = 0; i < 4; i++) {
-    await tester.pump(const Duration(milliseconds: 100));
+/// 构造一条 chat 弹幕。
+DanmakuMessage _chat(
+  String userName,
+  String text, {
+  int badgeLevel = 0,
+  String badgeName = '',
+  int color = 0,
+}) {
+  return DanmakuMessage(
+    type: DanmakuMessageType.chat,
+    roomId: '63136',
+    userName: userName,
+    userId: 'uid-$userName',
+    text: text,
+    badgeLevel: badgeLevel,
+    badgeName: badgeName,
+    color: color,
+    rawType: 'chatmsg',
+  );
+}
+
+/// 测试替身弹幕会话:由测试用 [StreamController] 完全驱动,不碰网络。
+class _FakeDanmakuSession implements DanmakuSession {
+  _FakeDanmakuSession();
+
+  final messagesController = StreamController<DanmakuMessage>.broadcast();
+  final statesController = StreamController<DanmakuSessionState>.broadcast();
+
+  /// close 调用次数:用于验证 autoDispose 时真正释放会话(不泄漏)。
+  int closeCount = 0;
+
+  @override
+  Stream<DanmakuMessage> get messages => messagesController.stream;
+
+  @override
+  Stream<DanmakuSessionState> get states => statesController.stream;
+
+  /// 模拟连接建立。
+  void emitConnected() => statesController.add(DanmakuSessionState.connected);
+
+  /// 推送一条真实弹幕。
+  void push(DanmakuMessage message) => messagesController.add(message);
+
+  @override
+  Future<void> close() async {
+    closeCount += 1;
+    await messagesController.close();
+    await statesController.close();
   }
 }
 
+/// 测试替身 connector:记录 connect 请求,返回受控 [_FakeDanmakuSession]。
+class _FakeDanmakuConnector implements DanmakuConnector {
+  _FakeDanmakuConnector({this.supported = true});
+
+  final bool supported;
+
+  final List<DanmakuSessionRequest> requests = [];
+  _FakeDanmakuSession? session;
+
+  @override
+  SiteCapabilities get capabilities => SiteCapabilities(danmaku: supported);
+
+  @override
+  Future<DanmakuSession> connect(DanmakuSessionRequest request) async {
+    requests.add(request);
+    return session ??= _FakeDanmakuSession();
+  }
+}
+
+/// 构造只替换斗鱼弹幕 connector 的注册表:其余(解析/浏览/搜索)沿用真实实现,
+/// 保证房间解析仍走 fixture 默认链路(本用例只关心弹幕来源)。
+SiteRegistry buildTestRegistry(DanmakuConnector connector) {
+  final registry = buildSiteRegistry();
+  final douyu = registry['douyu']!;
+  registry.register(
+    SiteRegistration(
+      id: douyu.id,
+      name: douyu.name,
+      capabilities: douyu.capabilities,
+      resolver: douyu.resolver,
+      browse: douyu.browse,
+      search: douyu.search,
+      danmaku: connector,
+    ),
+  );
+  return registry;
+}
+
+/// 测试替身:VM 下替代 MediaKitLivePlayer,不触碰任何原生播放内核。
+class _FakeLivePlayer implements LivePlayer {
+  _FakeLivePlayer();
+
+  @override
+  Stream<PlayerSnapshot> get snapshots =>
+      Stream<PlayerSnapshot>.value(const PlayerSnapshot());
+
+  @override
+  Widget buildVideoView({BoxFit fit = BoxFit.contain}) =>
+      const SizedBox.expand();
+
+  @override
+  Future<void> open(StreamLine line) async {}
+
+  @override
+  Future<void> play() async {}
+
+  @override
+  Future<void> pause() async {}
+
+  @override
+  Future<void> setVolume(double volume) async {}
+
+  @override
+  Future<void> setMuted(bool muted) async {}
+
+  @override
+  Future<void> toggleFullscreen() async {}
+
+  @override
+  void dispose() {}
+}
+
+/// 宿主:真实路由 + 主题,注入 FakeLivePlayer 与覆盖站点注册表的 fake connector。
+///
+/// 与 `platform_workflow.pumpPlatformApp` 同构,额外覆盖 [danmakuRegistryProvider]
+/// —— 这正是本用例「证明消费真实会话而非硬编码」的关键:弹幕数据只能来自我们
+/// 注入的 fake connector 所返回的会话。
+Future<void> _pumpHost(WidgetTester tester, _FakeDanmakuConnector connector) async {
+  tester.view.devicePixelRatio = 1.0;
+  tester.view.physicalSize = const Size(1600, 1200);
+  addTearDown(tester.view.resetPhysicalSize);
+  addTearDown(tester.view.resetDevicePixelRatio);
+
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        playerProvider.overrideWithValue(_FakeLivePlayer()),
+        danmakuRegistryProvider.overrideWithValue(buildTestRegistry(connector)),
+      ],
+      child: const _TestApp(),
+    ),
+  );
+  await _pumpStable(tester);
+}
+
+/// 测试宿主:同 platform_workflow._TestApp(播放页无壳,补一层透明 Material)。
+class _TestApp extends ConsumerWidget {
+  const _TestApp();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    return MaterialApp.router(
+      theme: ZishuTheme.dark(),
+      routerConfig: ref.watch(routerProvider),
+      builder: (context, child) =>
+          Material(type: MaterialType.transparency, child: child),
+    );
+  }
+}
+
+/// 从当前树取 GoRouter(Navigator 元素向上找 ProviderScope)。
+GoRouter _router(WidgetTester tester) =>
+    ProviderScope.containerOf(tester.element(find.byType(Navigator).first))
+        .read(routerProvider);
+
+/// 导航到播放页。
+void _goPlay(WidgetTester tester) {
+  _router(tester).go(_playLocation);
+}
+
 void main() {
-  testWidgets('danmakuRendersOnOpen:深链播放页切聊天 tab,弹幕条目 >0', (
+  testWidgets('danmakuRendersFromInjectedSession:推送真实弹幕后侧栏出现对应条目', (
     tester,
   ) async {
-    final router = await pumpPlatformApp(tester, _playLocation);
-    expect(router.routeInformationProvider.value.uri.path, _playLocation);
+    final connector = _FakeDanmakuConnector();
+    await _pumpHost(tester, connector);
+
+    // 进入播放页(聊天 tab 为默认页)。
+    _goPlay(tester);
+    await _pumpStable(tester);
     expect(find.byType(PlaySidePanel), findsOneWidget);
 
-    // driver 断言:点击聊天 tab(DefaultTabController 初始页,点击幂等)后,
-    // 侧栏内「用户名：消息」富文本条目 >0。
-    await expectDanmakuEntries(tester);
+    // 未推送前:列表为空态(证明不是硬编码常驻样例)。
+    expect(captureDanmakuCount(tester), 0, reason: '未推送时不应有弹幕条目');
+    expect(find.text('暂无弹幕，等待水友发言…'), findsOneWidget);
+
+    // connector 确实按 (site, roomId) 发起了连接。
+    expect(connector.requests, isNotEmpty);
+    expect(connector.requests.last.site, 'douyu');
+    expect(connector.requests.last.roomId, '63136');
+
+    final session = connector.session!;
+    session.emitConnected();
+    session.push(_chat('星河不入梦', '来了来了，主播这波操作可以', badgeLevel: 12));
+    session.push(_chat('奶茶三分甜', '晚上好呀，刚下班就来蹲直播'));
+    await _pumpStable(tester);
+
+    expect(captureDanmakuCount(tester), 2, reason: '推送 2 条应渲染 2 条');
+    expect(
+      find.descendant(
+        of: find.byType(PlaySidePanel),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is RichText &&
+              widget.text.toPlainText().startsWith('星河不入梦：'),
+        ),
+      ),
+      findsOneWidget,
+      reason: '应出现注入会话推送的用户名条目',
+    );
+    expect(find.text('弹幕已连接'), findsOneWidget);
+  });
+
+  testWidgets('danmakuIsNotHardcoded:推送内容变化,列表随之变化(证明非硬编码)', (
+    tester,
+  ) async {
+    final connector = _FakeDanmakuConnector();
+    await _pumpHost(tester, connector);
+    _goPlay(tester);
+    await _pumpStable(tester);
+
+    final session = connector.session!;
+    session.push(_chat('真实水友甲', '这条来自会话 A'));
+    session.push(_chat('真实水友乙', '这条来自会话 B'));
+    await _pumpStable(tester);
+    expect(captureDanmakuCount(tester), 2);
+
+    // 硬编码样例的用户名/文案不得出现(旧 `_chatSamples` 的钉死值)。
+    // 旧实现(任务 A4 之前)硬编码 12 条样例,其中首条正是下面这组;若仍是
+    // 硬编码,即使一条弹幕都不推也会渲染这些文本 —— 这里显式证明它们不存在。
+    const legacyMessage = '来了来了，主播这波操作可以';
+    expect(
+      find.descendant(
+        of: find.byType(PlaySidePanel),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is RichText &&
+              widget.text.toPlainText().contains(legacyMessage),
+        ),
+      ),
+      findsNothing,
+      reason: '硬编码样例文案「$legacyMessage」不得出现',
+    );
+    expect(
+      find.descendant(
+        of: find.byType(PlaySidePanel),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is RichText &&
+              widget.text.toPlainText().startsWith('星河不入梦：'),
+        ),
+      ),
+      findsNothing,
+      reason: '硬编码样例用户名「星河不入梦」不得出现',
+    );
+
+    // 再推一条:条目增量 +1,且新内容出现 —— 列表完全跟随注入流。
+    session.push(_chat('真实水友丙', '这条来自会话 C'));
+    await _pumpStable(tester);
+    expect(
+      captureDanmakuCount(tester),
+      3,
+      reason: '追加推送后条目应随之增加(证明列表由会话流驱动)',
+    );
+    expect(
+      find.descendant(
+        of: find.byType(PlaySidePanel),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is RichText &&
+              widget.text.toPlainText().startsWith('真实水友丙：'),
+        ),
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('danmakuVisualIntegrity:富文本结构完整,hash 着色+粉丝徽章', (
     tester,
   ) async {
-    await pumpPlatformApp(tester, _playLocation);
-    await expectDanmakuEntries(tester);
+    final connector = _FakeDanmakuConnector();
+    await _pumpHost(tester, connector);
+    _goPlay(tester);
+    await _pumpStable(tester);
+
+    final session = connector.session!;
+    session.push(_chat('星河不入梦', '来了来了，主播这波操作可以', badgeLevel: 12));
+    session.push(_chat('皮蛋solo', '这波是教科书级别，学会了吗', badgeLevel: 7));
+    await _pumpStable(tester);
 
     final entries = tester.widgetList<RichText>(_danmakuEntries()).toList();
     expect(entries, isNotEmpty);
-    // 通用结构:每条目均为 [用户名 span, '：' span, 消息 span] 三段组合,
+    // 通用结构:每条目均为 [用户名 span, '：' span, 正文 span] 三段组合,
     // 用户名 w600 加粗 + 独立颜色(与正文 textPrimary 区分)。
     for (final entry in entries) {
       final label = entry.text.toPlainText();
@@ -127,14 +403,14 @@ void main() {
       expect(
         row.children!.length,
         3,
-        reason: '弹幕条目结构应为 用户名+冒号+消息 三段:$label',
+        reason: '弹幕条目结构应为 用户名+冒号+正文 三段:$label',
       );
       final userSpan = row.children![0] as TextSpan;
       final colonSpan = row.children![1] as TextSpan;
       final messageSpan = row.children![2] as TextSpan;
-      expect(colonSpan.text, '：', reason: '$label 应以全角冒号分隔用户名与消息');
+      expect(colonSpan.text, '：', reason: '$label 应以全角冒号分隔用户名与正文');
       expect(userSpan.text, isNotEmpty, reason: '用户名 span 文本非空:$label');
-      expect(messageSpan.text, isNotEmpty, reason: '消息 span 文本非空:$label');
+      expect(messageSpan.text, isNotEmpty, reason: '正文 span 文本非空:$label');
       expect(
         userSpan.style?.fontWeight,
         FontWeight.w600,
@@ -152,32 +428,32 @@ void main() {
       );
     }
 
-    // hash 着色钉死校验:首条样例用户名颜色 == 复刻算法计算值
-    // (31 进制 hash → HSL 0.6/0.68)。
+    // hash 着色钉死校验:注入的用户名颜色 == 复刻算法计算值(31 进制 hash → HSL 0.6/0.68)。
+    const pinnedUser = '星河不入梦';
     final pinnedFinder = find.descendant(
       of: find.byType(PlaySidePanel),
       matching: find.byWidgetPredicate(
         (widget) =>
             widget is RichText &&
-            widget.text.toPlainText().startsWith('$_pinnedUser：'),
+            widget.text.toPlainText().startsWith('$pinnedUser：'),
       ),
     );
-    expect(pinnedFinder, findsOneWidget, reason: '应存在样例弹幕「$_pinnedUser」');
+    expect(pinnedFinder, findsOneWidget, reason: '应存在注入会话的弹幕「$pinnedUser」');
     final pinnedRow = _danmakuRowSpan(tester.widget<RichText>(pinnedFinder));
     final pinnedSpans = pinnedRow.children!;
-    expect((pinnedSpans[0] as TextSpan).text, _pinnedUser);
-    expect((pinnedSpans[2] as TextSpan).text, _pinnedMessage);
+    expect((pinnedSpans[0] as TextSpan).text, pinnedUser);
+    expect((pinnedSpans[2] as TextSpan).text, '来了来了，主播这波操作可以');
     expect(
       (pinnedSpans[0] as TextSpan).style?.color,
-      _hashUserColor(_pinnedUser),
+      _hashUserColor(pinnedUser),
       reason: '用户名颜色应按 hash(用户名) 稳定色相计算',
     );
 
-    // 粉丝团徽章:钉死样例行带「粉丝 12」徽章,且侧栏内徽章整体存在。
+    // 粉丝团徽章:「badgeLevel > 0」的消息渲染「粉丝 N」色块。
     expect(
       find.descendant(
         of: find.byType(PlaySidePanel),
-        matching: find.text(_pinnedBadge),
+        matching: find.text('粉丝 12'),
       ),
       findsOneWidget,
     );
@@ -187,20 +463,27 @@ void main() {
         matching: find.textContaining('粉丝 '),
       ),
       findsWidgets,
-      reason: '侧栏内应存在粉丝团徽章(样例 12 条中 6 条带徽章)',
+      reason: '注入的两条消息均带徽章,应存在粉丝团徽章',
     );
   });
 
   testWidgets('danmakuPanelIsolatedFromRoomNav:切关注/推荐再切回聊天条目仍在', (
     tester,
   ) async {
-    await pumpPlatformApp(tester, _playLocation);
-    await expectDanmakuEntries(tester);
-    final countBefore = captureDanmakuCount(tester);
-    expect(countBefore, greaterThan(0));
+    final connector = _FakeDanmakuConnector();
+    await _pumpHost(tester, connector);
+    _goPlay(tester);
+    await _pumpStable(tester);
 
-    // 切「关注」:关注面板出现(tab 内容切换生效)。侧栏信息头已有「关注」
-    // 操作按钮,故按 tab 锚点定位,避免与按钮文案歧义。
+    final session = connector.session!;
+    session.push(_chat('星河不入梦', '来了来了，主播这波操作可以'));
+    session.push(_chat('奶茶三分甜', '晚上好呀，刚下班就来蹲直播'));
+    session.push(_chat('皮蛋solo', '这波是教科书级别，学会了吗'));
+    await _pumpStable(tester);
+    final countBefore = captureDanmakuCount(tester);
+    expect(countBefore, 3);
+
+    // 切「关注」:关注面板出现。
     await tester.tap(find.byKey(const Key('play-side-tab-follow')));
     await _pumpStable(tester);
     expect(find.byKey(const Key('play-side-follow-panel')), findsOneWidget);
@@ -212,7 +495,7 @@ void main() {
     expect(find.byKey(const Key('play-side-recommend-panel')), findsOneWidget);
     expect(find.text('相关推荐'), findsOneWidget);
 
-    // 切回「聊天」:弹幕条目数与切换前一致——侧栏 tab 状态独立,样例流不丢。
+    // 切回「聊天」:条目数与切换前一致——会话不因 tab 切换而重建/丢消息。
     await tester.tap(find.byKey(const Key('play-side-tab-chat')));
     await _pumpStable(tester);
     expect(
@@ -220,35 +503,48 @@ void main() {
       countBefore,
       reason: '往返切换 tab 后弹幕条目应原样恢复',
     );
-    await expectDanmakuEntries(tester);
   });
 
-  testWidgets('danmakuIncrementStub:G2 增量断言接口位(fixture 阶段静态)', (
+  testWidgets('danmakuSessionReleased:离开播放页后会话被 close(autoDispose 不泄漏)', (
     tester,
   ) async {
-    await pumpPlatformApp(tester, _playLocation);
-    await expectDanmakuEntries(tester);
+    final connector = _FakeDanmakuConnector();
+    await _pumpHost(tester, connector);
+    _goPlay(tester);
+    await _pumpStable(tester);
 
-    // ── G2 接入真弹幕后的增量断言(届时替换下方静态断言块,其余零改动)────
-    // final count1 = captureDanmakuCount(tester);
-    // await tester.pump(const Duration(seconds: 5)); // 真弹幕流持续推送
-    // expect(
-    //   captureDanmakuCount(tester),
-    //   greaterThan(count1),
-    //   reason: '真弹幕流下 5s 窗口内应有新条目到达',
-    // );
-    // ── fixture 阶段静态断言:样例弹幕流静止,5s 窗口内条目数不变 ──────────
-    final count1 = captureDanmakuCount(tester);
-    expect(count1, greaterThan(0));
-    for (var i = 0; i < 10; i++) {
-      await tester.pump(const Duration(milliseconds: 500));
-    }
+    final session = connector.session!;
+    session.push(_chat('星河不入梦', '来了来了'));
+    await _pumpStable(tester);
+    expect(session.closeCount, 0);
+
+    // 回首页:播放页销毁 → autoDispose → 会话 close。
+    _router(tester).go('/all');
+    await _pumpStable(tester);
+    await _pumpStable(tester);
+    expect(find.byType(PlaySidePanel), findsNothing, reason: '应已离开播放页');
+
+    // close() 是异步的(onDispose 内 fire-and-forget),用 runAsync 让真实异步完成。
+    await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+    await _pumpStable(tester);
     expect(
-      captureDanmakuCount(tester),
-      count1,
-      reason: 'fixture 阶段弹幕为静态样例,5s 窗口内条目数应保持不变;'
-          'G2 接真弹幕后升级为 greaterThan(count1)(见上方注释块)',
+      session.closeCount,
+      greaterThanOrEqualTo(1),
+      reason: '离开播放页后弹幕会话应被 close(autoDispose),避免连接泄漏',
     );
+  });
+
+  testWidgets('danmakuUnsupportedSite:站点不支持弹幕时显示空态而非崩溃', (
+    tester,
+  ) async {
+    final connector = _FakeDanmakuConnector(supported: false);
+    await _pumpHost(tester, connector);
+    _goPlay(tester);
+    await _pumpStable(tester);
+
+    expect(find.text('弹幕不支持'), findsOneWidget);
+    expect(captureDanmakuCount(tester), 0);
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('playbackStatusIndicator:聊天状态条左侧播放状态可配置', (
@@ -258,9 +554,24 @@ void main() {
     // 播放指示随 PlaybackStatus 变化;文案避免全角冒号。
     Future<void> pumpWith(PlaybackStatus status) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SizedBox(width: 392, child: PlaySidePanel(playbackStatus: status)),
+        ProviderScope(
+          overrides: [
+            danmakuRegistryProvider.overrideWithValue(
+              buildTestRegistry(_FakeDanmakuConnector()),
+            ),
+          ],
+          child: MaterialApp(
+            theme: ZishuTheme.dark(),
+            home: Scaffold(
+              body: SizedBox(
+                width: 392,
+                child: PlaySidePanel(
+                  site: 'douyu',
+                  roomId: '63136',
+                  playbackStatus: status,
+                ),
+              ),
+            ),
           ),
         ),
       );
@@ -281,8 +592,7 @@ void main() {
     await pumpWith(const PlaybackStatus(playing: false));
     expect(find.text('已暂停'), findsOneWidget);
 
-    // 状态指示与「弹幕已连接」「刷新」并排。
+    // 状态指示与「重新连接」按钮并排。
     expect(find.byKey(const Key('play-side-chat-refresh')), findsOneWidget);
-    expect(find.text('弹幕已连接'), findsOneWidget);
   });
 }

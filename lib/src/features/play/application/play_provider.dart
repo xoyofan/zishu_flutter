@@ -11,6 +11,7 @@ import 'package:live_parser/live_parser.dart';
 import '../../../platforms/common/playback/live_player.dart';
 import '../../../platforms/common/playback/media_kit_live_player.dart';
 import '../../../shared/application/providers.dart';
+import '../../follow/application/settings_provider.dart';
 
 /// 播放器单例:app 生命周期内复用,不随页面销毁。
 /// dispose 由根 ProviderContainer 统一触发(仅 app 退出时执行)。
@@ -30,7 +31,13 @@ typedef PlayParams = ({String site, String roomId});
 
 /// 播放页状态:解析结果 + 选中画质/线路 + 代际计数。
 class PlayState {
-  const PlayState({this.payload, this.quality, this.line, this.generation = 0});
+  const PlayState({
+    this.payload,
+    this.quality,
+    this.line,
+    this.generation = 0,
+    this.showDanmaku = true,
+  });
 
   final RoomPayload? payload;
   final StreamQuality? quality;
@@ -40,6 +47,9 @@ class PlayState {
   /// 旧异步回调回来后 generation 不匹配即丢弃。
   final int generation;
 
+  /// 舞台弹幕叠加层开关:由控制条/快捷键切换,舞台据此挂载 overlay。
+  final bool showDanmaku;
+
   /// fixture 数据不进真实播放器,舞台显示占位。
   bool get isFixture => payload?.source == 'fixture';
 
@@ -48,12 +58,14 @@ class PlayState {
     StreamQuality? quality,
     StreamLine? line,
     int? generation,
+    bool? showDanmaku,
   }) {
     return PlayState(
       payload: payload ?? this.payload,
       quality: quality ?? this.quality,
       line: line ?? this.line,
       generation: generation ?? this.generation,
+      showDanmaku: showDanmaku ?? this.showDanmaku,
     );
   }
 }
@@ -77,6 +89,11 @@ class PlayController extends AsyncNotifier<PlayState> {
     final generation = ++_generation;
     // 数据源端口变化(G1 换真实解析)时自动重建,Widget 无感。
     final source = ref.watch(roomSourceProvider);
+    // 默认画质:读取设置项。设置页变更会重建本 family(下次进房生效,
+    // 不打断当前会话),与「进房按默认档选中」语义一致。
+    final preferredQuality = ref.watch(
+      settingsProvider.select((settings) => settings.defaultQuality),
+    );
     final payload = await source.resolveRoom(
       site: params.site,
       roomIdOrUrl: params.roomId,
@@ -87,7 +104,7 @@ class PlayController extends AsyncNotifier<PlayState> {
       return state.value ?? PlayState(generation: generation);
     }
 
-    final quality = payload.streams.isEmpty ? null : payload.streams.first;
+    final quality = _pickQuality(payload, preferredQuality);
     final line = quality?.preferredLine;
     final next = PlayState(
       payload: payload,
@@ -101,6 +118,21 @@ class PlayController extends AsyncNotifier<PlayState> {
       unawaited(ref.read(playerProvider).open(line));
     }
     return next;
+  }
+
+  /// 按默认画质挑档:命中同名 stream 则选中它,否则回退到首档。
+  ///
+  /// 判据用 `streams`(点得动的集合)而非 `availableQualities`,保证
+  /// 选中态必然能被 QualityLineBar 渲染成选中 chip;两集合不同源时
+  /// 也不会出现「选中了列表外的档」。找不到即回退 `streams.first`,
+  /// 不抛错、不提示。
+  static StreamQuality? _pickQuality(RoomPayload payload, String? name) {
+    if (payload.streams.isEmpty) return null;
+    if (name == null) return payload.streams.first;
+    for (final stream in payload.streams) {
+      if (stream.name == name) return stream;
+    }
+    return payload.streams.first;
   }
 
   /// 切换画质:落到该画质首选线路,并代际 +1 后重新开流。
@@ -122,6 +154,13 @@ class PlayController extends AsyncNotifier<PlayState> {
     final generation = ++_generation;
     state = AsyncData(current.copyWith(line: line, generation: generation));
     _openSelected();
+  }
+
+  /// 切换舞台弹幕叠加层显隐(纯展示开关,不重开流、不换代际)。
+  void toggleDanmaku() {
+    final current = state.value;
+    if (current == null) return;
+    state = AsyncData(current.copyWith(showDanmaku: !current.showDanmaku));
   }
 
   /// 重试:解析失败 → 整体重解析;播放失败 → 重开当前线路。
