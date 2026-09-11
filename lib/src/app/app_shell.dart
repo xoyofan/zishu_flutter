@@ -1,6 +1,14 @@
-import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
+import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+import 'package:live_parser/live_parser.dart';
+
+import '../features/browse/application/browse_provider.dart';
+import '../features/follow/application/follow_provider.dart';
+import '../shared/application/auth_provider.dart';
 import '../shared/presentation/design_tokens.dart';
 import '../shared/presentation/platform_brands.dart';
 import '../shared/presentation/widgets/platform_icon.dart';
@@ -9,7 +17,7 @@ import '../shared/presentation/widgets/platform_icon.dart';
 /// 手机(<768)为平台条 + 56px 底部主导航。结构对齐 SFVideoLive
 /// `NavSidebar.vue` 的品牌区、中心平台区与右侧工具区。
 /// 播放页不套壳。
-class AppShell extends StatelessWidget {
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key, required this.site, required this.child});
 
   /// 当前选中的平台 id(`all` = 全平台聚合)。
@@ -17,21 +25,147 @@ class AppShell extends StatelessWidget {
   final Widget child;
 
   @override
+  ConsumerState<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends ConsumerState<AppShell> {
+  /// hover 浮层关闭延迟:对齐 SFVideoLive `composables/useHoverUi.ts` 的
+  /// HOVER_MENU_CLOSE_MS(800)——离开触发区后留时间把鼠标移进浮层。
+  static const Duration _kHoverCloseDelay = Duration(milliseconds: 800);
+
+  Timer? _closeTimer;
+  String? _hoveredPlatform;
+  double _hoveredPlatformX = 0;
+  bool _followHover = false;
+  double _followX = 0;
+
+  @override
+  void dispose() {
+    _closeTimer?.cancel();
+    super.dispose();
+  }
+
+  void _cancelClose() => _closeTimer?.cancel();
+
+  void _scheduleClose() {
+    _closeTimer?.cancel();
+    _closeTimer = Timer(_kHoverCloseDelay, () {
+      if (!mounted) return;
+      setState(() {
+        _hoveredPlatform = null;
+        _followHover = false;
+      });
+    });
+  }
+
+  void _openPlatform(String id, double centerX) {
+    _cancelClose();
+    setState(() {
+      _hoveredPlatform = id;
+      _hoveredPlatformX = centerX;
+      _followHover = false;
+    });
+  }
+
+  void _openFollow(double centerX) {
+    _cancelClose();
+    setState(() {
+      _followHover = true;
+      _followX = centerX;
+      _hoveredPlatform = null;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final isPhone = MediaQuery.sizeOf(context).width < AppBreakpoints.phone;
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: Column(
+    // hover 浮层只走桌面/平板(触屏无 hover 语义)。
+    final showPlatformFlyout = !isPhone && _hoveredPlatform != null;
+    final showFollowFlyout = !isPhone && _followHover;
+
+    return Stack(
+      children: [
+        Scaffold(
+          backgroundColor: AppColors.background,
+          body: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (isPhone)
+                _PlatformStrip(currentSite: widget.site)
+              else
+                _TopNav(
+                  currentSite: widget.site,
+                  onPlatformHover: _openPlatform,
+                  onPlatformHoverEnd: _scheduleClose,
+                  onFollowHover: _openFollow,
+                  onFollowHoverEnd: _scheduleClose,
+                ),
+              Expanded(child: widget.child),
+            ],
+          ),
+          bottomNavigationBar: isPhone ? _BottomNav(currentSite: widget.site) : null,
+        ),
+        if (showPlatformFlyout)
+          _HoverOverlay(
+            centerX: _hoveredPlatformX,
+            width: _kPlatformFlyoutWidth,
+            child: _PlatformCategoryFlyout(
+              site: _hoveredPlatform!,
+              onEnter: _cancelClose,
+              onExit: _scheduleClose,
+            ),
+          ),
+        if (showFollowFlyout)
+          _HoverOverlay(
+            centerX: _followX,
+            width: _kFollowFlyoutWidth,
+            child: _FollowFlyout(onEnter: _cancelClose, onExit: _scheduleClose),
+          ),
+      ],
+    );
+  }
+}
+
+/// 平台分类浮层宽度:对齐 SFVideoLive `.nav-platform-menu`
+/// (min-width 12rem / max-width 56rem),这里取中间值 + 由 _HoverOverlay 夹到视口内。
+const double _kPlatformFlyoutWidth = 560;
+
+/// 关注浮层宽度:对齐 `.nav-follow-flyout` 的 21rem(16px 基准 ≈ 336px)。
+const double _kFollowFlyoutWidth = 336;
+
+/// hover 浮层定位:水平以触发点为中心,并夹到视口内;
+/// 顶部留 [_kBridgeHeight] 透明桥接区(SFVideoLive `.nav-*-flyout::before`),
+/// 鼠标从触发区移入浮层时不经过"非 hover 空白"。
+class _HoverOverlay extends StatelessWidget {
+  const _HoverOverlay({
+    required this.centerX,
+    required this.width,
+    required this.child,
+  });
+
+  static const double _kBridgeHeight = 10;
+
+  final double centerX;
+  final double width;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final w = width.clamp(120.0, screenWidth - 16).toDouble();
+    final left = (centerX - w / 2).clamp(8.0, screenWidth - w - 8).toDouble();
+    return Positioned(
+      top: AppSpacing.topNavHeight - _kBridgeHeight,
+      left: left,
+      width: w,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (isPhone)
-            _PlatformStrip(currentSite: site)
-          else
-            _TopNav(currentSite: site),
-          Expanded(child: child),
+          const SizedBox(height: _kBridgeHeight),
+          child,
         ],
       ),
-      bottomNavigationBar: isPhone ? _BottomNav(currentSite: site) : null,
     );
   }
 }
@@ -166,9 +300,23 @@ class _StripGridCell extends StatelessWidget {
 /// 34px 平台 tab 与 36px 级工具点击目标;平台 tab 默认只显示真实品牌图标,
 /// 平台名通过 Tooltip 提供,避免 12 个平台文字把中心区域挤变形。
 class _TopNav extends StatelessWidget implements PreferredSizeWidget {
-  const _TopNav({required this.currentSite});
+  const _TopNav({
+    required this.currentSite,
+    required this.onPlatformHover,
+    required this.onPlatformHoverEnd,
+    required this.onFollowHover,
+    required this.onFollowHoverEnd,
+  });
 
   final String currentSite;
+
+  /// 平台 tab hover → `(平台 id, 触发点中心 x)`;移出触发 800ms 后关闭浮层。
+  final void Function(String id, double centerX) onPlatformHover;
+  final VoidCallback onPlatformHoverEnd;
+
+  /// 「我的关注」入口 hover → 触发点中心 x。
+  final void Function(double centerX) onFollowHover;
+  final VoidCallback onFollowHoverEnd;
 
   @override
   Size get preferredSize => const Size.fromHeight(AppSpacing.topNavHeight);
@@ -192,10 +340,18 @@ class _TopNav extends StatelessWidget implements PreferredSizeWidget {
           ),
           Expanded(
             child: Center(
-              child: _PlatformTabs(currentSite: currentSite),
+              child: _PlatformTabs(
+                currentSite: currentSite,
+                onHover: onPlatformHover,
+                onHoverEnd: onPlatformHoverEnd,
+              ),
             ),
           ),
-          _TopNavTools(showLabels: showLabels),
+          _TopNavTools(
+            showLabels: showLabels,
+            onFollowHover: onFollowHover,
+            onFollowHoverEnd: onFollowHoverEnd,
+          ),
         ],
       ),
     );
@@ -247,9 +403,15 @@ class _TopNavLeading extends StatelessWidget {
 }
 
 class _TopNavTools extends StatelessWidget {
-  const _TopNavTools({required this.showLabels});
+  const _TopNavTools({
+    required this.showLabels,
+    required this.onFollowHover,
+    required this.onFollowHoverEnd,
+  });
 
   final bool showLabels;
+  final void Function(double centerX) onFollowHover;
+  final VoidCallback onFollowHoverEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -263,6 +425,8 @@ class _TopNavTools extends StatelessWidget {
           tooltip: '我的关注',
           route: '/follow',
           showLabel: showLabels,
+          onHoverStart: onFollowHover,
+          onHoverEnd: onFollowHoverEnd,
         ),
         _NavAction(
           key: const Key('nav-search'),
@@ -295,54 +459,272 @@ class _TopNavTools extends StatelessWidget {
 
 /// 顶栏右侧账号区:对齐 SFVideoLive `NavSidebar.vue` 登录态的头像 + 用户名。
 ///
-/// 当前无真实登录态,渲染圆形头像占位(人形图标),保留 `nav-user` 锚点,
-/// hover 有反馈;`showLabels` 时附带「登录」文案。
-class _UserAvatar extends StatelessWidget {
+/// 登录态由 [authProvider] 驱动(data-server 账号 + JWT):
+/// - restoring:头像占位 + 「…」,交互禁用;
+/// - authenticated:头像 + 用户名,点击弹账号菜单(退出登录);
+/// - anonymous:头像 + 「登录」,点击弹登录框。
+/// 手动登录成功后的关注云同步由 FollowController 的登录监听自动触发。
+/// 保留 `nav-user` 锚点;`showLabels` 时附带头像旁文案。
+class _UserAvatar extends ConsumerWidget {
   const _UserAvatar({required this.showLabels});
 
   final bool showLabels;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authProvider);
+    // 登录态跃迁(手动登录/启动链完成)→ 拉取云端关注。
+    // pullRemote 幂等且防重入;登录早于本页构建时由 FollowController
+    // _restore 尾部直接拉取,此处只补「登录在后」的时序。
+    ref.listen<AuthState>(authProvider, (prev, next) {
+      if (next.phase == AuthPhase.authenticated &&
+          prev?.phase != AuthPhase.authenticated) {
+        ref.read(followProvider.notifier).pullRemote();
+      }
+    });
+    final authenticated = auth.phase == AuthPhase.authenticated;
+    final restoring = auth.phase == AuthPhase.restoring;
+    final label = restoring
+        ? '…'
+        : authenticated
+            ? (auth.session?.username ?? '已登录')
+            : '登录';
+
+    final row = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const CircleAvatar(
+            radius: 14,
+            backgroundColor: AppColors.brand,
+            child: Icon(
+              Icons.person_outline_rounded,
+              size: 16,
+              color: Colors.black87,
+            ),
+          ),
+          if (showLabels) ...[
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: authenticated
+                    ? AppColors.textPrimary
+                    : AppColors.textSecondary,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+
+    if (restoring) {
+      return Tooltip(message: '账号状态恢复中', child: row);
+    }
+    if (authenticated) {
+      return PopupMenuButton<String>(
+        key: const Key('nav-user'),
+        tooltip: '账号',
+        offset: const Offset(0, 30),
+        color: AppColors.surface,
+        onSelected: (action) {
+          if (action == 'logout') {
+            ref.read(authProvider.notifier).logout();
+          }
+        },
+        itemBuilder: (_) => [
+          const PopupMenuItem(
+            value: 'logout',
+            height: 34,
+            child: Row(
+              children: [
+                Icon(Icons.logout_rounded, size: 15, color: AppColors.error),
+                SizedBox(width: 8),
+                Text(
+                  '退出登录',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+        child: row,
+      );
+    }
     return Tooltip(
-      message: '账号',
+      message: '登录',
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           key: const Key('nav-user'),
           borderRadius: AppRadius.allPill,
           hoverColor: AppColors.surfaceSoft,
-          onTap: () {},
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const CircleAvatar(
-                  radius: 14,
-                  backgroundColor: AppColors.brand,
-                  child: Icon(
-                    Icons.person_outline_rounded,
-                    size: 16,
-                    color: Colors.black87,
-                  ),
-                ),
-                if (showLabels) ...[
-                  const SizedBox(width: 5),
-                  const Text(
-                    '登录',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ],
-            ),
+          onTap: () => showDialog<void>(
+            context: context,
+            builder: (_) => const _LoginDialog(),
           ),
+          child: row,
         ),
       ),
+    );
+  }
+}
+
+/// data-server 登录对话框:用户名/密码 + 记住密码(默认勾选)。
+/// 用户名预填默认账号;成功后关闭,关注云同步由 FollowController 监听登录态触发。
+class _LoginDialog extends ConsumerStatefulWidget {
+  const _LoginDialog();
+
+  @override
+  ConsumerState<_LoginDialog> createState() => _LoginDialogState();
+}
+
+class _LoginDialogState extends ConsumerState<_LoginDialog> {
+  final TextEditingController _userController =
+      TextEditingController(text: kDefaultAuthUsername);
+  final TextEditingController _passController = TextEditingController();
+  bool _remember = true;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _userController.dispose();
+    _passController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final user = _userController.text.trim();
+    final pass = _passController.text;
+    if (user.isEmpty || pass.isEmpty || _busy) return;
+    setState(() => _busy = true);
+    final ok = await ref
+        .read(authProvider.notifier)
+        .login(user, pass, remember: _remember);
+    if (!mounted) return;
+    if (ok) {
+      Navigator.of(context).pop();
+    } else {
+      setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final lastError = ref.watch(authProvider).lastError;
+    return AlertDialog(
+      backgroundColor: AppColors.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      title: const Text(
+        '登录账号',
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textPrimary,
+        ),
+      ),
+      contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
+      actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      content: SizedBox(
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            TextField(
+              controller: _userController,
+              style:
+                  const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+              decoration: InputDecoration(
+                isDense: true,
+                labelText: '用户名',
+                labelStyle:
+                    const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                prefixIcon: const Icon(Icons.person_outline_rounded, size: 18),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _passController,
+              obscureText: true,
+              onSubmitted: (_) => _submit(),
+              style:
+                  const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+              decoration: InputDecoration(
+                isDense: true,
+                labelText: '密码',
+                labelStyle:
+                    const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18),
+                border:
+                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+            ),
+            const SizedBox(height: 6),
+            SizedBox(
+              height: 30,
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 30,
+                    child: Checkbox(
+                      value: _remember,
+                      visualDensity: VisualDensity.compact,
+                      activeColor: AppColors.brand,
+                      onChanged: (v) => setState(() => _remember = v ?? true),
+                    ),
+                  ),
+                  const Text(
+                    '记住密码(下次打开自动登录)',
+                    style:
+                        TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+            if (lastError != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 2, bottom: 4),
+                child: Text(
+                  lastError,
+                  style: const TextStyle(fontSize: 12, color: AppColors.error),
+                ),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text(
+            '取消',
+            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
+        ),
+        FilledButton(
+          onPressed: _busy ? null : _submit,
+          style: FilledButton.styleFrom(
+            backgroundColor: AppColors.brand,
+            foregroundColor: Colors.black87,
+            textStyle: const TextStyle(fontSize: 12),
+          ),
+          child: _busy
+              ? const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('登录'),
+        ),
+      ],
     );
   }
 }
@@ -419,6 +801,8 @@ class _NavAction extends StatelessWidget {
     this.route,
     this.active = false,
     this.showLabel = false,
+    this.onHoverStart,
+    this.onHoverEnd,
   });
 
   final IconData icon;
@@ -428,38 +812,55 @@ class _NavAction extends StatelessWidget {
   final bool active;
   final bool showLabel;
 
+  /// hover 浮层挂钩:进入时回传触发点中心 x(全局坐标),移出时通知关闭。
+  final void Function(double centerX)? onHoverStart;
+  final VoidCallback? onHoverEnd;
+
   @override
   Widget build(BuildContext context) {
     final color = active ? AppColors.brand : AppColors.textSecondary;
-    return Tooltip(
-      message: tooltip,
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: AppRadius.allMd,
-          hoverColor: AppColors.surfaceSoft,
-          onTap: route == null ? null : () => context.go(route!),
-          child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: showLabel ? AppSpacing.sm : AppSpacing.xs,
-              vertical: 3,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(icon, size: 18, color: color),
-                if (showLabel) ...[
-                  const SizedBox(width: 5),
-                  Text(
-                    label,
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: active ? FontWeight.w600 : FontWeight.w500,
-                      color: color,
-                    ),
-                  ),
-                ],
-              ],
+    return Builder(
+      builder: (hoverContext) => MouseRegion(
+        onEnter: onHoverStart == null
+            ? null
+            : (_) {
+                final box = hoverContext.findRenderObject() as RenderBox?;
+                if (box == null) return;
+                final dx = box.localToGlobal(Offset.zero).dx;
+                onHoverStart!(dx + box.size.width / 2);
+              },
+        onExit: onHoverEnd == null ? null : (_) => onHoverEnd!(),
+        child: Tooltip(
+          message: tooltip,
+          child: Material(
+            color: Colors.transparent,
+            child: InkWell(
+              borderRadius: AppRadius.allMd,
+              hoverColor: AppColors.surfaceSoft,
+              onTap: route == null ? null : () => context.go(route!),
+              child: Padding(
+                padding: EdgeInsets.symmetric(
+                  horizontal: showLabel ? AppSpacing.sm : AppSpacing.xs,
+                  vertical: 3,
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 18, color: color),
+                    if (showLabel) ...[
+                      const SizedBox(width: 5),
+                      Text(
+                        label,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: active ? FontWeight.w600 : FontWeight.w500,
+                          color: color,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ),
           ),
         ),
@@ -469,9 +870,17 @@ class _NavAction extends StatelessWidget {
 }
 
 class _PlatformTabs extends StatelessWidget {
-  const _PlatformTabs({required this.currentSite});
+  const _PlatformTabs({
+    required this.currentSite,
+    required this.onHover,
+    required this.onHoverEnd,
+  });
 
   final String currentSite;
+
+  /// hover 平台 tab → `(平台 id, 触发点中心 x)`;移出触发 800ms 后关闭。
+  final void Function(String id, double centerX) onHover;
+  final VoidCallback onHoverEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -484,7 +893,16 @@ class _PlatformTabs extends StatelessWidget {
           for (final brand in PlatformBrandCatalog.navPlatforms)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 1),
-              child: Tooltip(
+              child: Builder(
+                builder: (hoverContext) => MouseRegion(
+                  onEnter: (_) {
+                    final box = hoverContext.findRenderObject() as RenderBox?;
+                    if (box == null) return;
+                    final dx = box.localToGlobal(Offset.zero).dx;
+                    onHover(brand.id, dx + box.size.width / 2);
+                  },
+                  onExit: (_) => onHoverEnd(),
+                  child: Tooltip(
                 message: brand.name,
                 child: Material(
                   color: Colors.transparent,
@@ -523,6 +941,8 @@ class _PlatformTabs extends StatelessWidget {
                   ),
                 ),
               ),
+                  ),
+                ),
             ),
         ],
       ),
@@ -675,6 +1095,343 @@ class _BottomItem extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// hover 浮层面板容器:对齐 SFVideoLive `.nav-platform-menu` / `.nav-follow-flyout`
+/// 的容器规格(面板底色 + 1px 边框 + 圆角 + shadow-16),内容超高由
+/// [maxHeight] 约束后自行滚动。
+class _FlyoutPanel extends StatelessWidget {
+  const _FlyoutPanel({
+    required this.child,
+    this.padding = const EdgeInsets.fromLTRB(9.6, 8.8, 9.6, 9.6),
+
+    /// 26rem @16px ≈ 416px(同 `.nav-platform-menu` 的 max-height);
+    /// 关注浮层另传 5 行网格高度。
+    this.maxHeight = 416,
+  });
+
+  final Widget child;
+  final EdgeInsets padding;
+  final double maxHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        border: Border.all(color: AppColors.border),
+        borderRadius: AppRadius.allMd,
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x3D000000),
+            blurRadius: 16,
+            offset: Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        // 浮层挂在 Stack 顶层,不在 Scaffold 的 Material 子树内,
+        // 需自带 Material 才能承载内部 InkWell。
+        type: MaterialType.transparency,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: Padding(padding: padding, child: child),
+        ),
+      ),
+    );
+  }
+}
+
+/// 浮层内的提示行(加载中/错误/空态),对齐 `.nav-platform-menu__hint`。
+class _FlyoutHint extends StatelessWidget {
+  const _FlyoutHint(this.text, {this.danger = false});
+
+  final String text;
+  final bool danger;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 3.2, vertical: 5.6),
+      child: Text(
+        text,
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          fontSize: 12.5,
+          color: danger ? AppColors.error : AppColors.textSecondary,
+        ),
+      ),
+    );
+  }
+}
+
+/// 平台 tab hover 出的分类浮层:对齐 SFVideoLive `NavPlatformCategoryMenu.vue`。
+/// 数据来自 [browseCategoriesProvider](fixture/真实解析双轨同一入口),
+/// 不新造硬编码分类表。
+class _PlatformCategoryFlyout extends ConsumerWidget {
+  const _PlatformCategoryFlyout({
+    required this.site,
+    required this.onEnter,
+    required this.onExit,
+  });
+
+  final String site;
+  final VoidCallback onEnter;
+  final VoidCallback onExit;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final async = ref.watch(browseCategoriesProvider(site));
+    return MouseRegion(
+      onEnter: (_) => onEnter(),
+      onExit: (_) => onExit(),
+      child: _FlyoutPanel(
+        child: switch (async) {
+          AsyncData(:final value) => value.groups.isEmpty
+              ? const _FlyoutHint('暂无分类')
+              : _CategoryBoard(site: site, groups: value.groups),
+          AsyncError(:final error) =>
+            _FlyoutHint(error.toString(), danger: true),
+          _ => const _FlyoutHint('加载分类…'),
+        },
+      ),
+    );
+  }
+}
+
+/// 分类看板:单组平台平铺网格,多组平台横向分栏(列间 1px 竖线)。
+class _CategoryBoard extends StatelessWidget {
+  const _CategoryBoard({required this.site, required this.groups});
+
+  /// 列宽 4.2rem ≈ 67px(同 `.nav-platform-menu__column`)。
+  static const double _kColumnWidth = 67.2;
+
+  final String site;
+  final List<CategoryGroup> groups;
+
+  @override
+  Widget build(BuildContext context) {
+    if (groups.length == 1) {
+      // 单一大组:平铺网格(对齐 `.nav-platform-menu__hot-track`)。
+      return SingleChildScrollView(
+        child: Wrap(
+          children: [
+            for (final item in groups.first.items)
+              SizedBox(
+                width: _kColumnWidth,
+                child: _CategoryChip(
+                  label: item.name,
+                  onTap: () => _goCategory(context, item.cid),
+                ),
+              ),
+          ],
+        ),
+      );
+    }
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          for (final group in groups)
+            Container(
+              width: _kColumnWidth,
+              padding: const EdgeInsets.only(left: 2.4),
+              decoration: const BoxDecoration(
+                border: Border(right: BorderSide(color: AppColors.border)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.only(bottom: 3.8),
+                    decoration: const BoxDecoration(
+                      border: Border(bottom: BorderSide(color: AppColors.border)),
+                    ),
+                    child: Text(
+                      group.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                  for (final item in group.items)
+                    _CategoryChip(
+                      label: item.name,
+                      onTap: () => _goCategory(context, item.cid),
+                    ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  /// 跳平台分类页:分类页当前按平台整页呈现,子分类高亮待路由带 cid 后补齐。
+  void _goCategory(BuildContext context, String cid) =>
+      context.go(_categoryRoute(site));
+}
+
+/// 分类条目:hover → 金(平台主色)+ chip 底(同 `.nav-platform-menu__item:hover`)。
+class _CategoryChip extends StatefulWidget {
+  const _CategoryChip({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  State<_CategoryChip> createState() => _CategoryChipState();
+}
+
+class _CategoryChipState extends State<_CategoryChip> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: InkWell(
+        onTap: widget.onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 0.64, vertical: 1.28),
+          color: _hovering ? AppColors.brand.withValues(alpha: 0.12) : null,
+          child: Text(
+            widget.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11.84,
+              color: _hovering ? AppColors.brand : AppColors.textPrimary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 「我的关注」hover 出的主播网格:对齐 SFVideoLive
+/// `FollowHoverAvatarGrid.vue`(7 列、头像 1.85rem、名字 .56rem、最多 5 行滚动)。
+/// 开播中优先;无开播时退化为全部关注,避免空面板。
+class _FollowFlyout extends ConsumerWidget {
+  const _FollowFlyout({required this.onEnter, required this.onExit});
+
+  /// 头像 1.85rem ≈ 29.6px。
+  static const double _kAvatarSize = 29.6;
+
+  /// 名字 .56rem ≈ 9px。
+  static const double _kNameSize = 8.96;
+
+  /// 行间距 .22rem ≈ 3.52px;列间距 .06rem ≈ 0.96px。
+  static const double _kRowGap = 3.52;
+  static const double _kColumnGap = 0.96;
+  static const int _kColumns = 7;
+
+  /// 5 行可见高度 + padding(同 `.follow-hover-avatar-grid` 的 max-height)。
+  static const double _kMaxHeight = 280;
+
+  final VoidCallback onEnter;
+  final VoidCallback onExit;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final entries = ref.watch(followProvider);
+    final live = [for (final entry in entries) if (entry.isLive) entry];
+    final list = live.isNotEmpty ? live : entries;
+    return MouseRegion(
+      onEnter: (_) => onEnter(),
+      onExit: (_) => onExit(),
+      child: _FlyoutPanel(
+        padding: const EdgeInsets.fromLTRB(3.52, 4.16, 3.52, 3.52),
+        maxHeight: _kMaxHeight,
+        child: list.isEmpty
+            ? const _FlyoutHint('暂无关注')
+            : GridView.builder(
+                shrinkWrap: true,
+                itemCount: list.length,
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: _kColumns,
+                  mainAxisExtent: 50,
+                  mainAxisSpacing: _kRowGap,
+                  crossAxisSpacing: _kColumnGap,
+                ),
+                itemBuilder: (context, index) =>
+                    _FollowAvatarTile(entry: list[index]),
+              ),
+      ),
+    );
+  }
+}
+
+/// 关注浮层单格:圆形头像 + 单行名字(超长省略),点击进入播放页。
+class _FollowAvatarTile extends StatelessWidget {
+  const _FollowAvatarTile({required this.entry});
+
+  final FollowEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final room = entry.room;
+    return Tooltip(
+      message: '${room.anchorName} · ${room.title}',
+      child: InkWell(
+        borderRadius: AppRadius.allSm,
+        hoverColor: AppColors.surfaceSoft,
+        onTap: () => context.go('/${room.site}/play/${room.roomId}'),
+        child: Padding(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 0.96, vertical: 2.56),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _avatar(room),
+              const SizedBox(height: 1.92),
+              Text(
+                room.anchorName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  fontSize: _FollowFlyout._kNameSize,
+                  color: AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _avatar(RoomSummary room) {
+    final fallback = CircleAvatar(
+      radius: _FollowFlyout._kAvatarSize / 2,
+      backgroundColor: AppColors.surfaceRaised,
+      child: Text(
+        room.anchorName.isEmpty ? '?' : room.anchorName.substring(0, 1),
+        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+      ),
+    );
+    if (room.cover.isEmpty) return fallback;
+    return ClipOval(
+      child: CachedNetworkImage(
+        imageUrl: room.cover,
+        width: _FollowFlyout._kAvatarSize,
+        height: _FollowFlyout._kAvatarSize,
+        fit: BoxFit.cover,
+        errorWidget: (_, _, _) => fallback,
       ),
     );
   }

@@ -25,7 +25,16 @@ import 'package:zishu_flutter/src/features/follow/application/settings_provider.
 import 'package:zishu_flutter/src/features/follow/views/settings_view.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
+import 'package:zishu_flutter/src/shared/application/auth_provider.dart';
 import 'package:zishu_flutter/src/shared/presentation/platform_brands.dart';
+
+/// 测试替身:登录态固定匿名。真实 AuthController 的启动链在「有存储后端 +
+/// 无缓存凭据」时会向 data-server 发起默认账号登录,fake_async 测试环境
+/// 不允许真实 HTTP,这里整体替换掉登录态。
+class _AnonymousAuthController extends AuthController {
+  @override
+  AuthState build() => const AuthState(phase: AuthPhase.anonymous);
+}
 
 /// 测试替身:VM 下替代 MediaKitLivePlayer,不触碰任何原生播放内核。
 class _FakeLivePlayer implements LivePlayer {
@@ -56,6 +65,9 @@ class _FakeLivePlayer implements LivePlayer {
   Future<void> toggleFullscreen() async {}
 
   @override
+  Future<void> stop() async {}
+
+  @override
   void dispose() {}
 }
 
@@ -81,7 +93,10 @@ Future<GoRouter> _pumpSettings(WidgetTester tester) async {
   _suppressRenderFlexOverflow();
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [playerProvider.overrideWithValue(_FakeLivePlayer())],
+      overrides: [
+        playerProvider.overrideWithValue(_FakeLivePlayer()),
+        authProvider.overrideWith(_AnonymousAuthController.new),
+      ],
       child: const WindowsApp(),
     ),
   );
