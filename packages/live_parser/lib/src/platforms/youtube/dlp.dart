@@ -189,8 +189,13 @@ List<YoutubeDlpTier> parseYoutubeDlpTiers(Object? formats) {
     if (!url.contains('m3u8')) continue;
     final resolution = jsonText(format['resolution']);
     final resMatch = RegExp(r'^(\d+)x(\d+)$').firstMatch(resolution);
+    // 档位名按短边(height):竖屏直播 resolution 为 1080x1920,用长边会得到
+    // 1920p 这类非常规档名,与设置里的 720p/1080p 对不上。
     final height = resMatch != null
-        ? int.tryParse(resMatch.group(2)!) ?? 0
+        ? _shortSide(
+            int.tryParse(resMatch.group(1)!) ?? 0,
+            int.tryParse(resMatch.group(2)!) ?? 0,
+          )
         : jsonInt(format['height']);
     final fpsValue = format['fps'];
     final fps = fpsValue is num
@@ -221,3 +226,9 @@ List<StreamQuality> youtubeDlpQualities(List<YoutubeDlpTier> tiers) => [
       lines: [StreamLine(name: '线路', url: tier.url, format: 'hls')],
     ),
 ];
+
+int _shortSide(int width, int height) {
+  if (width <= 0) return height;
+  if (height <= 0) return width;
+  return width < height ? width : height;
+}

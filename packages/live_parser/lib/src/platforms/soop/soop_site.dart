@@ -37,12 +37,12 @@ class SoopRoomResolver implements RoomResolver {
   final Map<String, ({DateTime at, SoopRoomDetail detail})> _detailCache = {};
   static const Duration _detailTtl = Duration(seconds: 60);
 
-  /// 档位流地址短缓存(对齐 SF 服务层 tier 缓存 60s):assign/aid 结果在短时间
-  /// 重复进房时直接复用,热路径 0 请求。
-  final Map<String, ({DateTime at, List<StreamQuality> streams})> _tierCache = {};
+  /// 档位流地址短缓存(对齐 SF 服务层 tier 缓存 60s):按档缓存 assign/aid 结果,
+  /// 懒取流后短时间切回同档/重复进房零请求。
+  final Map<String, ({DateTime at, Map<String, StreamQuality> byName})> _tierCache = {};
   static const Duration _tierTtl = Duration(seconds: 60);
 
-  /// 全档取流封顶(SF MAX_TIERS=4),避免长尾档位放大请求数。
+  /// 档位列表封顶(SF MAX_TIERS=4),避免长尾档位放大 UI/缓存。
   static const int _maxTiers = 4;
 
   @override
@@ -84,29 +84,12 @@ class SoopRoomResolver implements RoomResolver {
       );
     }
 
-    final now = DateTime.now();
-    final cachedTiers = _tierCache[roomId];
-    if (cachedTiers != null &&
-        now.difference(cachedTiers.at) < _tierTtl &&
-        cachedTiers.streams.isNotEmpty) {
-      return _buildPayload(
-        roomId: roomId,
-        sourceUrl: sourceUrl,
-        detail: detail,
-        roomState: RoomState.live,
-        streams: cachedTiers.streams,
-      );
-    }
-
-    // 全档并行取流(SF 同款 Promise.all;单档失败隔离)。
-    final tiers = await Future.wait([
-      for (final quality in detail.qualities.take(_maxTiers))
-        buildSoopTier(_client.parserHttp, detail, quality),
-    ]);
-    final streams = [
-      for (final tier in tiers) ?tier,
-    ];
-    if (streams.isEmpty) {
+    // 懒取流(对齐 SF resolveTier):只取偏好档(默认清晰度),其余档位以空线路
+    // 占位供 UI 列出;用户切档时由播放侧带新的 preferredQuality 重新解析,再取该档。
+    final qualities = detail.qualities.take(_maxTiers).toList();
+    final preferred = _matchQuality(qualities, request.preferredQuality) ??
+        (qualities.isEmpty ? null : qualities.first);
+    if (preferred == null) {
       return _buildPayload(
         roomId: roomId,
         sourceUrl: sourceUrl,
@@ -115,7 +98,24 @@ class SoopRoomResolver implements RoomResolver {
         error: '未获取到可播放地址',
       );
     }
-    _tierCache[roomId] = (at: DateTime.now(), streams: streams);
+
+    final tier = await _fetchTier(roomId, detail, preferred);
+    if (tier == null) {
+      return _buildPayload(
+        roomId: roomId,
+        sourceUrl: sourceUrl,
+        detail: detail,
+        roomState: RoomState.offline,
+        error: '未获取到可播放地址',
+      );
+    }
+    final streams = [
+      for (final quality in qualities)
+        if (quality.name == preferred.name)
+          tier
+        else
+          StreamQuality(name: quality.name, rate: quality.rate, lines: const []),
+    ];
     return _buildPayload(
       roomId: roomId,
       sourceUrl: sourceUrl,
@@ -123,6 +123,44 @@ class SoopRoomResolver implements RoomResolver {
       roomState: RoomState.live,
       streams: streams,
     );
+  }
+
+  /// 取某档流地址(命中 60s 档位缓存则 0 请求)。
+  Future<StreamQuality?> _fetchTier(
+    String roomId,
+    SoopRoomDetail detail,
+    SoopQuality quality,
+  ) async {
+    final cached = _tierCache[roomId];
+    if (cached != null && DateTime.now().difference(cached.at) < _tierTtl) {
+      final hit = cached.byName[quality.name];
+      if (hit != null) return hit;
+    } else {
+      _tierCache[roomId] = (at: DateTime.now(), byName: {});
+    }
+    final tier = await buildSoopTier(_client.parserHttp, detail, quality);
+    if (tier != null) {
+      _tierCache[roomId]!.byName[quality.name] = tier;
+    }
+    return tier;
+  }
+
+  /// 偏好档匹配:精确 → 双向包含(与播放侧 `_pickQuality` 同语义)。
+  static SoopQuality? _matchQuality(
+    List<SoopQuality> qualities,
+    String? preferred,
+  ) {
+    final name = preferred?.trim() ?? '';
+    if (name.isEmpty) return null;
+    for (final quality in qualities) {
+      if (quality.name == name) return quality;
+    }
+    for (final quality in qualities) {
+      if (name.contains(quality.name) || quality.name.contains(name)) {
+        return quality;
+      }
+    }
+    return null;
   }
 
   RoomPayload _buildPayload({

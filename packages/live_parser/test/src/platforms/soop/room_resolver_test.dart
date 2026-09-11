@@ -64,6 +64,41 @@ void main() {
       expect(Uri.splitQueryString(aidRequest.body)['bno'], '12345678');
     });
 
+    test('偏好档懒取流:只请求所选档,其余档位空线路占位', () async {
+      final payload = await registration.resolver.resolveRoom(
+        const RoomRequest(
+          site: 'soop',
+          roomIdOrUrl: 'testbj',
+          preferredQuality: '高清',
+        ),
+      );
+
+      expect(payload.roomState, RoomState.live);
+      expect(payload.availableQualities.map((q) => q.name).toList(), [
+        '原画',
+        '高清',
+        '标清',
+      ]);
+      final hd = payload.streams.firstWhere((stream) => stream.name == '高清');
+      expect(hd.lines, isNotEmpty);
+      final origin = payload.streams.firstWhere(
+        (stream) => stream.name == '原画',
+      );
+      expect(origin.lines, isEmpty, reason: '未选中的档位不预取线路');
+
+      final assignCount = fake.requests
+          .where((request) => request.url.path.endsWith('/broad_stream_assign.html'))
+          .length;
+      final aidRequests = fake.requests.where(
+        (request) =>
+            request.url.path == '/afreeca/player_live_api.php' &&
+            Uri.splitQueryString(request.body)['type'] == 'aid',
+      );
+      expect(assignCount, 1, reason: '懒取流只取偏好档');
+      expect(aidRequests, hasLength(1));
+      expect(Uri.splitQueryString(aidRequests.first.body)['quality'], 'HD');
+    });
+
     test('离线:RESULT=0 返回 offline 且无线路', () async {
       fake.detailResponse = soopFixture('detail_offline.json');
 

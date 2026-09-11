@@ -161,7 +161,12 @@ List<StreamQuality> parseYoutubeMasterPlaylist(
 
     final resolution = attributes['RESOLUTION'] ?? '';
     final resMatch = RegExp(r'^(\d+)x(\d+)$').firstMatch(resolution);
-    final height = resMatch != null ? int.tryParse(resMatch.group(2)!) ?? 0 : 0;
+    final height = resMatch != null
+        ? _shortSide(
+            int.tryParse(resMatch.group(1)!) ?? 0,
+            int.tryParse(resMatch.group(2)!) ?? 0,
+          )
+        : 0;
     final fpsRaw = double.tryParse(attributes['FRAME-RATE'] ?? '') ?? 0;
     final fps = fpsRaw.round();
     final bandwidth = int.tryParse(attributes['BANDWIDTH'] ?? '') ?? 0;
@@ -399,6 +404,12 @@ String _resolveUri(String value, String base) {
 
 Map<String, dynamic> _mapOf(Object? value) =>
     value is Map ? Map<String, dynamic>.from(value) : const {};
+
+int _shortSide(int width, int height) {
+  if (width <= 0) return height;
+  if (height <= 0) return width;
+  return width < height ? width : height;
+}
 
 List<String> _setCookieValues(String? header) {
   if (header == null || header.trim().isEmpty) return const [];

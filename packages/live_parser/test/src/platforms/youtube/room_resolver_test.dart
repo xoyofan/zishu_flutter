@@ -60,6 +60,19 @@ void main() {
       final qualities = youtubeDlpQualities(tiers);
       expect(qualities.first.lines.single.url, 'https://x/1080p60.m3u8');
     });
+
+    test('竖屏 resolution 按短边取档名(1080x1920 -> 1080p)', () {
+      final tiers = parseYoutubeDlpTiers([
+        {
+          'url': 'https://x/portrait.m3u8',
+          'resolution': '1080x1920',
+          'height': 1920,
+          'fps': 30,
+        },
+      ]);
+      expect(tiers.single.label, '1080p');
+      expect(tiers.single.height, 1080);
+    });
   });
 
   group('YouTube 房间解析', () {
