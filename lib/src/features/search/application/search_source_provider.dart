@@ -3,19 +3,14 @@ library;
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/application/providers.dart' show useRealParser;
 import '../../../shared/application/search_source.dart';
 
-/// 与 providers.dart 的 [useRealParser] 同源(均读 `ZISHU_REAL_PARSER`),
-/// A12 收口时合并为同一常量,避免两处重复定义产生漂移。默认 false:走 fixture,
-/// 保证 widget 测试不依赖公网和站点接口状态。
-const bool useRealParserSearch = bool.fromEnvironment(
-  'ZISHU_REAL_PARSER',
-  defaultValue: false,
-);
-
 /// 搜索数据源:开启真实解析时委托 live_parser,否则用 fixture。
+///
+/// 开关直接复用 [useRealParser](providers.dart,同读 `ZISHU_REAL_PARSER`),
+/// 不再单独定义 `useRealParserSearch`——两处重复定义会产生漂移
+/// (A1 分支原留 TODO,随本次合并落掉)。
 final searchSourceProvider = Provider<SearchSource>(
-  (ref) => useRealParserSearch
-      ? ParserSearchSource()
-      : const FixtureSearchSource(),
+  (ref) => useRealParser ? ParserSearchSource() : const FixtureSearchSource(),
 );

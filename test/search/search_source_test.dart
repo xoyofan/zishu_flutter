@@ -25,9 +25,7 @@ SearchHit makeHit(String id) => SearchHit(
 
 /// 简易 fake 数据源:要么整批返回 [hits],要么按 site 映射返回([bySite])。
 class FakeSearchSource implements SearchSource {
-  FakeSearchSource(List<SearchHit> hits)
-    : _all = hits,
-      _bySite = null;
+  FakeSearchSource(List<SearchHit> hits) : _all = hits, _bySite = null;
 
   FakeSearchSource.bySite(Map<String, List<SearchHit>> bySite)
     : _all = const [],
@@ -89,7 +87,9 @@ Future<(SearchController, ProviderContainer)> pumpController(
       child: const SizedBox.shrink(),
     ),
   );
-  final container = ProviderScope.containerOf(tester.element(find.byType(SizedBox)));
+  final container = ProviderScope.containerOf(
+    tester.element(find.byType(SizedBox)),
+  );
   return (container.read(searchProvider.notifier), container);
 }
 
@@ -144,11 +144,9 @@ void main() {
       ['63136'],
       reason: '神超 应被 anchorName 命中',
     );
-    expect(
-      (await source.search(site: 'all', keyword: '云顶')).map((h) => h.id),
-      ['288016'],
-      reason: '云顶之弈 应被 title/category 命中',
-    );
+    expect((await source.search(site: 'all', keyword: '云顶')).map((h) => h.id), [
+      '288016',
+    ], reason: '云顶之弈 应被 title/category 命中');
   });
 
   testWidgets('① fake 注入:命中列表正确且 searching 复位', (tester) async {

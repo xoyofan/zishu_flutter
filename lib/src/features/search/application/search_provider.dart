@@ -174,7 +174,10 @@ class SearchController extends Notifier<SearchState> {
   ///
   /// 单站失败直接向上抛出(由 [_resolve] 统一以 [SearchState.error] 表达,
   /// 不整页空白、不抛到 widget);仅 `all` 聚合模式下才逐站隔离失败。
-  Future<List<SearchHitItem>> _searchAttributed(String site, String keyword) async {
+  Future<List<SearchHitItem>> _searchAttributed(
+    String site,
+    String keyword,
+  ) async {
     if (site == 'all') {
       final results = await Future.wait([
         for (final s in ParserSearchSource.aggregateSites)
@@ -188,7 +191,10 @@ class SearchController extends Notifier<SearchState> {
 
   /// 单站隔离查询(仅用于 `all` 聚合):失败返回空,该站本轮空缺,
   /// 不影响其余平台结果,整页不空白。
-  Future<List<SearchHitItem>> _searchSiteIsolated(String site, String keyword) async {
+  Future<List<SearchHitItem>> _searchSiteIsolated(
+    String site,
+    String keyword,
+  ) async {
     try {
       final hits = await _source.search(site: site, keyword: keyword);
       return [for (final hit in hits) SearchHitItem(site: site, hit: hit)];
@@ -206,11 +212,17 @@ class SearchController extends Notifier<SearchState> {
     }
     final match = _douyuLinkPattern.firstMatch(keyword);
     if (match != null) {
-      return DirectTarget(kind: DirectKind.link, roomId: match.group(1)!, url: keyword);
+      return DirectTarget(
+        kind: DirectKind.link,
+        roomId: match.group(1)!,
+        url: keyword,
+      );
     }
     return null;
   }
 }
 
 /// 搜索页全局 provider(keep-alive:返回搜索页保留上次输入与结果)。
-final searchProvider = NotifierProvider<SearchController, SearchState>(SearchController.new);
+final searchProvider = NotifierProvider<SearchController, SearchState>(
+  SearchController.new,
+);

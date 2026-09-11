@@ -58,7 +58,11 @@ class ParserSearchSource implements SearchSource {
     return results.expand((hits) => hits).toList(growable: false);
   }
 
-  Future<List<SearchHit>> _searchSite(String site, String keyword, int limit) async {
+  Future<List<SearchHit>> _searchSite(
+    String site,
+    String keyword,
+    int limit,
+  ) async {
     final repo = _registry[site]?.search;
     if (repo == null) return const [];
     try {
@@ -101,7 +105,9 @@ class FixtureSearchSource implements SearchSource {
             avatar: '',
             cover: room.cover,
             // 约定:online 非空视为直播中,否则未开播。
-            state: room.online.isEmpty ? SearchHitState.offline : SearchHitState.live,
+            state: room.online.isEmpty
+                ? SearchHitState.offline
+                : SearchHitState.live,
             category: room.category,
             online: room.online,
           ),

@@ -119,7 +119,11 @@ class _SearchViewState extends ConsumerState<SearchView> {
       decoration: InputDecoration(
         hintText: '搜索主播 / 房间号 / 直播间链接',
         hintStyle: AppTypography.body.copyWith(color: tokens.textSecondary),
-        prefixIcon: Icon(Icons.search_rounded, size: 20, color: tokens.textSecondary),
+        prefixIcon: Icon(
+          Icons.search_rounded,
+          size: 20,
+          color: tokens.textSecondary,
+        ),
         suffixIcon: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -127,7 +131,11 @@ class _SearchViewState extends ConsumerState<SearchView> {
             if (search.query.isNotEmpty)
               IconButton(
                 tooltip: '清空',
-                icon: Icon(Icons.close_rounded, size: 18, color: tokens.textSecondary),
+                icon: Icon(
+                  Icons.close_rounded,
+                  size: 18,
+                  color: tokens.textSecondary,
+                ),
                 onPressed: () {
                   _input.clear();
                   ref.read(searchProvider.notifier).setQuery('');
@@ -177,7 +185,10 @@ class _SearchViewState extends ConsumerState<SearchView> {
             padding: const EdgeInsets.all(AppSpacing.lg),
             children: [
               if (direct != null) ...[
-                SearchDirectTile(target: direct, onTap: () => _openDirect(direct)),
+                SearchDirectTile(
+                  target: direct,
+                  onTap: () => _openDirect(direct),
+                ),
                 const SizedBox(height: AppSpacing.md),
               ],
               if (search.searching && search.hits.isEmpty)
@@ -186,7 +197,9 @@ class _SearchViewState extends ConsumerState<SearchView> {
                   child: Center(
                     child: Text(
                       '搜索中…',
-                      style: AppTypography.bodySecondary.copyWith(color: tokens.textSecondary),
+                      style: AppTypography.bodySecondary.copyWith(
+                        color: tokens.textSecondary,
+                      ),
                     ),
                   ),
                 ),
@@ -220,7 +233,10 @@ class _EscHint extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = context.tokens;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 2,
+      ),
       decoration: BoxDecoration(
         borderRadius: AppRadius.allSm,
         border: Border.all(color: tokens.border),
@@ -258,7 +274,9 @@ class _EmptyHint extends StatelessWidget {
             const SizedBox(height: AppSpacing.xs),
             Text(
               subtitle!,
-              style: AppTypography.caption.copyWith(color: tokens.textSecondary),
+              style: AppTypography.caption.copyWith(
+                color: tokens.textSecondary,
+              ),
             ),
           ],
         ],
