@@ -1484,6 +1484,9 @@ class _FollowFlyout extends ConsumerWidget {
 }
 
 /// 关注浮层单格:圆形头像 + 单行名字(超长省略),点击进入播放页。
+///
+/// 每格底色与名字都取**平台品牌色**:底为低透明度品牌色,hover 时加深,
+/// 让「哪个平台的主播」在网格里一眼可辨(未收录平台回退主文字色)。
 class _FollowAvatarTile extends StatelessWidget {
   const _FollowAvatarTile({required this.entry});
 
@@ -1492,31 +1495,36 @@ class _FollowAvatarTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final room = entry.room;
+    final brand = PlatformBrandCatalog.byId(room.site);
+    final color = brand?.color ?? AppColors.textPrimary;
     return Tooltip(
       message: '${room.anchorName} · ${room.title}',
-      child: InkWell(
-        borderRadius: AppRadius.allSm,
-        hoverColor: AppColors.surfaceSoft,
-        onTap: () => context.go('/${room.site}/play/${room.roomId}'),
-        child: Padding(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 0.96, vertical: 2.56),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _avatar(room),
-              const SizedBox(height: 1.92),
-              Text(
-                room.anchorName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: _FollowFlyout._kNameSize,
-                  color: AppColors.textPrimary,
+      child: Ink(
+        color: color.withValues(alpha: 0.16),
+        child: InkWell(
+          hoverColor: color.withValues(alpha: 0.3),
+          onTap: () => context.go('/${room.site}/play/${room.roomId}'),
+          child: Padding(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 0.96, vertical: 2.56),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _avatar(room),
+                const SizedBox(height: 1.92),
+                Text(
+                  room.anchorName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: _FollowFlyout._kNameSize,
+                    color: color,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

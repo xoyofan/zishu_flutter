@@ -125,8 +125,8 @@ class FollowEntryTile extends StatelessWidget {
                                 ),
                                 if (entry.isSpecial)
                                   Positioned(
-                                    right: 3,
-                                    top: 3,
+                                    right: 0,
+                                    top: 0,
                                     child: Icon(
                                       Icons.star_rounded,
                                       size: 12,
@@ -156,17 +156,12 @@ class FollowEntryTile extends StatelessWidget {
                               Flexible(
                                 child: GestureDetector(
                                   onTap: onAnchorTap,
-                                  child: Text(
-                                    room.anchorName,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: AppTypography.body.copyWith(
-                                      fontSize: 13.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: live
-                                          ? tokens.textPrimary
-                                          : tokens.textSecondary,
-                                    ),
+                                  child: FollowAnchorName(
+                                    site: room.site,
+                                    name: room.anchorName,
+                                    live: live,
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                               ),
@@ -278,7 +273,6 @@ class _TileCategoryTag extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
       decoration: BoxDecoration(
         color: tokens.brand.withValues(alpha: 0.12),
-        borderRadius: AppRadius.allSm,
         border: Border.all(color: tokens.brand.withValues(alpha: 0.45)),
       ),
       child: Text(
@@ -309,7 +303,6 @@ class _TilePlatformTag extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
       decoration: BoxDecoration(
         color: color,
-        borderRadius: AppRadius.allSm,
       ),
       child: Text(
         label,

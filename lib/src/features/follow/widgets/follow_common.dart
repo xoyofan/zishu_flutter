@@ -133,6 +133,9 @@ class FollowCategoryTag extends StatelessWidget {
 }
 
 /// 覆盖在封面上的浮层小标签(离线/在线人数/平台名等)。
+///
+/// 参考实现的封面角标一律**紧贴所在角、直角无圆角**;调用方用
+/// [Positioned] 以 0 偏移贴边,本组件只负责底色与内边距。
 class FollowCoverTag extends StatelessWidget {
   const FollowCoverTag({
     super.key,
@@ -148,12 +151,56 @@ class FollowCoverTag extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
         color: (accent ?? context.tokens.surfaceSoft).withValues(alpha: 0.88),
-        borderRadius: AppRadius.allSm,
       ),
       child: child,
+    );
+  }
+}
+
+/// 主播名:全站统一取**平台品牌色**(离线压暗淡化),未收录平台回退文字 token。
+///
+/// 关注三密度 / 播放页房间卡 / 侧栏列表共用,保证「看名字就知道是哪个平台」。
+class FollowAnchorName extends StatelessWidget {
+  const FollowAnchorName({
+    super.key,
+    required this.site,
+    required this.name,
+    required this.live,
+    this.fontSize = 12.5,
+    this.fontWeight = FontWeight.w600,
+    this.textAlign,
+  });
+
+  final String site;
+  final String name;
+  final bool live;
+  final double fontSize;
+  final FontWeight fontWeight;
+  final TextAlign? textAlign;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    final brand = PlatformBrandCatalog.byId(site);
+    final Color color;
+    if (brand != null) {
+      color = live ? brand.color : brand.color.withValues(alpha: 0.6);
+    } else {
+      color = live ? tokens.textPrimary : tokens.textSecondary;
+    }
+    return Text(
+      name,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      textAlign: textAlign,
+      style: AppTypography.body.copyWith(
+        fontSize: fontSize,
+        fontWeight: fontWeight,
+        color: color,
+      ),
     );
   }
 }

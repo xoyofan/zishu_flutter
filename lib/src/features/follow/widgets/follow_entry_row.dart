@@ -116,15 +116,11 @@ class FollowEntryRow extends StatelessWidget {
                       const SizedBox(width: 2),
                     ],
                     Flexible(
-                      child: Text(
-                        room.anchorName,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: AppTypography.body.copyWith(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w600,
-                          color: textColor,
-                        ),
+                      child: FollowAnchorName(
+                        site: room.site,
+                        name: room.anchorName,
+                        live: live,
+                        fontSize: 12.5,
                       ),
                     ),
                   ],

@@ -115,11 +115,11 @@ class PlayRoomCard extends StatelessWidget {
                         room.category.isEmpty ? room.site : room.category,
                     offline: !_live,
                   ),
-                  // 左上:特别关注 ★。
+                  // 左上:特别关注 ★(角标一律贴角、直角无圆角)。
                   if (isSpecial)
                     Positioned(
-                      left: 3,
-                      top: 3,
+                      left: 0,
+                      top: 0,
                       child: FollowCoverTag(
                         child: Icon(
                           Icons.star_rounded,
@@ -130,8 +130,8 @@ class PlayRoomCard extends StatelessWidget {
                     ),
                   // 右上:平台角标。
                   Positioned(
-                    right: 3,
-                    top: 3,
+                    right: 0,
+                    top: 0,
                     child: FollowCoverTag(
                       accent: brand?.color,
                       child: Text(
@@ -147,8 +147,8 @@ class PlayRoomCard extends StatelessWidget {
                   // 右下:在线人数。
                   if (_live)
                     Positioned(
-                      right: 3,
-                      bottom: 3,
+                      right: 0,
+                      bottom: 0,
                       child: FollowCoverTag(
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -197,15 +197,11 @@ class PlayRoomCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      room.anchorName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.body.copyWith(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: _live ? tokens.textPrimary : tokens.textSecondary,
-                      ),
+                    FollowAnchorName(
+                      site: room.site,
+                      name: room.anchorName,
+                      live: _live,
+                      fontSize: 11,
                     ),
                     const SizedBox(height: 1),
                     Text(
@@ -319,17 +315,11 @@ class PlayRoomRow extends StatelessWidget {
                     Row(
                       children: [
                         Flexible(
-                          child: Text(
-                            room.anchorName,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: AppTypography.body.copyWith(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              color: _live
-                                  ? tokens.textPrimary
-                                  : tokens.textSecondary,
-                            ),
+                          child: FollowAnchorName(
+                            site: room.site,
+                            name: room.anchorName,
+                            live: _live,
+                            fontSize: 12,
                           ),
                         ),
                         if (isSpecial) ...[

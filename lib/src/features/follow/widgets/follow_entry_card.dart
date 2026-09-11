@@ -94,17 +94,11 @@ class FollowEntryCard extends StatelessWidget {
                               const SizedBox(width: 2),
                             ],
                             Flexible(
-                              child: Text(
-                                room.anchorName,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: AppTypography.body.copyWith(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: live
-                                      ? tokens.textPrimary
-                                      : tokens.textSecondary,
-                                ),
+                              child: FollowAnchorName(
+                                site: room.site,
+                                name: room.anchorName,
+                                live: live,
+                                fontSize: 12.5,
                               ),
                             ),
                           ],
@@ -207,8 +201,8 @@ class FollowEntryCard extends StatelessWidget {
           // 左下:分类角标(品牌色底 + 深色字)。
           if (room.category.isNotEmpty)
             Positioned(
-              left: AppSpacing.xs,
-              bottom: AppSpacing.xs,
+              left: 0,
+              bottom: 0,
               child: FollowCoverTag(
                 accent: brand?.color,
                 child: Text(
@@ -223,8 +217,8 @@ class FollowEntryCard extends StatelessWidget {
             ),
           // 右上:平台角标(品牌色底)。
           Positioned(
-            right: AppSpacing.xs,
-            top: AppSpacing.xs,
+            right: 0,
+            top: 0,
             child: FollowCoverTag(
               accent: brand?.color,
               child: Text(
@@ -239,8 +233,8 @@ class FollowEntryCard extends StatelessWidget {
           ),
           // 左上:特别关注 ★ / 批量模式复选框。
           Positioned(
-            left: AppSpacing.xs,
-            top: AppSpacing.xs,
+            left: 0,
+            top: 0,
             child: selectMode
                 ? _SelectBox(selected: selected, onChanged: (_) => onToggleSelect?.call())
                 : (entry.isSpecial
@@ -256,8 +250,8 @@ class FollowEntryCard extends StatelessWidget {
           // 右下:在线人数;离线不重复显示(底部已有未开播条)。
           if (live)
             Positioned(
-              right: AppSpacing.xs,
-              bottom: AppSpacing.xs,
+              right: 0,
+              bottom: 0,
               child: FollowCoverTag(
                 child: Row(
                   mainAxisSize: MainAxisSize.min,

@@ -62,3 +62,20 @@
 - [x] `flutter analyze`:No issues found。
 - [x] `test/ui/my_category_nav_test.dart` + `follow_style_shot_test.dart`:8/8 通过。
 - [x] 截图落盘 `tool/screenshots/zishu/`(6 张新图)。
+
+## 2026-09-12 平台色主播名 + 角标贴角直角统一(完成)
+
+**结论**:主播名全站统一取平台品牌色(离线压暗),我的关注 hover 每格底色/名字/ hover 高亮都用平台色;房间卡四角 chip/tag 全部紧贴所在角(0 偏移)且直角无圆角,统一收敛到共用组件 `FollowCoverTag`。
+
+### 本轮完成项
+- [x] `follow_common.dart`:
+  - `FollowCoverTag` 去圆角(直角),注释明确「贴角由调用方 Positioned 0 偏移负责」。
+  - 新增 `FollowAnchorName`:主播名统一平台色(离线 alpha 0.6),未收录平台回退文字 token。
+- [x] 主播名平台色落地:follow_entry_row / follow_entry_card / follow_entry_tile / play_room_grid(PlayRoomCard+PlayRoomRow)/ browse room_card。
+- [x] `app_shell.dart` `_FollowAvatarTile`:每格底色 = 平台色 16% 透明度,hover 加深到 30%,名字用平台色(Ink+InkWell,水波纹可见)。
+- [x] 角标贴角 + 直角:follow_entry_card 四角(分类左下/平台右上/★左上/在线右下)、play_room_grid 三角、browse room_card 四象限(分类/平台/促销/热度)Positioned 全部 0 偏移;room_card 四枚角标改用 FollowCoverTag(原 pill 圆角、sm 圆角全去除);tile 的分类/平台 tag 去圆角。
+- [x] golden 重生成 8 张(follow_style ×5 + hover ×3),同步 `tool/screenshots/zishu/`。
+
+### 验证
+- [x] `flutter analyze`:No issues found;全量套件 242/242 通过。
+- [x] debug 重建成功,已 schtasks 拉起真机(hover 关注浮层/关注页三视图/首页房间卡可验)。
