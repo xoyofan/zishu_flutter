@@ -26,7 +26,15 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
 
   FlutterWindow window(project);
   Win32Window::Point origin(10, 10);
-  Win32Window::Size size(1280, 720);
+  // Default client area 1024x768 to align with tool/screenshots/sfvideo/
+  // 1024x768_tablet_land_* baselines (browser viewport size). CreateWindow
+  // takes the OUTER size (frame + title bar), so convert the desired client
+  // rect via AdjustWindowRect to keep the Flutter viewport exactly 1024x768.
+  RECT target_client = {0, 0, 1024, 768};
+  AdjustWindowRect(&target_client, WS_OVERLAPPEDWINDOW, FALSE);
+  const int outer_w = target_client.right - target_client.left;
+  const int outer_h = target_client.bottom - target_client.top;
+  Win32Window::Size size(outer_w, outer_h);
   if (!window.Create(L"zishu_flutter", origin, size)) {
     return EXIT_FAILURE;
   }
