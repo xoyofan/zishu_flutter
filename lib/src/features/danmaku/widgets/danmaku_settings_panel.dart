@@ -52,7 +52,8 @@ class DanmakuSettingsPanel extends ConsumerWidget {
           value: settings.fontSize.toDouble(),
           min: DanmakuSettings.kFontSizeMin.toDouble(),
           max: DanmakuSettings.kFontSizeMax.toDouble(),
-          divisions: DanmakuSettings.kFontSizeMax - DanmakuSettings.kFontSizeMin,
+          divisions:
+              DanmakuSettings.kFontSizeMax - DanmakuSettings.kFontSizeMin,
           onChanged: (v) => controller.setFontSize(v.round()),
         ),
         _SliderRow(
@@ -124,9 +125,8 @@ class _SliderRow extends StatelessWidget {
               Text(label, style: Theme.of(context).textTheme.bodyMedium),
               Text(
                 valueLabel,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: Theme.of(context).colorScheme.outline,
-                    ),
+                style: Theme.of(context).textTheme.bodySmall
+                    ?.copyWith(color: Theme.of(context).colorScheme.outline),
               ),
             ],
           ),
@@ -152,9 +152,6 @@ class _SectionLabel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Text(
-      text,
-      style: Theme.of(context).textTheme.titleSmall,
-    );
+    return Text(text, style: Theme.of(context).textTheme.titleSmall);
   }
 }

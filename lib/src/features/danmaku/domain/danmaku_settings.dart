@@ -85,13 +85,12 @@ class DanmakuSettings {
     int? fontSize,
     int? speed,
     double? displayAreaRatio,
-  }) =>
-      DanmakuSettings(
-        opacity: opacity ?? this.opacity,
-        fontSize: fontSize ?? this.fontSize,
-        speed: speed ?? this.speed,
-        displayAreaRatio: displayAreaRatio ?? this.displayAreaRatio,
-      );
+  }) => DanmakuSettings(
+    opacity: opacity ?? this.opacity,
+    fontSize: fontSize ?? this.fontSize,
+    speed: speed ?? this.speed,
+    displayAreaRatio: displayAreaRatio ?? this.displayAreaRatio,
+  );
 
   /// 将任意(可能越界/脏)输入 clamp 到合法范围,缺失字段回退默认值。
   ///
@@ -105,11 +104,15 @@ class DanmakuSettings {
   }) {
     return DanmakuSettings(
       opacity: (opacity ?? kOpacityDefault).clamp(kOpacityMin, kOpacityMax),
-      fontSize:
-          (fontSize ?? kFontSizeDefault).clamp(kFontSizeMin, kFontSizeMax),
+      fontSize: (fontSize ?? kFontSizeDefault).clamp(
+        kFontSizeMin,
+        kFontSizeMax,
+      ),
       speed: (speed ?? kSpeedDefault).clamp(kSpeedMin, kSpeedMax),
-      displayAreaRatio: (displayAreaRatio ?? kDisplayAreaDefault)
-          .clamp(kDisplayAreaRatios.last, kDisplayAreaRatios.first),
+      displayAreaRatio: (displayAreaRatio ?? kDisplayAreaDefault).clamp(
+        kDisplayAreaRatios.last,
+        kDisplayAreaRatios.first,
+      ),
     );
   }
 
@@ -123,8 +126,7 @@ class DanmakuSettings {
           displayAreaRatio == other.displayAreaRatio;
 
   @override
-  int get hashCode =>
-      Object.hash(opacity, fontSize, speed, displayAreaRatio);
+  int get hashCode => Object.hash(opacity, fontSize, speed, displayAreaRatio);
 }
 
 /// 速度档(1~10)→ 单条弹幕滚动总时长(秒)的映射。

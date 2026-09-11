@@ -37,7 +37,10 @@ class DanmakuSettingsController extends Notifier<DanmakuSettings> {
       final speed = await prefs.getInt(_kSpeed);
       final area = await prefs.getDouble(_kDisplayArea);
       // 四项全空:首次启动,默认值即出厂值,无需覆盖 state。
-      if (opacity == null && fontSize == null && speed == null && area == null) {
+      if (opacity == null &&
+          fontSize == null &&
+          speed == null &&
+          area == null) {
         return;
       }
       state = DanmakuSettings.clamp(
@@ -105,7 +108,10 @@ class DanmakuSettingsController extends Notifier<DanmakuSettings> {
       displayAreaRatio: ratio,
     );
     try {
-      await SharedPreferencesAsync().setDouble(_kDisplayArea, state.displayAreaRatio);
+      await SharedPreferencesAsync().setDouble(
+        _kDisplayArea,
+        state.displayAreaRatio,
+      );
     } catch (_) {
       // 写盘失败:内存态仍生效。
     }
@@ -135,5 +141,5 @@ class DanmakuSettingsController extends Notifier<DanmakuSettings> {
 /// 弹幕细粒度设置 provider。
 final danmakuSettingsProvider =
     NotifierProvider<DanmakuSettingsController, DanmakuSettings>(
-  DanmakuSettingsController.new,
-);
+      DanmakuSettingsController.new,
+    );

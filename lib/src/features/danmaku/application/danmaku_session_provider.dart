@@ -229,9 +229,7 @@ class DanmakuSessionController extends Notifier<DanmakuChatState> {
 ///
 /// **必须 autoDispose**(理由见文件头/类注释):`ref.onDispose` 只在 provider
 /// 被销毁时触发,非 autoDispose 下切房不会销毁,旧连接泄漏且 fence 失效。
-final danmakuSessionProvider =
-    NotifierProvider.autoDispose.family<
-      DanmakuSessionController,
-      DanmakuChatState,
-      DanmakuSessionParams
-    >(DanmakuSessionController.new);
+final danmakuSessionProvider = NotifierProvider.autoDispose
+    .family<DanmakuSessionController, DanmakuChatState, DanmakuSessionParams>(
+      DanmakuSessionController.new,
+    );

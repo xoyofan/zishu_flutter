@@ -172,8 +172,9 @@ Future<void> _pumpFrames(
   if (message.contains('RenderFlex') ||
       message.contains('overflowed') ||
       message.contains('Multiple exceptions')) {
-    final short =
-        message.length > 80 ? '${message.substring(0, 80)}...' : message;
+    final short = message.length > 80
+        ? '${message.substring(0, 80)}...'
+        : message;
     // ignore: avoid_print
     print('[overflow-drain] $where: $short');
   }
@@ -249,8 +250,9 @@ Future<void> expectCategoryRoomsCorrect(
   );
 
   // 标题/主播字段非空:读 RoomCard 实现,不依赖封面图片加载。
-  final renderedCards =
-      tester.widgetList<RoomCard>(find.byWidgetPredicate((w) => w is RoomCard));
+  final renderedCards = tester.widgetList<RoomCard>(
+    find.byWidgetPredicate((w) => w is RoomCard),
+  );
   for (final card in renderedCards) {
     expect(
       card.room.title,
@@ -329,11 +331,7 @@ Future<void> expectDanmakuEntries(WidgetTester tester) async {
       ),
     ),
   );
-  expect(
-    entries.length,
-    greaterThan(0),
-    reason: '聊天 tab 下应渲染至少 1 条弹幕条目',
-  );
+  expect(entries.length, greaterThan(0), reason: '聊天 tab 下应渲染至少 1 条弹幕条目');
 }
 
 /// W2 platformSmoke:完整冒烟链路——分类页渲染 → 房间列表 → 进播放页 →
@@ -352,20 +350,42 @@ Future<void> platformSmoke(WidgetTester tester, String site) async {
   await _pumpFrames(tester, 3, where: 'smoke/$site/openRoom');
   expect(findAnchor('play-back'), findsOneWidget);
 
-  // 4. 切第二个画质(树序第 2 个 play-quality-*):进入选中态。
+  // 4. 控制栏画质 selectbox 切档(2026-09-11 裁决):开菜单 → 点另一档 →
+  //    入口标签 `play-quality-current` 同步为所选档。菜单项锚点在菜单打开
+  //    时才挂载,故先 tap 入口再取锚点集。
+  final qualityMenu = findAnchor('play-quality-menu');
+  expect(
+    qualityMenu,
+    findsOneWidget,
+    reason: 'smoke($site):控制栏应有画质 selectbox 入口',
+  );
+  await tester.tap(qualityMenu);
+  // pump 8 帧:等 PopupRoute 尺寸过渡完成,菜单项才可点(实测 2 帧不够)。
+  await _pumpFrames(tester, 8, where: 'smoke/$site/openQualityMenu');
   final qualities = anchorKeysWithPrefix(tester, 'play-quality-');
   expect(
     qualities.length,
     greaterThanOrEqualTo(2),
     reason: 'smoke($site):至少 2 个画质档位才能执行切换',
   );
-  final secondQuality = find.byKey(Key(qualities[1]));
+  final currentLabel =
+      tester.widget<Text>(findAnchor('play-quality-current')).data ?? '';
+  // 排除入口自身锚点('menu'/'current'),只留真实档位名。
+  final otherNames = qualities
+      .map((key) => key.substring('play-quality-'.length))
+      .where(
+        (name) =>
+            name != currentLabel && name != 'menu' && name != 'current',
+      )
+      .toList();
+  expect(otherNames, isNotEmpty, reason: 'smoke($site):应有可选的其他画质');
+  final secondQuality = find.byKey(Key('play-quality-${otherNames.first}'));
   await tester.tap(secondQuality);
   await _pumpFrames(tester, 2, where: 'smoke/$site/switchQuality');
   expect(
-    tester.widget<ChoiceChip>(secondQuality).selected,
-    isTrue,
-    reason: 'smoke($site):第二个画质 chip 应进入选中态',
+    tester.widget<Text>(findAnchor('play-quality-current')).data,
+    otherNames.first,
+    reason: 'smoke($site):切档后 selectbox 入口应显示新档位',
   );
 
   // 5. 返回:play-back 出栈回分类页,房间网格锚点仍在。

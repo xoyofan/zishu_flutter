@@ -79,9 +79,8 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
     if (followed) {
       notifier.remove(key);
     } else if (list.length >= _kFollowCap) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('关注已达上限（200）')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('关注已达上限（200）')));
     } else {
       final site = widget.site ?? widget.payload?.site ?? '';
       final roomId = widget.roomId ?? widget.payload?.roomId ?? '';
@@ -232,7 +231,10 @@ class _SideHeader extends StatelessWidget {
     return Container(
       key: const Key('play-side-header'),
       height: headerHeight,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 5),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 5,
+      ),
       decoration: BoxDecoration(
         color: AppColors.surface,
         border: Border(bottom: BorderSide(color: tokens.border)),
@@ -278,7 +280,9 @@ class _SideHeader extends StatelessWidget {
                         style: TextStyle(
                           fontSize: 11,
                           height: 1.08,
-                          color: isLive ? tokens.liveBadge : tokens.textSecondary,
+                          color: isLive
+                              ? tokens.liveBadge
+                              : tokens.textSecondary,
                         ),
                       ),
                     ),
@@ -305,7 +309,10 @@ class _SideHeader extends StatelessWidget {
                           category,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 10, color: tokens.textSecondary),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: tokens.textSecondary,
+                          ),
                         ),
                       ),
                     ],
@@ -333,7 +340,11 @@ class _SideHeader extends StatelessWidget {
 }
 
 class _SideAvatar extends StatelessWidget {
-  const _SideAvatar({required this.avatar, required this.label, required this.live});
+  const _SideAvatar({
+    required this.avatar,
+    required this.label,
+    required this.live,
+  });
 
   final String avatar;
   final String label;
@@ -363,7 +374,9 @@ class _SideAvatar extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w700,
-                            color: live ? tokens.liveBadge : tokens.textSecondary,
+                            color: live
+                                ? tokens.liveBadge
+                                : tokens.textSecondary,
                           ),
                         ),
                       ),
@@ -379,7 +392,9 @@ class _SideAvatar extends StatelessWidget {
                             style: TextStyle(
                               fontSize: 20,
                               fontWeight: FontWeight.w700,
-                              color: live ? tokens.liveBadge : tokens.textSecondary,
+                              color: live
+                                  ? tokens.liveBadge
+                                  : tokens.textSecondary,
                             ),
                           ),
                         ),
@@ -476,7 +491,9 @@ class _SideActions extends StatelessWidget {
           Expanded(
             child: _SideActionButton(
               key: const Key('play-side-follow-btn'),
-              icon: followed ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+              icon: followed
+                  ? Icons.favorite_rounded
+                  : Icons.favorite_border_rounded,
               label: followed ? '已关注' : '关注',
               foreground: followed
                   ? AppColors.playFollowTextActive
@@ -492,7 +509,9 @@ class _SideActions extends StatelessWidget {
           Expanded(
             child: _SideActionButton(
               key: const Key('play-side-super-follow'),
-              icon: superFollowed ? Icons.star_rounded : Icons.star_border_rounded,
+              icon: superFollowed
+                  ? Icons.star_rounded
+                  : Icons.star_border_rounded,
               label: superFollowed ? '已超关' : '超关',
               foreground: superFollowed
                   ? AppColors.playSuperTextActive
@@ -568,7 +587,11 @@ class _SideActionButton extends StatelessWidget {
 }
 
 class _StatValue extends StatelessWidget {
-  const _StatValue({required this.icon, required this.value, required this.color});
+  const _StatValue({
+    required this.icon,
+    required this.value,
+    required this.color,
+  });
 
   final IconData icon;
   final String value;
@@ -629,8 +652,7 @@ class PlaybackStatus {
   final bool playing;
   final bool muted;
 
-  String get label =>
-      playing ? (muted ? '播放中(静音)' : '播放中') : '已暂停';
+  String get label => playing ? (muted ? '播放中(静音)' : '播放中') : '已暂停';
 }
 
 /// 聊天 tab:消费真实弹幕会话([danmakuSessionProvider]),含连接状态条 + 消息列表。
@@ -716,7 +738,9 @@ class _ChatTabState extends ConsumerState<_ChatTab>
     _seenCount = messageCount;
     if (!wasAtBottom) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _scrollController.hasClients) _scrollToBottom(animate: false);
+      if (mounted && _scrollController.hasClients) {
+        _scrollToBottom(animate: false);
+      }
     });
   }
 
@@ -729,7 +753,11 @@ class _ChatTabState extends ConsumerState<_ChatTab>
     };
   }
 
-  Color _connectionColor(DanmakuSessionState connection, bool supported, ZishuTokens tokens) {
+  Color _connectionColor(
+    DanmakuSessionState connection,
+    bool supported,
+    ZishuTokens tokens,
+  ) {
     if (!supported) return tokens.textSecondary;
     return connection == DanmakuSessionState.connected
         ? tokens.liveBadge
@@ -801,7 +829,11 @@ class _ChatTabState extends ConsumerState<_ChatTab>
               Icon(
                 Icons.circle,
                 size: 7,
-                color: _connectionColor(chat.connection, chat.supported, tokens),
+                color: _connectionColor(
+                  chat.connection,
+                  chat.supported,
+                  tokens,
+                ),
               ),
               const SizedBox(width: 5),
               Flexible(
@@ -823,7 +855,10 @@ class _ChatTabState extends ConsumerState<_ChatTab>
                             .reconnect()
                       : null,
                   padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(minWidth: 24, minHeight: 24),
+                  constraints: const BoxConstraints(
+                    minWidth: 24,
+                    minHeight: 24,
+                  ),
                   icon: Icon(
                     Icons.refresh_rounded,
                     size: 15,
@@ -1039,9 +1074,8 @@ class _FollowPanel extends ConsumerWidget {
                   ),
                   itemCount: entries.length,
                   separatorBuilder: (context, _) => const SizedBox(height: 6),
-                  itemBuilder: (context, index) => _FollowListItem(
-                    entry: entries[index],
-                  ),
+                  itemBuilder: (context, index) =>
+                      _FollowListItem(entry: entries[index]),
                 ),
         ),
       ],
@@ -1058,7 +1092,9 @@ class _FollowListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = context.tokens;
     final room = entry.room;
-    final initial = room.anchorName.isNotEmpty ? room.anchorName.substring(0, 1) : '?';
+    final initial = room.anchorName.isNotEmpty
+        ? room.anchorName.substring(0, 1)
+        : '?';
     final cover = room.cover.isEmpty
         ? ColoredBox(
             color: tokens.surfaceRaised,
@@ -1200,10 +1236,8 @@ class _RecommendPanel extends ConsumerWidget {
                 ),
                 itemCount: rooms.length,
                 separatorBuilder: (context, _) => const SizedBox(height: 6),
-                itemBuilder: (context, index) => _RecommendListItem(
-                  site: site,
-                  room: rooms[index],
-                ),
+                itemBuilder: (context, index) =>
+                    _RecommendListItem(site: site, room: rooms[index]),
               );
             },
           ),
@@ -1222,7 +1256,9 @@ class _RecommendListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    final initial = room.anchorName.isNotEmpty ? room.anchorName.substring(0, 1) : '?';
+    final initial = room.anchorName.isNotEmpty
+        ? room.anchorName.substring(0, 1)
+        : '?';
     final cover = room.cover.isEmpty
         ? ColoredBox(
             color: tokens.surfaceRaised,
@@ -1341,9 +1377,8 @@ class _SettingsPanel extends ConsumerWidget {
               trailing: Switch(
                 key: const Key('play-side-setting-chat'),
                 value: settings.chatEnabled,
-                onChanged: (enabled) => ref
-                    .read(settingsProvider.notifier)
-                    .setChatEnabled(enabled),
+                onChanged: (enabled) =>
+                    ref.read(settingsProvider.notifier).setChatEnabled(enabled),
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
             ),
@@ -1390,7 +1425,10 @@ class _SettingsGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 5),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 5,
+      ),
       decoration: BoxDecoration(
         color: AppColors.surfaceSoft,
         borderRadius: AppRadius.allSm,
@@ -1425,9 +1463,7 @@ class _SettingRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(
-          child: Text(label, style: AppTypography.caption),
-        ),
+        Expanded(child: Text(label, style: AppTypography.caption)),
         trailing,
       ],
     );

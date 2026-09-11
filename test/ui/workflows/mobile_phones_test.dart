@@ -55,7 +55,7 @@ import 'package:zishu_flutter/src/features/follow/views/settings_view.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/features/play/views/play_view.dart';
 import 'package:zishu_flutter/src/features/play/widgets/play_side_panel.dart';
-import 'package:zishu_flutter/src/features/play/widgets/quality_line_bar.dart';
+import 'package:zishu_flutter/src/features/play/widgets/player_controls.dart';
 import 'package:zishu_flutter/src/features/search/views/search_view.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 import 'package:zishu_flutter/src/shared/presentation/design_tokens.dart';
@@ -134,8 +134,10 @@ List<(String, Widget Function())> _pages() => [
 ];
 
 /// `/all` 等价:应用壳层 + 全平台首页。
-Widget _homePage() =>
-    const AppShell(site: 'all', child: HomeView(site: 'all'));
+Widget _homePage() => const AppShell(
+  site: 'all',
+  child: HomeView(site: 'all'),
+);
 
 /// `/douyu/category/1` 等价:应用壳层 + 斗鱼分类页(fixture 首组 cid='1')。
 Widget _categoryPage() => const AppShell(
@@ -242,9 +244,7 @@ void main() {
           print('[navVisible] ${device.label}/$id: OK');
         } else {
           print('[navVisible] ${device.label}/$id: FAIL');
-          failures.add(
-            '${device.label}/$id: rect=$rect 超出视口 $viewport',
-          );
+          failures.add('${device.label}/$id: rect=$rect 超出视口 $viewport');
         }
       }
       resetViewport(tester);
@@ -285,16 +285,15 @@ void main() {
       // 根布局即全视口)。
       final viewport = tester.getRect(find.byType(PlayView));
 
-      // 视频舞台几何:画质条 QualityLineBar 与 Expanded(_VideoStage) 同列
-      // (视频列 Column 内:视频舞台 Expanded → 控制条 → 画质条),列宽 =
-      // 视频舞台宽,故取 play-quality 锚点祖先列的宽度度量视频舞台。
-      final qualityBar = find.byType(QualityLineBar);
-      final videoColumn = find.ancestor(
-        of: qualityBar.first,
-        matching: find.byType(Column),
-      ).first;
+      // 视频舞台几何:控制条 PlayerControlsBar 与 Expanded(_VideoStage) 同列
+      // (视频列 Column 内:视频舞台 Expanded → 控制条),列宽 =
+      // 视频舞台宽,故取控制条祖先列的宽度度量视频舞台。
+      final controlsBar = find.byType(PlayerControlsBar);
+      final videoColumn = find
+          .ancestor(of: controlsBar.first, matching: find.byType(Column))
+          .first;
       final videoRect = tester.getRect(videoColumn);
-      final qualityRect = tester.getRect(qualityBar.first);
+      final qualityRect = tester.getRect(controlsBar.first);
 
       // 断言 1:视频舞台宽 > 视口宽的 60%。
       final minWidth = viewport.width * 0.6;

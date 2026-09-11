@@ -269,3 +269,34 @@
 | 2026-09-11 | `flutter analyze` | No issues(0 issue) |
 | 2026-09-11 | `flutter test` 全量 | **214 passed / 0 failed / 0 skipped** |
 | 2026-09-11 | `flutter build windows --debug -t lib/main.dart` | OK(157.2s) |
+
+## 真机验收工具与弹幕/控制栏修复(2026-09-11 第二轮)
+
+A1 分支合并(master,零冲突)+ 真实解析版真机模拟中发现的三个问题,全部修复:
+
+### 1. 弹幕叠加层不显示(已连接但视频无弹幕)——真 bug 修复
+- **根因**:`_DanmakuLayer._pushTail` 按 `messages.length > _sentCount` 判定新消息,而会话状态是 **200 条定长环形缓冲**,灌满后 length 恒为上限 → 比较永远 false → **叠加层在连上后十几秒就再也收不到弹幕**;聊天 tab 直 watch state 重建列表故正常。与 SFVideo `useDanmaku.ts` 对照:参考实现里飘屏与聊天是两条独立队列(overlay 限 100 / chat 限 200),不共享长度比较。
+- **修复**:新增 `features/danmaku/application/danmaku_tail_forwarder.dart`(纯逻辑,按对象身份追踪已转发位置,环形翻页找不到基准时退化为全量转发),`_DanmakuLayer` 接线;7 条单测锁死灌满缓冲回归场景。
+
+### 2. 画质/线路选择迁入控制栏 selectbox(2026-09-11 裁决)
+- 用户裁决「清晰度应该是播放下方控制栏里的 selectbox」:`QualityLineBar` 整体移除,画质/线路两个 selectbox(锚点契约原样保留:`play-quality-menu`/`play-quality-current`/`play-quality-{name}`/`play-line-menu`/`play-line-item-{name}`)迁入 `PlayerControlsBar`,payload 经 `playControllerProvider` 获取。
+- **收缩判据改 LayoutBuilder(控制条自身可用宽 <560)**:原按视口宽 <768 判定,但 800 视口下常驻侧栏会把控制条挤到 ~392dp → 溢出(实测)。compact 时隐藏音量/延迟文案/画中画。
+- 存量 chip 口径用例全部迁移:`play_page_test`/`workflow_browse_play`/`platformSmoke ×3`/`latency douyu`/`mobile_phones`/`mobile_tablets`(视频宽度代理改量 `PlayerControlsBar`)。
+
+### 3. PopupRoute 过渡期菜单项不可点——测试口径修正
+- `PopupMenuButton` 菜单打开有 ~300ms 尺寸过渡,**过渡自顶向下展开**:打开后 2 帧(100ms)时靠近菜单底部的项 `hitTestable=0`(实测),tap 落空且无告警。
+- 统一口径:开菜单后 pump **8 帧(≈400ms)** 再点菜单项;§platformSmoke 候选名需排除入口自身锚点(`menu`/`current`)。
+
+### 4. 真机验收工具链(tool/ 入库,其他电脑可直接对比测试)
+- `tool/win_tool.py`(零编译):PrintWindow(PW_RENDERFULLCONTENT)后台抓 GPU 合成帧 + click/move/restore。两个关键坑:①后台进程 SetForegroundWindow 被 Windows 拒 → 点击需先 TOPMOST 置顶、点完还原;②窗口定位必须用 `FLUTTER_RUNNER_WIN32_WINDOW` 类名(桌面存在同名标题的其它窗口)。
+- 最小化窗口:PrintWindow 拿到的是暂停前的陈旧帧(Flutter 生命周期 paused)→ `restorebg`(SW_SHOWNOACTIVATE)可无焦点恢复,但渲染循环需激活一次才恢复。
+- 截图产物入库:`screenshots/sfvideo/`(参考基线 23MB)+ `screenshots/zishu/`(本项目实拍);`.gitignore` 改为精确忽略 `sfvideo_session.json`(登录 token)与日志;流程文档见 `tool/README.md`。
+
+### 已验证记录(追加)
+
+| 日期 | 命令 | 结果 |
+|---|---|---|
+| 2026-09-11 | A1 合并后门禁 | analyze 0 issue / test 222 / build OK |
+| 2026-09-11 | 真实解析 exe 真机模拟(点击进房) | 视频帧差 57.4(在播)、聊天亮行 429→473(弹幕在流) |
+| 2026-09-11 | 修复后门禁:`flutter analyze` + `flutter test` 全量 | **No issues / 229 passed / 0 failed**(较上轮 +7 转发器单测) |
+| 2026-09-11 | `flutter build windows --debug`(真实解析开关) | OK(18.0s) |

@@ -137,20 +137,17 @@ Future<void> _awaitSettingsHydrated(
   fail('settingsProvider 未在限定帧数内完成 hydrated');
 }
 
-/// 当前选中画质 chip 的锚点名(null 表示无选中档)。
+/// 当前选中画质锚点名(null 表示无选中档)。
+///
+/// 画质选择已是控制栏内的 selectbox(2026-09-11 裁决,原独立 chip 行已移除):
+/// 锚点取入口标签 `play-quality-current` 的文本,回填成 `play-quality-{name}`
+/// 口径以保持各用例断言不变。
 String? _selectedQualityName(WidgetTester tester) {
-  final chips = tester.widgetList<ChoiceChip>(
-    find.byWidgetPredicate(
-      (widget) =>
-          widget is ChoiceChip &&
-          widget.key is ValueKey<String> &&
-          (widget.key! as ValueKey<String>).value.startsWith('play-quality-'),
-    ),
-  );
-  for (final chip in chips) {
-    if (chip.selected) return (chip.key! as ValueKey<String>).value;
-  }
-  return null;
+  final current = find.byKey(const Key('play-quality-current'));
+  if (!tester.any(current)) return null;
+  final label = tester.widget<Text>(current).data;
+  if (label == null || label == '画质') return null;
+  return 'play-quality-$label';
 }
 
 /// 从当前 settings 状态读值。
@@ -190,7 +187,9 @@ void main() {
     await _awaitSettingsHydrated(tester, play.container);
 
     // 用户改默认画质为「流畅」。
-    await play.container.read(settingsProvider.notifier).setDefaultQuality('流畅');
+    await play.container
+        .read(settingsProvider.notifier)
+        .setDefaultQuality('流畅');
     await tester.pump(_kFrame);
     expect(_settingsOf(play.container).defaultQuality, '流畅');
 
@@ -211,8 +210,8 @@ void main() {
     // 白名单校验,模拟旧版本残留 / 平台档位改名后的脏数据。
     SharedPreferencesAsyncPlatform.instance =
         InMemorySharedPreferencesAsync.withData(<String, Object>{
-      'zishu.settings.defaultQuality': '4K 原画',
-    });
+          'zishu.settings.defaultQuality': '4K 原画',
+        });
 
     final play = await _pumpPlay(tester);
     await _awaitSettingsHydrated(tester, play.container);
@@ -255,22 +254,14 @@ void main() {
     await tester.sendKeyDownEvent(LogicalKeyboardKey.space);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.space);
     await _pumpFrames(tester, 2);
-    expect(
-      _player.calls,
-      contains('play'),
-      reason: 'Space 应触发播放/暂停切换',
-    );
+    expect(_player.calls, contains('play'), reason: 'Space 应触发播放/暂停切换');
     _player.calls.clear();
 
     // ── M:回退快照 muted=false → 期望 setMuted(true) ──────────────────
     await tester.sendKeyDownEvent(LogicalKeyboardKey.keyM);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.keyM);
     await _pumpFrames(tester, 2);
-    expect(
-      _player.calls,
-      contains('muted:true'),
-      reason: 'M 应切换静音',
-    );
+    expect(_player.calls, contains('muted:true'), reason: 'M 应切换静音');
     _player.calls.clear();
 
     // ── F:全屏接口当前是平台层空实现(见 live_player.dart),这里只断言
@@ -321,11 +312,7 @@ void main() {
     final before = _player.calls.length;
     await tester.sendKeyEvent(LogicalKeyboardKey.space);
     await _pumpFrames(tester, 2);
-    expect(
-      _player.calls.length,
-      before,
-      reason: '输入框聚焦时 Space 不应被控制条快捷键吞掉',
-    );
+    expect(_player.calls.length, before, reason: '输入框聚焦时 Space 不应被控制条快捷键吞掉');
     expect(tester.takeException(), isNull);
   });
 
@@ -338,7 +325,10 @@ void main() {
     expect(toggle, findsOneWidget, reason: '弹幕总开关开启时控制条应有弹幕按钮');
 
     final params = (site: 'douyu', roomId: '63136');
-    expect(container.read(playControllerProvider(params)).value?.showDanmaku, isTrue);
+    expect(
+      container.read(playControllerProvider(params)).value?.showDanmaku,
+      isTrue,
+    );
 
     await tester.tap(toggle);
     await _pumpFrames(tester, 2);
@@ -363,8 +353,8 @@ void main() {
   testWidgets('danmakuToggle:设置总开关关闭时控制条不出现弹幕按钮', (tester) async {
     SharedPreferencesAsyncPlatform.instance =
         InMemorySharedPreferencesAsync.withData(<String, Object>{
-      'zishu.settings.danmakuEnabled': false,
-    });
+          'zishu.settings.danmakuEnabled': false,
+        });
 
     final play = await _pumpPlay(tester);
     final container = play.container;
@@ -389,11 +379,7 @@ void main() {
     // 点舞台中央(playerControls 区域之外的空白处)。
     await tester.tapAt(const Offset(200, 300));
     await _pumpFrames(tester, 2);
-    expect(
-      _player.calls,
-      contains('play'),
-      reason: '点击视频帧应切到播放',
-    );
+    expect(_player.calls, contains('play'), reason: '点击视频帧应切到播放');
 
     // 点控制条上的播放按钮:走按钮自身回调,同样落到 play 通路。
     final beforeButton = _player.calls.length;
@@ -431,11 +417,7 @@ void main() {
     );
 
     // 刷新后弹 SnackBar「已刷新」。
-    expect(
-      find.text('已刷新'),
-      findsOneWidget,
-      reason: '刷新后应提示「已刷新」',
-    );
+    expect(find.text('已刷新'), findsOneWidget, reason: '刷新后应提示「已刷新」');
 
     // 刷新只重开流,不改变选中画质/线路。
     expect(
@@ -446,62 +428,56 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
-    'qualityMenuNarrow:窄屏画质收进下拉,菜单项可点切档',
-    (tester) async {
-      final play = await _pumpPlay(tester);
-      final container = play.container;
-      await _awaitSettingsHydrated(tester, play.container);
+  testWidgets('qualityMenuNarrow:窄屏画质收进下拉,菜单项可点切档', (tester) async {
+    final play = await _pumpPlay(tester);
+    final container = play.container;
+    await _awaitSettingsHydrated(tester, play.container);
 
-      // 切到窄屏视口(<1024):横向 chips 应收进菜单。
-      tester.view.physicalSize = const Size(480, 900);
-      tester.view.devicePixelRatio = 1.0;
-      await _pumpFrames(tester, 3);
+    // 切到窄屏视口(<1024):横向 chips 应收进菜单。
+    tester.view.physicalSize = const Size(480, 900);
+    tester.view.devicePixelRatio = 1.0;
+    await _pumpFrames(tester, 3);
 
-      // 菜单未打开时,横向画质 chip 不应在树上。
-      expect(
-        find.byKey(const Key('play-quality-超清')),
-        findsNothing,
-        reason: '窄屏下画质 chip 应收进下拉,菜单未打开时不在树上',
-      );
-      // 下拉入口与当前画质标签存在。
-      expect(
-        find.byKey(const Key('play-quality-menu')),
-        findsOneWidget,
-        reason: '窄屏应有画质下拉入口',
-      );
-      expect(
-        find.byKey(const Key('play-quality-current')),
-        findsOneWidget,
-        reason: '窄屏下拉入口应暴露当前画质名标签',
-      );
+    // 菜单未打开时,横向画质 chip 不应在树上。
+    expect(
+      find.byKey(const Key('play-quality-超清')),
+      findsNothing,
+      reason: '窄屏下画质 chip 应收进下拉,菜单未打开时不在树上',
+    );
+    // 下拉入口与当前画质标签存在。
+    expect(
+      find.byKey(const Key('play-quality-menu')),
+      findsOneWidget,
+      reason: '窄屏应有画质下拉入口',
+    );
+    expect(
+      find.byKey(const Key('play-quality-current')),
+      findsOneWidget,
+      reason: '窄屏下拉入口应暴露当前画质名标签',
+    );
 
-      // 打开画质下拉。
-      await tester.tap(find.byKey(const Key('play-quality-menu')));
-      await _pumpFrames(tester, 2);
+    // 打开画质下拉。pump 8 帧:等 PopupRoute 尺寸过渡完成,菜单项才可点
+    // (实测 2 帧不够,尤其靠近菜单底部的项——过渡自顶向下展开)。
+    await tester.tap(find.byKey(const Key('play-quality-menu')));
+    await _pumpFrames(tester, 8);
 
-      // 菜单项可见且可点。
-      final item = find.byKey(const Key('play-quality-蓝光8M'));
-      expect(item, findsOneWidget, reason: '下拉应展开画质菜单项');
-      expect(
-        item.hitTestable(),
-        findsOneWidget,
-        reason: '画质菜单项应可点',
-      );
+    // 菜单项可见且可点。
+    final item = find.byKey(const Key('play-quality-蓝光8M'));
+    expect(item, findsOneWidget, reason: '下拉应展开画质菜单项');
+    expect(item.hitTestable(), findsOneWidget, reason: '画质菜单项应可点');
 
-      // 点选第二个画质:选中态更新(验证下拉切档通路)。
-      await tester.tap(item);
-      await _pumpFrames(tester, 2);
-      expect(
-        container
-            .read(playControllerProvider((site: 'douyu', roomId: '63136')))
-            .value
-            ?.quality
-            ?.name,
-        '蓝光8M',
-        reason: '窄屏下拉选画质应更新选中档',
-      );
-      expect(tester.takeException(), isNull);
-    },
-  );
+    // 点选第二个画质:选中态更新(验证下拉切档通路)。
+    await tester.tap(item);
+    await _pumpFrames(tester, 2);
+    expect(
+      container
+          .read(playControllerProvider((site: 'douyu', roomId: '63136')))
+          .value
+          ?.quality
+          ?.name,
+      '蓝光8M',
+      reason: '窄屏下拉选画质应更新选中档',
+    );
+    expect(tester.takeException(), isNull);
+  });
 }

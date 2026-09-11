@@ -85,48 +85,87 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   }
 
-  testWidgets('/douyu/play/63136:返回与侧栏开关锚点存在,画质锚点 4 个',
-      (tester) async {
+  testWidgets('/douyu/play/63136:返回与侧栏开关锚点存在,画质/线路 selectbox 可用', (
+    tester,
+  ) async {
     await pumpPlayView(tester);
 
     expect(find.byKey(const Key('play-back')), findsOneWidget);
     expect(find.byKey(const Key('play-side-panel-toggle')), findsOneWidget);
 
-    // fixture payload 固定 4 个画质:蓝光8M/超清/高清/流畅。
+    // 2026-09-11 裁决:画质/线路收进控制栏 selectbox(菜单项锚点只在菜单
+    // 打开时挂载)。入口与当前档标签必须常驻。
+    expect(
+      find.byKey(const Key('play-quality-menu')),
+      findsOneWidget,
+      reason: '控制栏应有画质 selectbox 入口',
+    );
+    expect(find.byKey(const Key('play-quality-current')), findsOneWidget);
+    expect(find.byKey(const Key('play-line-menu')), findsOneWidget);
+
+    // 打开画质菜单:fixture 固定 4 档(蓝光8M/超清/高清/流畅)。
+    // pump 8 帧:等 PopupRoute 尺寸过渡完成(见下方选档用例说明)。
+    await tester.tap(find.byKey(const Key('play-quality-menu')));
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
     for (final name in const ['蓝光8M', '超清', '高清', '流畅']) {
       expect(
         find.byKey(Key('play-quality-$name')),
         findsOneWidget,
-        reason: '缺少画质锚点 $name',
+        reason: '画质菜单缺少档位 $name',
       );
     }
-    // 默认选中第一档画质(蓝光8M),其下 3 条线路锚点可见。
-    for (final name in const ['HLS', '主线 FLV', '备线 FLV']) {
-      expect(find.byKey(Key('play-line-$name')), findsOneWidget);
+
+    // 切到线路菜单:蓝光8M 下 3 条线路。
+    await tester.tap(find.text('蓝光8M').last);
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
     }
-  });
-
-  testWidgets('点击 play-quality-流畅:对应 chip 进入选中态', (tester) async {
-    await pumpPlayView(tester);
-
-    final qualityChip = find.byKey(const Key('play-quality-流畅'));
-    expect(
-      tester.widget<ChoiceChip>(qualityChip).selected,
-      isFalse,
-      reason: '初始选中蓝光8M,流畅应未选中',
-    );
-
-    await tester.tap(qualityChip);
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
-
-    // ChoiceChip 的 selected 即选中态样式来源(实现里同时切换边框/文字色)。
-    expect(tester.widget<ChoiceChip>(qualityChip).selected, isTrue);
+    await tester.tap(find.byKey(const Key('play-line-menu')));
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    for (final name in const ['HLS', '主线 FLV', '备线 FLV']) {
+      expect(
+        find.byKey(Key('play-line-item-$name')),
+        findsOneWidget,
+        reason: '线路菜单缺少 $name',
+      );
+    }
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('点击 play-side-panel-toggle:328px 侧栏消失/再点恢复出现',
-      (tester) async {
+  testWidgets('selectbox 选画质:入口标签切换为所选档', (tester) async {
+    await pumpPlayView(tester);
+
+    String currentLabel() =>
+        tester
+            .widget<Text>(find.byKey(const Key('play-quality-current')))
+            .data ??
+        '';
+
+    // 进房默认档 = settings 生效默认(出厂「超清」,fixture 有同名档)。
+    expect(currentLabel(), '超清');
+
+    // 打开画质菜单选「流畅」。PopupMenuRoute 有约 300ms 的尺寸过渡,过渡期间
+    // 靠近菜单底部的项不在裁剪区内(hitTestable=0,实测):pump 到过渡完成后
+    // 再点,不能只 pump 2 帧。
+    await tester.tap(find.byKey(const Key('play-quality-menu')));
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    await tester.tap(find.byKey(const Key('play-quality-流畅')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+    // ignore: avoid_print
+    print('DBG labelAfter=${currentLabel()}');
+
+    expect(currentLabel(), '流畅', reason: 'selectbox 选档后入口标签应切换为所选画质');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('点击 play-side-panel-toggle:328px 侧栏消失/再点恢复出现', (tester) async {
     await pumpPlayView(tester);
 
     // 侧栏初始可见(容器宽 328,由 PlaySidePanel 填充)。

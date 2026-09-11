@@ -13,12 +13,12 @@ import '../../../shared/presentation/zishu_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../danmaku/application/danmaku_session_provider.dart'
     show DanmakuChatState, danmakuSessionProvider;
+import '../../danmaku/application/danmaku_tail_forwarder.dart';
 import '../../danmaku/widgets/danmaku_overlay.dart';
 import '../application/play_provider.dart';
 import '../../follow/application/settings_provider.dart';
 import '../widgets/play_side_panel.dart';
 import '../widgets/player_controls.dart';
-import '../widgets/quality_line_bar.dart';
 
 /// 播放页(U5 布局基线):44px 房间头 + 视频舞台/控制条/画质线路条 +
 /// 右侧 328px 信息栏。编排全部收敛在 playControllerProvider/LivePlayer,
@@ -249,17 +249,6 @@ class _PlayViewState extends ConsumerState<PlayView> {
                             .read(playControllerProvider(_params).notifier)
                             .toggleDanmaku(),
                       ),
-                      QualityLineBar(
-                        payload: play?.payload,
-                        activeQuality: play?.quality,
-                        activeLine: play?.line,
-                        onQualityTap: (quality) => ref
-                            .read(playControllerProvider(_params).notifier)
-                            .switchQuality(quality),
-                        onLineTap: (line) => ref
-                            .read(playControllerProvider(_params).notifier)
-                            .switchLine(line),
-                      ),
                     ],
                   ),
                 ),
@@ -446,8 +435,11 @@ class _DanmakuLayerState extends ConsumerState<_DanmakuLayer> {
   late final StreamController<DanmakuMessage> _controller =
       StreamController<DanmakuMessage>.broadcast();
 
-  /// 已转发条数(与 provider 的 FIFO 快照尾部对齐)。
-  int _sentCount = 0;
+  /// 尾部转发器:按对象身份追踪已转发位置,把环形缓冲快照换算成新增弹幕。
+  /// 不能按 length 比较——缓冲灌满后 length 恒为上限,叠加层会永远收不到
+  /// 新消息(实测:聊天在滚、视频无弹幕)。对齐 SFVideo useDanmaku 的
+  /// 「飘屏与聊天独立队列」结构(overlay 自身另有 maxVisible 上限)。
+  final DanmakuTailForwarder _forwarder = DanmakuTailForwarder();
 
   ProviderSubscription<DanmakuChatState>? _sub;
 
@@ -470,14 +462,8 @@ class _DanmakuLayerState extends ConsumerState<_DanmakuLayer> {
   }
 
   void _pushTail(List<DanmakuMessage> messages) {
-    if (messages.length > _sentCount) {
-      for (final m in messages.skip(_sentCount)) {
-        _controller.add(m);
-      }
-      _sentCount = messages.length;
-    } else if (messages.length < _sentCount) {
-      // 环形缓冲回退(理论上不发生):重置基准,避免漏发/重发。
-      _sentCount = messages.length;
+    for (final m in _forwarder.forward(messages)) {
+      _controller.add(m);
     }
   }
 

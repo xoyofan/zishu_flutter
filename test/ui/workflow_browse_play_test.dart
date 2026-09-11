@@ -97,14 +97,29 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.byKey(const Key('play-back')), findsOneWidget);
 
-    // 3. 点击第二个画质 chip(超清):切换无异常且进入选中态。
-    final secondQuality = find.byKey(const Key('play-quality-超清'));
-    expect(secondQuality, findsOneWidget);
+    // 3. 控制栏画质 selectbox 选「流畅」:菜单项可点且入口标签同步。
+    //    (2026-09-11 裁决:画质/线路为控制栏内 selectbox,菜单项锚点在
+    //    菜单打开时才挂载。)
+    String currentLabel() =>
+        tester
+            .widget<Text>(find.byKey(const Key('play-quality-current')))
+            .data ??
+        '';
+    // 进房默认档 = settings 生效默认(出厂「超清」)。
+    expect(currentLabel(), '超清');
+
+    await tester.tap(find.byKey(const Key('play-quality-menu')));
+    // pump 8 帧:等 PopupRoute 尺寸过渡完成,菜单项才可点(实测 2 帧不够)。
+    for (var i = 0; i < 8; i++) {
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    final secondQuality = find.byKey(const Key('play-quality-流畅'));
+    expect(secondQuality, findsOneWidget, reason: '画质菜单应展开档位流畅');
     await tester.tap(secondQuality);
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
     expect(tester.takeException(), isNull);
-    expect(tester.widget<ChoiceChip>(secondQuality).selected, isTrue);
+    expect(currentLabel(), '流畅', reason: '切档后 selectbox 入口应显示流畅');
 
     // 4. 点返回按钮 → 回到首页,房间网格锚点仍在。
     await tester.tap(find.byKey(const Key('play-back')));

@@ -65,127 +65,137 @@ Future<void> _pumpFrames(WidgetTester tester, int times) async {
 void main() {
   // ---- 任务 1+2:三平台首帧进房耗时,预热 1 次不计分 + 计分 3 次取中位数 ----
   for (final site in _kSites) {
-    testWidgets(
-      '$site 首帧进房耗时:预热 1 次不计分,计分 3 次取中位数',
-      (tester) async {
-        await pumpPlatformApp(tester, '/$site');
-        // ignore: avoid_print
-        print('[latency-plan] $site: 1 warmup (not scored) + 3 scored samples');
+    testWidgets('$site 首帧进房耗时:预热 1 次不计分,计分 3 次取中位数', (tester) async {
+      await pumpPlatformApp(tester, '/$site');
+      // ignore: avoid_print
+      print('[latency-plan] $site: 1 warmup (not scored) + 3 scored samples');
 
-        // 预热(不计分):driver 照常打印 [latency] 报告行,但不进入样本。
-        await openRoomLatency(tester, site);
+      // 预热(不计分):driver 照常打印 [latency] 报告行,但不进入样本。
+      await openRoomLatency(tester, site);
 
-        final msSamples = <int>[];
-        final frameSamples = <int>[];
-        for (var i = 0; i < 3; i++) {
-          final result = await openRoomLatency(tester, site);
-          msSamples.add(result.ms);
-          frameSamples.add(result.frames);
-        }
+      final msSamples = <int>[];
+      final frameSamples = <int>[];
+      for (var i = 0; i < 3; i++) {
+        final result = await openRoomLatency(tester, site);
+        msSamples.add(result.ms);
+        frameSamples.add(result.frames);
+      }
 
-        final medianMs = _medianOf3(msSamples);
-        final medianFrames = _medianOf3(frameSamples);
-        // 先记录后断言:即使阈值失败,汇总行仍能给出数值供人工比对。
-        _firstEntryMedians[site] = medianMs;
+      final medianMs = _medianOf3(msSamples);
+      final medianFrames = _medianOf3(frameSamples);
+      // 先记录后断言:即使阈值失败,汇总行仍能给出数值供人工比对。
+      _firstEntryMedians[site] = medianMs;
 
-        // 每平台中位数报告行(供人工比对与 W13 收录)。
-        // ignore: avoid_print
-        print(
-          '[latency-median] $site: median=${medianMs}ms '
-          'samples=$msSamples frames=$medianFrames',
-        );
+      // 每平台中位数报告行(供人工比对与 W13 收录)。
+      // ignore: avoid_print
+      print(
+        '[latency-median] $site: median=${medianMs}ms '
+        'samples=$msSamples frames=$medianFrames',
+      );
 
-        expect(
-          medianMs,
-          lessThan(_kMedianWallClockBudgetMs),
-          reason: '$site 进房中位墙钟 ${medianMs}ms 应 < '
-              '$_kMedianWallClockBudgetMs ms,samples=$msSamples——疑似编排劣化或'
-              '环境异常(G1 接真实解析后阈值收紧到 500ms)',
-        );
-        expect(
-          medianFrames,
-          lessThanOrEqualTo(_kMedianFramesBudget),
-          reason: '$site 进房中位帧数 $medianFrames 应 ≤ $_kMedianFramesBudget,'
-              'samples=$frameSamples——进房编排(路由/provider/锚点挂载)退化',
-        );
-      },
-      timeout: const Timeout(Duration(minutes: 5)),
-    );
+      expect(
+        medianMs,
+        lessThan(_kMedianWallClockBudgetMs),
+        reason:
+            '$site 进房中位墙钟 ${medianMs}ms 应 < '
+            '$_kMedianWallClockBudgetMs ms,samples=$msSamples——疑似编排劣化或'
+            '环境异常(G1 接真实解析后阈值收紧到 500ms)',
+      );
+      expect(
+        medianFrames,
+        lessThanOrEqualTo(_kMedianFramesBudget),
+        reason:
+            '$site 进房中位帧数 $medianFrames 应 ≤ $_kMedianFramesBudget,'
+            'samples=$frameSamples——进房编排(路由/provider/锚点挂载)退化',
+      );
+    }, timeout: const Timeout(Duration(minutes: 5)));
   }
 
   // ---- 任务 4:交互回归,切画质后二次进房不劣化(防切房资源泄漏) ----
   // 只在 douyu 上执行:fixture payload 与 site 无关(fixtureRoomPayload 忽略
   // site,四档画质/线路形状全平台一致),douyu 作为代表平台即可覆盖该语义,
   // 同时控制用例时长;G1 接真实解析后可按平台展开。
-  testWidgets(
-    'douyu 切画质后二次进房不劣化(防切房资源泄漏)',
-    (tester) async {
-      final firstMedian = _firstEntryMedians['douyu'];
-      expect(
-        firstMedian,
-        isNotNull,
-        reason: '依赖首个用例记录的 douyu 首次进房中位数',
-      );
+  testWidgets('douyu 切画质后二次进房不劣化(防切房资源泄漏)', (tester) async {
+    final firstMedian = _firstEntryMedians['douyu'];
+    expect(firstMedian, isNotNull, reason: '依赖首个用例记录的 douyu 首次进房中位数');
 
-      await pumpPlatformApp(tester, '/douyu');
+    await pumpPlatformApp(tester, '/douyu');
 
-      // 进入播放页(入口跑一次完整 openRoomLatency,不计分),切第二个画质 chip。
-      await openRoomLatency(tester, 'douyu');
-      await _pumpFrames(tester, 2); // payload 完整落地,画质 chips 全部挂载。
-      final qualities = anchorKeysWithPrefix(tester, 'play-quality-');
-      expect(
-        qualities.length,
-        greaterThanOrEqualTo(2),
-        reason: 'fixture 房间应至少有 2 个画质档位',
-      );
-      final secondQuality = find.byKey(Key(qualities[1]));
-      await tester.tap(secondQuality);
-      await _pumpFrames(tester, 2);
-      expect(
-        tester.widget<ChoiceChip>(secondQuality).selected,
-        isTrue,
-        reason: '切画质后第二个 chip 应进入选中态',
-      );
+    // 进入播放页(入口跑一次完整 openRoomLatency,不计分),控制栏画质
+    // selectbox 切另一档(2026-09-11 裁决口径:菜单项锚点在菜单打开时挂载)。
+    await openRoomLatency(tester, 'douyu');
+    await _pumpFrames(tester, 2); // payload 完整落地,selectbox 入口挂载。
+    final qualityMenu = find.byKey(const Key('play-quality-menu'));
+    expect(qualityMenu, findsOneWidget);
+    await tester.tap(qualityMenu);
+    // pump 8 帧:等 PopupRoute 尺寸过渡完成,菜单项才可点(实测 2 帧不够)。
+    await _pumpFrames(tester, 8);
+    final qualities = anchorKeysWithPrefix(tester, 'play-quality-');
+    expect(
+      qualities.length,
+      greaterThanOrEqualTo(2),
+      reason: 'fixture 房间应至少有 2 个画质档位',
+    );
+    final currentLabel =
+        tester
+            .widget<Text>(find.byKey(const Key('play-quality-current')))
+            .data ??
+        '';
+    // 排除入口自身锚点('menu'/'current'),只留真实档位名。
+    final otherName = qualities
+        .map((key) => key.substring('play-quality-'.length))
+        .where(
+          (name) => name != currentLabel && name != 'menu' && name != 'current',
+        )
+        .first;
+    final secondQuality = find.byKey(Key('play-quality-$otherName'));
+    await tester.tap(secondQuality);
+    await _pumpFrames(tester, 2);
+    expect(
+      tester.widget<Text>(find.byKey(const Key('play-quality-current'))).data,
+      otherName,
+      reason: '切画质后 selectbox 入口应显示新档位',
+    );
 
-      // 3 轮「play-back 返回 → 再进房」计分:计时窗口与首次口径一致
-      // (tap 房卡 → play-quality 锚点出现),play-back 与首页恢复不计入。
-      final msSamples = <int>[];
-      final frameSamples = <int>[];
-      for (var i = 1; i <= 3; i++) {
-        final result = await _reentryLatency(tester, 'douyu', run: i);
-        msSamples.add(result.ms);
-        frameSamples.add(result.frames);
-      }
-      final medianMs = _medianOf3(msSamples);
-      final medianFrames = _medianOf3(frameSamples);
-      final budget = firstMedian! + _kReentryDegradationBudgetMs;
+    // 3 轮「play-back 返回 → 再进房」计分:计时窗口与首次口径一致
+    // (tap 房卡 → play-quality 锚点出现),play-back 与首页恢复不计入。
+    final msSamples = <int>[];
+    final frameSamples = <int>[];
+    for (var i = 1; i <= 3; i++) {
+      final result = await _reentryLatency(tester, 'douyu', run: i);
+      msSamples.add(result.ms);
+      frameSamples.add(result.frames);
+    }
+    final medianMs = _medianOf3(msSamples);
+    final medianFrames = _medianOf3(frameSamples);
+    final budget = firstMedian! + _kReentryDegradationBudgetMs;
 
-      // ignore: avoid_print
-      print(
-        '[latency-reentry] douyu: first=${firstMedian}ms '
-        'reentry-median=${medianMs}ms samples=$msSamples '
-        'frames=$medianFrames budget=$budget',
-      );
+    // ignore: avoid_print
+    print(
+      '[latency-reentry] douyu: first=${firstMedian}ms '
+      'reentry-median=${medianMs}ms samples=$msSamples '
+      'frames=$medianFrames budget=$budget',
+    );
 
-      // 语义:切房/切画质后反复进出房间,若 player/provider/监听未随路由释放,
-      // 二次进房会呈资源泄漏型单调劣化。fixture 阶段门槛取「不劣化」:
-      // 中位墙钟 ≤ 首次中位数 + 500ms,中位帧数同样 ≤ 8。
-      expect(
-        medianMs,
-        lessThanOrEqualTo(budget),
-        reason: '二次进房中位墙钟 ${medianMs}ms 应 ≤ 首次中位数 ${firstMedian}ms + '
-              '${_kReentryDegradationBudgetMs}ms,samples=$msSamples——'
-              '疑似切房资源泄漏(切画质后未释放)',
-      );
-      expect(
-        medianFrames,
-        lessThanOrEqualTo(_kMedianFramesBudget),
-        reason: '二次进房中位帧数 $medianFrames 应 ≤ $_kMedianFramesBudget,'
-            'samples=$frameSamples——切房后编排退化',
-      );
-    },
-    timeout: const Timeout(Duration(minutes: 5)),
-  );
+    // 语义:切房/切画质后反复进出房间,若 player/provider/监听未随路由释放,
+    // 二次进房会呈资源泄漏型单调劣化。fixture 阶段门槛取「不劣化」:
+    // 中位墙钟 ≤ 首次中位数 + 500ms,中位帧数同样 ≤ 8。
+    expect(
+      medianMs,
+      lessThanOrEqualTo(budget),
+      reason:
+          '二次进房中位墙钟 ${medianMs}ms 应 ≤ 首次中位数 ${firstMedian}ms + '
+          '${_kReentryDegradationBudgetMs}ms,samples=$msSamples——'
+          '疑似切房资源泄漏(切画质后未释放)',
+    );
+    expect(
+      medianFrames,
+      lessThanOrEqualTo(_kMedianFramesBudget),
+      reason:
+          '二次进房中位帧数 $medianFrames 应 ≤ $_kMedianFramesBudget,'
+          'samples=$frameSamples——切房后编排退化',
+    );
+  }, timeout: const Timeout(Duration(minutes: 5)));
 
   // ---- 任务 3:汇总报告,一行输出三平台中位数(W13 门禁录入格式) ----
   test('汇总报告:三平台中位数一行输出(供人工比对与 W13 收录)', () {
@@ -210,13 +220,21 @@ Future<({int ms, int frames})> _reentryLatency(
   String site, {
   required int run,
 }) async {
+  // play-back 挂载等待(有界):全量套件高负载下,上一轮页面栈动画可能
+  // 尚未完全落位,直接 tap 会偶发 "Found 0 widgets"(实测)。
+  var guard = 0;
+  while (!tester.any(findAnchor('play-back')) && guard < 60) {
+    await tester.pump(_kFrame);
+    guard++;
+  }
+  expect(
+    tester.any(findAnchor('play-back')),
+    isTrue,
+    reason: 'reentry run$run: 60 帧内 play-back 未挂载',
+  );
   await tester.tap(findAnchor('play-back'));
   await _pumpFrames(tester, 2);
-  expect(
-    findAnchor('play-back'),
-    findsNothing,
-    reason: 'play-back 应出栈返回首页',
-  );
+  expect(findAnchor('play-back'), findsNothing, reason: 'play-back 应出栈返回首页');
   final cards = anchorKeysWithPrefix(tester, 'room-card-');
   expect(cards, isNotEmpty, reason: 'play-back 返回后应仍有 room-card-* 锚点可点');
 

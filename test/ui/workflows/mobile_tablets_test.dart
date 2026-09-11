@@ -44,7 +44,7 @@ import 'package:zishu_flutter/src/features/follow/views/follow_view.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/features/play/views/play_view.dart';
 import 'package:zishu_flutter/src/features/play/widgets/play_side_panel.dart';
-import 'package:zishu_flutter/src/features/play/widgets/quality_line_bar.dart';
+import 'package:zishu_flutter/src/features/play/widgets/player_controls.dart';
 import 'package:zishu_flutter/src/features/search/views/search_view.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 import 'package:zishu_flutter/src/shared/presentation/design_tokens.dart';
@@ -146,8 +146,9 @@ Future<void> _pumpPageOnDevice(
       keys.map((key) => tester.getRect(find.byKey(Key(key))).top).toList()
         ..sort();
   final firstTop = tops.first;
-  final columns =
-      tops.where((top) => (top - firstTop).abs() < _rowTolerance).length;
+  final columns = tops
+      .where((top) => (top - firstTop).abs() < _rowTolerance)
+      .length;
   var rows = 0;
   var lastTop = double.nan;
   for (final top in tops) {
@@ -186,8 +187,9 @@ Future<List<String>> _followOverflowSweep(
         firstLine.contains('RenderFlex overflowed') ||
         firstLine.startsWith('Multiple exceptions');
     if (isKnownLibOverflow) {
-      final short =
-          firstLine.length > 100 ? firstLine.substring(0, 100) : firstLine;
+      final short = firstLine.length > 100
+          ? firstLine.substring(0, 100)
+          : firstLine;
       // ignore: avoid_print
       print('[overflow-drain] follow@${device.label} (W13 已知 lib 溢出): $short');
       continue;
@@ -201,109 +203,98 @@ Future<List<String>> _followOverflowSweep(
 }
 
 void main() {
-  testWidgets(
-    'tabletsOverflowMatrix:4 平板纵向 × 首页/分类/播放/关注 溢出扫测全过',
-    (tester) async {
-      const devices = <MobileDevice>[
-        kIpadMini,
-        kIpadAir,
-        kIpadPro129,
-        kAndroidTablet,
-      ];
-      final failures = await overflowSweep(
-        tester,
-        [
-          ('home', _homePage),
-          ('category', _categoryPage),
-          ('play', _playPage),
-        ],
-        devices: devices,
-      );
-      // 关注页走排水 sweep(follow_entry_card 已知 lib 溢出见文件头注释)。
-      failures.addAll(await _followOverflowSweep(tester, devices));
-      expect(failures, isEmpty, reason: '平板矩阵存在溢出或渲染异常');
+  testWidgets('tabletsOverflowMatrix:4 平板纵向 × 首页/分类/播放/关注 溢出扫测全过', (
+    tester,
+  ) async {
+    const devices = <MobileDevice>[
+      kIpadMini,
+      kIpadAir,
+      kIpadPro129,
+      kAndroidTablet,
+    ];
+    final failures = await overflowSweep(tester, [
+      ('home', _homePage),
+      ('category', _categoryPage),
+      ('play', _playPage),
+    ], devices: devices);
+    // 关注页走排水 sweep(follow_entry_card 已知 lib 溢出见文件头注释)。
+    failures.addAll(await _followOverflowSweep(tester, devices));
+    expect(failures, isEmpty, reason: '平板矩阵存在溢出或渲染异常');
 
-      // 补充深检:sweep 的 2 帧窗口之外,每台平板对播放页多 pump 一帧
-      // (fixture 解析落地),断言无渲染异常且播放锚点齐备。
-      for (final device in devices) {
-        await _pumpPageOnDevice(tester, _playPage(), device);
-        expect(
-          tester.takeException(),
-          isNull,
-          reason: 'play@${device.label}: 数据落地帧存在渲染异常',
-        );
-        expect(
-          find.byKey(const Key('play-back')),
-          findsOneWidget,
-          reason: 'play@${device.label}: 缺 play-back 锚点',
-        );
-        expect(
-          anchorKeysWithPrefix(tester, 'play-quality-').length,
-          greaterThanOrEqualTo(2),
-          reason: 'play@${device.label}: 画质档位应 ≥2',
-        );
-      }
-    },
-  );
-
-  testWidgets(
-    'landscapeOverflowMatrix:2 横屏手机 × 首页/播放/关注/搜索 溢出扫测全过',
-    (tester) async {
-      const devices = <MobileDevice>[kIphone15Landscape, kPixel7Landscape];
-      final failures = await overflowSweep(
-        tester,
-        [
-          ('home', _homePage),
-          ('play', _playPage),
-          ('search', _searchPage),
-        ],
-        devices: devices,
-      );
-      // 关注页走排水 sweep(follow_entry_card 已知 lib 溢出见文件头注释)。
-      failures.addAll(await _followOverflowSweep(tester, devices));
-      expect(failures, isEmpty, reason: '横屏矩阵存在溢出或渲染异常');
-    },
-  );
-
-  testWidgets(
-    'gridColumnsScale:首页网格列数对齐 SFVideo 断点固定列数(800→4、1024→5)',
-    (tester) async {
-      // 对齐 RoomGrid.vue:120-155 的断点固定列数,而非按列宽连续推算。
-      // Android 平板 800 宽:≥768 → 4 列。
-      await _pumpPageOnDevice(tester, _homePage(), kAndroidTablet);
-      final (columns800, rows800) = _gridShape(tester);
-      // ignore: avoid_print
-      print('[grid] AndroidTablet(800): columns=$columns800 rows=$rows800');
+    // 补充深检:sweep 的 2 帧窗口之外,每台平板对播放页多 pump 一帧
+    // (fixture 解析落地),断言无渲染异常且播放锚点齐备。
+    for (final device in devices) {
+      await _pumpPageOnDevice(tester, _playPage(), device);
       expect(
-        columns800,
-        AppRoomGrid.columnsFor(800),
-        reason: '800 宽(Android 平板)首页网格应为 4 列',
+        tester.takeException(),
+        isNull,
+        reason: 'play@${device.label}: 数据落地帧存在渲染异常',
       );
       expect(
-        rows800,
+        find.byKey(const Key('play-back')),
+        findsOneWidget,
+        reason: 'play@${device.label}: 缺 play-back 锚点',
+      );
+      expect(
+        anchorKeysWithPrefix(tester, 'play-quality-').length,
         greaterThanOrEqualTo(2),
-        reason: '网格应换行铺开成多行(单行说明视口内卡片未构成多列网格)',
+        reason: 'play@${device.label}: 画质档位应 ≥2',
       );
+    }
+  });
 
-      // iPad Pro 12.9 1024 宽:≥1024 → 5 列。
-      await _pumpPageOnDevice(tester, _homePage(), kIpadPro129);
-      final (columns1024, rows1024) = _gridShape(tester);
-      // ignore: avoid_print
-      print('[grid] iPadPro129(1024): columns=$columns1024 rows=$rows1024');
-      expect(
-        columns1024,
-        AppRoomGrid.columnsFor(1024),
-        reason: '1024 宽(iPad Pro)首页网格应为 5 列',
-      );
-      expect(rows1024, greaterThanOrEqualTo(2));
+  testWidgets('landscapeOverflowMatrix:2 横屏手机 × 首页/播放/关注/搜索 溢出扫测全过', (
+    tester,
+  ) async {
+    const devices = <MobileDevice>[kIphone15Landscape, kPixel7Landscape];
+    final failures = await overflowSweep(tester, [
+      ('home', _homePage),
+      ('play', _playPage),
+      ('search', _searchPage),
+    ], devices: devices);
+    // 关注页走排水 sweep(follow_entry_card 已知 lib 溢出见文件头注释)。
+    failures.addAll(await _followOverflowSweep(tester, devices));
+    expect(failures, isEmpty, reason: '横屏矩阵存在溢出或渲染异常');
+  });
 
-      expect(
-        columns1024,
-        greaterThan(columns800),
-        reason: '列数应随视口宽度增长(800 → 1024 列数递增)',
-      );
-    },
-  );
+  testWidgets('gridColumnsScale:首页网格列数对齐 SFVideo 断点固定列数(800→4、1024→5)', (
+    tester,
+  ) async {
+    // 对齐 RoomGrid.vue:120-155 的断点固定列数,而非按列宽连续推算。
+    // Android 平板 800 宽:≥768 → 4 列。
+    await _pumpPageOnDevice(tester, _homePage(), kAndroidTablet);
+    final (columns800, rows800) = _gridShape(tester);
+    // ignore: avoid_print
+    print('[grid] AndroidTablet(800): columns=$columns800 rows=$rows800');
+    expect(
+      columns800,
+      AppRoomGrid.columnsFor(800),
+      reason: '800 宽(Android 平板)首页网格应为 4 列',
+    );
+    expect(
+      rows800,
+      greaterThanOrEqualTo(2),
+      reason: '网格应换行铺开成多行(单行说明视口内卡片未构成多列网格)',
+    );
+
+    // iPad Pro 12.9 1024 宽:≥1024 → 5 列。
+    await _pumpPageOnDevice(tester, _homePage(), kIpadPro129);
+    final (columns1024, rows1024) = _gridShape(tester);
+    // ignore: avoid_print
+    print('[grid] iPadPro129(1024): columns=$columns1024 rows=$rows1024');
+    expect(
+      columns1024,
+      AppRoomGrid.columnsFor(1024),
+      reason: '1024 宽(iPad Pro)首页网格应为 5 列',
+    );
+    expect(rows1024, greaterThanOrEqualTo(2));
+
+    expect(
+      columns1024,
+      greaterThan(columns800),
+      reason: '列数应随视口宽度增长(800 → 1024 列数递增)',
+    );
+  });
 
   testWidgets(
     'landscapePlayPriority:852×393 横屏播放页——画质锚点可达、视频区 >50%、侧栏隐藏可 sheet 滑出',
@@ -318,19 +309,19 @@ void main() {
       final qualityMenu = find.byKey(const Key('play-quality-menu'));
       expect(qualityMenu, findsOneWidget, reason: '窄屏应有画质下拉入口');
       final menuRect = tester.getRect(qualityMenu);
-      expect(menuRect.left, greaterThanOrEqualTo(0),
-          reason: '画质入口越出视口左缘');
-      expect(menuRect.top, greaterThanOrEqualTo(0),
-          reason: '画质入口越出视口顶缘');
-      expect(menuRect.right, lessThanOrEqualTo(viewport.width),
-          reason: '画质入口越出视口右缘(控制区被挤出)');
-      expect(menuRect.bottom, lessThanOrEqualTo(viewport.height),
-          reason: '画质入口越出视口底缘(控制区被挤出)');
+      expect(menuRect.left, greaterThanOrEqualTo(0), reason: '画质入口越出视口左缘');
+      expect(menuRect.top, greaterThanOrEqualTo(0), reason: '画质入口越出视口顶缘');
       expect(
-        qualityMenu.hitTestable(),
-        findsOneWidget,
-        reason: '画质入口被遮挡/不可点',
+        menuRect.right,
+        lessThanOrEqualTo(viewport.width),
+        reason: '画质入口越出视口右缘(控制区被挤出)',
       );
+      expect(
+        menuRect.bottom,
+        lessThanOrEqualTo(viewport.height),
+        reason: '画质入口越出视口底缘(控制区被挤出)',
+      );
+      expect(qualityMenu.hitTestable(), findsOneWidget, reason: '画质入口被遮挡/不可点');
       expect(
         find.byKey(const Key('play-quality-current')),
         findsOneWidget,
@@ -338,7 +329,14 @@ void main() {
       );
 
       // 2) 打开菜单点选另一档:证明横屏下切档通路真实可达,入口标签同步。
+      //    pump 8 帧:等 PopupRoute 尺寸过渡完成,菜单项才可点(实测 2 帧不够)。
       await tester.tap(qualityMenu);
+      await tester.pump(_kFrame);
+      await tester.pump(_kFrame);
+      await tester.pump(_kFrame);
+      await tester.pump(_kFrame);
+      await tester.pump(_kFrame);
+      await tester.pump(_kFrame);
       await tester.pump(_kFrame);
       await tester.pump(_kFrame);
       final item = find.byKey(const Key('play-quality-蓝光8M'));
@@ -355,22 +353,25 @@ void main() {
       expect(tester.takeException(), isNull);
 
       // 3) 视频主区宽 > 视口 50%:play-back 祖先定位 PlayView(无壳页面),
-      //    视频舞台与 QualityLineBar 同列 CrossAxisAlignment.stretch,同宽。
+      //    视频舞台与 PlayerControlsBar 同列(底部叠层 Column),同宽。
       final playViewFinder = find.ancestor(
         of: find.byKey(const Key('play-back')),
         matching: find.byType(PlayView),
       );
       expect(playViewFinder, findsOneWidget);
-      final qualityBarRect = tester.getRect(
-        find.descendant(of: playViewFinder, matching: find.byType(QualityLineBar)),
+      final controlsBarRect = tester.getRect(
+        find.descendant(
+          of: playViewFinder,
+          matching: find.byType(PlayerControlsBar),
+        ),
       );
       // ignore: avoid_print
       print(
         '[play-landscape] viewport=${viewport.width}x${viewport.height} '
-        'videoWidth=${qualityBarRect.width} panelWidth=hidden(sheet)',
+        'videoWidth=${controlsBarRect.width} panelWidth=hidden(sheet)',
       );
       expect(
-        qualityBarRect.width,
+        controlsBarRect.width,
         greaterThan(viewport.width * 0.5),
         reason: '横屏播放页视频主区应占视口宽度过半',
       );
