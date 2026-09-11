@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 
 import '../features/browse/application/browse_provider.dart';
+import '../features/browse/application/my_category_provider.dart';
 import '../features/follow/application/follow_provider.dart';
 import '../shared/application/auth_provider.dart';
 import '../shared/presentation/design_tokens.dart';
@@ -38,6 +39,8 @@ class _AppShellState extends ConsumerState<AppShell> {
   double _hoveredPlatformX = 0;
   bool _followHover = false;
   double _followX = 0;
+  bool _myCatHover = false;
+  double _myCatX = 0;
 
   @override
   void dispose() {
@@ -47,6 +50,17 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   void _cancelClose() => _closeTimer?.cancel();
 
+  /// 立即收起所有浮层(点击收藏分类跳转 / 打开管理弹窗前调用)。
+  void _closeAll() {
+    _closeTimer?.cancel();
+    if (!mounted) return;
+    setState(() {
+      _hoveredPlatform = null;
+      _followHover = false;
+      _myCatHover = false;
+    });
+  }
+
   void _scheduleClose() {
     _closeTimer?.cancel();
     _closeTimer = Timer(_kHoverCloseDelay, () {
@@ -54,6 +68,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       setState(() {
         _hoveredPlatform = null;
         _followHover = false;
+        _myCatHover = false;
       });
     });
   }
@@ -64,6 +79,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       _hoveredPlatform = id;
       _hoveredPlatformX = centerX;
       _followHover = false;
+      _myCatHover = false;
     });
   }
 
@@ -73,6 +89,34 @@ class _AppShellState extends ConsumerState<AppShell> {
       _followHover = true;
       _followX = centerX;
       _hoveredPlatform = null;
+      _myCatHover = false;
+    });
+  }
+
+  /// 「我的分类」hover 打开。
+  void _openMyCategory(double centerX) {
+    _cancelClose();
+    if (_myCatHover) return;
+    setState(() {
+      _myCatHover = true;
+      _myCatX = centerX;
+      _hoveredPlatform = null;
+      _followHover = false;
+    });
+  }
+
+  /// 「我的分类」点击 toggle(对齐 SFVideoLive `onMyCatTriggerClick`)。
+  void _toggleMyCategory(double centerX) {
+    if (_myCatHover) {
+      _closeAll();
+      return;
+    }
+    _cancelClose();
+    setState(() {
+      _myCatHover = true;
+      _myCatX = centerX;
+      _hoveredPlatform = null;
+      _followHover = false;
     });
   }
 
@@ -82,6 +126,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     // hover 浮层只走桌面/平板(触屏无 hover 语义)。
     final showPlatformFlyout = !isPhone && _hoveredPlatform != null;
     final showFollowFlyout = !isPhone && _followHover;
+    final showMyCatFlyout = !isPhone && _myCatHover;
 
     return Stack(
       children: [
@@ -99,6 +144,9 @@ class _AppShellState extends ConsumerState<AppShell> {
                   onPlatformHoverEnd: _scheduleClose,
                   onFollowHover: _openFollow,
                   onFollowHoverEnd: _scheduleClose,
+                  onMyCategoryHover: _openMyCategory,
+                  onMyCategoryTap: _toggleMyCategory,
+                  onMyCategoryHoverEnd: _scheduleClose,
                 ),
               Expanded(child: widget.child),
             ],
@@ -121,6 +169,17 @@ class _AppShellState extends ConsumerState<AppShell> {
             width: _kFollowFlyoutWidth,
             child: _FollowFlyout(onEnter: _cancelClose, onExit: _scheduleClose),
           ),
+        if (showMyCatFlyout)
+          _HoverOverlay(
+            centerX: _myCatX,
+            width: _kMyCategoryFlyoutWidth,
+            child: _MyCategoryFlyout(
+              site: widget.site,
+              onEnter: _cancelClose,
+              onExit: _scheduleClose,
+              onClose: _closeAll,
+            ),
+          ),
       ],
     );
   }
@@ -132,6 +191,9 @@ const double _kPlatformFlyoutWidth = 560;
 
 /// 关注浮层宽度:对齐 `.nav-follow-flyout` 的 21rem(16px 基准 ≈ 336px)。
 const double _kFollowFlyoutWidth = 336;
+
+/// 我的分类浮层宽度:chips 折行,取略窄于关注浮层的 20rem(16px 基准 ≈ 320px)。
+const double _kMyCategoryFlyoutWidth = 320;
 
 /// hover 浮层定位:水平以触发点为中心,并夹到视口内;
 /// 顶部留 [_kBridgeHeight] 透明桥接区(SFVideoLive `.nav-*-flyout::before`),
@@ -306,6 +368,9 @@ class _TopNav extends StatelessWidget implements PreferredSizeWidget {
     required this.onPlatformHoverEnd,
     required this.onFollowHover,
     required this.onFollowHoverEnd,
+    required this.onMyCategoryHover,
+    required this.onMyCategoryTap,
+    required this.onMyCategoryHoverEnd,
   });
 
   final String currentSite;
@@ -317,6 +382,11 @@ class _TopNav extends StatelessWidget implements PreferredSizeWidget {
   /// 「我的关注」入口 hover → 触发点中心 x。
   final void Function(double centerX) onFollowHover;
   final VoidCallback onFollowHoverEnd;
+
+  /// 「我的分类」入口:hover 打开浮层,点击 toggle(均回传触发点中心 x)。
+  final void Function(double centerX) onMyCategoryHover;
+  final void Function(double centerX) onMyCategoryTap;
+  final VoidCallback onMyCategoryHoverEnd;
 
   @override
   Size get preferredSize => const Size.fromHeight(AppSpacing.topNavHeight);
@@ -337,6 +407,9 @@ class _TopNav extends StatelessWidget implements PreferredSizeWidget {
           _TopNavLeading(
             currentSite: currentSite,
             showLabels: showLabels,
+            onMyCategoryHover: onMyCategoryHover,
+            onMyCategoryTap: onMyCategoryTap,
+            onMyCategoryHoverEnd: onMyCategoryHoverEnd,
           ),
           Expanded(
             child: Center(
@@ -359,10 +432,21 @@ class _TopNav extends StatelessWidget implements PreferredSizeWidget {
 }
 
 class _TopNavLeading extends StatelessWidget {
-  const _TopNavLeading({required this.currentSite, required this.showLabels});
+  const _TopNavLeading({
+    required this.currentSite,
+    required this.showLabels,
+    required this.onMyCategoryHover,
+    required this.onMyCategoryTap,
+    required this.onMyCategoryHoverEnd,
+  });
 
   final String currentSite;
   final bool showLabels;
+
+  /// 「我的分类」:hover 打开浮层,点击 toggle。
+  final void Function(double centerX) onMyCategoryHover;
+  final void Function(double centerX) onMyCategoryTap;
+  final VoidCallback onMyCategoryHoverEnd;
 
   @override
   Widget build(BuildContext context) {
@@ -381,21 +465,22 @@ class _TopNavLeading extends StatelessWidget {
           showLabel: showLabels,
         ),
         _NavAction(
+          key: const Key('nav-category'),
           icon: Icons.grid_view_rounded,
           label: '分类',
           tooltip: '分类',
           route: _categoryRoute(currentSite),
-          active: false,
           showLabel: showLabels,
         ),
         _NavAction(
           key: const Key('nav-my-category'),
           icon: Icons.star_border_rounded,
           label: '我的分类',
-          tooltip: '我的分类',
-          route: '/time',
-          active: false,
+          tooltip: '我的分类(收藏常用分类)',
           showLabel: showLabels,
+          onTap: onMyCategoryTap,
+          onHoverStart: onMyCategoryHover,
+          onHoverEnd: onMyCategoryHoverEnd,
         ),
       ],
     );
@@ -801,6 +886,7 @@ class _NavAction extends StatelessWidget {
     this.route,
     this.active = false,
     this.showLabel = false,
+    this.onTap,
     this.onHoverStart,
     this.onHoverEnd,
   });
@@ -812,6 +898,9 @@ class _NavAction extends StatelessWidget {
   final bool active;
   final bool showLabel;
 
+  /// 自定义点击(回传触发点中心 x,供浮层定位);为空时按 [route] 跳转。
+  final void Function(double centerX)? onTap;
+
   /// hover 浮层挂钩:进入时回传触发点中心 x(全局坐标),移出时通知关闭。
   final void Function(double centerX)? onHoverStart;
   final VoidCallback? onHoverEnd;
@@ -820,51 +909,60 @@ class _NavAction extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = active ? AppColors.brand : AppColors.textSecondary;
     return Builder(
-      builder: (hoverContext) => MouseRegion(
-        onEnter: onHoverStart == null
-            ? null
-            : (_) {
-                final box = hoverContext.findRenderObject() as RenderBox?;
-                if (box == null) return;
-                final dx = box.localToGlobal(Offset.zero).dx;
-                onHoverStart!(dx + box.size.width / 2);
-              },
-        onExit: onHoverEnd == null ? null : (_) => onHoverEnd!(),
-        child: Tooltip(
-          message: tooltip,
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              borderRadius: AppRadius.allMd,
-              hoverColor: AppColors.surfaceSoft,
-              onTap: route == null ? null : () => context.go(route!),
-              child: Padding(
-                padding: EdgeInsets.symmetric(
-                  horizontal: showLabel ? AppSpacing.sm : AppSpacing.xs,
-                  vertical: 3,
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(icon, size: 18, color: color),
-                    if (showLabel) ...[
-                      const SizedBox(width: 5),
-                      Text(
-                        label,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: active ? FontWeight.w600 : FontWeight.w500,
-                          color: color,
+      builder: (hoverContext) {
+        // 触发点中心 x:MouseRegion 与 InkWell 共用同一个 RenderBox 快照。
+        RenderBox? box;
+        double centerX() {
+          final target = box ??= hoverContext.findRenderObject() as RenderBox?;
+          if (target == null) return 0;
+          final dx = target.localToGlobal(Offset.zero).dx;
+          return dx + target.size.width / 2;
+        }
+
+        return MouseRegion(
+          onEnter: (onHoverStart == null && onTap == null)
+              ? null
+              : (_) => onHoverStart?.call(centerX()),
+          onExit: onHoverEnd == null ? null : (_) => onHoverEnd!(),
+          child: Tooltip(
+            message: tooltip,
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: AppRadius.allMd,
+                hoverColor: AppColors.surfaceSoft,
+                onTap: onTap != null
+                    ? () => onTap!(centerX())
+                    : (route == null ? null : () => context.go(route!)),
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: showLabel ? AppSpacing.sm : AppSpacing.xs,
+                    vertical: 3,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 18, color: color),
+                      if (showLabel) ...[
+                        const SizedBox(width: 5),
+                        Text(
+                          label,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight:
+                                active ? FontWeight.w600 : FontWeight.w500,
+                            color: color,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
-                  ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 }
@@ -952,9 +1050,16 @@ class _PlatformTabs extends StatelessWidget {
 
 String _platformRoute(String id) => id == 'all' ? '/all' : '/$id';
 
-String _categoryRoute(String site) => site == 'all' || site.isEmpty
-    ? '/all/category'
-    : '/$site/category';
+/// 分类路由:[cid] 为空时进分类落地页(`/:site/category`,由 CategoryView
+/// 默认选中第一组),否则进子分类(`/:site/category/:cid`)。
+///
+/// 注意路由表里 `/:site/category/:cid` 是**三/两段路径**,早期版本拼出的
+/// `/all/category`(缺 cid)匹配不到任何路由 → go_router 抛 no-routes 异常。
+String _categoryRoute(String site, {String? cid}) {
+  final target = site.isEmpty ? 'all' : site;
+  if (cid == null || cid.isEmpty) return '/$target/category';
+  return '/$target/category/${Uri.encodeComponent(cid)}';
+}
 
 /// 手机(<768)底部主导航:56px 高,保留既有 nav-* 锚点契约。
 ///
@@ -1224,6 +1329,7 @@ class _CategoryBoard extends StatelessWidget {
               SizedBox(
                 width: _kColumnWidth,
                 child: _CategoryChip(
+                  key: ValueKey('flyout-category-${item.cid}'),
                   label: item.name,
                   onTap: () => _goCategory(context, item.cid),
                 ),
@@ -1267,6 +1373,7 @@ class _CategoryBoard extends StatelessWidget {
                   ),
                   for (final item in group.items)
                     _CategoryChip(
+                      key: ValueKey('flyout-category-${item.cid}'),
                       label: item.name,
                       onTap: () => _goCategory(context, item.cid),
                     ),
@@ -1278,14 +1385,15 @@ class _CategoryBoard extends StatelessWidget {
     );
   }
 
-  /// 跳平台分类页:分类页当前按平台整页呈现,子分类高亮待路由带 cid 后补齐。
+  /// 跳平台分类页:带 cid 进 `/:site/category/:cid`,CategoryView 据此高亮
+  /// 所属分组与子分类(落地页形态见 [_categoryRoute])。
   void _goCategory(BuildContext context, String cid) =>
-      context.go(_categoryRoute(site));
+      context.go(_categoryRoute(site, cid: cid));
 }
 
 /// 分类条目:hover → 金(平台主色)+ chip 底(同 `.nav-platform-menu__item:hover`)。
 class _CategoryChip extends StatefulWidget {
-  const _CategoryChip({required this.label, required this.onTap});
+  const _CategoryChip({super.key, required this.label, required this.onTap});
 
   final String label;
   final VoidCallback onTap;
@@ -1432,6 +1540,385 @@ class _FollowAvatarTile extends StatelessWidget {
         height: _FollowFlyout._kAvatarSize,
         fit: BoxFit.cover,
         errorWidget: (_, _, _) => fallback,
+      ),
+    );
+  }
+}
+
+/// 「我的分类」hover 浮层:对齐 SFVideoLive `NavMyCategoryMenu.vue`。
+///
+/// 结构:右上角「管理分类」入口 + 收藏 chip 折行区(max-height 11rem≈176px),
+/// 空集合显示「暂无收藏分类」。chip 点击跳对应子分类并收起浮层。
+class _MyCategoryFlyout extends ConsumerWidget {
+  const _MyCategoryFlyout({
+    required this.site,
+    required this.onEnter,
+    required this.onExit,
+    required this.onClose,
+  });
+
+  /// 当前站点,用于「管理分类」弹窗的分类目录。
+  final String site;
+  final VoidCallback onEnter;
+  final VoidCallback onExit;
+
+  /// 立即收起浮层(跳转/开弹窗前调用)。
+  final VoidCallback onClose;
+
+  /// chip 区最大高度:11rem @16px ≈ 176px(同 `.nav-my-cat-menu__tags`)。
+  static const double _kTagsMaxHeight = 176;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final entries = [
+      for (final entry in ref.watch(myCategoriesProvider))
+        if (entry.isValid) entry,
+    ];
+    return MouseRegion(
+      onEnter: (_) => onEnter(),
+      onExit: (_) => onExit(),
+      child: _FlyoutPanel(
+        padding: const EdgeInsets.fromLTRB(6.4, 5.6, 6.4, 6.4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Align(
+              alignment: Alignment.centerRight,
+              child: SizedBox(
+                height: 22,
+                child: TextButton(
+                  onPressed: () {
+                    onClose();
+                    showDialog<void>(
+                      context: context,
+                      builder: (_) => _MyCategoryManageDialog(site: site),
+                    );
+                  },
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 6),
+                    minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    foregroundColor: AppColors.brand,
+                    textStyle: const TextStyle(fontSize: 12),
+                  ),
+                  child: const Text('管理分类'),
+                ),
+              ),
+            ),
+            if (entries.isEmpty)
+              const _FlyoutHint('暂无收藏分类')
+            else
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: _kTagsMaxHeight),
+                child: SingleChildScrollView(
+                  child: Wrap(
+                    spacing: 5.12,
+                    runSpacing: 4.48,
+                    children: [
+                      for (final entry in entries)
+                        _MyCategoryChip(
+                          entry: entry,
+                          onTap: () {
+                            onClose();
+                            context.go(
+                              _categoryRoute(entry.site, cid: entry.cid),
+                            );
+                          },
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 收藏 chip:对齐 `.nav-my-cat-menu__tag`(描边 pill,hover 转金色)。
+class _MyCategoryChip extends StatefulWidget {
+  const _MyCategoryChip({required this.entry, required this.onTap});
+
+  final MyCategoryEntry entry;
+  final VoidCallback onTap;
+
+  @override
+  State<_MyCategoryChip> createState() => _MyCategoryChipState();
+}
+
+class _MyCategoryChipState extends State<_MyCategoryChip> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final gold = _hovering;
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: InkWell(
+        borderRadius: AppRadius.allPill,
+        onTap: widget.onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 9.6, vertical: 4.8),
+          decoration: BoxDecoration(
+            color: gold
+                ? AppColors.brand.withValues(alpha: 0.1)
+                : AppColors.surfaceSoft,
+            border: Border.all(
+              color: gold
+                  ? AppColors.brand.withValues(alpha: 0.55)
+                  : AppColors.border,
+            ),
+            borderRadius: AppRadius.allPill,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.star_rounded,
+                size: 12,
+                color: gold ? AppColors.brand : AppColors.textSecondary,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                widget.entry.name,
+                style: TextStyle(
+                  fontSize: 14.4,
+                  fontWeight: FontWeight.w500,
+                  color: gold ? AppColors.brand : AppColors.textPrimary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 我的分类管理弹窗:勾选当前平台的分类作为收藏(上限
+/// [MyCategoryController.maxCount]),顶部列出已收藏项可移除。
+class _MyCategoryManageDialog extends ConsumerWidget {
+  const _MyCategoryManageDialog({required this.site});
+
+  final String site;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final favorites = ref.watch(myCategoriesProvider);
+    final async = ref.watch(browseCategoriesProvider(site));
+    return AlertDialog(
+      backgroundColor: AppColors.surface,
+      title: Text(
+        '我的分类(${favorites.length}/${MyCategoryController.maxCount})',
+        style: const TextStyle(fontSize: 15, color: AppColors.textPrimary),
+      ),
+      content: SizedBox(
+        width: 420,
+        height: 360,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (favorites.isNotEmpty) ...[
+              const Text(
+                '已收藏(点击 × 移除)',
+                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  for (final entry in favorites)
+                    _RemovableChip(
+                      entry: entry,
+                      onRemove: () =>
+                          ref.read(myCategoriesProvider.notifier).remove(entry),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+            ],
+            const Text(
+              '分类目录(点击收藏/取消)',
+              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 6),
+            Expanded(child: _catalog(context, ref, async, favorites)),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('完成'),
+        ),
+      ],
+    );
+  }
+
+  Widget _catalog(
+    BuildContext context,
+    WidgetRef ref,
+    AsyncValue<CategoryResult> async,
+    List<MyCategoryEntry> favorites,
+  ) {
+    return switch (async) {
+      AsyncData(:final value) => value.groups.isEmpty
+          ? const _FlyoutHint('暂无分类数据')
+          : ListView(
+              children: [
+                for (final group in value.groups)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          group.name,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            for (final item in group.items)
+                              _PickableChip(
+                                label: item.name,
+                                selected: favorites.any((entry) =>
+                                    entry.site == site &&
+                                    entry.cid == item.cid),
+                                onTap: () async {
+                                  final ok = await ref
+                                      .read(myCategoriesProvider.notifier)
+                                      .toggle(
+                                    MyCategoryEntry(
+                                      site: site,
+                                      cid: item.cid,
+                                      name: item.name,
+                                    ),
+                                  );
+                                  if (!ok && context.mounted) {
+                                    ScaffoldMessenger.of(context)
+                                      ..hideCurrentSnackBar()
+                                      ..showSnackBar(
+                                        SnackBar(
+                                          content: Text(
+                                            '最多收藏 ${MyCategoryController.maxCount} 个分类',
+                                          ),
+                                        ),
+                                      );
+                                  }
+                                },
+                              ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+      AsyncError(:final error) =>
+        _FlyoutHint('分类加载失败:$error', danger: true),
+      _ => const _FlyoutHint('加载分类…'),
+    };
+  }
+}
+
+/// 已收藏 chip:带移除叉号。
+class _RemovableChip extends StatelessWidget {
+  const _RemovableChip({required this.entry, required this.onRemove});
+
+  final MyCategoryEntry entry;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.only(left: 9.6, right: 2),
+      decoration: BoxDecoration(
+        color: AppColors.brand.withValues(alpha: 0.1),
+        border: Border.all(color: AppColors.brand.withValues(alpha: 0.55)),
+        borderRadius: AppRadius.allPill,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            entry.name,
+            style: const TextStyle(fontSize: 13, color: AppColors.brand),
+          ),
+          InkWell(
+            borderRadius: AppRadius.allPill,
+            onTap: onRemove,
+            child: const Padding(
+              padding: EdgeInsets.all(3),
+              child:
+                  Icon(Icons.close_rounded, size: 13, color: AppColors.brand),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 目录中的可选 chip:选中为金色描边 + 实心星,未选中为描边 pill。
+class _PickableChip extends StatelessWidget {
+  const _PickableChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: AppRadius.allPill,
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9.6, vertical: 5),
+        decoration: BoxDecoration(
+          color: selected
+              ? AppColors.brand.withValues(alpha: 0.12)
+              : AppColors.surfaceSoft,
+          border: Border.all(
+            color: selected
+                ? AppColors.brand.withValues(alpha: 0.55)
+                : AppColors.border,
+          ),
+          borderRadius: AppRadius.allPill,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              selected ? Icons.star_rounded : Icons.star_border_rounded,
+              size: 13,
+              color: selected ? AppColors.brand : AppColors.textSecondary,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                color: selected ? AppColors.brand : AppColors.textPrimary,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

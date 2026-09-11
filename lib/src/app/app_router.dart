@@ -39,6 +39,13 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/all',
         pageBuilder: (_, state) => _shellPage(state, 'all', const HomeView(site: 'all')),
       ),
+      // 分类落地页(不带子分类):对齐 SFVideoLive `/${site}/category`,
+      // 进入后由 CategoryView 默认选中第一组。
+      GoRoute(
+        path: '/all/category',
+        pageBuilder: (_, state) =>
+            _shellPage(state, 'all', const CategoryView(site: 'all')),
+      ),
       GoRoute(
         path: '/all/category/:key',
         pageBuilder: (_, state) => _shellPage(
@@ -67,6 +74,14 @@ final routerProvider = Provider<GoRouter>((ref) {
             site: state.pathParameters['site']!,
             anchorId: state.pathParameters['id']!,
           ),
+        ),
+      ),
+      GoRoute(
+        path: '/:site/category',
+        pageBuilder: (_, state) => _shellPage(
+          state,
+          state.pathParameters['site']!,
+          CategoryView(site: state.pathParameters['site']!),
         ),
       ),
       GoRoute(

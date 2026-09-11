@@ -125,11 +125,13 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
         if (group.items.any((item) => item.cid == cid)) return group;
       }
     }
+    // key 既可能是分类名(web 侧 `/all/category/:key`),也可能是 cid
+    // (顶栏 hover 与「我的分类」按 cid 跳转),两者都要命中。
     final key = widget.categoryKey;
     if (key != null && key.isNotEmpty) {
       for (final group in groups) {
         if (group.name == key ||
-            group.items.any((item) => item.name == key)) {
+            group.items.any((item) => item.name == key || item.cid == key)) {
           return group;
         }
       }
@@ -137,7 +139,7 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
     return groups.first;
   }
 
-  /// 解析当前选中的子分类:cid 精确匹配,其次 categoryKey 匹配子分类名。
+  /// 解析当前选中的子分类:cid 精确匹配,其次 categoryKey 匹配子分类名或 cid。
   CategoryItem? _pickItem(CategoryGroup group) {
     final cid = _selectedCid ?? widget.cid;
     if (cid != null && cid.isNotEmpty) {
@@ -148,7 +150,7 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
     final key = widget.categoryKey;
     if (key != null && key.isNotEmpty) {
       for (final item in group.items) {
-        if (item.name == key) return item;
+        if (item.name == key || item.cid == key) return item;
       }
     }
     return null;

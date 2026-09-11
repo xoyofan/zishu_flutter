@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:live_parser/live_parser.dart' show StreamLine;
 import 'package:zishu_flutter/src/apps/windows/windows_app.dart';
+import 'package:zishu_flutter/src/features/browse/application/my_category_provider.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 
@@ -48,6 +49,17 @@ class _FakeLivePlayer implements LivePlayer {
   void dispose() {}
 }
 
+/// 收藏替身:VM 无 SharedPreferences 实现,直接用固定收藏渲染浮层。
+class _SeededMyCategoryController extends MyCategoryController {
+  @override
+  List<MyCategoryEntry> build() => const [
+        MyCategoryEntry(site: 'all', cid: '1', name: '英雄联盟'),
+        MyCategoryEntry(site: 'douyu', cid: '8', name: '无畏契约'),
+        MyCategoryEntry(site: 'douyu', cid: '2', name: '唱见'),
+        MyCategoryEntry(site: 'huya', cid: '3', name: '户外'),
+      ];
+}
+
 void main() {
   /// VM 测试字体取整可能带来既有布局的 RenderFlex 溢出,只放行该类渲染错误。
   void suppressRenderFlexOverflow() {
@@ -75,11 +87,18 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
   }
 
-  Future<void> pumpApp(WidgetTester tester) async {
+  Future<void> pumpApp(
+    WidgetTester tester, {
+    bool seedMyCategories = false,
+  }) async {
     useWideSurface(tester);
     await tester.pumpWidget(
       ProviderScope(
-        overrides: [playerProvider.overrideWithValue(_FakeLivePlayer())],
+        overrides: [
+          playerProvider.overrideWithValue(_FakeLivePlayer()),
+          if (seedMyCategories)
+            myCategoriesProvider.overrideWith(_SeededMyCategoryController.new),
+        ],
         child: const WindowsApp(),
       ),
     );
@@ -120,6 +139,17 @@ void main() {
     await expectLater(
       find.byType(Scaffold).first,
       matchesGoldenFile('hover_follow_grid.png'),
+    );
+  });
+
+  testWidgets('hover 我的分类 → 收藏 chip 网格', (tester) async {
+    suppressRenderFlexOverflow();
+    mockPathProvider();
+    await pumpApp(tester, seedMyCategories: true);
+    await hover(tester, find.byKey(const Key('nav-my-category')));
+    await expectLater(
+      find.byType(Scaffold).first,
+      matchesGoldenFile('hover_my_category.png'),
     );
   });
 }

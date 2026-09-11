@@ -1,0 +1,116 @@
+/// 我的分类:用户收藏的分类快捷入口(对齐 SFVideoLive 导航「我的分类」)。
+///
+/// 条目以 (site, cid) 唯一,name 仅用于渲染与 `/all/category/:key` 路由匹配;
+/// 收藏只落本机 SharedPreferences(`zishu.myCategories`),不上行 data-server
+/// (关注数据才走云同步)。
+library;
+
+import 'dart:convert';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+/// 一条收藏分类。
+class MyCategoryEntry {
+  const MyCategoryEntry({
+    required this.site,
+    required this.cid,
+    required this.name,
+  });
+
+  /// 站点 id(`all` = 全平台聚合)。
+  final String site;
+
+  /// 子分类 id。
+  final String cid;
+
+  /// 分类名(收藏时刻的快照,平台改名后仍按 cid 命中)。
+  final String name;
+
+  /// 唯一键。
+  String get key => '$site|$cid';
+
+  bool get isValid => site.isNotEmpty && cid.isNotEmpty;
+
+  Map<String, dynamic> toJson() => {'site': site, 'cid': cid, 'name': name};
+
+  factory MyCategoryEntry.fromJson(Object? raw) {
+    if (raw is! Map) {
+      return const MyCategoryEntry(site: '', cid: '', name: '');
+    }
+    return MyCategoryEntry(
+      site: raw['site']?.toString() ?? '',
+      cid: raw['cid']?.toString() ?? '',
+      name: raw['name']?.toString() ?? '',
+    );
+  }
+}
+
+/// 我的分类控制器:本地持久化的收藏集合,带数量上限。
+class MyCategoryController extends Notifier<List<MyCategoryEntry>> {
+  /// 存储键(与 follow 的 `zishu.` 前缀一致)。
+  static const String storeKey = 'zishu.myCategories';
+
+  /// 上限:对齐 SFVideoLive `MAX_MY_CROSS_CATEGORIES`。
+  static const int maxCount = 12;
+
+  @override
+  List<MyCategoryEntry> build() {
+    // 启动时异步恢复;完成前为空集合,浮层渲染「暂无收藏分类」。
+    Future.microtask(_restore);
+    return const <MyCategoryEntry>[];
+  }
+
+  /// 是否已收藏。
+  bool contains(String site, String cid) =>
+      state.any((entry) => entry.site == site && entry.cid == cid);
+
+  /// 收藏/取消收藏;已达上限且是新增时返回 false(UI 侧提示)。
+  Future<bool> toggle(MyCategoryEntry entry) async {
+    if (!entry.isValid) return false;
+    if (contains(entry.site, entry.cid)) {
+      state = [for (final item in state) if (item.key != entry.key) item];
+    } else {
+      if (state.length >= maxCount) return false;
+      state = [...state, entry];
+    }
+    await _persist();
+    return true;
+  }
+
+  Future<void> remove(MyCategoryEntry entry) async {
+    state = [for (final item in state) if (item.key != entry.key) item];
+    await _persist();
+  }
+
+  Future<void> _restore() async {
+    try {
+      final raw = await SharedPreferencesAsync().getString(storeKey);
+      if (raw == null || raw.isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return;
+      state = [
+        for (final item in decoded)
+          if (MyCategoryEntry.fromJson(item).isValid)
+            MyCategoryEntry.fromJson(item),
+      ];
+    } catch (_) {
+      // 存储不可用/数据损坏:保持空集合,不阻塞 UI。
+    }
+  }
+
+  Future<void> _persist() async {
+    try {
+      final payload = [for (final entry in state) entry.toJson()];
+      await SharedPreferencesAsync().setString(storeKey, jsonEncode(payload));
+    } catch (_) {
+      // 写盘失败:内存态仍生效。
+    }
+  }
+}
+
+/// 我的分类收藏集合。
+final myCategoriesProvider =
+    NotifierProvider<MyCategoryController, List<MyCategoryEntry>>(
+  MyCategoryController.new,
+);
