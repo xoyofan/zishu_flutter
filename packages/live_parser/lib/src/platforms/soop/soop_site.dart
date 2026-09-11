@@ -33,12 +33,32 @@ class SoopRoomResolver implements RoomResolver {
 
   final SoopClient _client;
 
+  /// 房间详情短缓存(对齐 SF soopCache:进房重试/短时间回访不再打 player_live_api)。
+  final Map<String, ({DateTime at, SoopRoomDetail detail})> _detailCache = {};
+  static const Duration _detailTtl = Duration(seconds: 60);
+
+  /// 档位流地址短缓存(对齐 SF 服务层 tier 缓存 60s):assign/aid 结果在短时间
+  /// 重复进房时直接复用,热路径 0 请求。
+  final Map<String, ({DateTime at, List<StreamQuality> streams})> _tierCache = {};
+  static const Duration _tierTtl = Duration(seconds: 60);
+
+  /// 全档取流封顶(SF MAX_TIERS=4),避免长尾档位放大请求数。
+  static const int _maxTiers = 4;
+
   @override
   Future<RoomPayload> resolveRoom(RoomRequest request) async {
     final roomId = normalizeSoopRoomId(request.roomIdOrUrl);
     final sourceUrl = soopSourceUrl(roomId);
-    final payload = await fetchSoopPlayerApi(_client.parserHttp, roomId);
-    final detail = parseSoopRoomDetail(payload, roomId);
+
+    final cached = _detailCache[roomId];
+    final SoopRoomDetail detail;
+    if (cached != null && DateTime.now().difference(cached.at) < _detailTtl) {
+      detail = cached.detail;
+    } else {
+      final payload = await fetchSoopPlayerApi(_client.parserHttp, roomId);
+      detail = parseSoopRoomDetail(payload, roomId);
+      _detailCache[roomId] = (at: DateTime.now(), detail: detail);
+    }
 
     if (detail.isBanned) {
       return _buildPayload(
@@ -64,11 +84,28 @@ class SoopRoomResolver implements RoomResolver {
       );
     }
 
-    final streams = <StreamQuality>[];
-    for (final quality in detail.qualities) {
-      final tier = await buildSoopTier(_client.parserHttp, detail, quality);
-      if (tier != null) streams.add(tier);
+    final now = DateTime.now();
+    final cachedTiers = _tierCache[roomId];
+    if (cachedTiers != null &&
+        now.difference(cachedTiers.at) < _tierTtl &&
+        cachedTiers.streams.isNotEmpty) {
+      return _buildPayload(
+        roomId: roomId,
+        sourceUrl: sourceUrl,
+        detail: detail,
+        roomState: RoomState.live,
+        streams: cachedTiers.streams,
+      );
     }
+
+    // 全档并行取流(SF 同款 Promise.all;单档失败隔离)。
+    final tiers = await Future.wait([
+      for (final quality in detail.qualities.take(_maxTiers))
+        buildSoopTier(_client.parserHttp, detail, quality),
+    ]);
+    final streams = [
+      for (final tier in tiers) ?tier,
+    ];
     if (streams.isEmpty) {
       return _buildPayload(
         roomId: roomId,
@@ -78,6 +115,7 @@ class SoopRoomResolver implements RoomResolver {
         error: '未获取到可播放地址',
       );
     }
+    _tierCache[roomId] = (at: DateTime.now(), streams: streams);
     return _buildPayload(
       roomId: roomId,
       sourceUrl: sourceUrl,

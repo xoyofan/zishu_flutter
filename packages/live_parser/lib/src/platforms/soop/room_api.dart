@@ -85,8 +85,8 @@ class SoopRoomDetail {
 /// 请求 `player_live_api.php`。
 ///
 /// [type] 为 `live`(房间/弹幕参数)或 `aid`(播放凭证)。
-/// 上游为短连接负载均衡,连接池里的旧连接常被服务端先关掉;这里显式
-/// `Connection: close` 并对瞬时传输错误重试,避免批量请求时随机失败。
+/// 上游偶发提前关闭复用的短连接;对瞬时传输错误短重试,保留连接复用
+/// (强制 `Connection: close` 会让经代理的每次请求都重握手,得不偿失)。
 Future<Map<String, dynamic>> fetchSoopPlayerApi(
   ParserHttp http,
   String roomId, {
@@ -117,7 +117,6 @@ Future<Map<String, dynamic>> fetchSoopPlayerApi(
       'Accept': '*/*',
       'Origin': 'https://www.sooplive.co.kr',
       'Referer': 'https://www.sooplive.co.kr/',
-      'Connection': 'close',
     },
   );
   return http.jsonMap(response);
@@ -128,7 +127,7 @@ Future<T> _retrySoop<T>(Future<T> Function() action) async {
   Object? lastError;
   for (var attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) {
-      await Future<void>.delayed(Duration(milliseconds: 200 * attempt));
+      await Future<void>.delayed(Duration(milliseconds: 150 * attempt));
     }
     try {
       return await action();
@@ -296,7 +295,6 @@ Future<String> fetchSoopAssignUrl(
   ).query;
   final response = await http.get(
     Uri.parse('$base/broad_stream_assign.html?$query'),
-    headers: const {'Connection': 'close'},
   );
   final json = http.jsonMap(response);
   return jsonText(json['view_url']);
@@ -319,25 +317,25 @@ Future<String> fetchSoopStreamAid(
   return jsonText(jsonMapOf(payload['CHANNEL'])['AID']);
 }
 
-/// 构建一个可播放档位;assign/aid 任一缺失返回 null(该档静默跳过)。
+/// 构建一个可播放档位;assign 与 aid 互不依赖,并行请求。
+/// 任一缺失返回 null(该档静默跳过)。
 Future<StreamQuality?> buildSoopTier(
   ParserHttp http,
   SoopRoomDetail detail,
   SoopQuality quality,
 ) async {
-  final cdnUrl = await fetchSoopAssignUrl(
-    http,
-    detail: detail,
-    quality: quality.rawName,
-  );
-  if (cdnUrl.isEmpty) return null;
-  final aid = await fetchSoopStreamAid(
-    http,
-    roomId: detail.roomId,
-    bno: detail.bno,
-    quality: quality.rawName,
-  );
-  if (aid.isEmpty) return null;
+  final results = await Future.wait<Object?>([
+    fetchSoopAssignUrl(http, detail: detail, quality: quality.rawName),
+    fetchSoopStreamAid(
+      http,
+      roomId: detail.roomId,
+      bno: detail.bno,
+      quality: quality.rawName,
+    ),
+  ]);
+  final cdnUrl = results[0] as String;
+  final aid = results[1] as String;
+  if (cdnUrl.isEmpty || aid.isEmpty) return null;
   return StreamQuality(
     name: quality.name,
     rate: quality.rate,

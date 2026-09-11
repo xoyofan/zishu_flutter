@@ -43,6 +43,10 @@ class TwitchRoomResolver implements RoomResolver {
 
   final TwitchClient _client;
 
+  /// 直播结果短缓存(对齐 SF playlistCache 20s):短时间内重复进房不再打 GQL/usher。
+  final Map<String, ({DateTime at, RoomPayload payload})> _cache = {};
+  static const Duration _cacheTtl = Duration(seconds: 20);
+
   @override
   Future<RoomPayload> resolveRoom(RoomRequest request) async {
     final login = normalizeTwitchLogin(request.roomIdOrUrl);
@@ -50,8 +54,27 @@ class TwitchRoomResolver implements RoomResolver {
       throw const ParserHttpException('无法识别的 Twitch 房间输入');
     }
     final url = 'https://www.twitch.tv/$login';
+    final cached = _cache[login.toLowerCase()];
+    if (cached != null && DateTime.now().difference(cached.at) < _cacheTtl) {
+      return cached.payload;
+    }
 
-    final user = await fetchTwitchUser(_client.gql, login);
+    final payload = await _resolve(login, url);
+    if (payload.isLive) {
+      _cache[login.toLowerCase()] = (at: DateTime.now(), payload: payload);
+    }
+    return payload;
+  }
+
+  Future<RoomPayload> _resolve(String login, String url) async {
+    // metadata 与 playback token 互不依赖(都只需 login),并行请求;
+    // token 对离线房会失败,静默置空,不影响离线资料返回。
+    final results = await Future.wait<Object?>([
+      _retryTwitch(() => fetchTwitchUser(_client.gql, login)),
+      _retryTwitch(() => _fetchTokenOrEmpty(login)),
+    ]);
+    final user = results[0] as TwitchUser?;
+    final token = results[1] as TwitchPlaybackToken;
     if (user == null) {
       return _payload(
         roomId: login,
@@ -70,13 +93,17 @@ class TwitchRoomResolver implements RoomResolver {
         roomState: RoomState.offline,
       );
     }
+    if (token.value.isEmpty || token.signature.isEmpty) {
+      throw const ParserHttpException('未获取到播放令牌');
+    }
 
-    final token = await fetchTwitchPlaybackToken(_client.gql, user.login);
-    final playlist = await fetchTwitchMasterPlaylist(
-      _client.parserHttp,
-      login: user.login,
-      token: token,
-      clientId: _client.clientId,
+    final playlist = await _retryTwitch(
+      () => fetchTwitchMasterPlaylist(
+        _client.parserHttp,
+        login: user.login,
+        token: token,
+        clientId: _client.clientId,
+      ),
     );
     final streams = parseTwitchMasterPlaylist(playlist);
     if (streams.isEmpty) {
@@ -95,6 +122,29 @@ class TwitchRoomResolver implements RoomResolver {
       roomState: RoomState.live,
       streams: streams,
     );
+  }
+
+  Future<TwitchPlaybackToken> _fetchTokenOrEmpty(String login) async {
+    try {
+      return await fetchTwitchPlaybackToken(_client.gql, login);
+    } on Object {
+      return const TwitchPlaybackToken(value: '', signature: '');
+    }
+  }
+
+  Future<T> _retryTwitch<T>(Future<T> Function() action) async {
+    Object? lastError;
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(Duration(milliseconds: 150 * attempt));
+      }
+      try {
+        return await action();
+      } on Object catch (error) {
+        lastError = error;
+      }
+    }
+    Error.throwWithStackTrace(lastError!, StackTrace.current);
   }
 
   RoomPayload _payload({

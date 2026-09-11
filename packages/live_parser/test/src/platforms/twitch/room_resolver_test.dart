@@ -128,10 +128,12 @@ void main() {
       expect(payload.isLive, isFalse);
       expect(payload.streams, isEmpty);
       expect(payload.anchorName, 'shroud');
+      // 元数据与 token 并行(直播房省一个 RTT);离线房多发一次 token 请求,
+      // 其结果被丢弃且失败不阻塞离线资料返回。
       expect(
         api.gqlOperations,
-        isNot(contains('PlaybackAccessToken_Template')),
-        reason: '未开播不再请求播放令牌',
+        contains('PlaybackAccessToken_Template'),
+        reason: '并行取 token;离线判定不依赖 token 结果',
       );
     });
 

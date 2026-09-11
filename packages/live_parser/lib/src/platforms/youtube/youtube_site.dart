@@ -23,6 +23,10 @@ class YoutubeRoomResolver implements RoomResolver {
   final YoutubeDlpExtractor? dlpExtractor;
   final YoutubeDlpAvailability? dlpAvailableCheck;
 
+  /// 直播结果短缓存(对齐 SF playlistCache 20s):短时间重复解析不再拉页/跑 dlp。
+  final Map<String, ({DateTime at, RoomPayload payload})> _cache = {};
+  static const Duration _cacheTtl = Duration(seconds: 20);
+
   @override
   Future<RoomPayload> resolveRoom(RoomRequest request) async {
     final videoId = extractYoutubeVideoId(request.roomIdOrUrl);
@@ -35,9 +39,18 @@ class YoutubeRoomResolver implements RoomResolver {
         error: '无法解析 YouTube URL',
       );
     }
-    final sourceUrl = youtubeSourceUrl(videoId);
+    final cached = _cache[videoId];
+    if (cached != null && DateTime.now().difference(cached.at) < _cacheTtl) {
+      return cached.payload;
+    }
 
-    var ctx = await fetchYoutubeWatchPage(_client, videoId);
+    final sourceUrl = youtubeSourceUrl(videoId);
+    // watch 页与 dlp 提取互不依赖,并行;dlp 内部含首档预校验。
+    final ctxFuture = fetchYoutubeWatchPage(_client, videoId);
+    final dlpFuture = _tryDlpTiers(videoId);
+    final ctx = await ctxFuture;
+    final dlpTiers = await dlpFuture;
+
     if (!ctx.hasPlayer) {
       return _buildPayload(
         roomId: videoId,
@@ -75,9 +88,8 @@ class YoutubeRoomResolver implements RoomResolver {
 
     // dlp 主路线:数据中心 IP 的分片强制 PO Token,页面链地址会 403,
     // yt-dlp(+Deno/EJS)签出的地址才可播;不可用时回退页面链。
-    final dlpTiers = await _tryDlpTiers(videoId);
     if (dlpTiers != null && dlpTiers.isNotEmpty) {
-      return _buildPayload(
+      final payload = _buildPayload(
         roomId: videoId,
         sourceUrl: sourceUrl,
         roomState: RoomState.live,
@@ -86,20 +98,22 @@ class YoutubeRoomResolver implements RoomResolver {
         cover: cover,
         streams: dlpTiers,
       );
+      _cache[videoId] = (at: DateTime.now(), payload: payload);
+      return payload;
     }
-
+    var ctxForPage = ctx;
     var tiers = const <StreamQuality>[];
     for (var attempt = 0; attempt < 4; attempt++) {
       if (attempt > 0) {
         await Future<void>.delayed(const Duration(milliseconds: 400));
         final refreshed = await fetchYoutubeWatchPage(_client, videoId);
         if (refreshed.hasPlayer && !refreshed.isLiveContent) break;
-        if (refreshed.hasPlayer) ctx = refreshed;
+        if (refreshed.hasPlayer) ctxForPage = refreshed;
       }
 
-      var master = jsonText(ctx.streamingData['hlsManifestUrl']);
+      var master = jsonText(ctxForPage.streamingData['hlsManifestUrl']);
       if (master.isEmpty) {
-        master = await resolveYoutubeInnerTubeHls(_client, ctx, videoId);
+        master = await resolveYoutubeInnerTubeHls(_client, ctxForPage, videoId);
       }
       if (master.isEmpty) continue;
       if (!await validateYoutubeChain(_client, master)) continue;
@@ -128,7 +142,7 @@ class YoutubeRoomResolver implements RoomResolver {
         error: '直播中，但流地址被 Google 反爬拦截（可稍后重试）',
       );
     }
-    return _buildPayload(
+    final payload = _buildPayload(
       roomId: videoId,
       sourceUrl: sourceUrl,
       roomState: RoomState.live,
@@ -137,6 +151,8 @@ class YoutubeRoomResolver implements RoomResolver {
       cover: cover,
       streams: tiers,
     );
+    _cache[videoId] = (at: DateTime.now(), payload: payload);
+    return payload;
   }
 
   /// dlp 提取 + 首档预校验;任一步失败返回 null 交由页面链兜底。
