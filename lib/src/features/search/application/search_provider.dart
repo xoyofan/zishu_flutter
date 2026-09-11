@@ -1,6 +1,6 @@
 /// 搜索应用层:平台(site)+ 关键词 → 命中列表与直达项。
-/// G0 阶段以 kFixtureRooms 为模拟搜索源,后续替换为解析 package 的搜索用例,
-/// Widget 只依赖 [SearchState] 与 live_parser 契约模型。
+/// Widget 只依赖 [SearchState] 与 live_parser 契约模型;命中数据源经
+/// [searchSourceProvider] 注入(fixture / 真实解析由编译开关切换)。
 library;
 
 import 'dart:async';
@@ -8,7 +8,8 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:live_parser/live_parser.dart';
 
-import '../../../shared/application/fixture_sources.dart';
+import '../../../shared/application/search_source.dart';
+import '../application/search_source_provider.dart';
 
 /// 输入防抖间隔:停顿 300ms 后才真正执行一次查询。
 const Duration kSearchDebounce = Duration(milliseconds: 300);
@@ -35,7 +36,21 @@ class DirectTarget {
   final String? url;
 }
 
-/// 搜索页状态:当前平台 + 关键词 + 命中结果 + 直达项。
+/// 命中项 UI 侧包装:携带平台归属,彻底去掉对 fixture 的反查。
+///
+/// [SearchHit] 契约无 site 字段,real 数据下无法靠 id 反查平台。改为在状态中
+/// 显式保存 (site, hit) 对,UI 用 [site] 拼路由、用 [hit] 渲染。
+class SearchHitItem {
+  const SearchHitItem({required this.site, required this.hit});
+
+  /// 命中所属平台 id。
+  final String site;
+
+  /// 真实命中数据(live_parser 契约模型)。
+  final SearchHit hit;
+}
+
+/// 搜索页状态:当前平台 + 关键词 + 命中结果 + 直达项 + 错误标记。
 class SearchState {
   const SearchState({
     this.site = 'douyu',
@@ -43,6 +58,7 @@ class SearchState {
     this.searching = false,
     this.hits = const [],
     this.direct,
+    this.error,
   });
 
   /// 当前平台 id(`all` = 全平台聚合)。
@@ -54,11 +70,14 @@ class SearchState {
   /// 防抖等待/查询进行中(结果尚未刷新)。
   final bool searching;
 
-  /// 命中的主播/房间列表。
-  final List<SearchHit> hits;
+  /// 命中的主播/房间列表(已携带平台归属)。
+  final List<SearchHitItem> hits;
 
   /// 快捷直达项(房间号 / 链接),无则为 null。
   final DirectTarget? direct;
+
+  /// 最近一次查询的错误信息(非空表示查询失败;结果保留上次,不抛到 widget)。
+  final String? error;
 
   /// 关键词是否非空(去除首尾空白)。
   bool get hasQuery => query.trim().isNotEmpty;
@@ -67,9 +86,11 @@ class SearchState {
     String? site,
     String? query,
     bool? searching,
-    List<SearchHit>? hits,
+    List<SearchHitItem>? hits,
     DirectTarget? direct,
     bool clearDirect = false,
+    String? error,
+    bool clearError = false,
   }) {
     return SearchState(
       site: site ?? this.site,
@@ -77,6 +98,7 @@ class SearchState {
       searching: searching ?? this.searching,
       hits: hits ?? this.hits,
       direct: clearDirect ? null : (direct ?? this.direct),
+      error: clearError ? null : (error ?? this.error),
     );
   }
 }
@@ -85,20 +107,24 @@ class SearchState {
 /// 以 generation fence 保证只有最新一次查询能写入状态。
 class SearchController extends Notifier<SearchState> {
   int _generation = 0;
+  late final SearchSource _source;
 
   @override
-  SearchState build() => const SearchState();
+  SearchState build() {
+    _source = ref.watch(searchSourceProvider);
+    return const SearchState();
+  }
 
   /// 切换平台,并按当前关键词重新查询(仍走防抖)。
   void setSite(String site) {
     if (site == state.site) return;
-    state = state.copyWith(site: site);
+    state = state.copyWith(site: site, clearError: true);
     _scheduleSearch();
   }
 
   /// 关键词实时变更入口(由输入框 onChanged 触发)。
   void setQuery(String query) {
-    state = state.copyWith(query: query);
+    state = state.copyWith(query: query, clearError: true);
     _scheduleSearch();
   }
 
@@ -108,47 +134,70 @@ class SearchController extends Notifier<SearchState> {
     final keyword = state.query.trim();
     if (keyword.isEmpty) {
       // 清空输入:立即回到空态,同时令未完成的查询全部过期。
-      state = state.copyWith(searching: false, hits: const [], clearDirect: true);
+      state = state.copyWith(
+        searching: false,
+        hits: const [],
+        clearDirect: true,
+        clearError: true,
+      );
       return;
     }
-    state = state.copyWith(searching: true);
+    state = state.copyWith(searching: true, clearError: true);
     Future<void>.delayed(kSearchDebounce, () {
       // generation fence:期间有新输入/切平台,则丢弃本次过期查询。
       if (!ref.mounted || generation != _generation) return;
-      state = _resolve(state.site, keyword);
+      _resolve(state.site, keyword, generation);
     });
   }
 
-  SearchState _resolve(String site, String keyword) {
-    return state.copyWith(
-      searching: false,
-      hits: _filterRooms(site, keyword.toLowerCase()),
-      direct: _resolveDirect(keyword),
-    );
+  /// 异步查询并写入状态;保留防抖与 generation fence。
+  Future<void> _resolve(String site, String keyword, int generation) async {
+    try {
+      final hits = await _searchAttributed(site, keyword);
+      // generation fence:期间有新输入/切平台,则丢弃本次结果。
+      if (!ref.mounted || generation != _generation) return;
+      state = state.copyWith(
+        searching: false,
+        hits: hits,
+        direct: _resolveDirect(keyword),
+        clearError: true,
+      );
+    } on Object catch (e) {
+      // 查询失败:保留上次结果与输入,仅标记 error;不抛到 widget、不整页空白。
+      if (!ref.mounted || generation != _generation) return;
+      state = state.copyWith(searching: false, error: _errorMessage(e));
+    }
   }
 
-  /// fixture 过滤:site 匹配且 title/anchorName/category 包含关键词(大小写不敏感)。
-  List<SearchHit> _filterRooms(String site, String lowerKeyword) {
-    return [
-      for (final room in kFixtureRooms)
-        if ((site == 'all' || room.site == site) &&
-            (room.title.toLowerCase().contains(lowerKeyword) ||
-                room.anchorName.toLowerCase().contains(lowerKeyword) ||
-                room.category.toLowerCase().contains(lowerKeyword)))
-          SearchHit(
-            id: room.roomId,
-            anchor: room.anchorName,
-            title: room.title,
-            // fixture 无独立头像字段,UI 端以昵称首字占位。
-            avatar: '',
-            cover: room.cover,
-            // 约定:online 非空视为直播中,否则未开播。
-            state: room.online.isEmpty ? SearchHitState.offline : SearchHitState.live,
-            category: room.category,
-            online: room.online,
-          ),
-    ];
+  /// 调用数据源并携带平台归属:[site] 为单站时整批归属该站;
+  /// `all` 时并发聚合 [ParserSearchSource.aggregateSites],各站命中归属各自平台。
+  ///
+  /// 单站失败直接向上抛出(由 [_resolve] 统一以 [SearchState.error] 表达,
+  /// 不整页空白、不抛到 widget);仅 `all` 聚合模式下才逐站隔离失败。
+  Future<List<SearchHitItem>> _searchAttributed(String site, String keyword) async {
+    if (site == 'all') {
+      final results = await Future.wait([
+        for (final s in ParserSearchSource.aggregateSites)
+          _searchSiteIsolated(s, keyword),
+      ]);
+      return results.expand((items) => items).toList(growable: false);
+    }
+    final hits = await _source.search(site: site, keyword: keyword);
+    return [for (final hit in hits) SearchHitItem(site: site, hit: hit)];
   }
+
+  /// 单站隔离查询(仅用于 `all` 聚合):失败返回空,该站本轮空缺,
+  /// 不影响其余平台结果,整页不空白。
+  Future<List<SearchHitItem>> _searchSiteIsolated(String site, String keyword) async {
+    try {
+      final hits = await _source.search(site: site, keyword: keyword);
+      return [for (final hit in hits) SearchHitItem(site: site, hit: hit)];
+    } on Object {
+      return const [];
+    }
+  }
+
+  String _errorMessage(Object e) => e is StateError ? e.message : e.toString();
 
   /// 直达识别:纯数字 → 房间号;含 douyu.com → 链接直达。
   DirectTarget? _resolveDirect(String keyword) {
@@ -160,14 +209,6 @@ class SearchController extends Notifier<SearchState> {
       return DirectTarget(kind: DirectKind.link, roomId: match.group(1)!, url: keyword);
     }
     return null;
-  }
-
-  /// 命中项所属平台(SearchHit 契约无 site 字段,all 混排时按 fixture 反查)。
-  String siteOf(SearchHit hit) {
-    for (final room in kFixtureRooms) {
-      if (room.roomId == hit.id) return room.site;
-    }
-    return state.site;
   }
 }
 
