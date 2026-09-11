@@ -79,3 +79,30 @@
 ### 验证
 - [x] `flutter analyze`:No issues found;全量套件 242/242 通过。
 - [x] debug 重建成功,已 schtasks 拉起真机(hover 关注浮层/关注页三视图/首页房间卡可验)。
+
+## 2026-09-12 对齐差距盘点(对照 `docs/ui-reference/README.md` + SFVideoLive 源码)
+
+**结论**:主体骨架(顶导航/底栏/抽屉/网格断点/侧栏分档/分类图标页/hover 浮层)已对齐;剩余差距集中在**房卡徽章象限、收起态抽屉导轨、关注头像堆叠、时间线入口、播放页底部栏与全屏抽屉**五处,均为局部改动。
+
+### 已对齐(本轮复核确认,不再列待办)
+| 项 | 参考 | zishu 现状 |
+|---|---|---|
+| 顶导航 | 44px sticky,左品牌+三项、中平台 tab 居中、右工具组 | `AppSpacing.topNavHeight=44`;nav-home/category/my-category/follow/search/theme/settings/user 齐备 |
+| 手机端 | <768 底部 56px 图标栏 + 顶部平台条 | `bottomNavHeight` 56 + `_PlatformStrip` 两行 |
+| DirectoryDrawer | 展开 220px,主内容 margin 同步 | `AppDirectoryDrawer.width=220` |
+| 房卡网格 | 列数 2/3/4/5/6/6/7,gap 16/13.6 | `AppRoomGrid.columnsFor` + gridCrossAxis/MainSpacing |
+| 播放页侧栏 | 268/328/392/425 分档 | `playSidePanelWidthFor` |
+| 侧栏 tabs | 聊天/关注/推荐 | 多一枚「设置」,聊天走 danmakuSession 且与舞台弹幕共用会话 |
+| 分类图标页 | 方形图标网格 | `_CategoryTile` 56×56 方形 + 分组 tabs |
+| hover 浮层 | 平台分类 800ms 延迟关;关注 7 列头像网格;我的分类 chips | 全部落地(golden 3 张) |
+
+### 未对齐(下轮候选,按优先级)
+| # | 差距 | 参考值 | 现状 | 建议 |
+|---|---|---|---|---|
+| 1 | 首页房卡徽章象限 | 分类**左上**;平台 badge + 热度**同在右下** | 分类左上、平台**左下**、促销右上、热度右下(四角方案) | 二选一:改回参考的「左下留空、平台+热度并列右下」,或保留四角方案待用户裁决 |
+| 2 | 抽屉收起态导轨 | `--directory-rail-width ≈ 28px` | `railWidth = 52`(含图标点击热区) | 视觉导轨压到 28,热区用 padding 外扩 |
+| 3 | 右组「我的关注」静态态 | 开播头像堆叠,1.48rem、重叠 32% | 仅文字 + hover 网格,静态无堆叠头像 | 补 `_FollowAvatarStack`(最多 3 枚,重叠 32%) |
+| 4 | 时间线 /time 入口 | 顶栏/底栏有入口 | 路由 `/time` 在,但顶栏占位已被「我的分类」取代,**无入口可达** | 底栏或「我的」里补时间线入口 |
+| 5 | 播放页底部工具栏 + 全屏右侧抽屉折叠 | 桌面底部工具条;全屏可收侧栏 | 控制条在舞台上,无底部工具条/全屏抽屉 | 与既有「桌面 1920 布局对齐」合并做 |
+- [ ] 我的分类:在分类页/hover 浮层内加「收藏当前分类」快捷星标(当前需进管理弹窗勾选)。
+- [ ] 手机端(<768)无顶栏头像:后续在设置页补登录入口,并把登录跃迁监听同步过去。
