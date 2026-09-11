@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../../contracts/contracts.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
+import '../../registry/cached_room_resolver.dart';
 import 'browse.dart';
 import 'gql.dart';
 import 'normalize.dart';
@@ -196,7 +197,7 @@ SiteRegistration buildTwitchRegistration({
       anchorSearch: true,
       multiQuality: true,
     ),
-    resolver: TwitchRoomResolver(effectiveClient),
+    resolver: CachedRoomResolver(TwitchRoomResolver(effectiveClient)),
     browse: TwitchBrowseRepository(effectiveClient.gql),
     search: TwitchSearchRepository(effectiveClient.gql),
   );

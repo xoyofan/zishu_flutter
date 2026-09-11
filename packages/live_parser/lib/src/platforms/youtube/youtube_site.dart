@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
+import '../../registry/cached_room_resolver.dart';
 import '../douyu/json_utils.dart';
 import 'browse.dart';
 import 'danmaku.dart';
@@ -26,6 +27,12 @@ class YoutubeRoomResolver implements RoomResolver {
   /// 直播结果短缓存(对齐 SF playlistCache 20s):短时间重复解析不再拉页/跑 dlp。
   final Map<String, ({DateTime at, RoomPayload payload})> _cache = {};
   static const Duration _cacheTtl = Duration(seconds: 20);
+
+  /// dlp 提取结果 60s 缓存(实例级):同视频切档/换偏好档不再重跑 yt-dlp
+  /// 子进程(直播 HLS URL 的 expire 通常以小时计,60s 复用安全)。
+  final Map<String, ({DateTime at, YoutubeDlpExtract extract})> _dlpCache = {};
+  final Map<String, DateTime> _dlpValidatedAt = {};
+  static const Duration _dlpCacheTtl = Duration(seconds: 60);
 
   @override
   Future<RoomPayload> resolveRoom(RoomRequest request) async {
@@ -162,16 +169,34 @@ class YoutubeRoomResolver implements RoomResolver {
       if (!available) return null;
       final extract = await (dlpExtractor ?? _defaultDlpExtract)(videoId);
       if (extract == null || extract.tiers.isEmpty) return null;
-      final firstUrl = extract.tiers.first.url;
-      if (!await validateYoutubeChain(_client, firstUrl)) return null;
+      // 60s 内同一实例已校验过该视频的地址链:跳过重复 master/变体/分片探测。
+      final validatedAt = _dlpValidatedAt[videoId];
+      final recentlyValidated =
+          validatedAt != null &&
+          DateTime.now().difference(validatedAt) < _dlpCacheTtl;
+      if (!recentlyValidated) {
+        final firstUrl = extract.tiers.first.url;
+        if (!await validateYoutubeChain(_client, firstUrl)) return null;
+        _dlpValidatedAt[videoId] = DateTime.now();
+      }
       return youtubeDlpQualities(extract.tiers);
     } on Object {
       return null;
     }
   }
 
-  Future<YoutubeDlpExtract?> _defaultDlpExtract(String videoId) =>
-      extractYoutubeViaDlp(videoId);
+  Future<YoutubeDlpExtract?> _defaultDlpExtract(String videoId) async {
+    final cached = _dlpCache[videoId];
+    if (cached != null &&
+        DateTime.now().difference(cached.at) < _dlpCacheTtl) {
+      return cached.extract;
+    }
+    final extract = await extractYoutubeViaDlp(videoId);
+    if (extract != null) {
+      _dlpCache[videoId] = (at: DateTime.now(), extract: extract);
+    }
+    return extract;
+  }
 
   RoomPayload _buildPayload({
     required String roomId,
@@ -230,10 +255,12 @@ SiteRegistration buildYoutubeRegistration({
       multiQuality: true,
       multiLine: true,
     ),
-    resolver: YoutubeRoomResolver(
-      effectiveClient,
-      dlpExtractor: dlpExtractor,
-      dlpAvailableCheck: dlpAvailableCheck,
+    resolver: CachedRoomResolver(
+      YoutubeRoomResolver(
+        effectiveClient,
+        dlpExtractor: dlpExtractor,
+        dlpAvailableCheck: dlpAvailableCheck,
+      ),
     ),
     browse: YoutubeBrowseRepository(effectiveClient.parserHttp),
     danmaku: YoutubeDanmakuConnector(

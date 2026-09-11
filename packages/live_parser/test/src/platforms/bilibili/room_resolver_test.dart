@@ -39,7 +39,9 @@ class BiliHarness {
   late FakeBilibiliApi fake;
   late SiteRegistration registration;
 
-  BilibiliRoomResolver get resolver => registration.resolver as BilibiliRoomResolver;
+  // 注册表出口套了 CachedRoomResolver(结果 60s),这里直接测平台解析器本体。
+  BilibiliRoomResolver get resolver =>
+      BilibiliRoomResolver(BilibiliClient(httpClient: fake));
 }
 
 void main() {
@@ -57,6 +59,11 @@ void main() {
     expect(payload.category, '网游');
     expect(payload.cid, '325');
     expect(payload.avatar, 'https://i0.hdslb.com/bfs/face/a.jpg');
+    // get_info 已带主播名/头像 → 省掉一次 get_anchor_in_room 请求
+    expect(
+      harness.fake.requests.any((r) => r.url.contains('get_anchor_in_room')),
+      isFalse,
+    );
     expect(payload.source, 'live_parser/bilibili');
 
     // 画质:accept_qn ∩ 档位表,保持官网顺序

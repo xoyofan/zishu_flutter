@@ -47,16 +47,31 @@ const Map<String, String> _fallbackRooms = {
   'soop': 'khm11903',
 };
 
+/// 计分轮的偏好档:与 app `effectiveDefaultQuality` 一致
+/// (platformDefaultQuality 优先,其余回落全局默认「超清」)。
+/// 懒取流的平台只解析该档;解析器内 60s 结果缓存也以它为缓存键。
+const Map<String, String> _preferredQualities = {
+  'douyu': '超清',
+  'huya': '超清',
+  'bilibili': '超清',
+  'douyin': '超清',
+  'yy': '超清',
+  'twitch': '720p',
+  'kuaishou': '超清',
+  'soop': '高清',
+  'youtube': '720p',
+};
+
 /// 各平台的非 HTTP 阶段说明(报告里标出,便于定位优化点)。
 const Map<String, String> _nonHttpNotes = {
   'douyin': 'a_bogus 签名(SM3+RC4,纯 CPU)在每次带签请求前计算;cookie 引导(300s TTL)',
-  'youtube': 'yt-dlp 子进程(含 Deno/EJS)+ master/变体/首分片三段预校验;解析优先 dlp;20s 结果缓存',
-  'soop': '房间详情 60s 缓存;全档并行取流(每档 assign/aid 并行,封顶 4 档);瞬时错误短重试',
+  'youtube': 'yt-dlp 子进程(含 Deno/EJS;提取结果与地址链校验 60s 实例缓存)+ master/变体/首分片三段预校验;解析优先 dlp;结果 20s 缓存',
+  'soop': '房间详情/档位 60s 缓存;偏好档懒取流(其余档空线路占位);瞬时错误短重试',
   'kuaishou': '房间页 HTML 解析(__INITIAL_STATE__),feed 弹幕不走解析链路',
-  'bilibili': 'WBI 签名(纯 CPU)+ room_info/play_info 两段',
-  'huya': 'anti-code(Tars 编码,纯 CPU)+ web-stream 两段',
-  'douyu': '白名单加密 md5 auth(TTL 缓存)+ multirates 多 CDN 探测',
-  'yy': 'stream-manager 每档一次 POST;失败回退移动 HLS',
+  'bilibili': 'WBI 签名 nav/finger 并行;get_info 已带主播名/头像时跳过 anchor;anchor 与 play_info 并行',
+  'huya': 'anti-code(Tars 编码,纯 CPU);页面与 profile 并行,web-stream 两段',
+  'douyu': '白名单加密 md5 auth(TTL 缓存);偏好档懒取流(未命中才全档并行);播放接口响应 60s 缓存',
+  'yy': 'detail + gear1 探测(命中偏好档时直接复用响应);未命中全档并行',
   'twitch': 'GQL POST + playback access token(元数据/token 并行);直播结果 20s 缓存',
 };
 
@@ -290,13 +305,18 @@ Future<PlatformReport> _benchmarkSite(String site) async {
   }
 
   RoomPayload? livePayload;
+  final preferredQuality = _preferredQualities[site];
   for (var round = 0; round < _resolveRounds; round++) {
     final timing = TimingHttpClient(http.Client());
     final roundRegistration = _buildRegistration(site, httpClient: timing)!;
     final stopwatch = Stopwatch()..start();
     try {
       final payload = await roundRegistration.resolver.resolveRoom(
-        RoomRequest(site: site, roomIdOrUrl: chosen),
+        RoomRequest(
+          site: site,
+          roomIdOrUrl: chosen,
+          preferredQuality: preferredQuality,
+        ),
       );
       stopwatch.stop();
       report.resolveRounds.add(
@@ -327,15 +347,19 @@ Future<PlatformReport> _benchmarkSite(String site) async {
   }
   if (livePayload == null) return report;
 
-  /// 热解析(同一实例连续解析):验证 resolver 内缓存(soop 60s / twitch,youtube 20s)
-  /// 与 HTTP 连接复用收益。
+  /// 热解析(同一实例连续解析):验证 60s 结果缓存(带偏好档)/ soop 档位 60s /
+  /// twitch,youtube 20s 缓存 与 HTTP 连接复用收益。
   final warmRegistration = _buildRegistration(site);
   if (warmRegistration != null) {
     for (var round = 0; round < 3; round++) {
       final stopwatch = Stopwatch()..start();
       try {
         await warmRegistration.resolver.resolveRoom(
-          RoomRequest(site: site, roomIdOrUrl: chosen),
+          RoomRequest(
+            site: site,
+            roomIdOrUrl: chosen,
+            preferredQuality: preferredQuality,
+          ),
         );
       } on Object {
         // 热轮失败不计入缓存收益,仅记录耗时。
@@ -501,8 +525,10 @@ String _renderMarkdown(List<PlatformReport> reports) {
     '- 环境: Windows 桌面(本机网络,含透明代理;绝对值仅供同环境对比,跨网络需重跑)',
   );
   buffer.writeln(
-    '- 方法: browse 选首个可解析在播房 → `resolveRoom` 预热 1 次 + 计分 3 次取中位;'
-    '「热解析」= 同一实例连续解析 3 次中位(命中 resolver 内 20s/60s 缓存与连接复用)',
+    '- 方法: browse 选首个可解析在播房 → 计分轮带 app 平台默认偏好档'
+    '(soop 高清 / twitch,youtube 720p / 其余超清),`resolveRoom` 预热 1 次 + '
+    '计分 3 次取中位;「热解析」= 同一实例连续解析 3 次中位(带偏好档的 60s '
+    '结果缓存与连接复用)',
   );
   buffer.writeln(
     '- HTTP 请求耗时经注入的计时 `http.Client` 按 `host+path` 聚合(仅最后一轮冷解析)',
@@ -546,7 +572,9 @@ String _renderMarkdown(List<PlatformReport> reports) {
   for (final report in reports) {
     if (report.lastRecords.isEmpty) continue;
     buffer.writeln();
-    buffer.writeln('### ${report.site}');
+    buffer.writeln(
+      '### ${report.site} · 偏好档 ${_preferredQualities[report.site] ?? '-'}',
+    );
     buffer.writeln();
     buffer.writeln('| 请求 (host+path) | 次数 | 总耗时(ms) | 均值(ms) | 状态 |');
     buffer.writeln('|---|---:|---:|---:|---|');

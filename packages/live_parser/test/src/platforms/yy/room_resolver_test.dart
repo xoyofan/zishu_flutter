@@ -55,6 +55,45 @@ void main() {
       expect(body, contains('"gear":1'));
     });
 
+    test('偏好档懒取流:只取该档,其余档空线路占位', () async {
+      final fake = FakeYyApi()
+        ..detailResponse = yyFixture('detail_live.json')
+        ..streamResponse = yyFixture('stream_live.json');
+      final registration = buildYyRegistration(httpClient: fake);
+
+      final payload = await registration.resolver.resolveRoom(
+        const RoomRequest(site: 'yy', roomIdOrUrl: '1414787909', preferredQuality: '高清'),
+      );
+
+      // 探测固定 gear=1,偏好 gear=2 再取一次,其余档位不再请求。
+      expect(fake.streamGearCalls, {1: 1, 2: 1});
+      expect(payload.roomState, RoomState.live);
+      expect(payload.streams.first.name, '高清');
+      expect(payload.streams.first.lines, isNotEmpty);
+      expect(payload.playUrl, isNotEmpty);
+      expect(payload.streams.skip(1).every((s) => s.lines.isEmpty), isTrue);
+      expect(
+        payload.availableQualities.map((q) => q.name).toList(),
+        ['蓝光', '高清', '流畅'],
+        reason: 'chips 保持平台原顺序',
+      );
+    });
+
+    test('偏好档懒取流:命中 gear=1 时复用探测响应', () async {
+      final fake = FakeYyApi()
+        ..detailResponse = yyFixture('detail_live.json')
+        ..streamResponse = yyFixture('stream_live.json');
+      final registration = buildYyRegistration(httpClient: fake);
+
+      final payload = await registration.resolver.resolveRoom(
+        const RoomRequest(site: 'yy', roomIdOrUrl: '1414787909', preferredQuality: '流畅'),
+      );
+
+      expect(fake.streamGearCalls, {1: 1}, reason: 'gear=1 的探测响应直接复用为档位线路');
+      expect(payload.streams.first.name, '流畅');
+      expect(payload.streams.first.lines, isNotEmpty);
+    });
+
     test('离线：detail data=null，返回 offline 且无线路', () async {
       final fake = FakeYyApi()..detailResponse = yyFixture('detail_offline.json');
       final registration = buildYyRegistration(httpClient: fake);

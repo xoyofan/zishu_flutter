@@ -121,6 +121,9 @@ void resetYoutubeDlpAvailability() {
 }
 
 /// 调用 `yt-dlp -J` 提取全部 HLS 档位;失败/超时返回 null。
+///
+/// 结果缓存由调用方(YoutubeRoomResolver)按实例管理,避免跨解析器实例
+/// 共享导致「冷解析」失真。[argsOverride] 供测试注入。
 Future<YoutubeDlpExtract?> extractYoutubeViaDlp(
   String videoId, {
   List<String>? argsOverride,

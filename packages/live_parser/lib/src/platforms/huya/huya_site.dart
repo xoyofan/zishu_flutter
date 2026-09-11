@@ -7,6 +7,7 @@ import '../../http/danmaku_transport.dart';
 import '../../http/parser_http.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
+import '../../registry/cached_room_resolver.dart';
 import 'browse.dart';
 import 'danmaku.dart';
 import '../douyu/json_utils.dart';
@@ -41,6 +42,8 @@ class HuyaRoomResolver implements RoomResolver {
     final rid = await resolveHuyaNumericRoomId(http, url);
     final canonicalUrl = 'https://www.huya.com/$rid';
 
+    // 页面与 profile 互不依赖(仅需 rid):并行发,页面失败仍可用 profile 判三态。
+    final profileFuture = fetchHuyaProfileBrief(http, rid)..ignore();
     HuyaWebStreamData? webData;
     try {
       webData = await fetchHuyaWebStreamData(http, canonicalUrl);
@@ -48,7 +51,7 @@ class HuyaRoomResolver implements RoomResolver {
       // 页面缺失(如房间不存在)时交给 profileRoom 判定三态。
       if (error.statusCode == null) rethrow;
     }
-    final profile = await fetchHuyaProfileBrief(http, rid);
+    final profile = await profileFuture;
     final profileData = profile.data;
 
     final gameInfo = webData?.gameLiveInfo ?? const <String, dynamic>{};
@@ -273,7 +276,7 @@ SiteRegistration buildHuyaRegistration({
       multiQuality: true,
       multiLine: true,
     ),
-    resolver: HuyaRoomResolver(effectiveClient),
+    resolver: CachedRoomResolver(HuyaRoomResolver(effectiveClient)),
     browse: HuyaBrowseRepository(effectiveClient.parserHttp),
     search: HuyaSearchRepository(effectiveClient.parserHttp),
     danmaku: HuyaDanmakuConnector(

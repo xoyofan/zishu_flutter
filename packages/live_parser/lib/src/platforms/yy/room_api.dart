@@ -266,10 +266,18 @@ Future<String> fetchYyMobileHls(
   }
 }
 
-Future<List<YyQuality>> fetchYyQualities(ParserHttp http, String sid) async {
+Future<List<YyQuality>> fetchYyQualities(ParserHttp http, String sid) async =>
+    (await fetchYyQualitiesWithProbe(http, sid)).qualities;
+
+/// 取档位列表,并带回探测用的原始响应(gear=1)。
+///
+/// 原始响应里的 `stream_line_addr` 就是 gear=1 档的线路,解析侧命中该档时
+/// 可直接复用,省掉一次 stream-manager POST。
+Future<({List<YyQuality> qualities, Object? probePayload})>
+fetchYyQualitiesWithProbe(ParserHttp http, String sid) async {
   final object = await fetchYyStreamObject(http, sid, 1);
   final qualities = parseYyQualities(object);
-  if (qualities.isNotEmpty) return qualities;
+  if (qualities.isNotEmpty) return (qualities: qualities, probePayload: object);
 
   final fallback = <YyQuality>[];
   for (final rate in kYyMobileHlsRates) {
@@ -281,15 +289,16 @@ Future<List<YyQuality>> fetchYyQualities(ParserHttp http, String sid) async {
       ),
     );
   }
-  return fallback;
+  return (qualities: fallback, probePayload: null);
 }
 
 Future<StreamQuality?> buildYyTier(
   ParserHttp http,
   String sid,
-  YyQuality quality,
-) async {
-  final object = await fetchYyStreamObject(http, sid, quality.gear);
+  YyQuality quality, {
+  Object? prefetched,
+}) async {
+  final object = prefetched ?? await fetchYyStreamObject(http, sid, quality.gear);
   final urls = parseYyPlayUrls(object);
   if (urls.isNotEmpty) {
     return StreamQuality(

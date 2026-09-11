@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../../contracts/contracts.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
+import '../../registry/cached_room_resolver.dart';
 import 'browse.dart';
 import 'normalize.dart';
 import 'room_api.dart';
@@ -30,6 +31,11 @@ class YyRoomResolver implements RoomResolver {
   YyRoomResolver(this._client);
 
   final YyClient _client;
+
+  /// 档位流地址短缓存(60s,对齐 SF tier 缓存):切回同档/重复进房零请求。
+  /// 只缓存成功结果,失败不缓存以便立即重试。
+  final Map<int, ({DateTime at, StreamQuality tier})> _tierCache = {};
+  static const Duration _tierTtl = Duration(seconds: 60);
 
   @override
   Future<RoomPayload> resolveRoom(RoomRequest request) async {
@@ -58,7 +64,8 @@ class YyRoomResolver implements RoomResolver {
       );
     }
 
-    final qualities = await fetchYyQualities(_client.parserHttp, roomId);
+    final probe = await fetchYyQualitiesWithProbe(_client.parserHttp, roomId);
+    final qualities = probe.qualities;
     if (qualities.isEmpty) {
       return _payload(
         roomId: roomId,
@@ -68,10 +75,43 @@ class YyRoomResolver implements RoomResolver {
       );
     }
 
-    final streams = <StreamQuality>[];
-    for (final quality in qualities) {
-      final tier = await buildYyTier(_client.parserHttp, roomId, quality);
-      if (tier != null) streams.add(tier);
+    // 懒取流:命中偏好档只取该档,其余档位以空线路占位供 UI 列出;未命中或
+    // 取流失败则回退全档并行枚举。
+    final preferred = matchQualityPreference(
+      qualities,
+      request.preferredQuality,
+      (quality) => quality.name,
+    );
+    var streams = <StreamQuality>[];
+    var lazy = false;
+    if (preferred != null) {
+      final tier = await _buildTierCached(
+        roomId,
+        preferred,
+        prefetched: preferred.gear == 1 ? probe.probePayload : null,
+      );
+      if (tier != null) {
+        streams = [
+          tier,
+          for (final quality in qualities)
+            if (quality.gear != preferred.gear)
+              StreamQuality(name: quality.name, rate: quality.gear, lines: const []),
+        ];
+        lazy = true;
+      }
+    }
+    if (streams.isEmpty) {
+      final tiers = await Future.wait([
+        for (final quality in qualities)
+          _buildTierCached(
+            roomId,
+            quality,
+            prefetched: quality.gear == 1 ? probe.probePayload : null,
+          ),
+      ]);
+      streams = [
+        for (final tier in tiers) ?tier,
+      ];
     }
     if (streams.isEmpty) {
       return _payload(
@@ -87,7 +127,35 @@ class YyRoomResolver implements RoomResolver {
       detail: detail,
       roomState: RoomState.live,
       streams: streams,
+      // 懒取流时 chips 保持平台原顺序;全档模式仍「列出的档 == 点得动的档」。
+      qualities: lazy
+          ? [
+              for (final quality in qualities)
+                QualityOption(name: quality.name, rate: quality.gear),
+            ]
+          : null,
     );
+  }
+
+  Future<StreamQuality?> _buildTierCached(
+    String roomId,
+    YyQuality quality, {
+    Object? prefetched,
+  }) async {
+    final cached = _tierCache[quality.gear];
+    if (cached != null && DateTime.now().difference(cached.at) < _tierTtl) {
+      return cached.tier;
+    }
+    final tier = await buildYyTier(
+      _client.parserHttp,
+      roomId,
+      quality,
+      prefetched: prefetched,
+    );
+    if (tier != null) {
+      _tierCache[quality.gear] = (at: DateTime.now(), tier: tier);
+    }
+    return tier;
   }
 
   RoomPayload _payload({
@@ -96,6 +164,7 @@ class YyRoomResolver implements RoomResolver {
     required YyRoomDetail detail,
     required RoomState roomState,
     List<StreamQuality> streams = const [],
+    List<QualityOption>? qualities,
   }) => RoomPayload(
         site: kYySiteId,
         roomId: roomId,
@@ -108,10 +177,11 @@ class YyRoomResolver implements RoomResolver {
         cid: detail.ssid,
         roomState: roomState,
         streams: streams,
-        availableQualities: [
-          for (final stream in streams)
-            QualityOption(name: stream.name, rate: stream.rate),
-        ],
+        availableQualities: qualities ??
+            [
+              for (final stream in streams)
+                QualityOption(name: stream.name, rate: stream.rate),
+            ],
         source: kYySource,
         fetchedAt: DateTime.now(),
       );
@@ -133,7 +203,7 @@ SiteRegistration buildYyRegistration({
       multiQuality: true,
       multiLine: true,
     ),
-    resolver: YyRoomResolver(effectiveClient),
+    resolver: CachedRoomResolver(YyRoomResolver(effectiveClient)),
     browse: YyBrowseRepository(effectiveClient.parserHttp),
     search: YySearchRepository(effectiveClient.parserHttp),
   );

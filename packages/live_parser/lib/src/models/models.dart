@@ -207,6 +207,29 @@ class RoomPayload {
       RoomPayload.fromJson(Map<String, dynamic>.from(jsonDecode(text) as Map));
 }
 
+/// 画质偏好匹配:精确同名优先,其次双向包含(与 [RoomPayload.qualityByName]
+/// 及播放侧 `_pickQuality` 同语义)。平台解析侧据此定位「偏好档」做懒取流;
+/// 返回 null 表示未命中(调用方决定回退策略)。
+T? matchQualityPreference<T>(
+  List<T> items,
+  String? preferred,
+  String Function(T item) nameOf,
+) {
+  final name = preferred?.trim() ?? '';
+  if (name.isEmpty || items.isEmpty) return null;
+  for (final item in items) {
+    if (nameOf(item) == name) return item;
+  }
+  for (final item in items) {
+    final itemName = nameOf(item);
+    if (itemName.isNotEmpty &&
+        (name.contains(itemName) || itemName.contains(name))) {
+      return item;
+    }
+  }
+  return null;
+}
+
 /// 房间网格卡片摘要。
 class RoomSummary {
   const RoomSummary({

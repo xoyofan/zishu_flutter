@@ -16,8 +16,8 @@ Future<(DouyuRoomResolver, FakeDouyuApi)> _makeResolver({
   final fake = FakeDouyuApi()
     ..betardResponse = betardResponse
     ..playV1ProbeOverride = probeOverride;
-  final registration = buildDouyuRegistration(httpClient: fake);
-  return (registration.resolver as DouyuRoomResolver, fake);
+  // 注册表出口套了 CachedRoomResolver(结果 60s),这里直接测平台解析器本体。
+  return (DouyuRoomResolver(DouyuClient(httpClient: fake)), fake);
 }
 
 void main() {
@@ -93,6 +93,61 @@ void main() {
       expect(probeBody['ver'], '219032101');
       expect(probeBody['enc_data'], 'encDataToken');
       expect(probeBody['auth'], hasLength(32));
+    });
+
+    test('偏好档懒取流:只请求所选档,其余档空线路占位', () async {
+      final (resolver, fake) = await _makeResolver(betardResponse: {
+        'room': {
+          'room_id': 9527,
+          'nickname': '测试主播',
+          'show_status': 1,
+          'room_name': '斗鱼测试房间',
+        },
+      });
+
+      final payload = await resolver.resolveRoom(_request('9527', quality: '超清'));
+
+      // probe 1 次(取档位/CDN 元数据)+ 偏好档 3 CDN;不再为其余 CDN 探测 rate=0。
+      final playRequests = fake.requests
+          .where((r) => r.url.contains('getH5PlayV1'))
+          .toList();
+      expect(playRequests, hasLength(4));
+      expect(
+        playRequests.where((r) => r.formBody['rate'] == '2'),
+        hasLength(3),
+        reason: '只取超清档',
+      );
+      final probe = playRequests.singleWhere((r) => r.formBody['rate'] == '0');
+      expect(probe.formBody['cdn'], 'hw-h5', reason: '不再为其余 CDN 发 rate=0 探测');
+
+      expect(payload.roomState, RoomState.live);
+      // 可播档放 streams 首位(playUrl / 播放侧回退直接可用)
+      expect(payload.streams.first.name, '超清');
+      expect(payload.streams.first.lines, isNotEmpty);
+      expect(payload.playUrl, isNotEmpty);
+      // 其余档位空线路占位,点击后由播放侧带该档重解析
+      expect(payload.streams.last.name, '蓝光8M');
+      expect(payload.streams.last.lines, isEmpty);
+      expect(
+        payload.availableQualities.map((q) => q.name).toList(),
+        ['蓝光8M', '超清'],
+        reason: 'chips 保持平台原顺序',
+      );
+
+      // 播放接口响应 60s 缓存:同一实例重复解析时,成功响应不再请求;
+      // 失败 CDN(ali-h5)不缓存,会重试一次。
+      final before = fake.requests.length;
+      await resolver.resolveRoom(_request('9527', quality: '超清'));
+      final secondRound = fake.requests
+          .skip(before)
+          .where((r) => r.url.contains('getH5PlayV1'))
+          .toList();
+      expect(
+        secondRound.where((r) => r.formBody['cdn'] != 'ali-h5'),
+        isEmpty,
+        reason: '成功响应全部命中 60s 缓存',
+      );
+      expect(secondRound, hasLength(1), reason: '仅失败 CDN(ali-h5)重试');
     });
 
     test('画质选择:qualityByName 命中与回退', () async {

@@ -7,6 +7,7 @@ import '../../http/danmaku_transport.dart';
 import '../../http/parser_http.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
+import '../../registry/cached_room_resolver.dart';
 import 'browse.dart';
 import 'danmaku.dart';
 import '../douyu/json_utils.dart';
@@ -60,20 +61,34 @@ class BilibiliRoomResolver implements RoomResolver {
       rethrow;
     }
 
-    final anchor = await fetchBilibiliAnchorInRoom(
-      http,
-      credentials,
-      rid,
-    ).catchError((Object _) => (uname: '', face: ''));
-    final anchorName = jsonText(info['uname'] ??
-            jsonMapOf(jsonMapOf(info['anchor_info'])['base_info'])['uname'])
-        .isEmpty
-        ? anchor.uname
-        : jsonText(info['uname'] ??
-            jsonMapOf(jsonMapOf(info['anchor_info'])['base_info'])['uname']);
-    final avatar = bilibiliAvatarFromRoom(info).isEmpty
-        ? anchor.face
-        : bilibiliAvatarFromRoom(info);
+    final infoUname = jsonText(
+      info['uname'] ?? jsonMapOf(jsonMapOf(info['anchor_info'])['base_info'])['uname'],
+    );
+    final infoAvatar = bilibiliAvatarFromRoom(info);
+
+    // live_status:0 未开播 1 直播 2 轮播;契约无 replay,轮播/未播归 offline。
+    final isLive = jsonInt(info['live_status']) == 1;
+
+    // get_anchor_in_room 只在 get_info 缺主播名/头像时兜底(通常不需要),
+    // 且与 play 数据并行,不再阻塞在序列前面。
+    final Future<({String uname, String face})>? anchorFuture =
+        infoUname.isEmpty || infoAvatar.isEmpty
+        ? () async {
+            try {
+              return await fetchBilibiliAnchorInRoom(http, credentials, rid);
+            } on Object {
+              return (uname: '', face: '');
+            }
+          }()
+        : null;
+    final Future<Map<String, dynamic>>? playFuture = isLive
+        ? fetchBilibiliRoomPlayInfo(http, credentials, rid)
+        : null;
+    final anchor = anchorFuture == null
+        ? (uname: '', face: '')
+        : await anchorFuture;
+    final anchorName = infoUname.isEmpty ? anchor.uname : infoUname;
+    final avatar = infoAvatar.isEmpty ? anchor.face : infoAvatar;
     final base = _Base(
       rid: rid,
       sourceUrl: url,
@@ -85,12 +100,11 @@ class BilibiliRoomResolver implements RoomResolver {
       cid: jsonText(info['area_id'] ?? ''),
     );
 
-    // live_status:0 未开播 1 直播 2 轮播;契约无 replay,轮播/未播归 offline。
-    if (jsonInt(info['live_status']) != 1) {
+    if (!isLive) {
       return _payload(base, RoomState.offline);
     }
 
-    final data = await fetchBilibiliRoomPlayInfo(http, credentials, rid);
+    final data = await playFuture!;
     final qualities = bilibiliAvailableQualities(data);
     if (qualities.isEmpty) {
       throw const ParserHttpException('未获取到可播放的 B 站流地址');
@@ -208,7 +222,7 @@ SiteRegistration buildBilibiliRegistration({
       multiQuality: true,
       multiLine: true,
     ),
-    resolver: BilibiliRoomResolver(effectiveClient),
+    resolver: CachedRoomResolver(BilibiliRoomResolver(effectiveClient)),
     browse: BilibiliBrowseRepository(effectiveClient.parserHttp, effectiveClient.credentials),
     search: BilibiliSearchRepository(effectiveClient.parserHttp, effectiveClient.credentials),
     danmaku: BilibiliDanmakuConnector(

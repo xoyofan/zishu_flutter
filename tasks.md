@@ -48,6 +48,14 @@
 > (只请求选中档 assign+aid,其余档位空线路占位,切档时按偏好重解析),
 > YouTube dlp 档位名改按分辨率短边(竖屏 1080x1920 → 1080p)。真实网络验证:
 > SOOP 冷解析请求 9→3、Twitch 选中 720p60、YouTube 选中 720p。
+>
+> 2026-09-12 解析提速第二轮(九站):注册表出口新增 `CachedRoomResolver`(带偏好档
+> 进房 60s 结果缓存,并发同键合并),热解析九站全部 0ms;斗鱼偏好档懒取流+未命中
+> 档间并行+播放接口响应 60s 缓存;YY 偏好档懒取+复用 gear1 探测响应+档位缓存;
+> 虎牙页面/profile 并行;B 站 nav/finger 并行+get_info 信息齐全时跳过 anchor;
+> YouTube dlp 提取与地址链校验 60s 实例缓存(切档免重跑子进程)。基准(02:19):
+> huya 255→141、yy 377→282、bilibili 385→336、twitch 2470→853、soop 13788→2369ms;
+> youtube 冷解析仍受 dlp 2.8~4.7s 主导。包内 251 tests 通过。
 
 > 2026-09-09 盘点:`packages/live_parser` 实测 dart analyze 0 issue、dart test 167 passed + 5 skipped(fixtures 全离线),P 轨状态按实际产出同步(解析会话此前未回写看板)。
 

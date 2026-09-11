@@ -26,7 +26,9 @@ class HuyaHarness {
   late FakeHuyaApi fake;
   late SiteRegistration registration;
 
-  HuyaRoomResolver get resolver => registration.resolver as HuyaRoomResolver;
+  // 注册表出口套了 CachedRoomResolver(结果 60s),这里直接测平台解析器本体。
+  HuyaRoomResolver get resolver =>
+      HuyaRoomResolver(HuyaClient(httpClient: fake));
 
   void loadLiveRoom() {
     fake.webRoomHtml = _fixture('room_live.html');

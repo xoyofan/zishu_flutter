@@ -53,8 +53,13 @@ Future<Object?> bilibiliFetchJson(
 }) async {
   var query = <String, String>{};
   var effectiveUrl = url;
+  // nav(WBI 混出 key)与 finger(buvid3)互不依赖:冷启动并行取,之后命中缓存。
+  final mixinKeyFuture = params == null
+      ? Future<String?>.value(null)
+      : credentials.fetchMixinKey(http);
+  final buvid3Future = credentials.fetchBuvid3(http)..ignore();
   if (params != null) {
-    final mixinKey = await credentials.fetchMixinKey(http);
+    final mixinKey = await mixinKeyFuture;
     if (mixinKey != null) {
       query = signWbi(
         params,
@@ -69,7 +74,7 @@ Future<Object?> bilibiliFetchJson(
     );
   }
 
-  final buvid3 = await credentials.fetchBuvid3(http);
+  final buvid3 = await buvid3Future;
   final headers = <String, String>{
     ...kBilibiliPcHeaders,
     'Referer': roomId == null ? kBilibiliPcHeaders['Referer']! : 'https://live.bilibili.com/$roomId',

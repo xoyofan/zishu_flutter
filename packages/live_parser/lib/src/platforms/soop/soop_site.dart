@@ -7,6 +7,7 @@ import '../../contracts/contracts.dart';
 import '../../http/danmaku_transport.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
+import '../../registry/cached_room_resolver.dart';
 import 'browse.dart';
 import 'danmaku.dart';
 import 'normalize.dart';
@@ -87,7 +88,12 @@ class SoopRoomResolver implements RoomResolver {
     // 懒取流(对齐 SF resolveTier):只取偏好档(默认清晰度),其余档位以空线路
     // 占位供 UI 列出;用户切档时由播放侧带新的 preferredQuality 重新解析,再取该档。
     final qualities = detail.qualities.take(_maxTiers).toList();
-    final preferred = _matchQuality(qualities, request.preferredQuality) ??
+    final preferred =
+        matchQualityPreference(
+          qualities,
+          request.preferredQuality,
+          (quality) => quality.name,
+        ) ??
         (qualities.isEmpty ? null : qualities.first);
     if (preferred == null) {
       return _buildPayload(
@@ -109,11 +115,12 @@ class SoopRoomResolver implements RoomResolver {
         error: '未获取到可播放地址',
       );
     }
+    // 偏好档放首位(playUrl / 播放侧回退都取 streams.first),其余档位原顺序占位;
+    // availableQualities 保持平台原顺序(chips 顺序不因默认档变化)。
     final streams = [
+      tier,
       for (final quality in qualities)
-        if (quality.name == preferred.name)
-          tier
-        else
+        if (quality.name != preferred.name)
           StreamQuality(name: quality.name, rate: quality.rate, lines: const []),
     ];
     return _buildPayload(
@@ -122,6 +129,10 @@ class SoopRoomResolver implements RoomResolver {
       detail: detail,
       roomState: RoomState.live,
       streams: streams,
+      qualities: [
+        for (final quality in qualities)
+          QualityOption(name: quality.name, rate: quality.rate),
+      ],
     );
   }
 
@@ -145,30 +156,13 @@ class SoopRoomResolver implements RoomResolver {
     return tier;
   }
 
-  /// 偏好档匹配:精确 → 双向包含(与播放侧 `_pickQuality` 同语义)。
-  static SoopQuality? _matchQuality(
-    List<SoopQuality> qualities,
-    String? preferred,
-  ) {
-    final name = preferred?.trim() ?? '';
-    if (name.isEmpty) return null;
-    for (final quality in qualities) {
-      if (quality.name == name) return quality;
-    }
-    for (final quality in qualities) {
-      if (name.contains(quality.name) || quality.name.contains(name)) {
-        return quality;
-      }
-    }
-    return null;
-  }
-
   RoomPayload _buildPayload({
     required String roomId,
     required String sourceUrl,
     required SoopRoomDetail detail,
     required RoomState roomState,
     List<StreamQuality> streams = const [],
+    List<QualityOption>? qualities,
     String? error,
   }) => RoomPayload(
     site: kSoopSiteId,
@@ -182,10 +176,11 @@ class SoopRoomResolver implements RoomResolver {
     cid: roomId,
     roomState: roomState,
     streams: streams,
-    availableQualities: [
-      for (final stream in streams)
-        QualityOption(name: stream.name, rate: stream.rate),
-    ],
+    availableQualities: qualities ??
+        [
+          for (final stream in streams)
+            QualityOption(name: stream.name, rate: stream.rate),
+        ],
     source: kSoopSource,
     fetchedAt: DateTime.now(),
     error: error,
@@ -210,7 +205,7 @@ SiteRegistration buildSoopRegistration({
       multiQuality: true,
       multiLine: true,
     ),
-    resolver: SoopRoomResolver(effectiveClient),
+    resolver: CachedRoomResolver(SoopRoomResolver(effectiveClient)),
     browse: SoopBrowseRepository(effectiveClient.parserHttp),
     search: SoopSearchRepository(effectiveClient.parserHttp),
     danmaku: SoopDanmakuConnector(
