@@ -165,6 +165,42 @@ void main() {
         InMemorySharedPreferencesAsync.withData(<String, Object>{});
   });
 
+  test('平台默认档:soop/twitch/youtube 取高清,档位列表为平台原生', () {
+    expect(SettingsState.platformDefaultQuality['soop'], '高清');
+    expect(SettingsState.platformDefaultQuality['twitch'], '720p');
+    expect(SettingsState.platformDefaultQuality['youtube'], '720p');
+    expect(
+      SettingsState.qualityOptionsForSite('soop'),
+      contains('高清'),
+      reason: 'soop 设置页应列出原生档位(含高清)',
+    );
+    expect(SettingsState.qualityOptionsForSite('twitch'), contains('720p'));
+    expect(
+      SettingsState.qualityOptionsForSite('unknown_site'),
+      SettingsState.qualityOptions,
+      reason: '未收录平台回落通用预设',
+    );
+
+    const state = SettingsState(
+      themeMode: ThemeModeChoice.system,
+      defaultQuality: '超清',
+      danmakuEnabled: true,
+      chatEnabled: true,
+      preferredLineFormat: PreferredLineFormat.auto,
+      serverUrl: SettingsState.defaultServerUrl,
+    );
+    expect(state.effectiveDefaultQuality('soop'), '高清');
+    expect(state.effectiveDefaultQuality('twitch'), '720p');
+    expect(state.effectiveDefaultQuality('douyu'), '超清');
+    expect(
+      state
+          .copyWith(defaultQualityBySite: const {'soop': '原画'})
+          .effectiveDefaultQuality('soop'),
+      '原画',
+      reason: '平台单独配置优先于平台默认档',
+    );
+  });
+
   testWidgets('打开 /settings:默认值渲染(hydrated 后仍为出厂默认)', (tester) async {
     await _pumpSettings(tester);
 
@@ -323,18 +359,18 @@ void main() {
     final stored = await prefs.getString('zishu.settings.defaultQualityBySite');
     expect((jsonDecode(stored!) as Map<String, Object?>)['douyu'], '蓝光8M');
 
-    // 选「跟随全平台」→ 覆盖被清除。仍在同一展开态内完成,避免「重启后
+    // 选「跟随平台默认」→ 覆盖被清除。仍在同一展开态内完成,避免「重启后
     // State 折叠、需二次展开」的时序耦合。
-    await _selectDropdownOption(tester, douyuDropdown, '跟随全平台');
+    await _selectDropdownOption(tester, douyuDropdown, '跟随平台默认');
     expect(
       _readSettings(tester).defaultQualityBySite.containsKey('douyu'),
       isFalse,
-      reason: '选「跟随全平台」应清除平台覆盖',
+      reason: '选「跟随平台默认」应清除平台覆盖',
     );
     expect(
       _readSettings(tester).effectiveDefaultQuality('douyu'),
       '超清',
-      reason: '清除覆盖后斗鱼回落全平台默认',
+      reason: '斗鱼无平台默认档,清除覆盖后回落全平台默认',
     );
     final cleared = await prefs.getString('zishu.settings.defaultQualityBySite');
     expect(

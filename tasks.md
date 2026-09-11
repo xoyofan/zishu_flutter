@@ -41,6 +41,13 @@
 > YouTube watch 页与 dlp 并行+20s 结果缓存。热解析 soop/twitch/youtube 归零;
 > 冷解析 Twitch/SOOP/YouTube 最优路径较基线提升约 2.3×/3.9×/1.6×
 > (rest 平台受单请求 RTT 主导,处于噪声区间)。
+>
+> 2026-09-12 平台档位设置(对齐 SFVideoLive):设置页「按平台默认画质」改为
+> **平台原生档位**(qualityOptionsForSite),并登记平台默认档(soop/twitch/youtube
+> 取高清档);`RoomSource.resolveRoom` 透传 `preferredQuality`,SOOP 改为**懒取流**
+> (只请求选中档 assign+aid,其余档位空线路占位,切档时按偏好重解析),
+> YouTube dlp 档位名改按分辨率短边(竖屏 1080x1920 → 1080p)。真实网络验证:
+> SOOP 冷解析请求 9→3、Twitch 选中 720p60、YouTube 选中 720p。
 
 > 2026-09-09 盘点:`packages/live_parser` 实测 dart analyze 0 issue、dart test 167 passed + 5 skipped(fixtures 全离线),P 轨状态按实际产出同步(解析会话此前未回写看板)。
 

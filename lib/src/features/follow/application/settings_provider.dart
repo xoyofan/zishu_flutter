@@ -89,12 +89,43 @@ class SettingsState {
   final String serverUrl;
   final bool hydrated;
 
-  /// 画质候选。
+  /// 画质候选(全平台默认可选,与 fixture 画质名对齐)。
   static const List<String> qualityOptions = ['蓝光8M', '超清', '高清', '流畅'];
 
-  /// 某平台生效的默认画质:平台单独配置优先,未配置回落全平台默认。
+  /// 各平台原生画质档位(对齐 SFVideoLive `PLATFORM_QUALITY_OPTIONS`),
+  /// 设置页「平台独立默认清晰度」按此列表展示;未收录的平台回落 [qualityOptions]。
+  /// 档位名为各平台解析输出文案(含 twitch/youtube 分辨率后缀),播放侧
+  /// `_pickQuality` 做双向包含匹配,名称带 fps 后缀也能命中。
+  static const Map<String, List<String>> platformQualityOptions = {
+    'douyu': ['原画', '蓝光10M', '蓝光8M', '蓝光4M', '超清', '高清', '流畅'],
+    'huya': ['原画', '蓝光20M', '蓝光10M', '蓝光8M', '蓝光4M', '超清', '高清', '流畅'],
+    'bilibili': ['原画', '蓝光', '超清', '高清', '流畅'],
+    'douyin': ['原画', '蓝光', '超清', '高清', '流畅'],
+    'kuaishou': ['原画', '蓝光', '超清', '高清', '流畅'],
+    'yy': ['原画', '蓝光20M', '蓝光10M', '蓝光', '超清', '高清', '流畅'],
+    'twitch': ['自动', '1080p', '720p', '480p', '360p', '160p'],
+    'soop': ['原画', '8K', '4K', '蓝光', '超清', '高清', '标清', '流畅'],
+    'youtube': ['自动', '1080p', '720p', '480p', '360p', '240p', '144p'],
+    'iptv': ['直播'],
+  };
+
+  /// 平台默认档(未在设置里单独选择时的值,对齐 SF `PLATFORM_DEFAULT_QUALITY`):
+  /// soop/twitch/youtube 取高清档,解析侧只取该档,进房更快。
+  static const Map<String, String> platformDefaultQuality = {
+    'soop': '高清',
+    'twitch': '720p',
+    'youtube': '720p',
+  };
+
+  /// 某平台设置页可选档位(平台原生文案);未收录平台回落通用预设。
+  static List<String> qualityOptionsForSite(String site) =>
+      platformQualityOptions[site] ?? qualityOptions;
+
+  /// 某平台生效的默认画质:平台单独配置 > 平台默认档 > 全平台默认。
   String effectiveDefaultQuality(String site) =>
-      defaultQualityBySite[site] ?? defaultQuality;
+      defaultQualityBySite[site] ??
+      platformDefaultQuality[site] ??
+      defaultQuality;
 
   /// 服务器地址默认值。
   static const String defaultServerUrl = 'http://127.0.0.1:8787';
@@ -202,9 +233,10 @@ class SettingsController extends Notifier<SettingsState> {
     } catch (_) {}
   }
 
-  /// 设置某平台的默认画质并持久化;传 null 清除该平台覆盖,回落全平台默认。
+  /// 设置某平台的默认画质并持久化;传 null 清除该平台覆盖,回落平台默认档。
   Future<void> setDefaultQualityForSite(String site, String? quality) async {
-    if (quality != null && !SettingsState.qualityOptions.contains(quality)) {
+    if (quality != null &&
+        !SettingsState.qualityOptionsForSite(site).contains(quality)) {
       return;
     }
     final next = Map<String, String>.of(state.defaultQualityBySite);
@@ -224,8 +256,9 @@ class SettingsController extends Notifier<SettingsState> {
     }
   }
 
-  /// 解析按平台默认画质(JSON `Map<String, String>`);非法 JSON / 非法画质名
-  /// 一律剔除,整体解析失败返回 null(保留出厂默认,与其它字段同口径)。
+  /// 解析按平台默认画质(JSON `Map<String, String>`);非字符串/空值剔除,
+  /// 整体解析失败返回 null(保留出厂默认,与其它字段同口径)。
+  /// 档位名是否合法在写入侧([setDefaultQualityForSite])已校验,这里只做形状校验。
   static Map<String, String>? _decodeQualityBySite(String? raw) {
     if (raw == null || raw.isEmpty) return null;
     try {
@@ -235,9 +268,7 @@ class SettingsController extends Notifier<SettingsState> {
       for (final entry in decoded.entries) {
         final key = entry.key;
         final value = entry.value;
-        if (key is String &&
-            value is String &&
-            SettingsState.qualityOptions.contains(value)) {
+        if (key is String && value is String && value.trim().isNotEmpty) {
           result[key] = value;
         }
       }

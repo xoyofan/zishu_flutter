@@ -188,7 +188,11 @@ class FixtureRoomSource implements RoomSource {
   const FixtureRoomSource();
 
   @override
-  Future<RoomPayload> resolveRoom({required String site, required String roomIdOrUrl}) async {
+  Future<RoomPayload> resolveRoom({
+    required String site,
+    required String roomIdOrUrl,
+    String? preferredQuality,
+  }) async {
     final roomId = RegExp(r'(\d+)\s*$').firstMatch(roomIdOrUrl)?.group(1) ?? roomIdOrUrl;
     return fixtureRoomPayload(roomId);
   }

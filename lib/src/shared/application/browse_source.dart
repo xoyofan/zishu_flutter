@@ -11,5 +11,11 @@ abstract interface class BrowseSource {
 
 /// 房间解析数据源(播放页)。
 abstract interface class RoomSource {
-  Future<RoomPayload> resolveRoom({required String site, required String roomIdOrUrl});
+  /// [preferredQuality] 为生效的默认画质(平台级设置);解析侧可据此只取该档
+  /// 流地址(懒取流),其余档位以占位线路返回,由播放页切换时按需重解析。
+  Future<RoomPayload> resolveRoom({
+    required String site,
+    required String roomIdOrUrl,
+    String? preferredQuality,
+  });
 }

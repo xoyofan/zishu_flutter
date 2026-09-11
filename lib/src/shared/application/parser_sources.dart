@@ -49,13 +49,18 @@ class ParserRoomSource implements RoomSource {
   Future<RoomPayload> resolveRoom({
     required String site,
     required String roomIdOrUrl,
+    String? preferredQuality,
   }) async {
     final registration = _registry[site];
     if (registration == null) {
       throw StateError('未注册站点 $site');
     }
     return registration.resolver.resolveRoom(
-      RoomRequest(site: site, roomIdOrUrl: roomIdOrUrl),
+      RoomRequest(
+        site: site,
+        roomIdOrUrl: roomIdOrUrl,
+        preferredQuality: preferredQuality,
+      ),
     );
   }
 }

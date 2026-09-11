@@ -82,6 +82,10 @@ class PlayController extends AsyncNotifier<PlayState> {
 
   int _generation = 0;
 
+  /// 用户手动切档后的偏好覆盖(懒取流):切换到的档位若未预取线路,以此档
+  /// 重新解析,解析侧只取该档,避免整房全档取流。
+  String? _qualityOverride;
+
   @override
   FutureOr<PlayState> build() async {
     final generation = ++_generation;
@@ -92,17 +96,19 @@ class PlayController extends AsyncNotifier<PlayState> {
     ref.onDispose(() => unawaited(player.stop()));
     // 数据源端口变化(G1 换真实解析)时自动重建,Widget 无感。
     final source = ref.watch(roomSourceProvider);
-    // 默认画质:平台单独配置优先,未配置回落全平台默认(设置页可改)。
+    // 默认画质:平台单独配置 > 平台默认档 > 全平台默认(设置页可改)。
     // select 以「该平台生效值」为 key,只有它变化才重建本 family;
     // 房间缺该档时 _pickQuality 回退 streams.first(「没有才退」)。
-    final preferredQuality = ref.watch(
+    final settingsQuality = ref.watch(
       settingsProvider.select(
         (settings) => settings.effectiveDefaultQuality(params.site),
       ),
     );
+    final preferredQuality = _qualityOverride ?? settingsQuality;
     final payload = await source.resolveRoom(
       site: params.site,
       roomIdOrUrl: params.roomId,
+      preferredQuality: preferredQuality,
     );
 
     // generation fence:等待期间出现了更新的代际(retry 等),丢弃本次结果。
@@ -141,11 +147,17 @@ class PlayController extends AsyncNotifier<PlayState> {
     return payload.streams.first;
   }
 
-  /// 切换画质:落到该画质首选线路,并代际 +1 后重新开流。
+  /// 切换画质:已预取线路则直接开流;懒取流的档位(空线路占位)以其为偏好
+  /// 重新解析,解析侧只取该档后自动开流。
   void switchQuality(StreamQuality quality) {
     final current = state.value;
     if (current == null || current.payload == null) return;
     final line = quality.preferredLine;
+    if (line == null) {
+      _qualityOverride = quality.name;
+      ref.invalidateSelf();
+      return;
+    }
     final generation = ++_generation;
     state = AsyncData(
       current.copyWith(quality: quality, line: line, generation: generation),

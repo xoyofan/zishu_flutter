@@ -147,7 +147,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                         _SettingsRow(
                           label: brand.name,
                           hint: settings.defaultQualityBySite[brand.id] == null
-                              ? '未单独配置,进播放页用全平台默认'
+                              ? '未单独配置,默认「${SettingsState.platformDefaultQuality[brand.id] ?? settings.defaultQuality}」'
                               : null,
                           trailing: _StyledDropdown<String>(
                             // 测试锚点:按平台寻址(settings-quality-{site})。
@@ -156,9 +156,11 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                             value:
                                 settings.defaultQualityBySite[brand.id] ?? '',
                             items: [
-                              const (value: '', label: '跟随全平台'),
+                              const (value: '', label: '跟随平台默认'),
                               for (final quality
-                                  in SettingsState.qualityOptions)
+                                  in SettingsState.qualityOptionsForSite(
+                                    brand.id,
+                                  ))
                                 (value: quality, label: quality),
                             ],
                             onChanged: (quality) => ref
