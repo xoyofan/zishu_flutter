@@ -9,6 +9,8 @@
 /// 引入的平台接口包),写入与回读共享同一内存存储。
 library;
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -23,6 +25,7 @@ import 'package:zishu_flutter/src/features/follow/application/settings_provider.
 import 'package:zishu_flutter/src/features/follow/views/settings_view.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
+import 'package:zishu_flutter/src/shared/presentation/platform_brands.dart';
 
 /// 测试替身:VM 下替代 MediaKitLivePlayer,不触碰任何原生播放内核。
 class _FakeLivePlayer implements LivePlayer {
@@ -147,8 +150,7 @@ void main() {
         InMemorySharedPreferencesAsync.withData(<String, Object>{});
   });
 
-  testWidgets('打开 /settings:默认值渲染(hydrated 后仍为出厂默认)',
-      (tester) async {
+  testWidgets('打开 /settings:默认值渲染(hydrated 后仍为出厂默认)', (tester) async {
     await _pumpSettings(tester);
 
     // provider 状态:默认值且已完成恢复(空存储不覆盖默认)。
@@ -170,8 +172,7 @@ void main() {
     );
   });
 
-  testWidgets('主题模式切到深色:provider 状态更新且下拉控件反映',
-      (tester) async {
+  testWidgets('主题模式切到深色:provider 状态更新且下拉控件反映', (tester) async {
     await _pumpSettings(tester);
 
     await _selectDropdownOption(
@@ -186,8 +187,7 @@ void main() {
     expect(find.text('跟随系统'), findsNothing);
   });
 
-  testWidgets('切换弹幕开关:danmakuEnabled 翻转且 Switch 反映',
-      (tester) async {
+  testWidgets('切换弹幕开关:danmakuEnabled 翻转且 Switch 反映', (tester) async {
     await _pumpSettings(tester);
     expect(_readSettings(tester).danmakuEnabled, isTrue);
 
@@ -200,8 +200,7 @@ void main() {
     expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
   });
 
-  testWidgets('改默认画质并保存服务器地址:状态更新 + SnackBar 反馈',
-      (tester) async {
+  testWidgets('改默认画质并保存服务器地址:状态更新 + SnackBar 反馈', (tester) async {
     await _pumpSettings(tester);
 
     await _selectDropdownOption(
@@ -216,8 +215,9 @@ void main() {
     expect(_readSettings(tester).serverUrl, 'http://192.168.1.50:9000');
   });
 
-  testWidgets('持久化回读:zishu.settings.* 已写盘,重建 ProviderScope 后恢复一致',
-      (tester) async {
+  testWidgets('持久化回读:zishu.settings.* 已写盘,重建 ProviderScope 后恢复一致', (
+    tester,
+  ) async {
     await _pumpSettings(tester);
 
     // 通过 UI 触发一组变更(即持久化写入)。
@@ -242,8 +242,10 @@ void main() {
     expect(await prefs.getString('zishu.settings.themeMode'), 'dark');
     expect(await prefs.getString('zishu.settings.defaultQuality'), '蓝光8M');
     expect(await prefs.getBool('zishu.settings.danmakuEnabled'), isFalse);
-    expect(await prefs.getString('zishu.settings.serverUrl'),
-        'http://10.0.0.2:7777');
+    expect(
+      await prefs.getString('zishu.settings.serverUrl'),
+      'http://10.0.0.2:7777',
+    );
 
     // 重建 ProviderScope(等价重启):同一内存后端,期望完整恢复。
     await _pumpSettings(tester);
@@ -263,5 +265,73 @@ void main() {
       tester.widget<TextField>(find.byType(TextField)).controller!.text,
       'http://10.0.0.2:7777',
     );
+  });
+
+  testWidgets('按平台默认画质:平台覆盖优先于全平台默认,清除后回落', (tester) async {
+    await _pumpSettings(tester);
+
+    // 折叠态不构建平台下拉:DropdownButton<String> 只命中「全平台默认画质」。
+    expect(
+      find.byType(DropdownButton<String>),
+      findsOneWidget,
+      reason: '折叠态应只有全平台默认画质一个下拉',
+    );
+
+    // 展开后为各平台(除 all)各渲染一个下拉。
+    await tester.ensureVisible(
+      find.byKey(const Key('settings-toggle-platform-quality')),
+    );
+    await tester.tap(find.byKey(const Key('settings-toggle-platform-quality')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+    final platformCount = PlatformBrandCatalog.navPlatforms
+        .where((brand) => brand.id != 'all')
+        .length;
+    expect(
+      find.byType(DropdownButton<String>),
+      findsNWidgets(platformCount + 1),
+    );
+
+    // 给斗鱼单独配置「蓝光8M」(按平台锚点寻址,不依赖文案祖先链)。
+    final douyuDropdown = find.byKey(const Key('settings-quality-douyu'));
+    expect(douyuDropdown, findsOneWidget);
+    await _selectDropdownOption(tester, douyuDropdown, '蓝光8M');
+
+    // 内存态:平台覆盖生效,未配置平台回落全平台默认。
+    final state = _readSettings(tester);
+    expect(state.defaultQualityBySite['douyu'], '蓝光8M');
+    expect(state.effectiveDefaultQuality('douyu'), '蓝光8M');
+    expect(state.effectiveDefaultQuality('huya'), '超清');
+
+    // 已写盘(JSON Map<String,String>)。
+    final prefs = SharedPreferencesAsync();
+    final stored = await prefs.getString('zishu.settings.defaultQualityBySite');
+    expect((jsonDecode(stored!) as Map<String, Object?>)['douyu'], '蓝光8M');
+
+    // 选「跟随全平台」→ 覆盖被清除。仍在同一展开态内完成,避免「重启后
+    // State 折叠、需二次展开」的时序耦合。
+    await _selectDropdownOption(tester, douyuDropdown, '跟随全平台');
+    expect(
+      _readSettings(tester).defaultQualityBySite.containsKey('douyu'),
+      isFalse,
+      reason: '选「跟随全平台」应清除平台覆盖',
+    );
+    expect(
+      _readSettings(tester).effectiveDefaultQuality('douyu'),
+      '超清',
+      reason: '清除覆盖后斗鱼回落全平台默认',
+    );
+    final cleared = await prefs.getString('zishu.settings.defaultQualityBySite');
+    expect(
+      jsonDecode(cleared!),
+      <String, Object?>{},
+      reason: '空覆盖应写回空 Map',
+    );
+
+    // 重建 ProviderScope(等价重启):空覆盖持久化,回落全平台默认。
+    await _pumpSettings(tester);
+    final restored = _readSettings(tester);
+    expect(restored.defaultQualityBySite, isEmpty);
+    expect(restored.effectiveDefaultQuality('douyu'), '超清');
   });
 }

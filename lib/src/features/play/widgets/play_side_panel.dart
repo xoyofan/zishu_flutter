@@ -12,9 +12,13 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 
 import '../../danmaku/application/danmaku_session_provider.dart';
+import '../../browse/application/browse_provider.dart';
+import '../../follow/application/follow_provider.dart';
+import '../../follow/application/settings_provider.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 
@@ -44,16 +48,59 @@ class PlaySidePanel extends ConsumerStatefulWidget {
 }
 
 class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
-  bool _followed = false;
-  bool _superFollowed = false;
+  /// 关注上限:超出拒绝并提示(与「我的关注」页同源,落库前在此拦截)。
+  static const int _kFollowCap = 200;
+
+  String get _currentKey {
+    final site = widget.site ?? widget.payload?.site ?? '';
+    final roomId = widget.roomId ?? widget.payload?.roomId ?? '';
+    return '$site:$roomId';
+  }
+
+  RoomSummary _currentRoom(String site, String roomId) {
+    final payload = widget.payload;
+    return RoomSummary(
+      site: site,
+      roomId: roomId,
+      title: payload?.title ?? '',
+      anchorName: payload?.anchorName ?? '',
+      cid: payload?.cid ?? '',
+      category: payload?.category ?? '',
+      online: payload?.isLive == true ? '直播中' : '',
+      cover: payload?.cover ?? '',
+    );
+  }
 
   void _toggleFollow() {
-    setState(() => _followed = !_followed);
+    final key = _currentKey;
+    final notifier = ref.read(followProvider.notifier);
+    final list = ref.read(followProvider);
+    final followed = list.any((entry) => entry.key == key);
+    if (followed) {
+      notifier.remove(key);
+    } else if (list.length >= _kFollowCap) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('关注已达上限（200）')),
+      );
+    } else {
+      final site = widget.site ?? widget.payload?.site ?? '';
+      final roomId = widget.roomId ?? widget.payload?.roomId ?? '';
+      notifier.addFromRoom(_currentRoom(site, roomId));
+    }
     widget.onToggleFollow?.call();
   }
 
   void _toggleSuperFollow() {
-    setState(() => _superFollowed = !_superFollowed);
+    final key = _currentKey;
+    final notifier = ref.read(followProvider.notifier);
+    final matched = ref.read(followProvider).where((e) => e.key == key);
+    if (matched.isEmpty) {
+      final site = widget.site ?? widget.payload?.site ?? '';
+      final roomId = widget.roomId ?? widget.payload?.roomId ?? '';
+      notifier.addFromRoom(_currentRoom(site, roomId), isSpecial: true);
+    } else {
+      notifier.toggleSpecial(key);
+    }
     widget.onToggleSuperFollow?.call();
   }
 
@@ -63,6 +110,11 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
     final site = widget.site ?? payload?.site ?? '';
     final roomId = widget.roomId ?? payload?.roomId ?? '';
     final tokens = context.tokens;
+    final followList = ref.watch(followProvider);
+    final key = '$site:$roomId';
+    final matched = followList.where((e) => e.key == key);
+    final followed = matched.isNotEmpty;
+    final superFollowed = matched.isNotEmpty && matched.first.isSpecial;
 
     return Container(
       key: const Key('play-side-panel'),
@@ -79,8 +131,8 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
               site: site,
               roomId: roomId,
               payload: payload,
-              followed: _followed,
-              superFollowed: _superFollowed,
+              followed: followed,
+              superFollowed: superFollowed,
               onToggleFollow: _toggleFollow,
               onToggleSuperFollow: _toggleSuperFollow,
             ),
@@ -131,7 +183,7 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
                     playbackStatus: widget.playbackStatus,
                   ),
                   const _FollowPanel(),
-                  const _RecommendPanel(),
+                  _RecommendPanel(site: site, cid: payload?.cid ?? ''),
                   const _SettingsPanel(),
                 ],
               ),
@@ -423,7 +475,7 @@ class _SideActions extends StatelessWidget {
         children: [
           Expanded(
             child: _SideActionButton(
-              key: const Key('play-side-follow'),
+              key: const Key('play-side-follow-btn'),
               icon: followed ? Icons.favorite_rounded : Icons.favorite_border_rounded,
               label: followed ? '已关注' : '关注',
               foreground: followed
@@ -689,7 +741,23 @@ class _ChatTabState extends ConsumerState<_ChatTab>
     super.build(context); // AutomaticKeepAliveClientMixin 要求
     final tokens = context.tokens;
     final params = (site: widget.site, roomId: widget.roomId);
+    // 聊天总开关:关闭时仅隐藏内容区并显示占位,弹幕会话 provider 仍被 watch(不停)。
+    final chatEnabled = ref.watch(
+      settingsProvider.select((s) => s.chatEnabled),
+    );
     final chat = ref.watch(danmakuSessionProvider(params));
+    if (!chatEnabled) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(AppSpacing.md),
+          child: Text(
+            '聊天已关闭',
+            textAlign: TextAlign.center,
+            style: AppTypography.caption,
+          ),
+        ),
+      );
+    }
     final rows = [
       for (final message in chat.messages) _ChatRowData.fromMessage(message),
     ];
@@ -927,40 +995,312 @@ class _FanBadge extends StatelessWidget {
   }
 }
 
-class _FollowPanel extends StatelessWidget {
+class _FollowPanel extends ConsumerWidget {
   const _FollowPanel();
 
   @override
-  Widget build(BuildContext context) {
-    return const _PanelHint(
-      key: Key('play-side-follow-panel'),
-      icon: Icons.star_border_rounded,
-      title: '我的关注',
-      text: '关注的直播间会显示在这里',
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = context.tokens;
+    final entries = ref.watch(followProvider);
+    return Column(
+      key: const Key('play-side-follow-panel'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.sm,
+            AppSpacing.sm,
+            AppSpacing.sm,
+            4,
+          ),
+          child: Text(
+            '我的关注',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.2,
+              fontWeight: FontWeight.w600,
+              color: tokens.textPrimary,
+            ),
+          ),
+        ),
+        Expanded(
+          child: entries.isEmpty
+              ? const _PanelHint(
+                  icon: Icons.star_border_rounded,
+                  title: '我的关注',
+                  text: '关注的直播间会显示在这里',
+                )
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.sm,
+                    0,
+                    AppSpacing.sm,
+                    AppSpacing.sm,
+                  ),
+                  itemCount: entries.length,
+                  separatorBuilder: (context, _) => const SizedBox(height: 6),
+                  itemBuilder: (context, index) => _FollowListItem(
+                    entry: entries[index],
+                  ),
+                ),
+        ),
+      ],
     );
   }
 }
 
-class _RecommendPanel extends StatelessWidget {
-  const _RecommendPanel();
+class _FollowListItem extends StatelessWidget {
+  const _FollowListItem({required this.entry});
 
-  @override
-  Widget build(BuildContext context) {
-    return const _PanelHint(
-      key: Key('play-side-recommend-panel'),
-      icon: Icons.auto_awesome_outlined,
-      title: '相关推荐',
-      text: '相同分类的直播间会显示在这里',
-    );
-  }
-}
-
-class _SettingsPanel extends StatelessWidget {
-  const _SettingsPanel();
+  final FollowEntry entry;
 
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
+    final room = entry.room;
+    final initial = room.anchorName.isNotEmpty ? room.anchorName.substring(0, 1) : '?';
+    final cover = room.cover.isEmpty
+        ? ColoredBox(
+            color: tokens.surfaceRaised,
+            child: Center(
+              child: Text(
+                initial,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          )
+        : Image.network(
+            room.cover,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => ColoredBox(
+              color: tokens.surfaceRaised,
+              child: Center(
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            ),
+          );
+    return InkWell(
+      // 用 go(替换当前播放页)而非 push:直播切房若 push,旧播放页连同其
+      // media-kit 会话被压在栈下继续存活,与「切房不泄漏/generation fence」
+      // 的目标相悖;且被替换后旧房间 autoDispose 释放,资源收敛。
+      onTap: () => context.go('/${room.site}/play/${room.roomId}'),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 44,
+            height: 44,
+            child: ClipRRect(
+              borderRadius: const BorderRadius.all(Radius.circular(4)),
+              child: cover,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  room.title.isEmpty ? room.anchorName : room.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.2,
+                    color: tokens.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(room.anchorName, style: AppTypography.caption),
+              ],
+            ),
+          ),
+          if (entry.isSpecial)
+            Icon(Icons.star_rounded, size: 14, color: tokens.liveBadge),
+        ],
+      ),
+    );
+  }
+}
+
+class _RecommendPanel extends ConsumerWidget {
+  const _RecommendPanel({required this.site, required this.cid});
+
+  final String site;
+  final String cid;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = context.tokens;
+    final query = BrowseRoomQuery(site: site, cid: cid.isEmpty ? null : cid);
+    final asyncRooms = ref.watch(browseRoomsProvider(query));
+    return Column(
+      key: const Key('play-side-recommend-panel'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.sm,
+            AppSpacing.sm,
+            AppSpacing.sm,
+            4,
+          ),
+          child: Text(
+            '相关推荐',
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.2,
+              fontWeight: FontWeight.w600,
+              color: tokens.textPrimary,
+            ),
+          ),
+        ),
+        Expanded(
+          child: asyncRooms.when(
+            loading: () => const Center(
+              child: Padding(
+                padding: EdgeInsets.all(AppSpacing.md),
+                child: Text(
+                  '推荐加载中…',
+                  textAlign: TextAlign.center,
+                  style: AppTypography.caption,
+                ),
+              ),
+            ),
+            error: (error, _) => const _PanelHint(
+              icon: Icons.auto_awesome_outlined,
+              title: '相关推荐',
+              text: '加载失败,请稍后重试',
+            ),
+            data: (result) {
+              final rooms = result.rooms;
+              if (rooms.isEmpty) {
+                return const _PanelHint(
+                  icon: Icons.auto_awesome_outlined,
+                  title: '相关推荐',
+                  text: '相同分类的直播间会显示在这里',
+                );
+              }
+              return ListView.separated(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.sm,
+                  0,
+                  AppSpacing.sm,
+                  AppSpacing.sm,
+                ),
+                itemCount: rooms.length,
+                separatorBuilder: (context, _) => const SizedBox(height: 6),
+                itemBuilder: (context, index) => _RecommendListItem(
+                  site: site,
+                  room: rooms[index],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _RecommendListItem extends StatelessWidget {
+  const _RecommendListItem({required this.site, required this.room});
+
+  final String site;
+  final RoomSummary room;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    final initial = room.anchorName.isNotEmpty ? room.anchorName.substring(0, 1) : '?';
+    final cover = room.cover.isEmpty
+        ? ColoredBox(
+            color: tokens.surfaceRaised,
+            child: Center(
+              child: Text(
+                initial,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          )
+        : Image.network(
+            room.cover,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => ColoredBox(
+              color: tokens.surfaceRaised,
+              child: Center(
+                child: Text(
+                  initial,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ),
+            ),
+          );
+    return InkWell(
+      key: Key('play-recommend-room-${room.site}-${room.roomId}'),
+      // 与关注条目同口径:go 替换当前播放页,不压栈(见上方注释)。
+      onTap: () => context.go('/$site/play/${room.roomId}'),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 44,
+            height: 44,
+            child: ClipRRect(
+              borderRadius: const BorderRadius.all(Radius.circular(4)),
+              child: cover,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  room.title.isEmpty ? room.anchorName : room.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    height: 1.2,
+                    color: tokens.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(room.anchorName, style: AppTypography.caption),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsPanel extends ConsumerWidget {
+  const _SettingsPanel();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = context.tokens;
+    final settings = ref.watch(settingsProvider);
     return ListView(
       key: const Key('play-side-settings-panel'),
       padding: const EdgeInsets.all(AppSpacing.sm),
@@ -970,18 +1310,24 @@ class _SettingsPanel extends StatelessWidget {
           children: [
             _SettingRow(
               label: '线路格式',
-              trailing: DropdownButton<String>(
-                value: '自动',
+              trailing: DropdownButton<PreferredLineFormat>(
+                key: const Key('play-side-setting-line-format'),
+                value: settings.preferredLineFormat,
                 isDense: true,
                 underline: const SizedBox.shrink(),
                 dropdownColor: tokens.surfaceRaised,
                 style: TextStyle(fontSize: 11, color: tokens.textPrimary),
-                items: const [
-                  DropdownMenuItem(value: '自动', child: Text('自动')),
-                  DropdownMenuItem(value: 'HLS', child: Text('HLS')),
-                  DropdownMenuItem(value: 'FLV', child: Text('FLV')),
+                items: [
+                  for (final format in PreferredLineFormat.values)
+                    DropdownMenuItem(value: format, child: Text(format.label)),
                 ],
-                onChanged: (_) {},
+                onChanged: (format) {
+                  if (format != null) {
+                    ref
+                        .read(settingsProvider.notifier)
+                        .setPreferredLineFormat(format);
+                  }
+                },
               ),
             ),
           ],
@@ -993,11 +1339,15 @@ class _SettingsPanel extends StatelessWidget {
             _SettingRow(
               label: '聊天',
               trailing: Switch(
-                value: true,
-                onChanged: (_) {},
+                key: const Key('play-side-setting-chat'),
+                value: settings.chatEnabled,
+                onChanged: (enabled) => ref
+                    .read(settingsProvider.notifier)
+                    .setChatEnabled(enabled),
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
             ),
+            // 透明度/字号由 A3 另一轨负责,本轨不加控件。
             _SettingRow(
               label: '透明度',
               trailing: SizedBox(
@@ -1086,7 +1436,6 @@ class _SettingRow extends StatelessWidget {
 
 class _PanelHint extends StatelessWidget {
   const _PanelHint({
-    super.key,
     required this.icon,
     required this.title,
     required this.text,

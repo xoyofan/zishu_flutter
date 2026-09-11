@@ -24,14 +24,20 @@ abstract final class DanmakuStyle {
   /// 用户名基础色(未被 [DanmakuStyle.resolveColor] 覆盖时的回退)。
   static const Color userNameFallbackColor = Color(0xFFFFD666);
 
-  /// 字号(pt)。固定字号而非随画布缩放:弹幕可读性优先,宽度只驱动滚动速度。
+  /// 默认字号(pt)。固定字号而非随画布缩放:弹幕可读性优先,宽度只驱动滚动速度。
+  ///
+  /// 也是 [buildSpan] / [_buildParagraph] 的可选 [fontSize] 入参默认值,与
+  /// overlay 默认入参同源,保证未注入设置时渲染与历史一致。
   static const double fontSize = 20;
 
   /// 用户名相对正文字号的缩放(用户名略小,视觉上从属于正文)。
   static const double userNameScale = 0.9;
 
-  /// 行高(弹幕单行占位高度,单位 px)。
+  /// 行高(默认字号下单行占位高度,单位 px)。
   static const double lineHeight = fontSize * 1.4;
+
+  /// 给定字号下的行高(px)。A3 字号设置生效时据此换算轨道间距。
+  static double lineHeightOf(double fontSize) => fontSize * 1.4;
 
   /// 颜色归一:
   /// - `color == 0`(含越界值)→ [defaultTextColor];
@@ -60,7 +66,13 @@ abstract final class DanmakuStyle {
   ///
   /// 结构固定为 `[userName, text]`,空用户名时只保留正文段,便于
   /// `CustomPainter` 用 [TextPainter] 一次性布局。
-  static TextSpan buildSpan(DanmakuMessage message) {
+  ///
+  /// [fontSize] 可选,A3 由 [DanmakuOverlay] 注入(默认 [DanmakuStyle.fontSize],
+  /// 与历史一致)。
+  static TextSpan buildSpan(
+    DanmakuMessage message, {
+    double fontSize = DanmakuStyle.fontSize,
+  }) {
     final bodyColor = resolveColor(message.color);
     final children = <TextSpan>[];
     if (message.userName.isNotEmpty) {
@@ -118,7 +130,11 @@ abstract final class DanmakuStyle {
     return painter.maxIntrinsicWidth;
   }
 
-  static ui.Paragraph _buildParagraph(TextSpan span, {required bool stroke}) {
+  static ui.Paragraph _buildParagraph(
+    TextSpan span, {
+    required bool stroke,
+    double fontSize = DanmakuStyle.fontSize,
+  }) {
     final builder = ui.ParagraphBuilder(
       ui.ParagraphStyle(
         textDirection: TextDirection.ltr,

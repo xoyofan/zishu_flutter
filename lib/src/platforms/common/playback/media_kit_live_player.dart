@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart' show BoxFit, Widget;
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import 'package:window_manager/window_manager.dart';
 import 'package:live_parser/live_parser.dart' show StreamLine;
 
 import 'live_player.dart';
@@ -127,7 +128,13 @@ class MediaKitLivePlayer implements LivePlayer {
 
   @override
   Future<void> toggleFullscreen() async {
-    // Windows 桌面全屏接入放在平台层后续迭代,当前保持空操作(占位语义)。
+    // Windows 桌面全屏:取当前状态再取反。VM / 无窗口环境(单测注入 Fake 时
+    // 不调用本实现,这里仍做静默降级,避免原生插件不可用时抛错)。
+    try {
+      await windowManager.setFullScreen(!await windowManager.isFullScreen());
+    } catch (_) {
+      // 平台不支持 / 插件未就绪:静默降级,不阻断上层沉浸态切换。
+    }
   }
 
   @override

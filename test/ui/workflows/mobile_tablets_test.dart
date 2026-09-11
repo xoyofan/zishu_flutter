@@ -313,40 +313,46 @@ void main() {
       expect(device.size, viewport);
       await _pumpPageOnDevice(tester, _playPage(), device);
 
-      // 1) play-quality 锚点全部落在视口内且可点(控制区不被挤出视口)。
-      final qualities = anchorKeysWithPrefix(tester, 'play-quality-');
+      // 1) 窄屏(<1024)口径:画质/线路收进下拉。入口必须落在视口内且可点
+      //    (控制区不被挤出视口);菜单未打开时横向 chip 不在树上。
+      final qualityMenu = find.byKey(const Key('play-quality-menu'));
+      expect(qualityMenu, findsOneWidget, reason: '窄屏应有画质下拉入口');
+      final menuRect = tester.getRect(qualityMenu);
+      expect(menuRect.left, greaterThanOrEqualTo(0),
+          reason: '画质入口越出视口左缘');
+      expect(menuRect.top, greaterThanOrEqualTo(0),
+          reason: '画质入口越出视口顶缘');
+      expect(menuRect.right, lessThanOrEqualTo(viewport.width),
+          reason: '画质入口越出视口右缘(控制区被挤出)');
+      expect(menuRect.bottom, lessThanOrEqualTo(viewport.height),
+          reason: '画质入口越出视口底缘(控制区被挤出)');
       expect(
-        qualities.length,
-        greaterThanOrEqualTo(2),
-        reason: 'fixture 应提供 ≥2 个画质档位',
+        qualityMenu.hitTestable(),
+        findsOneWidget,
+        reason: '画质入口被遮挡/不可点',
       );
-      for (final quality in qualities) {
-        final rect = tester.getRect(find.byKey(Key(quality)));
-        expect(rect.left, greaterThanOrEqualTo(0),
-            reason: '$quality 越出视口左缘');
-        expect(rect.top, greaterThanOrEqualTo(0),
-            reason: '$quality 越出视口顶缘');
-        expect(rect.right, lessThanOrEqualTo(viewport.width),
-            reason: '$quality 越出视口右缘(控制区被挤出)');
-        expect(rect.bottom, lessThanOrEqualTo(viewport.height),
-            reason: '$quality 越出视口底缘(控制区被挤出)');
-        expect(
-          find.byKey(Key(quality)).hitTestable(),
-          findsOneWidget,
-          reason: '$quality 被遮挡/不可点',
-        );
-      }
+      expect(
+        find.byKey(const Key('play-quality-current')),
+        findsOneWidget,
+        reason: '下拉入口应暴露当前画质名标签',
+      );
 
-      // 2) 点击第二个画质 chip 应进入选中态(证明控制区真实可达)。
-      final secondQuality = find.byKey(Key(qualities[1]));
-      await tester.tap(secondQuality);
+      // 2) 打开菜单点选另一档:证明横屏下切档通路真实可达,入口标签同步。
+      await tester.tap(qualityMenu);
+      await tester.pump(_kFrame);
+      await tester.pump(_kFrame);
+      final item = find.byKey(const Key('play-quality-蓝光8M'));
+      expect(item, findsOneWidget, reason: '下拉应展开画质菜单项');
+      expect(item.hitTestable(), findsOneWidget, reason: '画质菜单项应可点');
+      await tester.tap(item);
       await tester.pump(_kFrame);
       await tester.pump(_kFrame);
       expect(
-        tester.widget<ChoiceChip>(secondQuality).selected,
-        isTrue,
-        reason: '横屏下点击第二个画质 chip 应进入选中态',
+        tester.widget<Text>(find.byKey(const Key('play-quality-current'))).data,
+        '蓝光8M',
+        reason: '下拉切档后入口应显示新选中的画质名',
       );
+      expect(tester.takeException(), isNull);
 
       // 3) 视频主区宽 > 视口 50%:play-back 祖先定位 PlayView(无壳页面),
       //    视频舞台与 QualityLineBar 同列 CrossAxisAlignment.stretch,同宽。

@@ -94,7 +94,24 @@
 | A12 | 集成收口:装配层接线(把 A1-A11 挂回 `play_view`/`play_side_panel`/`providers`)+ 全量门禁 + 打开 define 的 Windows 真实验收 | A1-A11 | [ ] | analyze + test 全量 + build windows + 真机观感 |
 | A13(P) ✅ | 解析侧配合(已完成,提交 `2f3709d`):① **死键修复**——`availableQualities` 改为从真实 `streams` 反推(此前按 `multirates` 全量生成;某档全部线路取流失败时该档仍留在列表里,但 `streams` 已无同名项 → UI 点该 chip 静默无反应);② `RoomPayload` 增补可空 `startedAt`,斗鱼取 betard `show_time`——**人气/关注数无单房间接口(`ol` 只在分类列表接口),故不提供;拿不到即 null,不伪造**;③ 附带修复**搜索恒 0 条**:斗鱼 japi 搜索缺设备标识 cookie `dy_did` 时返回 `{error:9,"搜索过于频繁"}` 且 `data` 为空,现自动补随机 32 位十六进制 did,并让上游 `error != 0` 抛 `ParserHttpException` 而非静默返回空结果(**搜索聚合层必须按平台 try/catch**) | A0 | [x] | `dart analyze` 0 issue + `dart test` 187 passed + 斗鱼在线 smoke 全绿 |
 
-> 假绿警示:`test/ui/workflows/danmaku_test.dart` 断言「弹幕条目 >0」,但数据源是硬编码 `_chatSamples`(12 条),**当前是通过状态但不是真弹幕**;A4 未完成前该用例不能作为弹幕能力证据。
+> ~~假绿警示~~ **已消除(2026-09-11)**:`danmaku_test` 已改为断言真实 `danmakuSessionProvider` 会话(推送内容变化/切 tab 会话存活/autoDispose 释放),硬编码 `_chatSamples` 断言删除;A4 已落地,该用例自此可作弹幕能力证据。
+
+### A 轨状态更新(2026-09-11 收口,以本节为准)
+
+第三轮按**文件级互斥**拆 R1-R4 四轨并行(收口人统一裁决口径),连同收口修复一次过门禁:`flutter analyze` 0 issue / `flutter test` **214 passed / 0 failed** / `flutter build windows --debug` ✓。
+
+| 卡 | 状态 | 落点 |
+|---|---|---|
+| A3 弹幕设置面板 | [x] | R1:`features/danmaku/` 新增 `danmaku_settings.dart`(clamp 模型)/`danmaku_settings_provider.dart`/`danmaku_settings_panel.dart`,透明度/字号/速度/显示区域四项,`test/features/danmaku/` 15 用例 |
+| A4 侧栏聊天接真实会话 | [x] | R2 前置轮:`play_side_panel.dart` 聊天 tab 消费 `danmakuSessionProvider`,连接状态条/自动滚底/N 条新消息跳底/重连 |
+| A5 全屏实装 | [x] | R2:`media_kit_live_player.toggleFullscreen` 接 window_manager 0.4.0(VM 测试不可用 → 按键即切本地沉浸态 + try/catch 调插件) |
+| A6 沉浸模式 | [x] | R2:沉浸态状态机(F 进入/F·Esc 退出、隐藏房间头与侧栏、控制条 3s 自动隐藏、MouseRegion 唤醒),`fullscreen_test.dart` |
+| A7 播放器细节 | [x] | R4:Space/M/F 快捷键、点帧播放暂停、刷新视频按钮、窄屏(<1024)画质/线路收进下拉、`settingsProvider.defaultQuality` 生效 |
+| A8 侧栏关注落库 | [x] | R3:关注/超关接 `followProvider` 并持久化(上限 200 + SnackBar),`side_panel_features_test.dart` |
+| A9 侧栏设置接线 | [x] | R3:聊天开关(`chatEnabled`)/线路格式(`preferredLineFormat`)接真并持久化,死控件清除 |
+| A10 推荐 Tab | [x] | R3:`browseRoomsProvider` 拉同分类 fixture 房间,条目 `go` 跳转(见收口裁决 3) |
+| A0 装配拆分 | [ ] **推迟** | R2/R3/R4 已把 A0 的三个目标文件改写(侧栏 1500+ 行),拆分必须在收口后的树上重排清单后进行,避免与并行轨互踩 |
+| A11 导航能力过滤 / A12 真机验收 | [ ] | 未开始(下一轮) |
 
 ## 测试轨 W(workflows)
 
@@ -207,3 +224,31 @@
 ## 历史归档
 
 旧 engine/ui 双 package 时代的 G/E/U/Q 轨道卡与记录见 git 历史(tasks.md @ 32465d3 及之前);其中 E1-E4/E7、U1/U2 的成果已被新架构吸收(live_parser 契约层、design tokens、AppShell)。
+
+## 收口记录(2026-09-11,R1-R4 集成)
+
+第三轮 R1-R4 回报后统一收口。基线实测 `flutter test` **163 passed / 50 failed**,归因为三个根因 + 两处用例缺陷,全部修复后 **214 passed / 0 failed**:
+
+| # | 根因 | 修复 |
+|---|---|---|
+| 1 | **`player_controls.dart` 在控制条内套 `Scaffold`**:控制条位于无界高度 `Stack` 内,`Scaffold` 的 `CustomMultiChildLayout` 拿到无限高约束 → performLayout 断言 → **整页渲染不出来**,连坐约 44 个用例(各文件表现为 `Found 0 widgets with type "PlaySidePanel"` 等次生错误) | 播放页无壳但必须有页面级 Scaffold:`PlayView` 根部新增透明 `Scaffold`,控制条内移除(正确宿主归属,SnackBar 由页面层提供) |
+| 2 | `play_page_test` 用 `setSurfaceSize` 设视口:只改渲染 surface,`MediaQuery` 仍报 800×600(W13 已记录的坑)→ 800<1024 被判窄屏,画质 chip 不挂载 | 改写 `tester.view`(物理尺寸+dpr),`play_page_test` / `workflow_browse_play_test` 统一口径 |
+| 3 | A9/A10 点击落空:TabBar 切换动画未落位即点击、`ListView.builder` 折叠线以下缓存条目 widgetList 找得到但点不到 | 测试侧 `ensureVisible` + pump 帧数补足(8 帧 ≈ 400ms ≥ 动画时长) |
+| 4 | R1 弹幕用例假阴:restore 在 provider **首次 build** 才经 microtask 调度,用例先 pump 后 read → restore 没跑,断言全是出厂默认;且 opacity 断言空转(出厂默认 100 == clamp 上限 100) | 先 read 触发 build 再 pump;opacity 种子改 5(越下界 → 夹到 10,与默认可区分) |
+| 5 | `danmaku_settings_test` 挂死 10 分钟:testWidgets 的 FakeAsync 里 timer 只随 `tester.pump` 推进,裸 `Future.delayed` 直接超时 | 改用 `tester.pump()` 冲 microtask |
+| 6 | 局部变量 `_pumpPanel` lint | 更名 `pumpPanel` |
+
+### 收口裁决(记录在案)
+
+1. **默认画质按平台可配**:`SettingsState` 增 `defaultQualityBySite`(site → 画质名,JSON 持久化)与 `effectiveDefaultQuality(site)`;`PlayController` watch 平台生效值。语义 = **平台单独配置优先,未配置回落全平台默认;房间缺该档才回退 `streams.first`**。设置页「按平台配置默认画质」默认折叠(避免 11 个下拉干扰既有 `find.byType(DropdownButton<String>)` 断言),锚点 `settings-quality-{site}`。
+2. **画质下拉口径(<1024)**:窄屏下锚点契约 = `play-quality-menu`/`play-quality-current` 常驻,`play-quality-{name}` 挂在菜单项上(菜单打开才挂载)。存量用例按此改口径:`mobile_tablets.landscapePlayPriority`(入口可达+菜单项可点+切档后入口标签同步)、`responsive_skip` 竖屏(用入口锚点替代 chip 锚点做堆叠参照)。
+3. **播放页条目导航 push→go**:推荐/关注条目改 `context.go`(替换当前播放页)。实证:`go_router.push` 后 `routeInformationProvider.value.uri` **不变**(上报 type=none);且 push 会把旧播放页连 media-kit 会话压在栈下存活,与「切房不泄漏/generation fence」相悖。
+
+### 已验证记录(追加)
+
+| 日期 | 命令 | 结果 |
+|---|---|---|
+| 2026-09-11 | 收口前基线 `flutter test` 全量 | 163 passed / 50 failed(R1-R4 合并中间态) |
+| 2026-09-11 | `flutter analyze` | No issues(0 issue) |
+| 2026-09-11 | `flutter test` 全量 | **214 passed / 0 failed / 0 skipped** |
+| 2026-09-11 | `flutter build windows --debug -t lib/main.dart` | OK(157.2s) |

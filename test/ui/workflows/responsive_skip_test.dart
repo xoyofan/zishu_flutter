@@ -302,8 +302,9 @@ void main() {
 
       // 不与视频同行:侧栏顶部必须低于视频列底部的画质条(堆叠布局);
       // 侧栏贴内容左缘,说明视频已占满内容区全宽,而非被右栏挤压。
+      // 窄屏(<1024)口径:画质收进下拉,chip 锚点不挂载,改用下拉入口锚点。
       final qualityTop =
-          tester.getTopLeft(find.byKey(const Key('play-quality-蓝光8M'))).dy;
+          tester.getTopLeft(find.byKey(const Key('play-quality-menu'))).dy;
       final panelRect = tester.getRect(panel);
       expect(
         panelRect.top,

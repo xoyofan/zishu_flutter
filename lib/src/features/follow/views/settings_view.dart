@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/presentation/design_tokens.dart';
+import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../application/settings_provider.dart';
 
@@ -20,11 +21,17 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
   late final TextEditingController _serverController;
   final FocusNode _serverFocus = FocusNode();
 
+  /// 「按平台配置默认画质」展开态。默认折叠:折叠时不构建 11 组平台下拉,
+  /// 避免设置页被撑爆,也让既有用例的 `find.byType(DropdownButton<String>)`
+  /// 仍只命中「全平台默认画质」一个控件。
+  bool _platformQualityExpanded = false;
+
   @override
   void initState() {
     super.initState();
-    _serverController =
-        TextEditingController(text: ref.read(settingsProvider).serverUrl);
+    _serverController = TextEditingController(
+      text: ref.read(settingsProvider).serverUrl,
+    );
   }
 
   @override
@@ -97,8 +104,8 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                 title: '播放',
                 children: [
                   _SettingsRow(
-                    label: '默认画质',
-                    hint: '进入播放页时优先选择的画质',
+                    label: '全平台默认画质',
+                    hint: '各平台未单独配置时使用的画质',
                     trailing: _StyledDropdown<String>(
                       value: settings.defaultQuality,
                       items: [
@@ -110,6 +117,58 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                           .setDefaultQuality(quality),
                     ),
                   ),
+                  _SettingsRow(
+                    label: '按平台配置默认画质',
+                    hint: _platformQualityExpanded ? '点此收起' : '为单个平台指定不同默认档',
+                    trailing: IconButton(
+                      key: const Key('settings-toggle-platform-quality'),
+                      tooltip: _platformQualityExpanded
+                          ? '收起平台画质配置'
+                          : '展开平台画质配置',
+                      onPressed: () => setState(
+                        () => _platformQualityExpanded =
+                            !_platformQualityExpanded,
+                      ),
+                      icon: Icon(
+                        _platformQualityExpanded
+                            ? Icons.expand_less_rounded
+                            : Icons.expand_more_rounded,
+                        size: 18,
+                        color: tokens.textSecondary,
+                      ),
+                    ),
+                  ),
+                  // 折叠时不构建平台下拉:一是页面不至于被 11 行撑爆,二是让
+                  // 既有用例的 `find.byType(DropdownButton<String>)` 仍只命中
+                  // 「全平台默认画质」一个控件(见 settings_test)。
+                  if (_platformQualityExpanded)
+                    for (final brand in PlatformBrandCatalog.navPlatforms)
+                      if (brand.id != 'all')
+                        _SettingsRow(
+                          label: brand.name,
+                          hint: settings.defaultQualityBySite[brand.id] == null
+                              ? '未单独配置,进播放页用全平台默认'
+                              : null,
+                          trailing: _StyledDropdown<String>(
+                            // 测试锚点:按平台寻址(settings-quality-{site})。
+                            key: Key('settings-quality-${brand.id}'),
+                            // 哨兵空串 = 「跟随全平台」;其余值为平台单独配置。
+                            value:
+                                settings.defaultQualityBySite[brand.id] ?? '',
+                            items: [
+                              const (value: '', label: '跟随全平台'),
+                              for (final quality
+                                  in SettingsState.qualityOptions)
+                                (value: quality, label: quality),
+                            ],
+                            onChanged: (quality) => ref
+                                .read(settingsProvider.notifier)
+                                .setDefaultQualityForSite(
+                                  brand.id,
+                                  quality.isEmpty ? null : quality,
+                                ),
+                          ),
+                        ),
                 ],
               ),
               _SettingsGroup(
@@ -131,14 +190,17 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                 title: '服务器',
                 children: [
                   Padding(
-                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: AppSpacing.sm,
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           'streaming-server 地址',
-                          style: AppTypography.body
-                              .copyWith(fontWeight: FontWeight.w600),
+                          style: AppTypography.body.copyWith(
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                         const SizedBox(height: AppSpacing.xs),
                         Text(
@@ -165,18 +227,19 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                                   fillColor: tokens.surfaceRaised,
                                   border: OutlineInputBorder(
                                     borderRadius: AppRadius.allSm,
-                                    borderSide:
-                                        BorderSide(color: tokens.border),
+                                    borderSide: BorderSide(
+                                      color: tokens.border,
+                                    ),
                                   ),
                                   enabledBorder: OutlineInputBorder(
                                     borderRadius: AppRadius.allSm,
-                                    borderSide:
-                                        BorderSide(color: tokens.border),
+                                    borderSide: BorderSide(
+                                      color: tokens.border,
+                                    ),
                                   ),
                                   focusedBorder: OutlineInputBorder(
                                     borderRadius: AppRadius.allSm,
-                                    borderSide:
-                                        BorderSide(color: tokens.brand),
+                                    borderSide: BorderSide(color: tokens.brand),
                                   ),
                                 ),
                                 onSubmitted: (_) => _saveServerUrl(),
@@ -249,11 +312,7 @@ class _SettingsGroup extends StatelessWidget {
 
 /// 一行设置:左标签/说明,右侧控件。
 class _SettingsRow extends StatelessWidget {
-  const _SettingsRow({
-    required this.label,
-    required this.trailing,
-    this.hint,
-  });
+  const _SettingsRow({required this.label, required this.trailing, this.hint});
 
   final String label;
   final Widget trailing;
@@ -271,7 +330,9 @@ class _SettingsRow extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: AppTypography.body.copyWith(fontWeight: FontWeight.w600),
+                  style: AppTypography.body.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
                 if (hint != null) ...[
                   const SizedBox(height: 2),
@@ -291,6 +352,7 @@ class _SettingsRow extends StatelessWidget {
 /// 统一样式的下拉选择(surface 底 + border 描边)。
 class _StyledDropdown<T> extends StatelessWidget {
   const _StyledDropdown({
+    super.key,
     required this.value,
     required this.items,
     required this.onChanged,
@@ -315,7 +377,11 @@ class _StyledDropdown<T> extends StatelessWidget {
         isDense: true,
         underline: const SizedBox.shrink(),
         dropdownColor: tokens.surfaceRaised,
-        icon: Icon(Icons.expand_more_rounded, size: 16, color: tokens.textSecondary),
+        icon: Icon(
+          Icons.expand_more_rounded,
+          size: 16,
+          color: tokens.textSecondary,
+        ),
         style: AppTypography.body,
         items: [
           for (final item in items)

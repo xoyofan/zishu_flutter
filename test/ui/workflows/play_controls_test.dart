@@ -402,4 +402,106 @@ void main() {
     expect(_player.calls.length, greaterThan(beforeButton));
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('refreshStream:点刷新按钮重开当前线路,画质/线路不变', (tester) async {
+    final play = await _pumpPlay(tester);
+    final container = play.container;
+    await _awaitSettingsHydrated(tester, container);
+
+    final params = (site: 'douyu', roomId: '63136');
+    final genBefore =
+        container.read(playControllerProvider(params)).value?.generation ?? 0;
+    expect(
+      find.byKey(const Key('play-refresh-stream')),
+      findsOneWidget,
+      reason: '控制条应存在刷新视频按钮',
+    );
+
+    await tester.tap(find.byKey(const Key('play-refresh-stream')));
+    await _pumpFrames(tester, 3);
+
+    // 刷新走 retry 通路:build 已 bump 一代际,retry 再 +1;fixture 房间不真正
+    // open 播放器(_openSelected 对 fixture 早返回),故用代际递增作 retry 路径证据。
+    final genAfter =
+        container.read(playControllerProvider(params)).value?.generation ?? 0;
+    expect(
+      genAfter,
+      greaterThan(genBefore),
+      reason: '刷新应经 retry 通路(代际递增),不重解析 payload',
+    );
+
+    // 刷新后弹 SnackBar「已刷新」。
+    expect(
+      find.text('已刷新'),
+      findsOneWidget,
+      reason: '刷新后应提示「已刷新」',
+    );
+
+    // 刷新只重开流,不改变选中画质/线路。
+    expect(
+      container.read(playControllerProvider(params)).value?.quality?.name,
+      '超清',
+      reason: '刷新不应改变默认画质档',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+    'qualityMenuNarrow:窄屏画质收进下拉,菜单项可点切档',
+    (tester) async {
+      final play = await _pumpPlay(tester);
+      final container = play.container;
+      await _awaitSettingsHydrated(tester, play.container);
+
+      // 切到窄屏视口(<1024):横向 chips 应收进菜单。
+      tester.view.physicalSize = const Size(480, 900);
+      tester.view.devicePixelRatio = 1.0;
+      await _pumpFrames(tester, 3);
+
+      // 菜单未打开时,横向画质 chip 不应在树上。
+      expect(
+        find.byKey(const Key('play-quality-超清')),
+        findsNothing,
+        reason: '窄屏下画质 chip 应收进下拉,菜单未打开时不在树上',
+      );
+      // 下拉入口与当前画质标签存在。
+      expect(
+        find.byKey(const Key('play-quality-menu')),
+        findsOneWidget,
+        reason: '窄屏应有画质下拉入口',
+      );
+      expect(
+        find.byKey(const Key('play-quality-current')),
+        findsOneWidget,
+        reason: '窄屏下拉入口应暴露当前画质名标签',
+      );
+
+      // 打开画质下拉。
+      await tester.tap(find.byKey(const Key('play-quality-menu')));
+      await _pumpFrames(tester, 2);
+
+      // 菜单项可见且可点。
+      final item = find.byKey(const Key('play-quality-蓝光8M'));
+      expect(item, findsOneWidget, reason: '下拉应展开画质菜单项');
+      expect(
+        item.hitTestable(),
+        findsOneWidget,
+        reason: '画质菜单项应可点',
+      );
+
+      // 点选第二个画质:选中态更新(验证下拉切档通路)。
+      await tester.tap(item);
+      await _pumpFrames(tester, 2);
+      expect(
+        container
+            .read(playControllerProvider((site: 'douyu', roomId: '63136')))
+            .value
+            ?.quality
+            ?.name,
+        '蓝光8M',
+        reason: '窄屏下拉选画质应更新选中档',
+      );
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

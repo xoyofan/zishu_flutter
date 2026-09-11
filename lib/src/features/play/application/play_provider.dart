@@ -72,10 +72,8 @@ class PlayState {
 
 /// 播放页控制器:family by (site, roomId);autoDispose 随页面离开释放状态,
 /// 但全局播放器实例不在此销毁。
-final playControllerProvider =
-    AsyncNotifierProvider.autoDispose.family<PlayController, PlayState, PlayParams>(
-      PlayController.new,
-    );
+final playControllerProvider = AsyncNotifierProvider.autoDispose
+    .family<PlayController, PlayState, PlayParams>(PlayController.new);
 
 class PlayController extends AsyncNotifier<PlayState> {
   PlayController(this.params);
@@ -89,10 +87,13 @@ class PlayController extends AsyncNotifier<PlayState> {
     final generation = ++_generation;
     // 数据源端口变化(G1 换真实解析)时自动重建,Widget 无感。
     final source = ref.watch(roomSourceProvider);
-    // 默认画质:读取设置项。设置页变更会重建本 family(下次进房生效,
-    // 不打断当前会话),与「进房按默认档选中」语义一致。
+    // 默认画质:平台单独配置优先,未配置回落全平台默认(设置页可改)。
+    // select 以「该平台生效值」为 key,只有它变化才重建本 family;
+    // 房间缺该档时 _pickQuality 回退 streams.first(「没有才退」)。
     final preferredQuality = ref.watch(
-      settingsProvider.select((settings) => settings.defaultQuality),
+      settingsProvider.select(
+        (settings) => settings.effectiveDefaultQuality(params.site),
+      ),
     );
     final payload = await source.resolveRoom(
       site: params.site,

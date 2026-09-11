@@ -60,8 +60,14 @@ void main() {
   /// 画质/线路条是水平 ListView 惰性挂载:默认 800x600 下侧栏占掉 328 后,
   /// 左列仅约 424 宽,末尾「备线 FLV」chip 不会挂载;放大 surface 保证全部锚点挂载。
   Future<void> pumpPlayView(WidgetTester tester) async {
-    addTearDown(() => tester.binding.setSurfaceSize(null));
-    await tester.binding.setSurfaceSize(const Size(1600, 1200));
+    // 必须写 tester.view(物理尺寸 + dpr),不能用 setSurfaceSize:
+    // setSurfaceSize 只改渲染 surface,MediaQuery 仍报 800×600,断点判定全失灵
+    // (tasks.md W13 记录)→ 800<1024 被判成窄屏,画质/线路收进下拉,
+    // play-quality-*/play-line-* 锚点不挂载,桌面口径用例全部失真。
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(1600, 1200);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [playerProvider.overrideWithValue(FakeLivePlayer())],

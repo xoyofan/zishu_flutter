@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'package:live_parser/live_parser.dart' show DanmakuMessage;
 
+import '../domain/danmaku_settings.dart';
 import '../domain/danmaku_style.dart';
 import '../domain/danmaku_track.dart';
 
@@ -17,6 +18,9 @@ import '../domain/danmaku_track.dart';
 /// - **数据源解耦**:只吃 `Stream<DanmakuMessage>`,不依赖播放器/provider,
 ///   便于 VM 单测与后续由 lead 接线。
 /// - **资源安全**:`dispose` 取消订阅;未填满/空流/流关闭均安全。
+/// - **A3 细粒度设置消费**:[opacity]/[fontSize]/[speedFactor]/[displayAreaRatio]
+///   均为可选,默认值与历史行为一致(不透明 / 20px / 8s / 全屏),保证既有用例
+///   不红;接线后由 lead 从 [danmakuSettingsProvider] 注入。
 class DanmakuOverlay extends StatefulWidget {
   const DanmakuOverlay({
     super.key,
@@ -25,6 +29,10 @@ class DanmakuOverlay extends StatefulWidget {
     this.durationSeconds = 8.0,
     this.maxVisible = 200,
     this.topPadding = 8,
+    this.opacity = 1.0,
+    this.fontSize = DanmakuStyle.fontSize,
+    this.speedFactor,
+    this.displayAreaRatio = 1.0,
   });
 
   /// 弹幕消息流。可为 `null`(无数据源时渲染空画布)。
@@ -34,6 +42,9 @@ class DanmakuOverlay extends StatefulWidget {
   final bool enabled;
 
   /// 单条弹幕从右边缘滚至完全离场的总时长(秒)。速度随画布宽度。
+  ///
+  /// 仅当 [speedFactor] 为 `null` 时生效;[speedFactor] 非空时由
+  /// [danmakuDurationForSpeed] 计算出更贴切的时长(覆盖本值)。
   final double durationSeconds;
 
   /// 同屏最大弹幕数(超出丢弃最旧的,防止长时间挂机内存无界增长)。
@@ -41,6 +52,23 @@ class DanmakuOverlay extends StatefulWidget {
 
   /// 弹幕区距顶部留白(px),避免遮挡视频顶部信息。
   final double topPadding;
+
+  /// 叠加层整体不透明度 0~1(1 = 不透明)。作用于 painter(全局 alpha)。
+  final double opacity;
+
+  /// 弹幕字号(px)。传入 [DanmakuStyle.buildSpan] 控制布局与描边。
+  final double fontSize;
+
+  /// 速度档(1~10)。非空时覆盖 [durationSeconds],经 [danmakuDurationForSpeed]
+  /// 映射为滚动总时长(速度越大时长越短)。
+  final int? speedFactor;
+
+  /// 弹幕可占画布高度比例(取 [DanmakuSettings.kDisplayAreaRatios] 之一),
+  /// 用于裁剪可用轨道高度。1.0 = 全屏(与历史行为一致)。
+  final double displayAreaRatio;
+
+  /// 速度档 → 滚动总时长(秒)。供 [speedFactor] 与单测共用。
+  static double durationForSpeed(int speed) => danmakuDurationForSpeed(speed);
 
   @override
   State<DanmakuOverlay> createState() => _DanmakuOverlayState();
@@ -61,6 +89,11 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
   Duration _lastElapsed = Duration.zero;
 
   DanmakuTrackAllocator? _allocator;
+
+  /// 当前生效的滚动总时长:优先 [speedFactor] 映射,否则 [durationSeconds]。
+  double get _duration => widget.speedFactor != null
+      ? DanmakuOverlay.durationForSpeed(widget.speedFactor!)
+      : widget.durationSeconds;
 
   @override
   void initState() {
@@ -100,7 +133,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
     final size = context.size;
     if (size == null || size.width <= 0) return;
 
-    final span = DanmakuStyle.buildSpan(message);
+    final span = DanmakuStyle.buildSpan(message, fontSize: widget.fontSize);
     final textWidth = DanmakuStyle.measureWidth(span);
     final widthRatio = (textWidth / size.width).clamp(0.0, 1.0);
 
@@ -114,7 +147,7 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
           span: span,
           textWidth: textWidth,
           lane: lane,
-          totalSeconds: widget.durationSeconds,
+          totalSeconds: _duration,
         ),
       );
       if (_items.length > widget.maxVisible) {
@@ -157,15 +190,19 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
         if (width <= 0 || height <= 0) {
           return const SizedBox.expand(key: Key('danmaku-overlay'));
         }
+        // 固定 px 留白随系统文字缩放,避免大字号模式下弹幕贴顶。
+        final top = MediaQuery.textScalerOf(context).scale(widget.topPadding);
+        // 显示区域比例裁剪可用轨道高度:仅顶部 (画布高 - 留白) × 比例 区域可放弹幕。
+        final availableHeight = (height - top) * widget.displayAreaRatio;
         final lanes = DanmakuTrackAllocator.lanesForHeight(
-          height - widget.topPadding,
-          DanmakuStyle.lineHeight,
+          availableHeight,
+          DanmakuStyle.lineHeightOf(widget.fontSize),
         );
         final allocator = _allocator;
         if (allocator == null || allocator.laneCount != lanes) {
           _allocator = DanmakuTrackAllocator(
             laneCount: lanes,
-            durationSeconds: widget.durationSeconds,
+            durationSeconds: _duration,
           );
         }
         return IgnorePointer(
@@ -175,9 +212,11 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
               size: Size(width, height),
               painter: _DanmakuPainter(
                 items: _items,
-                topPadding: widget.topPadding,
+                topPadding: top,
                 canvasWidth: width,
                 enabled: widget.enabled,
+                fontSize: widget.fontSize,
+                opacity: widget.opacity,
               ),
             ),
           ),
@@ -220,24 +259,45 @@ class _DanmakuPainter extends CustomPainter {
     required this.topPadding,
     required this.canvasWidth,
     required this.enabled,
+    required this.fontSize,
+    required this.opacity,
   });
 
   final List<_LiveDanmaku> items;
   final double topPadding;
   final double canvasWidth;
   final bool enabled;
+  final double fontSize;
+  final double opacity;
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (items.isEmpty) return;
+  void _paintAll(Canvas canvas, Size size) {
     canvas.save();
     for (final item in items) {
       final dx = item.left(size.width);
       // 视口裁剪:完全在左/右边界外的弹幕不绘制。
       if (dx > size.width || dx + item.textWidth < 0) continue;
-      final dy = topPadding + item.lane * DanmakuStyle.lineHeight;
+      final dy = topPadding + item.lane * DanmakuStyle.lineHeightOf(fontSize);
       DanmakuStyle.paintRichText(canvas, item.span, offset: Offset(dx, dy));
     }
+    canvas.restore();
+  }
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (items.isEmpty) return;
+    // 不透明度 < 1:用 dstIn 黑色层做全局 alpha(与 Flutter Opacity 同款做法),
+    // 避免逐段改色导致描边/填充 alpha 不一致。
+    if (opacity >= 1.0) {
+      _paintAll(canvas, size);
+      return;
+    }
+    canvas.saveLayer(
+      Offset.zero & size,
+      Paint()
+        ..color = Color.fromARGB((opacity * 255).round(), 0, 0, 0)
+        ..blendMode = BlendMode.dstIn,
+    );
+    _paintAll(canvas, size);
     canvas.restore();
   }
 
@@ -248,6 +308,8 @@ class _DanmakuPainter extends CustomPainter {
     return oldDelegate.items.length != items.length ||
         oldDelegate.enabled != enabled ||
         oldDelegate.canvasWidth != canvasWidth ||
+        oldDelegate.opacity != opacity ||
+        oldDelegate.fontSize != fontSize ||
         enabled;
   }
 }

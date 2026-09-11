@@ -78,6 +78,10 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
     final compact = MediaQuery.sizeOf(context).width < AppBreakpoints.phone;
 
     // Slider 需要 Material 祖先;播放页为无壳布局,这里用透明 Material 自给。
+    // SnackBar 的宿主由播放页根级 Scaffold 提供(见 play_view.dart)。
+    // 不可在本组件内套 Scaffold:控制条位于无界高度的 Stack 内,Scaffold 的
+    // CustomMultiChildLayout 会拿到无限高约束 → performLayout 断言失败,
+    // 进而整页渲染不出来(实测连坐 50 个用例)。
     return CallbackShortcuts(
       bindings: {
         const SingleActivator(LogicalKeyboardKey.space): _togglePlayback,
@@ -173,6 +177,35 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
                 },
                 icon: Icon(
                   Icons.picture_in_picture_alt_rounded,
+                  size: 20,
+                  color: tokens.textPrimary,
+                ),
+              ),
+              IconButton(
+                // 测试锚点:刷新视频(重开当前线路,不重解析 payload)。
+                key: const Key('play-refresh-stream'),
+                tooltip: '刷新视频',
+                onPressed: () {
+                  // 复用 playControllerProvider 的 retry 通路:payload 已就位时
+                  // 只 bump 代际并重新 open 当前线路(轻量重开流),不重解析房间;
+                  // 仅当解析失败(payload 为 null)时 retry 才整体重解析,语义也合理。
+                  ref
+                      .read(
+                        playControllerProvider((
+                          site: widget.site,
+                          roomId: widget.roomId,
+                        )).notifier,
+                      )
+                      .retry();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('已刷新'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                },
+                icon: Icon(
+                  Icons.refresh_rounded,
                   size: 20,
                   color: tokens.textPrimary,
                 ),

@@ -70,6 +70,13 @@ class _TestApp extends ConsumerWidget {
 
 void main() {
   testWidgets('首页 → 播放页切画质 → 返回首页,锚点全程可用', (tester) async {
+    // 桌面工作流用例:显式给桌面视口。默认测试 surface 是 800×600 逻辑宽,
+    // <1024 会被判成窄屏、画质/线路收进下拉,chip 锚点不挂载(实测)。
+    // 必须写 tester.view 而非 setSurfaceSize(后者不改 MediaQuery,见 W13)。
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(1600, 1200);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(
       ProviderScope(
         overrides: [playerProvider.overrideWithValue(FakeLivePlayer())],
