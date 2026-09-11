@@ -221,6 +221,9 @@ class _FakeLivePlayer implements LivePlayer {
   Future<void> toggleFullscreen() async {}
 
   @override
+  Future<void> stop() async {}
+
+  @override
   void dispose() {}
 }
 

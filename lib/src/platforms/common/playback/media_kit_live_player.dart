@@ -30,6 +30,10 @@ class MediaKitLivePlayer implements LivePlayer {
 
   bool _muted = false;
 
+  /// 已释放标记:app 退出时根容器可能先销毁播放器再触发页面级 stop,
+  /// 此标记保证 stop 不会打到已释放的原生播放内核。
+  bool _disposed = false;
+
   /// 静音前音量,解除静音时恢复。
   double _volumeBeforeMute = 100;
 
@@ -104,6 +108,16 @@ class MediaKitLivePlayer implements LivePlayer {
   Future<void> pause() => _player.pause();
 
   @override
+  Future<void> stop() async {
+    if (_disposed) return;
+    await _player.stop();
+    // 卸载媒体后回到空闲快照:清播放/缓冲/错误,保留音量与静音语义。
+    _emit(
+      (_) => PlayerSnapshot(volume: _latest.volume, muted: _muted),
+    );
+  }
+
+  @override
   Future<void> setVolume(double volume) async {
     final clamped = volume.clamp(0, 100).toDouble();
     // 手动拉起音量即解除静音;静音状态下置 0 则维持静音语义。
@@ -139,6 +153,8 @@ class MediaKitLivePlayer implements LivePlayer {
 
   @override
   void dispose() {
+    if (_disposed) return;
+    _disposed = true;
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
     }

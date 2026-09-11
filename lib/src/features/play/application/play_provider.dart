@@ -85,6 +85,11 @@ class PlayController extends AsyncNotifier<PlayState> {
   @override
   FutureOr<PlayState> build() async {
     final generation = ++_generation;
+    // 离开播放页(autoDispose 触发)→ 停止全局播放器:直播不得在后台继续出声/出画。
+    // 仅卸载媒体源,不 dispose 实例(下次进房复用同一 Player)。捕获实例而非在
+    // 回调里 ref.read,避免 provider 销毁期再去读依赖。
+    final player = ref.read(playerProvider);
+    ref.onDispose(() => unawaited(player.stop()));
     // 数据源端口变化(G1 换真实解析)时自动重建,Widget 无感。
     final source = ref.watch(roomSourceProvider);
     // 默认画质:平台单独配置优先,未配置回落全平台默认(设置页可改)。

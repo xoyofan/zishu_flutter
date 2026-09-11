@@ -99,6 +99,10 @@ abstract class LivePlayer {
 
   Future<void> pause();
 
+  /// 停止并卸载当前媒体源(画面与声音一并退出),但保留播放器实例以便复用。
+  /// 离开播放页时由控制器调用,避免直播在后台继续出声。
+  Future<void> stop();
+
   /// 设置音量(0-100);拉起音量应解除静音语义。
   Future<void> setVolume(double volume);
 

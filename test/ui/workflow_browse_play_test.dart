@@ -49,6 +49,9 @@ class FakeLivePlayer implements LivePlayer {
   Future<void> toggleFullscreen() async => calls.add('fullscreen');
 
   @override
+  Future<void> stop() async => calls.add('stop');
+
+  @override
   void dispose() => calls.add('dispose');
 }
 

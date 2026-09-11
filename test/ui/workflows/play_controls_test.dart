@@ -70,6 +70,9 @@ class FakeLivePlayer implements LivePlayer {
   Future<void> toggleFullscreen() async => calls.add('fullscreen');
 
   @override
+  Future<void> stop() async => calls.add('stop');
+
+  @override
   void dispose() => calls.add('dispose');
 }
 
@@ -477,6 +480,22 @@ void main() {
           ?.name,
       '蓝光8M',
       reason: '窄屏下拉选画质应更新选中档',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('leavePlay:离开播放页停止全局播放器,后台不再出声', (tester) async {
+    final play = await _pumpPlay(tester);
+    _player.calls.clear();
+
+    // 返回首页:PlayController 随页面 autoDispose,应下发 stop 卸载媒体源。
+    play.router.go('/all');
+    await _pumpFrames(tester, 3);
+
+    expect(
+      _player.calls,
+      contains('stop'),
+      reason: '离开播放页应停止全局播放器,避免直播在后台继续出声/出画',
     );
     expect(tester.takeException(), isNull);
   });
