@@ -1,0 +1,16 @@
+{
+  "data": {
+    "list": [
+      {
+        "category_no": "100",
+        "category_name": "英雄联盟",
+        "cate_img": "//img.sooplive.co.kr/cate/lol.jpg"
+      },
+      {
+        "category_no": "200",
+        "category_name": "绝地求生",
+        "cate_img": "https://img.sooplive.co.kr/cate/pubg.jpg"
+      }
+    ]
+  }
+}

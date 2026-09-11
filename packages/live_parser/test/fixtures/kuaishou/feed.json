@@ -1,0 +1,28 @@
+{
+  "result": 1,
+  "cursor": "cursor-2",
+  "pullCycleSeconds": 3,
+  "currentWatchingCount": "100",
+  "liveStreamFeeds": [
+    {
+      "id": "feed-1",
+      "type": "comment",
+      "content": "你好",
+      "time": 1700000000000,
+      "author": { "userName": "观众甲", "userId": "u1" }
+    },
+    {
+      "id": "feed-2",
+      "type": "comment",
+      "content": "你好",
+      "time": 1700000000000,
+      "author": { "userName": "观众甲", "userId": "u1" }
+    },
+    {
+      "id": "feed-3",
+      "type": "gift",
+      "content": "礼物",
+      "author": { "userName": "观众乙", "userId": "u2" }
+    }
+  ]
+}

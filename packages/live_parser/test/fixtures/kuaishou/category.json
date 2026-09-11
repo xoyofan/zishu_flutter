@@ -1,0 +1,8 @@
+{
+  "data": {
+    "list": [
+      { "id": "1001", "name": "英雄联盟", "poster": "https://p1.kuaishou.com/cate/lol" },
+      { "id": "1002", "name": "和平精英", "poster": "https://p1.kuaishou.com/cate/pubg.jpg" }
+    ]
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "status_code": 0,
+  "data": {
+    "user": { "nickname": "测试主播" },
+    "data": [
+      {
+        "status": 4,
+        "id_str": "7382735338101328680",
+        "title": "测试直播间",
+        "owner": { "nickname": "测试主播" }
+      }
+    ]
+  }
+}

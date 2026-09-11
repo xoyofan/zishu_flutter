@@ -1,0 +1,129 @@
+import 'package:live_parser/live_parser.dart';
+import 'package:test/test.dart';
+
+import '../../../support/fake_soop_api.dart';
+
+void main() {
+  late FakeSoopApi fake;
+  late SiteRegistration registration;
+
+  setUp(() {
+    fake = FakeSoopApi()
+      ..detailResponse = soopFixture('detail_live.json')
+      ..aidResponse = soopFixture('aid_live.json')
+      ..assignResponse = soopFixture('assign_live.json');
+    registration = buildSoopRegistration(httpClient: fake);
+  });
+
+  group('SOOP 房间解析', () {
+    test('在播:详情 + 多画质 + assign/aid 取流', () async {
+      final payload = await registration.resolver.resolveRoom(
+        const RoomRequest(
+          site: 'soop',
+          roomIdOrUrl: 'https://play.sooplive.co.kr/testbj',
+        ),
+      );
+
+      expect(payload.site, 'soop');
+      expect(payload.roomId, 'testbj');
+      expect(payload.sourceUrl, 'https://play.sooplive.co.kr/testbj');
+      expect(payload.roomState, RoomState.live);
+      expect(payload.anchorName, '测试主播');
+      expect(payload.title, 'SOOP 测试直播间');
+      expect(payload.category, '英雄联盟');
+      expect(payload.cover, startsWith('https://liveimg.sooplive.co.kr/m/12345678'));
+      expect(payload.availableQualities.map((q) => q.name).toList(), [
+        '原画',
+        '高清',
+        '标清',
+      ]);
+      expect(payload.streams, hasLength(3));
+      expect(payload.streams.first.rate, 8000000);
+      expect(
+        payload.streams.first.preferredLine?.url,
+        'https://live.sooplive.co.kr/hls/test/playlist.m3u8?aid=test-aid-001',
+      );
+      expect(payload.streams.first.preferredLine?.format, 'hls');
+
+      final assign = fake.requests.firstWhere(
+        (request) => request.url.path.endsWith('/broad_stream_assign.html'),
+      );
+      expect(assign.url.queryParameters['return_type'], 'gs_cdn_pc_web');
+      expect(
+        assign.url.queryParameters['broad_key'],
+        '12345678-common-original-hls',
+      );
+
+      final aidRequest = fake.requests.firstWhere(
+        (request) =>
+            request.url.path == '/afreeca/player_live_api.php' &&
+            Uri.splitQueryString(request.body)['type'] == 'aid',
+      );
+      expect(aidRequest.url.queryParameters['bjid'], 'testbj');
+      expect(Uri.splitQueryString(aidRequest.body)['quality'], 'original');
+      expect(Uri.splitQueryString(aidRequest.body)['bno'], '12345678');
+    });
+
+    test('离线:RESULT=0 返回 offline 且无线路', () async {
+      fake.detailResponse = soopFixture('detail_offline.json');
+
+      final payload = await registration.resolver.resolveRoom(
+        const RoomRequest(site: 'soop', roomIdOrUrl: 'testbj'),
+      );
+
+      expect(payload.roomState, RoomState.offline);
+      expect(payload.streams, isEmpty);
+      expect(payload.availableQualities, isEmpty);
+      expect(payload.error, isNull);
+    });
+
+    test('封禁:RESULT=-2 返回 notFound', () async {
+      fake.detailResponse = soopFixture('detail_banned.json');
+
+      final payload = await registration.resolver.resolveRoom(
+        const RoomRequest(site: 'soop', roomIdOrUrl: 'testbj'),
+      );
+
+      expect(payload.roomState, RoomState.notFound);
+      expect(payload.error, '房间已被封禁');
+      expect(payload.streams, isEmpty);
+    });
+
+    test('取流失败不伪报在播', () async {
+      fake.assignResponse = const {'view_url': ''};
+
+      final payload = await registration.resolver.resolveRoom(
+        const RoomRequest(site: 'soop', roomIdOrUrl: 'testbj'),
+      );
+
+      expect(payload.roomState, RoomState.offline);
+      expect(payload.error, '未获取到可播放地址');
+    });
+  });
+
+  test('SOOP 注册项声明浏览/搜索/弹幕与多线路', () {
+    expect(registration.id, 'soop');
+    expect(registration.name, 'SOOP');
+    expect(registration.resolver, isA<RoomResolver>());
+    expect(registration.browse, isA<BrowseRepository>());
+    expect(registration.search, isA<SearchRepository>());
+    expect(registration.danmaku, isA<DanmakuConnector>());
+    expect(registration.capabilities.browse, isTrue);
+    expect(registration.capabilities.roomSearch, isTrue);
+    expect(registration.capabilities.danmaku, isTrue);
+    expect(registration.capabilities.multiQuality, isTrue);
+    expect(registration.capabilities.multiLine, isTrue);
+  });
+
+  group('SOOP 输入归一', () {
+    test('URL/裸 id 均可解析', () {
+      expect(normalizeSoopRoomId('testbj'), 'testbj');
+      expect(normalizeSoopRoomId('https://play.sooplive.co.kr/testbj'), 'testbj');
+      expect(
+        normalizeSoopRoomId('https://www.sooplive.co.kr/station/testbj'),
+        'testbj',
+      );
+      expect(normalizeSoopRoomId('bj.afreecatv.com/testbj'), 'testbj');
+    });
+  });
+}

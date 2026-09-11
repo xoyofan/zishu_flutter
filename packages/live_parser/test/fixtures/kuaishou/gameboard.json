@@ -1,0 +1,18 @@
+{
+  "data": {
+    "list": [
+      {
+        "id": "stream-board-1",
+        "caption": "游戏板房间",
+        "poster": "https://p1.kuaishou.com/board/1",
+        "watchingCount": "1234",
+        "author": {
+          "id": "ks_board_1",
+          "name": "板上主播",
+          "avatar": "https://p1.kuaishou.com/avatar/board.png"
+        },
+        "gameInfo": { "name": "英雄联盟" }
+      }
+    ]
+  }
+}

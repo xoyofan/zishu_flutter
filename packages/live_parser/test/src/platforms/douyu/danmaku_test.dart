@@ -190,7 +190,11 @@ class FakeDanmakuTransport implements DanmakuTransport {
   Uri? lastUrl;
 
   @override
-  Future<DanmakuSocket> connect(Uri url) async {
+  Future<DanmakuSocket> connect(
+    Uri url, {
+    List<String>? protocols,
+    Map<String, String>? headers,
+  }) async {
     lastUrl = url;
     final socket = FakeDanmakuSocket();
     sockets.add(socket);

@@ -1,0 +1,24 @@
+{
+  "data": {
+    "list": [
+      {
+        "user_id": "room_a",
+        "broad_title": "分类房间 A",
+        "thumbnail": "//img.sooplive.co.kr/thumb/a.jpg",
+        "user_nick": "主播A",
+        "user_profile_img": "//img.sooplive.co.kr/avatar/a.jpg",
+        "category_name": "英雄联盟",
+        "total_view_cnt": "12345"
+      },
+      {
+        "user_id": "room_b",
+        "broad_title": "分类房间 B",
+        "thumbnail": "https://img.sooplive.co.kr/thumb/b.jpg",
+        "user_nick": "主播B",
+        "category_name": "英雄联盟",
+        "pc_view_cnt": "800",
+        "mobile_view_cnt": "200"
+      }
+    ]
+  }
+}

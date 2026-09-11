@@ -1,0 +1,28 @@
+{
+  "data": {
+    "list": [
+      {
+        "gameLiveInfo": [
+          {
+            "liveInfo": [
+              {
+                "id": "stream-home-1",
+                "author": {
+                  "id": "ks_home_1",
+                  "name": "首页主播",
+                  "avatar": "https://p1.kuaishou.com/avatar/home.png",
+                  "description": "首页推荐\n描述"
+                },
+                "gameInfo": {
+                  "name": "王者荣耀",
+                  "poster": "https://p1.kuaishou.com/home/1"
+                },
+                "watchingCount": "9999"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

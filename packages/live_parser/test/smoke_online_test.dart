@@ -4,12 +4,17 @@ library;
 
 import 'package:live_parser/live_parser.dart';
 import 'package:live_parser/src/platforms/iptv/iptv_site.dart';
+import 'package:live_parser/src/utils/format_online.dart';
 import 'package:test/test.dart';
 
 void main() {
   iptvSmoke();
   twitchSmoke();
   yySmoke();
+  soopSmoke();
+  kuaishouSmoke();
+  douyinSmoke();
+  youtubeSmoke();
   test(
     '斗鱼真实链路:首页 → 房间解析 → 搜索',
     () async {
@@ -360,6 +365,274 @@ void yySmoke() {
     },
     timeout: const Timeout(Duration(minutes: 2)),
     skip: '需真实网络;本地运行: dart test --run-skipped --plain-name YY test/smoke_online_test.dart',
+  );
+}
+
+void soopSmoke() {
+  test(
+    'SOOP 真实链路:推荐 → 房间解析 → 分类 → 搜索 → 弹幕',
+    () async {
+      final registry = buildSiteRegistry();
+      final soop = registry['soop']!;
+
+      final rooms = await soop.browse!.fetchRooms(
+        const RoomListRequest(site: 'soop', page: 1, limit: 10),
+      );
+      expect(rooms.rooms, isNotEmpty, reason: 'SOOP 推荐位应有在播房间');
+      final first = rooms.rooms.first;
+      // ignore: avoid_print
+      print('SOOP 推荐示例: ${first.roomId} ${first.title} (${first.online})');
+
+      final payload = await soop.resolver.resolveRoom(
+        RoomRequest(site: 'soop', roomIdOrUrl: first.roomId),
+      );
+      // ignore: avoid_print
+      print(
+        'SOOP 解析: room=${payload.roomId} state=${payload.roomState.name} '
+        'qualities=${payload.availableQualities.map((q) => q.name).toList()}',
+      );
+      if (payload.isLive) {
+        expect(payload.streams, isNotEmpty);
+        expect(payload.playUrl, isNotEmpty);
+        // ignore: avoid_print
+        print('SOOP 播放地址(截断): ${payload.playUrl.substring(0, 80)}...');
+      }
+
+      final categories = await soop.browse!.fetchCategories('soop');
+      expect(categories.groups, isNotEmpty);
+      // ignore: avoid_print
+      print('SOOP 分类数: ${categories.groups.single.items.length}');
+
+      final search = await soop.search!.search(
+        const SearchRequest(site: 'soop', query: 'lol', limit: 5),
+      );
+      // ignore: avoid_print
+      print('SOOP 搜索命中: ${search.hits.length} 条');
+      expect(search.hits, isNotEmpty);
+
+      // 弹幕:SOOP 聊天网关是 CHPT 指定的非 443 端口,部分受限网络(代理只放行
+      // 443)不可达;这里 best-effort 记录,不把环境性失败算作解析链路失败。
+      try {
+        final session = await soop.danmaku!.connect(
+          DanmakuSessionRequest(site: 'soop', roomId: first.roomId),
+        );
+        final received = <DanmakuMessage>[];
+        final sub = session.messages.listen(received.add);
+        try {
+          await Future<void>.delayed(const Duration(seconds: 30));
+        } finally {
+          await sub.cancel();
+          await session.close();
+        }
+        // ignore: avoid_print
+        print('SOOP 弹幕: 30s 收到 ${received.length} 条');
+        for (final m in received.take(5)) {
+          // ignore: avoid_print
+          print('弹幕示例: [${m.userName}] ${m.text}');
+        }
+      } catch (error) {
+        // ignore: avoid_print
+        print('SOOP 弹幕: 连接失败(若为受限网络属预期): $error');
+      }
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+    skip: '需真实网络;本地运行: dart test --run-skipped --plain-name SOOP test/smoke_online_test.dart',
+  );
+}
+
+void kuaishouSmoke() {
+  test(
+    '快手真实链路:首页 → 分类 → 房间解析 → feed 弹幕',
+    () async {
+      final registry = buildSiteRegistry();
+      final kuaishou = registry['kuaishou']!;
+
+      final rooms = await kuaishou.browse!.fetchRooms(
+        const RoomListRequest(site: 'kuaishou', page: 1, limit: 30),
+      );
+      expect(rooms.rooms, isNotEmpty, reason: '快手首页应有在播房间');
+      final sorted = [...rooms.rooms]..sort(
+        (a, b) =>
+            parseOnlineCount(b.online).compareTo(parseOnlineCount(a.online)),
+      );
+      final first = sorted.first;
+      // ignore: avoid_print
+      print('快手首页示例: ${first.roomId} ${first.title} (${first.online})');
+
+      final payload = await kuaishou.resolver.resolveRoom(
+        RoomRequest(site: 'kuaishou', roomIdOrUrl: first.roomId),
+      );
+      // ignore: avoid_print
+      print(
+        '快手解析: room=${payload.roomId} state=${payload.roomState.name} '
+        'qualities=${payload.availableQualities.map((q) => q.name).toList()}',
+      );
+      if (payload.isLive) {
+        expect(payload.streams, isNotEmpty);
+        expect(payload.playUrl, isNotEmpty);
+        // ignore: avoid_print
+        print('快手播放地址(截断): ${payload.playUrl.substring(0, 80)}...');
+      }
+
+      final categories = await kuaishou.browse!.fetchCategories('kuaishou');
+      expect(categories.groups, hasLength(kKuaishouTopCategories.length));
+      // ignore: avoid_print
+      print('快手一级分类: ${categories.groups.map((g) => g.name).toList()}');
+
+      // 弹幕:人数最高的房间,30s 内应有评论
+      final session = await kuaishou.danmaku!.connect(
+        DanmakuSessionRequest(site: 'kuaishou', roomId: first.roomId),
+      );
+      final received = <DanmakuMessage>[];
+      final sub = session.messages.listen(received.add);
+      try {
+        await Future<void>.delayed(const Duration(seconds: 30));
+      } finally {
+        await sub.cancel();
+        await session.close();
+      }
+      // ignore: avoid_print
+      print('快手弹幕: 30s 收到 ${received.length} 条');
+      for (final m in received.take(5)) {
+        // ignore: avoid_print
+        print('弹幕示例: [${m.userName}] ${m.text}');
+      }
+      expect(received, isNotEmpty, reason: '在播房间 30s 内应有评论');
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+    skip: '需真实网络;本地运行: dart test --run-skipped --plain-name 快手 test/smoke_online_test.dart',
+  );
+}
+
+void douyinSmoke() {
+  test(
+    '抖音真实链路:推荐 → 房间解析 → 分类 → 弹幕(best-effort)',
+    () async {
+      final registry = buildSiteRegistry();
+      final douyin = registry['douyin']!;
+
+      final rooms = await douyin.browse!.fetchRooms(
+        const RoomListRequest(site: 'douyin', page: 1, limit: 10),
+      );
+      expect(rooms.rooms, isNotEmpty, reason: '抖音推荐应有在播房间');
+      final sorted = [...rooms.rooms]..sort(
+        (a, b) =>
+            parseOnlineCount(b.online).compareTo(parseOnlineCount(a.online)),
+      );
+      final first = sorted.first;
+      // ignore: avoid_print
+      print('抖音推荐示例: ${first.roomId} ${first.title} (${first.online})');
+
+      final payload = await douyin.resolver.resolveRoom(
+        RoomRequest(site: 'douyin', roomIdOrUrl: first.roomId),
+      );
+      // ignore: avoid_print
+      print(
+        '抖音解析: room=${payload.roomId} state=${payload.roomState.name} '
+        'title=${payload.title} qualities=${payload.availableQualities.map((q) => q.name).toList()}',
+      );
+      expect(payload.roomState, anyOf(RoomState.live, RoomState.offline));
+      if (payload.isLive) {
+        expect(payload.streams, isNotEmpty);
+        expect(payload.playUrl, isNotEmpty);
+        // ignore: avoid_print
+        print('抖音播放地址(截断): ${payload.playUrl.substring(0, 80)}...');
+      }
+
+      final categories = await douyin.browse!.fetchCategories('douyin');
+      expect(categories.groups, isNotEmpty);
+      // ignore: avoid_print
+      print(
+        '抖音分类组: ${categories.groups.map((g) => g.name).toList()}',
+      );
+
+      // 弹幕:X-Bogus 变体签名对上游可能已失效,记录不视为链路失败。
+      try {
+        final session = await douyin.danmaku!.connect(
+          DanmakuSessionRequest(site: 'douyin', roomId: first.roomId),
+        );
+        final received = <DanmakuMessage>[];
+        final sub = session.messages.listen(received.add);
+        try {
+          await Future<void>.delayed(const Duration(seconds: 30));
+        } finally {
+          await sub.cancel();
+          await session.close();
+        }
+        // ignore: avoid_print
+        print('抖音弹幕: 30s 收到 ${received.length} 条');
+        for (final m in received.take(5)) {
+          // ignore: avoid_print
+          print('弹幕示例: [${m.userName}] ${m.text}');
+        }
+      } catch (error) {
+        // ignore: avoid_print
+        print('抖音弹幕: 连接失败(签名/风控环境): $error');
+      }
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+    skip: '需真实网络;本地运行: dart test --run-skipped --plain-name 抖音 test/smoke_online_test.dart',
+  );
+}
+
+void youtubeSmoke() {
+  test(
+    'YouTube 真实链路:直播页浏览 → 房间解析 → 聊天(best-effort)',
+    () async {
+      final registry = buildSiteRegistry();
+      final youtube = registry['youtube']!;
+
+      final rooms = await youtube.browse!.fetchRooms(
+        const RoomListRequest(site: 'youtube', page: 1, limit: 10),
+      );
+      expect(rooms.rooms, isNotEmpty, reason: 'YouTube /live 应有直播房间');
+      final first = rooms.rooms.first;
+      // ignore: avoid_print
+      print('YouTube 直播示例: ${first.roomId} ${first.title}');
+
+      final payload = await youtube.resolver.resolveRoom(
+        RoomRequest(site: 'youtube', roomIdOrUrl: first.roomId),
+      );
+      // ignore: avoid_print
+      print(
+        'YouTube 解析: room=${payload.roomId} state=${payload.roomState.name} '
+        'title=${payload.title} error=${payload.error ?? "-"} '
+        'qualities=${payload.availableQualities.map((q) => q.name).toList()}',
+      );
+      expect(payload.roomState, anyOf(RoomState.live, RoomState.offline));
+      if (payload.isLive) {
+        expect(payload.streams, isNotEmpty);
+        expect(payload.playUrl, contains('.m3u8'));
+        // ignore: avoid_print
+        print('YouTube 播放地址(截断): ${payload.playUrl.substring(0, 80)}...');
+      }
+
+      // 弹幕:匿名 live_chat 轮询(best-effort,地区/风控可能不可达)。
+      try {
+        final session = await youtube.danmaku!.connect(
+          DanmakuSessionRequest(site: 'youtube', roomId: first.roomId),
+        );
+        final received = <DanmakuMessage>[];
+        final sub = session.messages.listen(received.add);
+        try {
+          await Future<void>.delayed(const Duration(seconds: 30));
+        } finally {
+          await sub.cancel();
+          await session.close();
+        }
+        // ignore: avoid_print
+        print('YouTube 弹幕: 30s 收到 ${received.length} 条');
+        for (final m in received.take(5)) {
+          // ignore: avoid_print
+          print('弹幕示例: [${m.userName}] ${m.text}');
+        }
+      } catch (error) {
+        // ignore: avoid_print
+        print('YouTube 弹幕: 连接失败(地区/风控环境): $error');
+      }
+    },
+    timeout: const Timeout(Duration(minutes: 3)),
+    skip: '需真实网络;本地运行: dart test --run-skipped --plain-name YouTube test/smoke_online_test.dart',
   );
 }
 

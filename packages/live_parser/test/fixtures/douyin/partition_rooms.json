@@ -1,0 +1,27 @@
+{
+  "status_code": 0,
+  "data": {
+    "data": [
+      {
+        "web_rid": "123456",
+        "room": {
+          "id_str": "7382735338101328680",
+          "title": "分区房间",
+          "anchor_name": "分区主播",
+          "room_view_stats": { "display_value": 12345 },
+          "cover": { "url_list": ["//p3.douyinpic.com/cover.jpg"] }
+        }
+      },
+      {
+        "web_rid": "654321",
+        "room": {
+          "id_str": "7382735338101328681",
+          "title": "",
+          "owner": { "nickname": "昵称兜底" },
+          "stats": { "user_count_str": "800" }
+        }
+      }
+    ],
+    "has_more": true
+  }
+}

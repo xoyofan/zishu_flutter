@@ -1,0 +1,20 @@
+{
+  "broad": [
+    {
+      "user_id": "rec_a",
+      "broad_title": "推荐房间 A",
+      "broad_thumb": "//img.sooplive.co.kr/thumb/rec_a.jpg",
+      "user_nick": "推荐A",
+      "category_name": "聊天",
+      "view_cnt": "54321"
+    },
+    {
+      "user_id": "rec_b",
+      "broad_title": "推荐房间 B",
+      "broad_thumb": "https://img.sooplive.co.kr/thumb/rec_b.jpg",
+      "user_nick": "推荐B",
+      "category_name": "音乐",
+      "total_view_cnt": "900"
+    }
+  ]
+}

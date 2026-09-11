@@ -1,0 +1,31 @@
+{
+  "status_code": 0,
+  "data": {
+    "user": { "nickname": "测试主播" },
+    "data": [
+      {
+        "status": 2,
+        "id_str": "7382735338101328680",
+        "title": "测试直播间",
+        "anchor_name": "",
+        "owner": {
+          "nickname": "后备昵称",
+          "avatar_thumb": { "url_list": ["//p3.douyinpic.com/avatar.jpg"] }
+        },
+        "cover": { "url_list": ["//p3.douyinpic.com/cover.jpg"] },
+        "game_data": {
+          "game_tag_info": { "game_tag_name": "王者荣耀", "game_tag_id": 1010045 }
+        },
+        "stream_url": {
+          "flv_pull_url": {
+            "ORIGIN": "https://pull-flv.douyin.com/origin.flv",
+            "HD1": "https://pull-flv.douyin.com/hd.flv"
+          },
+          "hls_pull_url_map": {
+            "ORIGIN": "https://pull-hls.douyin.com/origin.m3u8"
+          }
+        }
+      }
+    ]
+  }
+}
