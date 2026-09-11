@@ -151,6 +151,71 @@ abstract final class AppBreakpoints {
   static const double wide = 1920;
 }
 
+/// 左侧目录抽屉(DirectoryDrawer)尺寸,对齐 SFVideoLive
+/// `DirectoryDrawer.vue` 的 CSS 变量与布局值(1rem = 16px)。
+///
+/// 未取整到 4pt 栅格:与参考实现逐像素复刻优先。
+abstract final class AppDirectoryDrawer {
+  /// 展开态宽度(`--directory-drawer-width: 220px`)。
+  static const double width = 220;
+
+  /// 收起态宽度(`--directory-rail-width: 52px`)。
+  static const double railWidth = 52;
+
+  // ---- 收藏星区(__follow-wrap / __follow-icon) ----
+
+  /// 星标行最小高(`min-height: 4rem`)。
+  static const double followRowHeight = 64;
+
+  /// 星标图标尺寸(`font-size: 2.25rem`,StarFilled)。
+  static const double followIconSize = 36;
+
+  /// 星标行左内边距(`padding-left: .35rem`)。
+  static const double followPadLeft = 5.6;
+
+  // ---- 平台 tab 网格(__platform-tabs / __platform-tab) ----
+
+  /// 单个 tab 容器边长(`width: 2.4rem` + `aspect-ratio: 1`)。
+  static const double platformTabSize = 38.4;
+
+  /// tab 内平台图标尺寸(`PlatformIcon size="md"` = 2rem)。
+  static const double platformIconSize = 32;
+
+  /// tab 水平/垂直间距(`gap: .35rem`)。
+  static const double platformGap = 5.6;
+
+  /// 平台区上下内边距(`padding: .45rem .35rem`)。
+  static const double platformPadV = 7.2;
+  static const double platformPadH = 5.6;
+
+  // ---- 分类网格(__body / __cat-grid / __cat-item / __cat-name) ----
+
+  /// 分类区水平内边距(`padding: .45rem .55rem .75rem`)。
+  static const double catPadH = 8.8;
+  static const double catPadTop = 7.2;
+  static const double catPadBottom = 12;
+
+  /// 分类条目行距(`gap: .16rem .22rem`)。
+  static const double catGapMain = 2.56;
+  static const double catGapCross = 3.52;
+
+  /// 分类条目最小高(`min-height: 1.3rem`)。
+  static const double catItemHeight = 20.8;
+
+  /// 分类名称字号(`font-size: .72rem`)。
+  static const double catFontSize = 11.5;
+
+  // ---- 开合按钮(__toggle) ----
+
+  /// 细长竖条按钮(`width: .85rem; height: 44px`,仅右侧圆角,贴右缘)。
+  static const double toggleWidth = 13.6;
+  static const double toggleHeight = 44;
+
+  /// active 平台/分类的金色 12% 底(`--sidebar-chip-active-bg`
+  /// = `color-mix(in srgb, var(--primary) 12%, var(--el-fill-color))`)。
+  static double activeChipAlpha = 0.12;
+}
+
 /// 房间网格的**固定列数**,对齐 SFVideoLive `RoomGrid.vue:120-155`。
 ///
 /// 参考实现用断点媒体查询切列数(非 `auto-fill`):

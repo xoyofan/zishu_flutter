@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 
-import '../../../shared/presentation/category_colors.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/widgets/platform_icon.dart';
@@ -13,19 +12,18 @@ import '../application/sidebar_pref_provider.dart';
 
 /// 桌面首页常驻左侧栏:可折叠 rail(收起 52px ↔ 展开 220px)。
 ///
-/// 对齐 SFVideoLive 桌面首页的 `DirectoryDrawer`(drawerPref 默认 `open: true`,
-/// `--directory-rail-width: 52px`,`--directory-drawer-width: 220px`);内容区经
-/// `margin-left` 让位(见 [HomeView] 的 Row + Expanded),房间网格列数仍按
-/// **视口断点** 固定(见 [RoomGrid]),卡片按剩余内容宽收窄。
+/// 对齐 SFVideoLive 桌面首页的 `DirectoryDrawer.vue`(mumu 分支),逐项复刻:
+/// - 收藏星区(`__follow-wrap`):64px 行 + 36px 金色实心星,底部分隔线;
+/// - 平台 tab 网格(`__platform-tabs`):38.4px 方形 tab + 32px 图标,Wrap 流式
+///   排布,非选中无边框透明底,选中金色边框 + 金色 12% 底;
+/// - 分类网格(`__cat-grid`):2 列(minmax(80px,1fr) 在 220px 抽屉下的落位),
+///   条目居中、fill 底、11.5px 最多 2 行,active 金边 + 金 12% 底;
+/// - 开合按钮(`__toggle`):13.6x44 细长竖条,仅右侧圆角,贴抽屉右缘垂直居中。
 ///
-/// 开合控件固定在左栏**右缘、垂直居中**(参考 `directory-drawer__toggle-rail`),
-/// 由左栏自身用 [Stack] 叠加渲染,不依赖父级改造;锚点
-/// [Key('browse-sidebar-toggle')] 用于测试与可达性。
-///
-/// 两态共用的平台入口锚点 [home-platform-chip-{id}] 始终唯一命中:
-/// 收起态是 52px 图标竖列(单列),展开态是 3 列图标网格 + 分类树。
-/// 分类树锚点 [browse-sidebar-cat-{cid}] 仅展开态渲染。下段分类树数据来自
-/// [browseCategoriesProvider],不新造硬编码表。
+/// 开合控件由左栏自身用 [Stack] 叠加渲染;锚点 [Key('browse-sidebar-toggle')]
+/// 用于测试与可达性。平台入口锚点 [home-platform-chip-{id}] 始终唯一命中
+/// (收起态 52px 竖列 / 展开态 tab 网格),分类树锚点 [browse-sidebar-cat-{cid}]
+/// 仅展开态渲染。分类数据来自 [browseCategoriesProvider],不新造硬编码表。
 class BrowseSidebar extends ConsumerWidget {
   const BrowseSidebar({super.key, required this.site});
 
@@ -33,16 +31,13 @@ class BrowseSidebar extends ConsumerWidget {
   final String site;
 
   /// 展开态宽度,对齐参考实现 `--directory-drawer-width`。
-  static const double width = 220;
+  static const double width = AppDirectoryDrawer.width;
 
   /// 收起态宽度,对齐参考实现 `--directory-rail-width`。
-  static const double railWidth = 52;
+  static const double railWidth = AppDirectoryDrawer.railWidth;
 
   /// 开合按钮的测试锚点。
   static const Key toggleKey = Key('browse-sidebar-toggle');
-
-  /// 上段平台网格列数,对齐参考实现 3 列图标网格。
-  static const int platformColumns = 3;
 
   /// 是否展开(默认展开,见 [sidebarOpenProvider])。
   static bool isOpen(WidgetRef ref) => ref.watch(sidebarOpenProvider);
@@ -57,7 +52,11 @@ class BrowseSidebar extends ConsumerWidget {
       duration: AppMotion.normal,
       curve: AppMotion.curve,
       width: open ? width : railWidth,
-      color: tokens.surfaceSoft,
+      // 参考实现:背景 --sidebar-bg + 右缘 1px --chrome-border。
+      decoration: BoxDecoration(
+        color: tokens.surfaceSoft,
+        border: Border(right: BorderSide(color: tokens.border)),
+      ),
       child: Stack(
         children: [
           Positioned.fill(
@@ -65,7 +64,7 @@ class BrowseSidebar extends ConsumerWidget {
                 ? _ExpandedContent(site: site, categoriesAsync: categoriesAsync)
                 : _RailContent(site: site),
           ),
-          // 右缘中央开合按钮:横向小胶囊,压在面板右边缘(中部)。
+          // 右缘中央开合按钮:细长竖条,贴在面板右边缘(中部)。
           Positioned(
             top: 0,
             bottom: 0,
@@ -83,7 +82,7 @@ class BrowseSidebar extends ConsumerWidget {
   }
 }
 
-/// 展开态内容:上段平台图标网格 + 分隔线 + 下段分类树。
+/// 展开态内容:收藏星区 + 平台 tab 网格 + 分类网格(参考实现自上而下三段)。
 class _ExpandedContent extends StatelessWidget {
   const _ExpandedContent({required this.site, required this.categoriesAsync});
 
@@ -96,8 +95,8 @@ class _ExpandedContent extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _PlatformGrid(site: site),
-        Container(height: 1, color: tokens.border),
+        _FollowRow(tokens: tokens),
+        _PlatformTabs(site: site, tokens: tokens),
         Expanded(
           child: _CategoryTree(site: site, categoriesAsync: categoriesAsync),
         ),
@@ -106,8 +105,41 @@ class _ExpandedContent extends StatelessWidget {
   }
 }
 
+/// 收藏星区(`__follow-wrap`):64px 行 + 36px 金色实心星,点击进入关注页。
+///
+/// 参考实现有关注时渲染头像堆叠;当前未接关注数据,先复刻其空态(StarFilled)。
+class _FollowRow extends StatelessWidget {
+  const _FollowRow({required this.tokens});
+
+  final ZishuTokens tokens;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => context.go('/follow'),
+        child: Container(
+          height: AppDirectoryDrawer.followRowHeight,
+          padding: const EdgeInsets.only(
+            left: AppDirectoryDrawer.followPadLeft,
+          ),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Icon(
+              Icons.star_rounded,
+              size: AppDirectoryDrawer.followIconSize,
+              color: tokens.brand,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// 收起态内容:平台图标竖列(单列,无文字),对齐参考
-/// `directory-drawer__rail-platforms`。
+/// `directory-drawer__rail-platform`(全宽按钮、竖直 padding .5rem、图标 32px)。
 class _RailContent extends StatelessWidget {
   const _RailContent({required this.site});
 
@@ -120,18 +152,12 @@ class _RailContent extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       children: [
         for (final brand in PlatformBrandCatalog.navPlatforms)
-          Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.xs),
-            child: Center(
-              child: _PlatformTile(
-                brand: brand,
-                selected: brand.id == site,
-                tokens: tokens,
-                // 收起态图标略大:52px 内单列展示,留白对齐参考竖列。
-                iconSize: AppSpacing.xxl,
-                compact: true,
-              ),
-            ),
+          _PlatformTab(
+            brand: brand,
+            selected: brand.id == site,
+            tokens: tokens,
+            size: AppDirectoryDrawer.platformIconSize,
+            fullWidth: true,
           ),
       ],
     );
@@ -139,6 +165,8 @@ class _RailContent extends StatelessWidget {
 }
 
 /// 右缘中央的开合按钮:收起时朝右(展开),展开时朝左(收起)。
+///
+/// 对齐参考 `__toggle`:0.85rem x 44px 细长竖条,仅右侧圆角,贴抽屉右缘。
 class _ToggleRail extends StatelessWidget {
   const _ToggleRail({
     required this.open,
@@ -152,29 +180,31 @@ class _ToggleRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final icon = Icon(
-      open ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
-      size: 14,
-      color: tokens.textSecondary,
+    final shape = RoundedRectangleBorder(
+      borderRadius: BorderRadius.horizontal(
+        right: Radius.circular(AppRadius.sm),
+      ),
     );
     return Align(
       alignment: Alignment.centerRight,
-      child: Padding(
-        padding: const EdgeInsets.only(right: AppSpacing.xs),
-        child: SizedBox(
-          // 收起态宽度受限于 52px rail,压到右缘留 4px;展开态给固定胶囊宽。
-          width: open ? AppSpacing.xl : AppSpacing.md,
-          height: AppSpacing.xxl,
-          child: Tooltip(
-            message: open ? '收起平台栏' : '展开平台栏',
-            child: Material(
-              key: BrowseSidebar.toggleKey,
-              color: tokens.surfaceRaised,
-              borderRadius: AppRadius.allSm,
-              child: InkWell(
-                onTap: onTap,
-                borderRadius: AppRadius.allSm,
-                child: Center(child: icon),
+      child: SizedBox(
+        width: AppDirectoryDrawer.toggleWidth,
+        height: AppDirectoryDrawer.toggleHeight,
+        child: Tooltip(
+          message: open ? '收起平台栏' : '展开平台栏',
+          child: Material(
+            key: BrowseSidebar.toggleKey,
+            color: tokens.surfaceRaised,
+            shape: shape,
+            child: InkWell(
+              onTap: onTap,
+              customBorder: shape,
+              child: Icon(
+                open
+                    ? Icons.chevron_left_rounded
+                    : Icons.chevron_right_rounded,
+                size: 12,
+                color: tokens.textSecondary,
               ),
             ),
           ),
@@ -184,30 +214,31 @@ class _ToggleRail extends StatelessWidget {
   }
 }
 
-/// 上段:平台图标网格(3 列)。每项即 [home-platform-chip-{id}] 锚点。
-class _PlatformGrid extends StatelessWidget {
-  const _PlatformGrid({required this.site});
+/// 平台 tab 网格(`__platform-tabs`):Wrap 流式排布 + 底部分隔线。
+class _PlatformTabs extends StatelessWidget {
+  const _PlatformTabs({required this.site, required this.tokens});
 
   final String site;
+  final ZishuTokens tokens;
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.tokens;
-    return Padding(
-      padding: const EdgeInsets.all(AppSpacing.xs),
-      child: GridView.count(
-        crossAxisCount: BrowseSidebar.platformColumns,
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        mainAxisSpacing: AppSpacing.xs,
-        crossAxisSpacing: AppSpacing.xs,
-        childAspectRatio: 1,
+    return Container(
+      padding: const EdgeInsets.symmetric(
+        vertical: AppDirectoryDrawer.platformPadV,
+        horizontal: AppDirectoryDrawer.platformPadH,
+      ),
+      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: tokens.border))),
+      child: Wrap(
+        spacing: AppDirectoryDrawer.platformGap,
+        runSpacing: AppDirectoryDrawer.platformGap,
         children: [
           for (final brand in PlatformBrandCatalog.navPlatforms)
-            _PlatformTile(
+            _PlatformTab(
               brand: brand,
               selected: brand.id == site,
               tokens: tokens,
+              size: AppDirectoryDrawer.platformTabSize,
             ),
         ],
       ),
@@ -217,49 +248,57 @@ class _PlatformGrid extends StatelessWidget {
 
 /// 单个平台入口:图标型 FilterChip,承载 [home-platform-chip-{id}] 锚点。
 ///
-/// 收起态([compact])把图标撑满 52px rail 的可用宽,展开态保持 22px 图标。
-class _PlatformTile extends StatelessWidget {
-  const _PlatformTile({
+/// 对齐参考 `__platform-tab` / `__rail-platform`:非选中无边框透明底,
+/// 选中金色边框 + 金色 12% 底;[fullWidth] 用于收起态(全宽按钮)。
+class _PlatformTab extends StatelessWidget {
+  const _PlatformTab({
     required this.brand,
     required this.selected,
     required this.tokens,
-    this.iconSize = 22,
-    this.compact = false,
+    required this.size,
+    this.fullWidth = false,
   });
 
   final PlatformBrand brand;
   final bool selected;
   final ZishuTokens tokens;
-  final double iconSize;
-  final bool compact;
+
+  /// tab 容器边长(展开态 38.4 / 收起态图标 32)。
+  final double size;
+
+  /// 收起态:占满 rail 行宽(参考 `__rail-platform` 全宽按钮)。
+  final bool fullWidth;
 
   @override
   Widget build(BuildContext context) {
     return Tooltip(
       message: brand.name,
-      child: ChipTheme(
-        data: ChipTheme.of(context).copyWith(
-          backgroundColor: tokens.surface,
-          selectedColor: brand.color.withValues(alpha: 0.22),
-          checkmarkColor: brand.color,
-          labelStyle: AppTypography.body.copyWith(
-            color: selected ? brand.color : tokens.textSecondary,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-          ),
-          side: BorderSide(color: selected ? brand.color : tokens.border),
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.allSm),
-        ),
+      child: SizedBox(
+        width: fullWidth ? double.infinity : size,
+        height: size,
         child: FilterChip(
           // 测试锚点:定位/点击平台入口(前缀同原内容区 chips,见 [BrowseSidebar])。
           key: Key('home-platform-chip-${brand.id}'),
           selected: selected,
           showCheckmark: false,
-          avatar: PlatformIcon(id: brand.id, size: iconSize),
+          avatar: PlatformIcon(
+            id: brand.id,
+            size: AppDirectoryDrawer.platformIconSize,
+          ),
           label: const SizedBox.shrink(),
-          visualDensity: compact ? VisualDensity.standard : VisualDensity.compact,
+          visualDensity: VisualDensity.compact,
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           padding: EdgeInsets.zero,
           labelPadding: EdgeInsets.zero,
+          backgroundColor: Colors.transparent,
+          selectedColor: tokens.brand.withValues(
+            alpha: AppDirectoryDrawer.activeChipAlpha,
+          ),
+          checkmarkColor: tokens.brand,
+          side: selected
+              ? BorderSide(color: tokens.brand)
+              : BorderSide.none,
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.allSm),
           onSelected: (_) =>
               context.go(brand.id == 'all' ? '/all' : '/${brand.id}'),
         ),
@@ -268,7 +307,11 @@ class _PlatformTile extends StatelessWidget {
   }
 }
 
-/// 下段:分类树(分组 + 子分类),数据来自 [browseCategoriesProvider]。
+/// 下段:分类网格(2 列),数据来自 [browseCategoriesProvider]。
+///
+/// 对齐参考 `__cat-grid`(auto-fill minmax(80px,1fr) 在 220px 抽屉下为 2 列):
+/// 条目居中、fill 底、无边框;active 金边 + 金字 + 金 12% 底;空数据时
+/// 显示参考实现的空态文案。
 class _CategoryTree extends StatelessWidget {
   const _CategoryTree({
     required this.site,
@@ -280,69 +323,64 @@ class _CategoryTree extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = context.tokens;
     return switch (categoriesAsync) {
       AsyncValue(:final value?) => value.groups.isEmpty
-          ? const SizedBox.shrink()
-          : ListView(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+          ? _DrawerHint(text: '该平台暂无分类', tokens: tokens)
+          : GridView.count(
+              padding: const EdgeInsets.fromLTRB(
+                AppDirectoryDrawer.catPadH,
+                AppDirectoryDrawer.catPadTop,
+                AppDirectoryDrawer.catPadH,
+                AppDirectoryDrawer.catPadBottom,
+              ),
+              crossAxisCount: 2,
+              mainAxisSpacing: AppDirectoryDrawer.catGapMain,
+              crossAxisSpacing: AppDirectoryDrawer.catGapCross,
+              // 220px 抽屉、8.8px 左右内边距下条目宽约 99.4px;参考条目
+              // min-height 20.8px,据此推 aspect 使默认行高一致。
+              childAspectRatio: 99.4 / AppDirectoryDrawer.catItemHeight,
               children: [
-                for (final group in value.groups) ...[
-                  _GroupHeader(name: group.name),
+                for (final group in value.groups)
                   for (final item in group.items)
                     _CategoryLeaf(site: site, cid: item.cid, name: item.name),
-                ],
               ],
             ),
-      // 加载中/出错时折叠分类树,不阻塞房间网格渲染。
+      // 加载中/出错时折叠分类网格,不阻塞房间网格渲染。
       _ => const SizedBox.shrink(),
     };
   }
 }
 
-/// 分组标题:名称 + 按分类配色取的色点(复用 [CategoryColors])。
-class _GroupHeader extends StatelessWidget {
-  const _GroupHeader({required this.name});
+/// 抽屉空态/加载态文案(参考 `__hint`:居中、.78rem、muted)。
+class _DrawerHint extends StatelessWidget {
+  const _DrawerHint({required this.text, required this.tokens});
 
-  final String name;
+  final String text;
+  final ZishuTokens tokens;
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.tokens;
-    final color = CategoryColors.opaqueFor(category: name)?.background ??
-        tokens.textSecondary;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.sm,
-        AppSpacing.sm,
-        AppSpacing.sm,
-        AppSpacing.xs,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: AppSpacing.sm,
-            height: AppSpacing.sm,
-            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-          ),
-          const SizedBox(width: AppSpacing.xs),
-          Expanded(
-            child: Text(
-              name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: AppTypography.caption.copyWith(
-                color: tokens.textSecondary,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.sm,
+          vertical: AppSpacing.md,
+        ),
+        child: Text(
+          text,
+          textAlign: TextAlign.center,
+          style: AppTypography.caption.copyWith(color: tokens.textSecondary),
+        ),
       ),
     );
   }
 }
 
-/// 子分类叶子:点击跳转到平台/全平台分类页。
+/// 分类条目(`__cat-item`):fill 底、居中文字 11.5px 最多 2 行。
+///
+/// 参考 `__cat-item--active` 的金边高亮态暂未接线:当前侧栏仅首页渲染,
+/// 点分类即跳转独立分类页(侧栏不在屏),无命中窗口;待侧栏常驻后再接。
 class _CategoryLeaf extends StatelessWidget {
   const _CategoryLeaf({
     required this.site,
@@ -357,22 +395,31 @@ class _CategoryLeaf extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    return InkWell(
-      key: Key('browse-sidebar-cat-$cid'),
-      onTap: () => context.go(
-        site == 'all' ? '/all/category/$cid' : '/$site/category/$cid',
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.sm,
-          vertical: AppSpacing.xs,
+    final shape = RoundedRectangleBorder(borderRadius: AppRadius.allSm);
+    return Material(
+      color: tokens.surfaceRaised,
+      shape: shape,
+      child: InkWell(
+        key: Key('browse-sidebar-cat-$cid'),
+        onTap: () => context.go(
+          site == 'all' ? '/all/category/$cid' : '/$site/category/$cid',
         ),
-        child: Text(
-          name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: AppTypography.bodySecondary.copyWith(
-            color: tokens.textPrimary,
+        customBorder: shape,
+        child: Align(
+          alignment: Alignment.center,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 1.92),
+            child: Text(
+              name,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: AppTypography.caption.copyWith(
+                fontSize: AppDirectoryDrawer.catFontSize,
+                height: 1.15,
+                color: tokens.textPrimary,
+              ),
+            ),
           ),
         ),
       ),
