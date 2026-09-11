@@ -50,6 +50,9 @@ class _FollowViewState extends ConsumerState<FollowView> {
   /// 卡片密度下封面卡最大宽(对齐 Vue minmax(240px, 1fr))。
   static const double _cardMaxExtent = 240;
 
+  /// 列视图单列目标宽(对齐 Vue 300–400px/列,取中位 340)。
+  static const double _rowColumnExtent = 380;
+
   /// 卡片元信息区固定高:上下 12px padding + 标题/主播/操作行。
   static const double _cardMetaHeight = 106;
 
@@ -408,11 +411,23 @@ class _FollowViewState extends ConsumerState<FollowView> {
             child: _buildItem(items[index]),
           ),
         ),
-      FollowDensity.row => ListView.builder(
-          padding: padding,
-          itemCount: items.length,
-          itemBuilder: (context, index) => _buildItem(items[index]),
-        ),
+      // 列视图:宽屏按 300–400px/列拆成多列(对齐 `FollowRoomRowView`
+      // 的 `multiColumn`),行高固定 34px,纵横比由列宽推导。
+      FollowDensity.row => LayoutBuilder(builder: (context, constraints) {
+          final width = math.max(0.0, constraints.maxWidth - padding.horizontal);
+          final columns = math.max(1, (width / _rowColumnExtent).floor());
+          final columnWidth = width / columns;
+          return GridView.builder(
+            padding: padding,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: columns,
+              crossAxisSpacing: AppSpacing.md,
+              childAspectRatio: columnWidth / kFollowRowHeight,
+            ),
+            itemCount: items.length,
+            itemBuilder: (context, index) => _buildItem(items[index]),
+          );
+        }),
     };
   }
 

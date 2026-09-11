@@ -20,7 +20,9 @@ import '../../browse/application/browse_provider.dart';
 import '../../follow/application/follow_provider.dart';
 import '../../follow/application/settings_provider.dart';
 import '../../../shared/presentation/design_tokens.dart';
+import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
+import 'play_room_grid.dart';
 
 class PlaySidePanel extends ConsumerStatefulWidget {
   const PlaySidePanel({
@@ -1030,33 +1032,68 @@ class _FanBadge extends StatelessWidget {
   }
 }
 
-class _FollowPanel extends ConsumerWidget {
+/// 侧栏「关注」tab:对齐 SFVideoLive `PlayFollowRecommendTabs.vue` ——
+/// 顶部视图切换(封面网格 / 紧凑列表)+ 平台筛选 chips,下方用预览网格呈现关注,
+/// 开播优先排序。空态提示与「我的关注」标题文案保持不变(测试锚点)。
+class _FollowPanel extends ConsumerStatefulWidget {
   const _FollowPanel();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_FollowPanel> createState() => _FollowPanelState();
+}
+
+class _FollowPanelState extends ConsumerState<_FollowPanel> {
+  /// true = 封面网格(参考实现的默认 preview 布局),false = 紧凑列表。
+  bool _grid = true;
+  String _siteFilter = 'all';
+
+  List<FollowEntry> _visible(List<FollowEntry> entries) {
+    final filtered = _siteFilter == 'all'
+        ? List<FollowEntry>.of(entries)
+        : entries.where((e) => e.room.site == _siteFilter).toList();
+    // 开播在前;同状态特别关注置前。
+    filtered.sort((a, b) {
+      if (a.isLive != b.isLive) return a.isLive ? -1 : 1;
+      if (a.isSpecial != b.isSpecial) return a.isSpecial ? -1 : 1;
+      return b.followedAt.compareTo(a.followedAt);
+    });
+    return filtered;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final tokens = context.tokens;
-    final entries = ref.watch(followProvider);
+    final entries = _visible(ref.watch(followProvider));
+    final rooms = [for (final entry in entries) entry.room];
+    final superKeys = <String>{
+      for (final entry in entries)
+        if (entry.isSpecial) entry.key,
+    };
     return Column(
       key: const Key('play-side-follow-panel'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.sm,
-            AppSpacing.sm,
-            AppSpacing.sm,
-            4,
-          ),
-          child: Text(
-            '我的关注',
-            style: TextStyle(
-              fontSize: 12,
-              height: 1.2,
-              fontWeight: FontWeight.w600,
-              color: tokens.textPrimary,
+        _PanelTitle(
+          tokens,
+          '我的关注',
+          trailing: Tooltip(
+            message: _grid ? '切换为列表视图' : '切换为封面预览',
+            child: IconButton(
+              key: const Key('play-side-follow-view-toggle'),
+              onPressed: () => setState(() => _grid = !_grid),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+              icon: Icon(
+                _grid ? Icons.list_rounded : Icons.grid_view_rounded,
+                size: 15,
+                color: _grid ? tokens.textSecondary : tokens.brand,
+              ),
             ),
           ),
+        ),
+        _SidePlatformChips(
+          value: _siteFilter,
+          onChanged: (site) => setState(() => _siteFilter = site),
         ),
         Expanded(
           child: entries.isEmpty
@@ -1065,110 +1102,110 @@ class _FollowPanel extends ConsumerWidget {
                   title: '我的关注',
                   text: '关注的直播间会显示在这里',
                 )
-              : ListView.separated(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.sm,
-                    0,
-                    AppSpacing.sm,
-                    AppSpacing.sm,
-                  ),
-                  itemCount: entries.length,
-                  separatorBuilder: (context, _) => const SizedBox(height: 6),
-                  itemBuilder: (context, index) =>
-                      _FollowListItem(entry: entries[index]),
-                ),
+              : _grid
+                  ? PlayRoomGrid(
+                      rooms: rooms,
+                      superKeys: superKeys,
+                      keyPrefix: 'play-follow-room-',
+                      onTap: _goRoom,
+                    )
+                  : PlayRoomList(
+                      rooms: rooms,
+                      superKeys: superKeys,
+                      onTap: _goRoom,
+                    ),
         ),
       ],
     );
   }
+
+  /// 用 go(替换当前播放页)而非 push:直播切房若 push,旧播放页连同其
+  /// media-kit 会话被压在栈下继续存活,与「切房不泄漏」的目标相悖。
+  void _goRoom(RoomSummary room) =>
+      context.go('/${room.site}/play/${room.roomId}');
 }
 
-class _FollowListItem extends StatelessWidget {
-  const _FollowListItem({required this.entry});
+/// 侧栏平台筛选 chips:横向滚动的小 chip(侧栏窄,Wrap 会折成多行)。
+class _SidePlatformChips extends StatelessWidget {
+  const _SidePlatformChips({required this.value, required this.onChanged});
 
-  final FollowEntry entry;
+  final String value;
+  final ValueChanged<String> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    final room = entry.room;
-    final initial = room.anchorName.isNotEmpty
-        ? room.anchorName.substring(0, 1)
-        : '?';
-    final cover = room.cover.isEmpty
-        ? ColoredBox(
-            color: tokens.surfaceRaised,
-            child: Center(
-              child: Text(
-                initial,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textSecondary,
-                ),
+    return SizedBox(
+      height: 28,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+        itemCount: PlatformBrandCatalog.navPlatforms.length,
+        separatorBuilder: (context, _) => const SizedBox(width: 5),
+        itemBuilder: (context, index) {
+          final brand = PlatformBrandCatalog.navPlatforms[index];
+          final selected = value == brand.id;
+          final accent = brand.id == 'all' ? tokens.brand : brand.color;
+          return InkWell(
+            borderRadius: AppRadius.allPill,
+            onTap: () => onChanged(brand.id),
+            child: Container(
+              alignment: Alignment.center,
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              decoration: BoxDecoration(
+                color: selected ? accent.withValues(alpha: 0.18) : tokens.surface,
+                borderRadius: AppRadius.allPill,
+                border: Border.all(color: selected ? accent : tokens.border),
               ),
-            ),
-          )
-        : Image.network(
-            room.cover,
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => ColoredBox(
-              color: tokens.surfaceRaised,
-              child: Center(
-                child: Text(
-                  initial,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textSecondary,
-                  ),
+              child: Text(
+                brand.id == 'all' ? '全平台' : brand.name,
+                style: AppTypography.caption.copyWith(
+                  fontSize: 10.5,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                  color: selected ? tokens.textPrimary : tokens.textSecondary,
                 ),
               ),
             ),
           );
-    return InkWell(
-      // 用 go(替换当前播放页)而非 push:直播切房若 push,旧播放页连同其
-      // media-kit 会话被压在栈下继续存活,与「切房不泄漏/generation fence」
-      // 的目标相悖;且被替换后旧房间 autoDispose 释放,资源收敛。
-      onTap: () => context.go('/${room.site}/play/${room.roomId}'),
+        },
+      ),
+    );
+  }
+}
+
+/// 面板标题行:左标题(12px 加粗)+ 可选右侧操作。
+class _PanelTitle extends StatelessWidget {
+  const _PanelTitle(this.tokens, this.title, {this.trailing});
+
+  final ZishuTokens tokens;
+  final String title;
+  final Widget? trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(AppSpacing.sm, AppSpacing.sm, 6, 4),
       child: Row(
         children: [
-          SizedBox(
-            width: 44,
-            height: 44,
-            child: ClipRRect(
-              borderRadius: const BorderRadius.all(Radius.circular(4)),
-              child: cover,
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              height: 1.2,
+              fontWeight: FontWeight.w600,
+              color: tokens.textPrimary,
             ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  room.title.isEmpty ? room.anchorName : room.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    height: 1.2,
-                    color: tokens.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(room.anchorName, style: AppTypography.caption),
-              ],
-            ),
-          ),
-          if (entry.isSpecial)
-            Icon(Icons.star_rounded, size: 14, color: tokens.liveBadge),
+          const Spacer(),
+          ?trailing,
         ],
       ),
     );
   }
 }
 
+/// 侧栏「推荐」tab:对齐 SFVideoLive —— 推荐同样用预览网格(2 列封面)
+/// 呈现,而非横排缩略图行;标题文案「相关推荐」保持不变(测试锚点)。
 class _RecommendPanel extends ConsumerWidget {
   const _RecommendPanel({required this.site, required this.cid});
 
@@ -1184,23 +1221,7 @@ class _RecommendPanel extends ConsumerWidget {
       key: const Key('play-side-recommend-panel'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            AppSpacing.sm,
-            AppSpacing.sm,
-            AppSpacing.sm,
-            4,
-          ),
-          child: Text(
-            '相关推荐',
-            style: TextStyle(
-              fontSize: 12,
-              height: 1.2,
-              fontWeight: FontWeight.w600,
-              color: tokens.textPrimary,
-            ),
-          ),
-        ),
+        _PanelTitle(tokens, '相关推荐'),
         Expanded(
           child: asyncRooms.when(
             loading: () => const Center(
@@ -1227,105 +1248,17 @@ class _RecommendPanel extends ConsumerWidget {
                   text: '相同分类的直播间会显示在这里',
                 );
               }
-              return ListView.separated(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.sm,
-                  0,
-                  AppSpacing.sm,
-                  AppSpacing.sm,
-                ),
-                itemCount: rooms.length,
-                separatorBuilder: (context, _) => const SizedBox(height: 6),
-                itemBuilder: (context, index) =>
-                    _RecommendListItem(site: site, room: rooms[index]),
+              return PlayRoomGrid(
+                rooms: rooms,
+                // 锚点沿用既有测试契约 play-recommend-room-{site}-{roomId}。
+                keyPrefix: 'play-recommend-room-',
+                onTap: (room) =>
+                    context.go('/${room.site}/play/${room.roomId}'),
               );
             },
           ),
         ),
       ],
-    );
-  }
-}
-
-class _RecommendListItem extends StatelessWidget {
-  const _RecommendListItem({required this.site, required this.room});
-
-  final String site;
-  final RoomSummary room;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = context.tokens;
-    final initial = room.anchorName.isNotEmpty
-        ? room.anchorName.substring(0, 1)
-        : '?';
-    final cover = room.cover.isEmpty
-        ? ColoredBox(
-            color: tokens.surfaceRaised,
-            child: Center(
-              child: Text(
-                initial,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ),
-          )
-        : Image.network(
-            room.cover,
-            fit: BoxFit.cover,
-            errorBuilder: (_, _, _) => ColoredBox(
-              color: tokens.surfaceRaised,
-              child: Center(
-                child: Text(
-                  initial,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-              ),
-            ),
-          );
-    return InkWell(
-      key: Key('play-recommend-room-${room.site}-${room.roomId}'),
-      // 与关注条目同口径:go 替换当前播放页,不压栈(见上方注释)。
-      onTap: () => context.go('/$site/play/${room.roomId}'),
-      child: Row(
-        children: [
-          SizedBox(
-            width: 44,
-            height: 44,
-            child: ClipRRect(
-              borderRadius: const BorderRadius.all(Radius.circular(4)),
-              child: cover,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  room.title.isEmpty ? room.anchorName : room.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12,
-                    height: 1.2,
-                    color: tokens.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(room.anchorName, style: AppTypography.caption),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

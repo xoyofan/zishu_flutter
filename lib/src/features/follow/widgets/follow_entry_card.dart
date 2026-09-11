@@ -1,5 +1,9 @@
-/// 卡片密度条目:约 240px 宽封面卡(16:9 封面 + 元信息区)。
-/// 纯渲染组件:状态全部来自 [FollowEntry],交互通过回调上抛。
+/// 卡片密度条目:对齐 SFVideoLive `FollowRoomPreviewView.vue` 的封面网格项。
+///
+/// 结构(自上而下):
+/// - 16:9 封面:左下分类角标、右上平台角标、左上特别关注 ★、右下在线角标;
+///   离线时整幅置灰压暗,并在底部压一条「未开播」暗条(参考 `.follow-preview-offline`);
+/// - 元信息区:主播名(可点进主播页)→ 标题 → 统计/操作行(平台圆点 + 在线数 + 三枚操作)。
 library;
 
 import 'package:flutter/material.dart';
@@ -45,7 +49,7 @@ class FollowEntryCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = context.tokens;
     final room = entry.room;
-    final brand = PlatformBrandCatalog.byId(room.site);
+    final live = entry.isLive;
     return Container(
       // 测试锚点:条目根节点(follow-entry-{site}-{roomId})。
       key: Key('follow-entry-${room.site}-${room.roomId}'),
@@ -54,6 +58,7 @@ class FollowEntryCard extends StatelessWidget {
         borderRadius: AppRadius.allMd,
         border: Border.all(
           color: selected ? tokens.brand : tokens.border,
+          width: selected ? 1.5 : 1,
         ),
       ),
       child: Material(
@@ -66,65 +71,111 @@ class FollowEntryCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildCover(context, room, brand),
+              _buildCover(context, room),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.md),
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.sm,
+                    6,
+                    AppSpacing.sm,
+                    4,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      // 主播名:参考实现的封面下一律先给主播。
+                      GestureDetector(
+                        onTap: onAnchorTap,
+                        child: Row(
+                          children: [
+                            if (entry.isSpecial) ...[
+                              Icon(Icons.star_rounded,
+                                  size: 12, color: tokens.brand),
+                              const SizedBox(width: 2),
+                            ],
+                            Flexible(
+                              child: Text(
+                                room.anchorName,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: AppTypography.body.copyWith(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: live
+                                      ? tokens.textPrimary
+                                      : tokens.textSecondary,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 2),
                       Text(
                         room.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppTypography.title.copyWith(
-                          fontSize: 13,
-                          color: entry.isLive ? tokens.textPrimary : tokens.textSecondary,
-                        ),
-                      ),
-                      const SizedBox(height: AppSpacing.xs),
-                      GestureDetector(
-                        onTap: onAnchorTap,
-                        child: Text(
-                          room.anchorName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: AppTypography.bodySecondary.copyWith(
-                            decoration: TextDecoration.underline,
-                            decorationColor: tokens.border,
-                          ),
+                        style: AppTypography.bodySecondary.copyWith(
+                          fontSize: 11,
+                          color: tokens.textSecondary,
                         ),
                       ),
                       const Spacer(),
+                      // 统计/操作行:平台圆点 + 在线数,右侧三枚操作。
                       Row(
                         children: [
-                          if (room.category.isNotEmpty) ...[
-                            Flexible(child: FollowCategoryTag(label: room.category)),
-                            const SizedBox(width: AppSpacing.sm),
+                          FollowPlatformDot(site: room.site),
+                          const SizedBox(width: 4),
+                          Icon(
+                            live
+                                ? Icons.people_alt_rounded
+                                : Icons.schedule_rounded,
+                            size: 10,
+                            color: live
+                                ? tokens.liveBadge
+                                : tokens.textSecondary,
+                          ),
+                          const SizedBox(width: 2),
+                          Flexible(
+                            child: Text(
+                              live ? room.online : '未开播',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: AppTypography.caption.copyWith(
+                                fontSize: 10,
+                                color: live
+                                    ? tokens.textPrimary
+                                    : tokens.textSecondary,
+                              ),
+                            ),
+                          ),
+                          if (!selectMode) ...[
+                            const Spacer(),
+                            FollowIconAction(
+                              icon: entry.isSpecial
+                                  ? Icons.star_rounded
+                                  : Icons.star_border_rounded,
+                              tooltip:
+                                  entry.isSpecial ? '取消特别关注' : '设为特别关注',
+                              active: entry.isSpecial,
+                              onPressed: onToggleSpecial,
+                            ),
+                            FollowIconAction(
+                              icon: entry.remindOn
+                                  ? Icons.notifications_active_rounded
+                                  : Icons.notifications_none_rounded,
+                              tooltip:
+                                  entry.remindOn ? '关闭开播提醒' : '开启开播提醒',
+                              active: entry.remindOn,
+                              onPressed: onToggleRemind,
+                            ),
+                            FollowIconAction(
+                              icon: Icons.delete_outline_rounded,
+                              tooltip: '移除关注',
+                              danger: true,
+                              onPressed: onRemove,
+                            ),
                           ],
-                          const Spacer(),
-                          FollowIconAction(
-                            icon: entry.isSpecial
-                                ? Icons.star_rounded
-                                : Icons.star_border_rounded,
-                            tooltip: entry.isSpecial ? '取消特别关注' : '设为特别关注',
-                            active: entry.isSpecial,
-                            onPressed: selectMode ? null : onToggleSpecial,
-                          ),
-                          FollowIconAction(
-                            icon: entry.remindOn
-                                ? Icons.notifications_active_rounded
-                                : Icons.notifications_none_rounded,
-                            tooltip: entry.remindOn ? '关闭开播提醒' : '开启开播提醒',
-                            active: entry.remindOn,
-                            onPressed: selectMode ? null : onToggleRemind,
-                          ),
-                          FollowIconAction(
-                            icon: Icons.delete_outline_rounded,
-                            tooltip: '移除关注',
-                            danger: true,
-                            onPressed: selectMode ? null : onRemove,
-                          ),
                         ],
                       ),
                     ],
@@ -138,9 +189,11 @@ class FollowEntryCard extends StatelessWidget {
     );
   }
 
-  /// 16:9 封面:平台角标 + 特别关注★ + 在线人数/离线标,批量模式左上为复选框。
-  Widget _buildCover(BuildContext context, RoomSummary room, PlatformBrand? brand) {
+  /// 16:9 封面:分类(左下)/ 平台(右上)/ ★(左上)/ 在线(右下),离线压暗 + 未开播条。
+  Widget _buildCover(BuildContext context, RoomSummary room) {
     final tokens = context.tokens;
+    final brand = PlatformBrandCatalog.byId(room.site);
+    final live = entry.isLive;
     return AspectRatio(
       aspectRatio: 16 / 9,
       child: Stack(
@@ -149,64 +202,100 @@ class FollowEntryCard extends StatelessWidget {
           FollowCoverImage(
             cover: room.cover,
             fallbackLabel: room.category.isEmpty ? room.site : room.category,
-            offline: !entry.isLive,
+            offline: !live,
           ),
-          Positioned(
-            left: AppSpacing.sm,
-            top: AppSpacing.sm,
-            child: selectMode
-                ? _SelectBox(selected: selected, onChanged: (_) => onToggleSelect?.call())
-                : Row(
-                    children: [
-                      // 平台角标:品牌色底 + 深色字(surfaceSoft 在深浅主题下都与品牌色拉开对比)。
-                      FollowCoverTag(
-                        accent: brand?.color,
-                        child: Text(
-                          brand?.name ?? room.site,
-                          style: AppTypography.caption.copyWith(
-                            color: tokens.surfaceSoft,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      if (entry.isSpecial) ...[
-                        const SizedBox(width: AppSpacing.xs),
-                        FollowCoverTag(
-                          child: Icon(
-                            Icons.star_rounded,
-                            size: 12,
-                            color: tokens.brand,
-                          ),
-                        ),
-                      ],
-                    ],
+          // 左下:分类角标(品牌色底 + 深色字)。
+          if (room.category.isNotEmpty)
+            Positioned(
+              left: AppSpacing.xs,
+              bottom: AppSpacing.xs,
+              child: FollowCoverTag(
+                accent: brand?.color,
+                child: Text(
+                  room.category,
+                  style: AppTypography.caption.copyWith(
+                    fontSize: 10,
+                    color: tokens.surfaceSoft,
+                    fontWeight: FontWeight.w700,
                   ),
-          ),
+                ),
+              ),
+            ),
+          // 右上:平台角标(品牌色底)。
           Positioned(
-            right: AppSpacing.sm,
-            bottom: AppSpacing.sm,
+            right: AppSpacing.xs,
+            top: AppSpacing.xs,
             child: FollowCoverTag(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    entry.isLive
-                        ? Icons.visibility_rounded
-                        : Icons.nightlight_round,
-                    size: 10,
-                    color: entry.isLive ? tokens.liveBadge : tokens.textSecondary,
-                  ),
-                  const SizedBox(width: 3),
-                  Text(
-                    entry.isLive ? room.online : '离线',
-                    style: AppTypography.caption.copyWith(
-                      color: entry.isLive ? tokens.textPrimary : tokens.textSecondary,
-                    ),
-                  ),
-                ],
+              accent: brand?.color,
+              child: Text(
+                brand?.name ?? room.site,
+                style: AppTypography.caption.copyWith(
+                  fontSize: 10,
+                  color: tokens.surfaceSoft,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ),
           ),
+          // 左上:特别关注 ★ / 批量模式复选框。
+          Positioned(
+            left: AppSpacing.xs,
+            top: AppSpacing.xs,
+            child: selectMode
+                ? _SelectBox(selected: selected, onChanged: (_) => onToggleSelect?.call())
+                : (entry.isSpecial
+                    ? FollowCoverTag(
+                        child: Icon(
+                          Icons.star_rounded,
+                          size: 12,
+                          color: tokens.brand,
+                        ),
+                      )
+                    : const SizedBox.shrink()),
+          ),
+          // 右下:在线人数;离线不重复显示(底部已有未开播条)。
+          if (live)
+            Positioned(
+              right: AppSpacing.xs,
+              bottom: AppSpacing.xs,
+              child: FollowCoverTag(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.people_alt_rounded,
+                        size: 10, color: tokens.liveBadge),
+                    const SizedBox(width: 3),
+                    Text(
+                      room.online,
+                      style: AppTypography.caption.copyWith(
+                        fontSize: 10,
+                        color: tokens.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          // 离线遮罩条:整幅底部压一条暗带,显示「未开播」。
+          if (!live)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                color: tokens.textPrimary.withValues(alpha: 0.62),
+                alignment: Alignment.center,
+                child: Text(
+                  '未开播',
+                  style: AppTypography.caption.copyWith(
+                    fontSize: 10,
+                    color: tokens.surface,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
