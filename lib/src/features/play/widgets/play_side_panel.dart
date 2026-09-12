@@ -1103,17 +1103,17 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
                   text: '关注的直播间会显示在这里',
                 )
               : _grid
-                  ? PlayRoomGrid(
-                      rooms: rooms,
-                      superKeys: superKeys,
-                      keyPrefix: 'play-follow-room-',
-                      onTap: _goRoom,
-                    )
-                  : PlayRoomList(
-                      rooms: rooms,
-                      superKeys: superKeys,
-                      onTap: _goRoom,
-                    ),
+              ? PlayRoomGrid(
+                  rooms: rooms,
+                  superKeys: superKeys,
+                  keyPrefix: 'play-follow-room-',
+                  onTap: _goRoom,
+                )
+              : PlayRoomList(
+                  rooms: rooms,
+                  superKeys: superKeys,
+                  onTap: _goRoom,
+                ),
         ),
       ],
     );
@@ -1140,10 +1140,10 @@ class _SidePlatformChips extends StatelessWidget {
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-        itemCount: PlatformBrandCatalog.navPlatforms.length,
+        itemCount: PlatformBrandCatalog.navigationPlatforms.length,
         separatorBuilder: (context, _) => const SizedBox(width: 5),
         itemBuilder: (context, index) {
-          final brand = PlatformBrandCatalog.navPlatforms[index];
+          final brand = PlatformBrandCatalog.navigationPlatforms[index];
           final selected = value == brand.id;
           final accent = brand.id == 'all' ? tokens.brand : brand.color;
           return InkWell(
@@ -1153,7 +1153,9 @@ class _SidePlatformChips extends StatelessWidget {
               alignment: Alignment.center,
               padding: const EdgeInsets.symmetric(horizontal: 8),
               decoration: BoxDecoration(
-                color: selected ? accent.withValues(alpha: 0.18) : tokens.surface,
+                color: selected
+                    ? accent.withValues(alpha: 0.18)
+                    : tokens.surface,
                 borderRadius: AppRadius.allPill,
                 border: Border.all(color: selected ? accent : tokens.border),
               ),

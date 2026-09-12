@@ -151,7 +151,9 @@ class _AppShellState extends ConsumerState<AppShell> {
               Expanded(child: widget.child),
             ],
           ),
-          bottomNavigationBar: isPhone ? _BottomNav(currentSite: widget.site) : null,
+          bottomNavigationBar: isPhone
+              ? _BottomNav(currentSite: widget.site)
+              : null,
         ),
         if (showPlatformFlyout)
           _HoverOverlay(
@@ -238,7 +240,7 @@ class _HoverOverlay extends StatelessWidget {
 ///
 /// 每格 = 品牌图标入口(锚点 `platform-tab-{site}`)+ 独立分类箭头(锚点
 /// `platform-category-{site}`),各自语义动作分离;平台清单来自
-/// `PlatformBrandCatalog.navPlatforms`(每行 6 项,共 2 行)。
+/// `PlatformBrandCatalog.navigationPlatforms`(每行 6 项,共 2 行)。
 class _PlatformStrip extends StatelessWidget {
   const _PlatformStrip({required this.currentSite});
 
@@ -262,11 +264,9 @@ class _PlatformStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final safeTop = MediaQuery.paddingOf(context).top;
-    final platforms = PlatformBrandCatalog.navPlatforms;
+    final platforms = PlatformBrandCatalog.navigationPlatforms;
     final rows = <Widget>[
-      for (int r = 0;
-          r < ((platforms.length / _kColumns).ceil());
-          r++)
+      for (int r = 0; r < ((platforms.length / _kColumns).ceil()); r++)
         Expanded(
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 2),
@@ -328,7 +328,10 @@ class _StripGridCell extends StatelessWidget {
                     borderRadius: AppRadius.allSm,
                   ),
                   child: Center(
-                    child: PlatformIcon(id: brand.id, size: _PlatformStrip._kIconSize),
+                    child: PlatformIcon(
+                      id: brand.id,
+                      size: _PlatformStrip._kIconSize,
+                    ),
                   ),
                 ),
               ),
@@ -522,6 +525,14 @@ class _TopNavTools extends StatelessWidget {
           showLabel: showLabels,
         ),
         _NavAction(
+          key: const Key('nav-time'),
+          icon: Icons.timeline_rounded,
+          label: '动态',
+          tooltip: '动态时间线',
+          route: '/time',
+          showLabel: showLabels,
+        ),
+        _NavAction(
           key: const Key('nav-theme'),
           icon: Icons.dark_mode_outlined,
           label: '深色',
@@ -572,8 +583,8 @@ class _UserAvatar extends ConsumerWidget {
     final label = restoring
         ? '…'
         : authenticated
-            ? (auth.session?.username ?? '已登录')
-            : '登录';
+        ? (auth.session?.username ?? '已登录')
+        : '登录';
 
     final row = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
@@ -630,10 +641,7 @@ class _UserAvatar extends ConsumerWidget {
                 SizedBox(width: 8),
                 Text(
                   '退出登录',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: AppColors.textPrimary,
-                  ),
+                  style: TextStyle(fontSize: 12, color: AppColors.textPrimary),
                 ),
               ],
             ),
@@ -652,7 +660,7 @@ class _UserAvatar extends ConsumerWidget {
           hoverColor: AppColors.surfaceSoft,
           onTap: () => showDialog<void>(
             context: context,
-            builder: (_) => const _LoginDialog(),
+            builder: (_) => const LoginDialog(),
           ),
           child: row,
         ),
@@ -663,16 +671,17 @@ class _UserAvatar extends ConsumerWidget {
 
 /// data-server 登录对话框:用户名/密码 + 记住密码(默认勾选)。
 /// 用户名预填默认账号;成功后关闭,关注云同步由 FollowController 监听登录态触发。
-class _LoginDialog extends ConsumerStatefulWidget {
-  const _LoginDialog();
+class LoginDialog extends ConsumerStatefulWidget {
+  const LoginDialog({super.key});
 
   @override
-  ConsumerState<_LoginDialog> createState() => _LoginDialogState();
+  ConsumerState<LoginDialog> createState() => _LoginDialogState();
 }
 
-class _LoginDialogState extends ConsumerState<_LoginDialog> {
-  final TextEditingController _userController =
-      TextEditingController(text: kDefaultAuthUsername);
+class _LoginDialogState extends ConsumerState<LoginDialog> {
+  final TextEditingController _userController = TextEditingController(
+    text: kDefaultAuthUsername,
+  );
   final TextEditingController _passController = TextEditingController();
   bool _remember = true;
   bool _busy = false;
@@ -724,16 +733,21 @@ class _LoginDialogState extends ConsumerState<_LoginDialog> {
           children: [
             TextField(
               controller: _userController,
-              style:
-                  const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.textPrimary,
+              ),
               decoration: InputDecoration(
                 isDense: true,
                 labelText: '用户名',
-                labelStyle:
-                    const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                labelStyle: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
                 prefixIcon: const Icon(Icons.person_outline_rounded, size: 18),
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
             const SizedBox(height: 12),
@@ -741,16 +755,21 @@ class _LoginDialogState extends ConsumerState<_LoginDialog> {
               controller: _passController,
               obscureText: true,
               onSubmitted: (_) => _submit(),
-              style:
-                  const TextStyle(fontSize: 13, color: AppColors.textPrimary),
+              style: const TextStyle(
+                fontSize: 13,
+                color: AppColors.textPrimary,
+              ),
               decoration: InputDecoration(
                 isDense: true,
                 labelText: '密码',
-                labelStyle:
-                    const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                labelStyle: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
                 prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18),
-                border:
-                    OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
             const SizedBox(height: 6),
@@ -769,8 +788,10 @@ class _LoginDialogState extends ConsumerState<_LoginDialog> {
                   ),
                   const Text(
                     '记住密码(下次打开自动登录)',
-                    style:
-                        TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
@@ -949,8 +970,9 @@ class _NavAction extends StatelessWidget {
                           label,
                           style: TextStyle(
                             fontSize: 12,
-                            fontWeight:
-                                active ? FontWeight.w600 : FontWeight.w500,
+                            fontWeight: active
+                                ? FontWeight.w600
+                                : FontWeight.w500,
                             color: color,
                           ),
                         ),
@@ -988,7 +1010,7 @@ class _PlatformTabs extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          for (final brand in PlatformBrandCatalog.navPlatforms)
+          for (final brand in PlatformBrandCatalog.navigationPlatforms)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 1),
               child: Builder(
@@ -1001,46 +1023,48 @@ class _PlatformTabs extends StatelessWidget {
                   },
                   onExit: (_) => onHoverEnd(),
                   child: Tooltip(
-                message: brand.name,
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
-                    key: Key('platform-tab-${brand.id}'),
-                    borderRadius: AppRadius.allSm,
-                    hoverColor: AppColors.surfaceSoft,
-                    onTap: () => context.go(_platformRoute(brand.id)),
-                    child: AnimatedContainer(
-                      duration: AppMotion.fast,
-                      width: 34,
-                      height: 34,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: currentSite == brand.id
-                            ? AppColors.surfaceRaised
-                            : Colors.transparent,
-                        border: Border.all(
-                          color: currentSite == brand.id
-                              ? brand.color
-                              : Colors.transparent,
-                        ),
+                    message: brand.name,
+                    child: Material(
+                      color: Colors.transparent,
+                      child: InkWell(
+                        key: Key('platform-tab-${brand.id}'),
                         borderRadius: AppRadius.allSm,
-                        boxShadow: currentSite == brand.id
-                            ? [
-                                BoxShadow(
-                                  color: brand.color.withValues(alpha: 0.22),
-                                  blurRadius: 8,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ]
-                            : null,
+                        hoverColor: AppColors.surfaceSoft,
+                        onTap: () => context.go(_platformRoute(brand.id)),
+                        child: AnimatedContainer(
+                          duration: AppMotion.fast,
+                          width: 34,
+                          height: 34,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: currentSite == brand.id
+                                ? AppColors.surfaceRaised
+                                : Colors.transparent,
+                            border: Border.all(
+                              color: currentSite == brand.id
+                                  ? brand.color
+                                  : Colors.transparent,
+                            ),
+                            borderRadius: AppRadius.allSm,
+                            boxShadow: currentSite == brand.id
+                                ? [
+                                    BoxShadow(
+                                      color: brand.color.withValues(
+                                        alpha: 0.22,
+                                      ),
+                                      blurRadius: 8,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: PlatformIcon(id: brand.id, size: 28),
+                        ),
                       ),
-                      child: PlatformIcon(id: brand.id, size: 28),
                     ),
                   ),
                 ),
               ),
-                  ),
-                ),
             ),
         ],
       ),
@@ -1128,7 +1152,10 @@ class _BottomNav extends StatelessWidget {
           ),
           _BottomItem(
             key: const Key('nav-follow'),
-            leading: _bottomIcon(Icons.star_border_rounded, currentSite == 'follow'),
+            leading: _bottomIcon(
+              Icons.star_border_rounded,
+              currentSite == 'follow',
+            ),
             label: '关注',
             route: '/follow',
             active: currentSite == 'follow',
@@ -1139,6 +1166,13 @@ class _BottomNav extends StatelessWidget {
             label: '搜索',
             route: '/search',
             active: false,
+          ),
+          _BottomItem(
+            key: const Key('nav-time'),
+            leading: _bottomIcon(Icons.timeline_rounded, currentSite == 'time'),
+            label: '动态',
+            route: '/time',
+            active: currentSite == 'time',
           ),
           _BottomItem(
             key: const Key('nav-theme'),
@@ -1164,8 +1198,11 @@ class _BottomNav extends StatelessWidget {
 }
 
 /// 底部导航图标(按选中态着色)。
-Widget _bottomIcon(IconData icon, bool active) =>
-    Icon(icon, size: 20, color: active ? AppColors.brand : AppColors.textSecondary);
+Widget _bottomIcon(IconData icon, bool active) => Icon(
+  icon,
+  size: 20,
+  color: active ? AppColors.brand : AppColors.textSecondary,
+);
 
 class _BottomItem extends StatelessWidget {
   const _BottomItem({
@@ -1296,11 +1333,14 @@ class _PlatformCategoryFlyout extends ConsumerWidget {
       onExit: (_) => onExit(),
       child: _FlyoutPanel(
         child: switch (async) {
-          AsyncData(:final value) => value.groups.isEmpty
-              ? const _FlyoutHint('暂无分类')
-              : _CategoryBoard(site: site, groups: value.groups),
-          AsyncError(:final error) =>
-            _FlyoutHint(error.toString(), danger: true),
+          AsyncData(:final value) =>
+            value.groups.isEmpty
+                ? const _FlyoutHint('暂无分类')
+                : _CategoryBoard(site: site, groups: value.groups),
+          AsyncError(:final error) => _FlyoutHint(
+            error.toString(),
+            danger: true,
+          ),
           _ => const _FlyoutHint('加载分类…'),
         },
       ),
@@ -1358,7 +1398,9 @@ class _CategoryBoard extends StatelessWidget {
                     width: double.infinity,
                     padding: const EdgeInsets.only(bottom: 3.8),
                     decoration: const BoxDecoration(
-                      border: Border(bottom: BorderSide(color: AppColors.border)),
+                      border: Border(
+                        bottom: BorderSide(color: AppColors.border),
+                      ),
                     ),
                     child: Text(
                       group.name,
@@ -1456,7 +1498,10 @@ class _FollowFlyout extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final entries = ref.watch(followProvider);
-    final live = [for (final entry in entries) if (entry.isLive) entry];
+    final live = [
+      for (final entry in entries)
+        if (entry.isLive) entry,
+    ];
     final list = live.isNotEmpty ? live : entries;
     return MouseRegion(
       onEnter: (_) => onEnter(),
@@ -1505,8 +1550,10 @@ class _FollowAvatarTile extends StatelessWidget {
           hoverColor: color.withValues(alpha: 0.3),
           onTap: () => context.go('/${room.site}/play/${room.roomId}'),
           child: Padding(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 0.96, vertical: 2.56),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 0.96,
+              vertical: 2.56,
+            ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -1775,67 +1822,69 @@ class _MyCategoryManageDialog extends ConsumerWidget {
     List<MyCategoryEntry> favorites,
   ) {
     return switch (async) {
-      AsyncData(:final value) => value.groups.isEmpty
-          ? const _FlyoutHint('暂无分类数据')
-          : ListView(
-              children: [
-                for (final group in value.groups)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          group.name,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.textSecondary,
+      AsyncData(:final value) =>
+        value.groups.isEmpty
+            ? const _FlyoutHint('暂无分类数据')
+            : ListView(
+                children: [
+                  for (final group in value.groups)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            group.name,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textSecondary,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 6),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 6,
-                          children: [
-                            for (final item in group.items)
-                              _PickableChip(
-                                label: item.name,
-                                selected: favorites.any((entry) =>
-                                    entry.site == site &&
-                                    entry.cid == item.cid),
-                                onTap: () async {
-                                  final ok = await ref
-                                      .read(myCategoriesProvider.notifier)
-                                      .toggle(
-                                    MyCategoryEntry(
-                                      site: site,
-                                      cid: item.cid,
-                                      name: item.name,
-                                    ),
-                                  );
-                                  if (!ok && context.mounted) {
-                                    ScaffoldMessenger.of(context)
-                                      ..hideCurrentSnackBar()
-                                      ..showSnackBar(
-                                        SnackBar(
-                                          content: Text(
-                                            '最多收藏 ${MyCategoryController.maxCount} 个分类',
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              for (final item in group.items)
+                                _PickableChip(
+                                  label: item.name,
+                                  selected: favorites.any(
+                                    (entry) =>
+                                        entry.site == site &&
+                                        entry.cid == item.cid,
+                                  ),
+                                  onTap: () async {
+                                    final ok = await ref
+                                        .read(myCategoriesProvider.notifier)
+                                        .toggle(
+                                          MyCategoryEntry(
+                                            site: site,
+                                            cid: item.cid,
+                                            name: item.name,
                                           ),
-                                        ),
-                                      );
-                                  }
-                                },
-                              ),
-                          ],
-                        ),
-                      ],
+                                        );
+                                    if (!ok && context.mounted) {
+                                      ScaffoldMessenger.of(context)
+                                        ..hideCurrentSnackBar()
+                                        ..showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              '最多收藏 ${MyCategoryController.maxCount} 个分类',
+                                            ),
+                                          ),
+                                        );
+                                    }
+                                  },
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-              ],
-            ),
-      AsyncError(:final error) =>
-        _FlyoutHint('分类加载失败:$error', danger: true),
+                ],
+              ),
+      AsyncError(:final error) => _FlyoutHint('分类加载失败:$error', danger: true),
       _ => const _FlyoutHint('加载分类…'),
     };
   }
@@ -1869,8 +1918,11 @@ class _RemovableChip extends StatelessWidget {
             onTap: onRemove,
             child: const Padding(
               padding: EdgeInsets.all(3),
-              child:
-                  Icon(Icons.close_rounded, size: 13, color: AppColors.brand),
+              child: Icon(
+                Icons.close_rounded,
+                size: 13,
+                color: AppColors.brand,
+              ),
             ),
           ),
         ],

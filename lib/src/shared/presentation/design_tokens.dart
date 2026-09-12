@@ -164,8 +164,12 @@ abstract final class AppDirectoryDrawer {
 
   // ---- 收藏星区(__follow-wrap / __follow-icon) ----
 
-  /// 星标行最小高(`min-height: 4rem`)。
+  /// 展开态关注行高度。
   static const double followRowHeight = 64;
+
+  /// 展开态关注头像尺寸与重叠量。
+  static const double followAvatarSize = 24;
+  static const double followAvatarOverlap = 8;
 
   /// 星标图标尺寸(`font-size: 2.25rem`,StarFilled)。
   static const double followIconSize = 36;

@@ -7,6 +7,8 @@ import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/widgets/platform_icon.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
+import '../../follow/application/follow_provider.dart';
+import '../../follow/widgets/follow_common.dart';
 import '../application/browse_provider.dart';
 import '../application/sidebar_pref_provider.dart';
 
@@ -72,8 +74,7 @@ class BrowseSidebar extends ConsumerWidget {
             child: _ToggleRail(
               open: open,
               tokens: tokens,
-              onTap: () =>
-                  ref.read(sidebarOpenProvider.notifier).toggle(),
+              onTap: () => ref.read(sidebarOpenProvider.notifier).toggle(),
             ),
           ),
         ],
@@ -107,14 +108,16 @@ class _ExpandedContent extends StatelessWidget {
 
 /// 收藏星区(`__follow-wrap`):64px 行 + 36px 金色实心星,点击进入关注页。
 ///
-/// 参考实现有关注时渲染头像堆叠;当前未接关注数据,先复刻其空态(StarFilled)。
-class _FollowRow extends StatelessWidget {
+/// 参考实现有关注时渲染头像堆叠;无关注时显示星标入口。
+class _FollowRow extends ConsumerWidget {
   const _FollowRow({required this.tokens});
 
   final ZishuTokens tokens;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final entries = ref.watch(followProvider);
+    final live = entries.where((entry) => entry.isLive).take(3).toList();
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -126,11 +129,13 @@ class _FollowRow extends StatelessWidget {
           ),
           child: Align(
             alignment: Alignment.centerLeft,
-            child: Icon(
-              Icons.star_rounded,
-              size: AppDirectoryDrawer.followIconSize,
-              color: tokens.brand,
-            ),
+            child: live.isEmpty
+                ? Icon(
+                    Icons.star_rounded,
+                    size: AppDirectoryDrawer.followIconSize,
+                    color: tokens.brand,
+                  )
+                : _FollowAvatarStack(entries: live),
           ),
         ),
       ),
@@ -138,6 +143,39 @@ class _FollowRow extends StatelessWidget {
   }
 }
 
+class _FollowAvatarStack extends StatelessWidget {
+  const _FollowAvatarStack({required this.entries});
+
+  final List<FollowEntry> entries;
+
+  @override
+  Widget build(BuildContext context) {
+    const size = AppDirectoryDrawer.followAvatarSize;
+    const overlap = AppDirectoryDrawer.followAvatarOverlap;
+    return SizedBox(
+      width: size + (entries.length - 1) * (size - overlap),
+      height: size,
+      child: Stack(
+        children: [
+          for (var index = 0; index < entries.length; index++)
+            Positioned(
+              left: index * (size - overlap),
+              child: ClipOval(
+                child: FollowCoverImage(
+                  cover: entries[index].room.cover,
+                  fallbackLabel: entries[index].room.anchorName,
+                  width: size,
+                  height: size,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 展示最多 3 个开播关注头像,头像重叠约 33%。
 /// 收起态内容:平台图标竖列(单列,无文字),对齐参考
 /// `directory-drawer__rail-platform`(全宽按钮、竖直 padding .5rem、图标 32px)。
 class _RailContent extends StatelessWidget {
@@ -151,7 +189,7 @@ class _RailContent extends StatelessWidget {
     return ListView(
       padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
       children: [
-        for (final brand in PlatformBrandCatalog.navPlatforms)
+        for (final brand in PlatformBrandCatalog.navigationPlatforms)
           _PlatformTab(
             brand: brand,
             selected: brand.id == site,
@@ -200,9 +238,7 @@ class _ToggleRail extends StatelessWidget {
               onTap: onTap,
               customBorder: shape,
               child: Icon(
-                open
-                    ? Icons.chevron_left_rounded
-                    : Icons.chevron_right_rounded,
+                open ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
                 size: 12,
                 color: tokens.textSecondary,
               ),
@@ -228,12 +264,14 @@ class _PlatformTabs extends StatelessWidget {
         vertical: AppDirectoryDrawer.platformPadV,
         horizontal: AppDirectoryDrawer.platformPadH,
       ),
-      decoration: BoxDecoration(border: Border(bottom: BorderSide(color: tokens.border))),
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: tokens.border)),
+      ),
       child: Wrap(
         spacing: AppDirectoryDrawer.platformGap,
         runSpacing: AppDirectoryDrawer.platformGap,
         children: [
-          for (final brand in PlatformBrandCatalog.navPlatforms)
+          for (final brand in PlatformBrandCatalog.navigationPlatforms)
             _PlatformTab(
               brand: brand,
               selected: brand.id == site,
@@ -295,9 +333,7 @@ class _PlatformTab extends StatelessWidget {
             alpha: AppDirectoryDrawer.activeChipAlpha,
           ),
           checkmarkColor: tokens.brand,
-          side: selected
-              ? BorderSide(color: tokens.brand)
-              : BorderSide.none,
+          side: selected ? BorderSide(color: tokens.brand) : BorderSide.none,
           shape: RoundedRectangleBorder(borderRadius: AppRadius.allSm),
           onSelected: (_) =>
               context.go(brand.id == 'all' ? '/all' : '/${brand.id}'),
@@ -313,10 +349,7 @@ class _PlatformTab extends StatelessWidget {
 /// 条目居中、fill 底、无边框;active 金边 + 金字 + 金 12% 底;空数据时
 /// 显示参考实现的空态文案。
 class _CategoryTree extends StatelessWidget {
-  const _CategoryTree({
-    required this.site,
-    required this.categoriesAsync,
-  });
+  const _CategoryTree({required this.site, required this.categoriesAsync});
 
   final String site;
   final AsyncValue<CategoryResult> categoriesAsync;
@@ -325,27 +358,28 @@ class _CategoryTree extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = context.tokens;
     return switch (categoriesAsync) {
-      AsyncValue(:final value?) => value.groups.isEmpty
-          ? _DrawerHint(text: '该平台暂无分类', tokens: tokens)
-          : GridView.count(
-              padding: const EdgeInsets.fromLTRB(
-                AppDirectoryDrawer.catPadH,
-                AppDirectoryDrawer.catPadTop,
-                AppDirectoryDrawer.catPadH,
-                AppDirectoryDrawer.catPadBottom,
+      AsyncValue(:final value?) =>
+        value.groups.isEmpty
+            ? _DrawerHint(text: '该平台暂无分类', tokens: tokens)
+            : GridView.count(
+                padding: const EdgeInsets.fromLTRB(
+                  AppDirectoryDrawer.catPadH,
+                  AppDirectoryDrawer.catPadTop,
+                  AppDirectoryDrawer.catPadH,
+                  AppDirectoryDrawer.catPadBottom,
+                ),
+                crossAxisCount: 2,
+                mainAxisSpacing: AppDirectoryDrawer.catGapMain,
+                crossAxisSpacing: AppDirectoryDrawer.catGapCross,
+                // 220px 抽屉、8.8px 左右内边距下条目宽约 99.4px;参考条目
+                // min-height 20.8px,据此推 aspect 使默认行高一致。
+                childAspectRatio: 99.4 / AppDirectoryDrawer.catItemHeight,
+                children: [
+                  for (final group in value.groups)
+                    for (final item in group.items)
+                      _CategoryLeaf(site: site, cid: item.cid, name: item.name),
+                ],
               ),
-              crossAxisCount: 2,
-              mainAxisSpacing: AppDirectoryDrawer.catGapMain,
-              crossAxisSpacing: AppDirectoryDrawer.catGapCross,
-              // 220px 抽屉、8.8px 左右内边距下条目宽约 99.4px;参考条目
-              // min-height 20.8px,据此推 aspect 使默认行高一致。
-              childAspectRatio: 99.4 / AppDirectoryDrawer.catItemHeight,
-              children: [
-                for (final group in value.groups)
-                  for (final item in group.items)
-                    _CategoryLeaf(site: site, cid: item.cid, name: item.name),
-              ],
-            ),
       // 加载中/出错时折叠分类网格,不阻塞房间网格渲染。
       _ => const SizedBox.shrink(),
     };

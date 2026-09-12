@@ -186,9 +186,9 @@ void main() {
     await goAndStabilize(tester, router, '/douyu');
     expectTopNavAnchors('/douyu');
     expect(
-      tester.widget<FilterChip>(
-        find.byKey(const Key('home-platform-chip-douyu')),
-      ).selected,
+      tester
+          .widget<FilterChip>(find.byKey(const Key('home-platform-chip-douyu')))
+          .selected,
       isTrue,
       reason: '/douyu 页斗鱼平台 chip 应为选中态',
     );
@@ -219,8 +219,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('navTraversal:顶部导航遍历 follow → settings → home → search',
-      (tester) async {
+  testWidgets('navTraversal:顶部导航遍历 follow → settings → home → search', (
+    tester,
+  ) async {
     suppressRenderFlexOverflow();
     final router = await pumpApp(tester);
 
@@ -286,16 +287,15 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('platformSwitch:platform-tab chip 切换平台路由与选中态',
-      (tester) async {
+  testWidgets('platformSwitch:platform-tab chip 切换平台路由与选中态', (tester) async {
     suppressRenderFlexOverflow();
     final router = await pumpApp(tester);
 
     // 起点 /all:全平台 chip 选中。
     expect(
-      tester.widget<FilterChip>(
-        find.byKey(const Key('home-platform-chip-all')),
-      ).selected,
+      tester
+          .widget<FilterChip>(find.byKey(const Key('home-platform-chip-all')))
+          .selected,
       isTrue,
     );
 
@@ -306,15 +306,15 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     expect(router.routeInformationProvider.value.uri.path, '/huya');
     expect(
-      tester.widget<FilterChip>(
-        find.byKey(const Key('home-platform-chip-huya')),
-      ).selected,
+      tester
+          .widget<FilterChip>(find.byKey(const Key('home-platform-chip-huya')))
+          .selected,
       isTrue,
     );
     expect(
-      tester.widget<FilterChip>(
-        find.byKey(const Key('home-platform-chip-all')),
-      ).selected,
+      tester
+          .widget<FilterChip>(find.byKey(const Key('home-platform-chip-all')))
+          .selected,
       isFalse,
     );
     expect(tester.takeException(), isNull);
@@ -326,9 +326,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     expect(router.routeInformationProvider.value.uri.path, '/all');
     expect(
-      tester.widget<FilterChip>(
-        find.byKey(const Key('home-platform-chip-all')),
-      ).selected,
+      tester
+          .widget<FilterChip>(find.byKey(const Key('home-platform-chip-all')))
+          .selected,
       isTrue,
     );
     expect(find.byKey(const Key('room-card-douyu-63136')), findsOneWidget);
@@ -339,23 +339,19 @@ void main() {
     suppressRenderFlexOverflow();
     final router = await pumpApp(tester);
 
-    // 实际行为记录:路由表末尾的 /:site 是单段兜底路由,'/nonexistent' 并不会
-    // 触发 go_router 的 no-match 错误,而是命中 HomeView(site: 'nonexistent')
-    // + AppShell(site: 'nonexistent');fixture 数据源对任意 site 返回同一批
-    // 样例房间,因此页面按普通平台首页语义渲染。这里断言:导航完成无框架异常
-    // 且页面真实渲染出来(顶导航锚点 + 房间网格)。
+    // 未知平台统一回退到全平台首页,避免构造无效 site 后继续渲染 fixture/真实数据。
     await goAndStabilize(tester, router, '/nonexistent');
     expect(tester.takeException(), isNull);
-    expectTopNavAnchors('/nonexistent');
+    expectTopNavAnchors('/all');
     expect(find.byKey(const Key('room-card-douyu-63136')), findsOneWidget);
 
-    // 平台 chips 仍渲染,但没有任何一个被选中('nonexistent' 不在品牌目录中)。
+    // 非法平台不应进入任何选中态。
     expect(find.byKey(const Key('home-platform-chip-all')), findsOneWidget);
     expect(
-      tester.widget<FilterChip>(
-        find.byKey(const Key('home-platform-chip-all')),
-      ).selected,
-      isFalse,
+      tester
+          .widget<FilterChip>(find.byKey(const Key('home-platform-chip-all')))
+          .selected,
+      isTrue,
     );
     expect(tester.takeException(), isNull);
   });

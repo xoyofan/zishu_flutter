@@ -19,13 +19,14 @@ class SearchPlatformChips extends ConsumerWidget {
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
         children: [
-          for (final brand in PlatformBrandCatalog.navPlatforms)
+          for (final brand in PlatformBrandCatalog.searchPlatforms)
             Padding(
               padding: const EdgeInsets.only(right: AppSpacing.sm),
               child: _PlatformChip(
                 brand: brand,
                 selected: brand.id == selected,
-                onTap: () => ref.read(searchProvider.notifier).setSite(brand.id),
+                onTap: () =>
+                    ref.read(searchProvider.notifier).setSite(brand.id),
               ),
             ),
         ],
@@ -57,7 +58,9 @@ class _PlatformChip extends StatelessWidget {
           vertical: AppSpacing.xs,
         ),
         decoration: BoxDecoration(
-          color: selected ? brand.color.withValues(alpha: 0.18) : tokens.surface,
+          color: selected
+              ? brand.color.withValues(alpha: 0.18)
+              : tokens.surface,
           borderRadius: AppRadius.allSm,
           border: Border.all(color: selected ? brand.color : tokens.border),
         ),
@@ -67,7 +70,10 @@ class _PlatformChip extends StatelessWidget {
             Container(
               width: 8,
               height: 8,
-              decoration: BoxDecoration(color: brand.color, shape: BoxShape.circle),
+              decoration: BoxDecoration(
+                color: brand.color,
+                shape: BoxShape.circle,
+              ),
             ),
             const SizedBox(width: AppSpacing.xs),
             Text(

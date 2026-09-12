@@ -5,6 +5,8 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/app_shell.dart';
+import '../../../shared/application/auth_provider.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -12,6 +14,8 @@ import '../application/settings_provider.dart';
 
 class SettingsView extends ConsumerStatefulWidget {
   const SettingsView({super.key});
+
+  static const Key mobileLoginKey = Key('mobile-login');
 
   @override
   ConsumerState<SettingsView> createState() => _SettingsViewState();
@@ -21,7 +25,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
   late final TextEditingController _serverController;
   final FocusNode _serverFocus = FocusNode();
 
-  /// 「按平台配置默认画质」展开态。默认折叠:折叠时不构建 11 组平台下拉,
+  /// 手机端没有顶栏头像,在设置页提供稳定的登录入口。
   /// 避免设置页被撑爆,也让既有用例的 `find.byType(DropdownButton<String>)`
   /// 仍只命中「全平台默认画质」一个控件。
   bool _platformQualityExpanded = false;
@@ -81,6 +85,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
             children: [
               Text('设置', style: AppTypography.title.copyWith(fontSize: 18)),
               const SizedBox(height: AppSpacing.lg),
+              _SettingsGroup(title: '账号', children: [_AccountSettingRow()]),
               _SettingsGroup(
                 title: '外观',
                 children: [
@@ -308,6 +313,54 @@ class _SettingsGroup extends StatelessWidget {
           ...children,
         ],
       ),
+    );
+  }
+}
+
+/// 账号状态行:移动端没有顶栏头像时提供登录/退出入口。
+class _AccountSettingRow extends ConsumerWidget {
+  const _AccountSettingRow();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final auth = ref.watch(authProvider);
+    final authenticated = auth.phase == AuthPhase.authenticated;
+    final label = authenticated
+        ? (auth.session?.username ?? '已登录')
+        : auth.phase == AuthPhase.restoring
+        ? '恢复中…'
+        : '未登录';
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: CircleAvatar(
+        backgroundColor: context.tokens.brand,
+        child: Icon(
+          authenticated ? Icons.person_rounded : Icons.person_outline_rounded,
+          color: Colors.black87,
+          size: 18,
+        ),
+      ),
+      title: Text(label, style: AppTypography.body),
+      subtitle: Text(
+        authenticated ? '登录状态已恢复，可同步我的关注' : '登录后同步我的关注',
+        style: AppTypography.bodySecondary,
+      ),
+      trailing: authenticated
+          ? TextButton(
+              key: SettingsView.mobileLoginKey,
+              onPressed: () => ref.read(authProvider.notifier).logout(),
+              child: const Text('退出登录'),
+            )
+          : FilledButton(
+              key: SettingsView.mobileLoginKey,
+              onPressed: auth.phase == AuthPhase.restoring
+                  ? null
+                  : () => showDialog<void>(
+                      context: context,
+                      builder: (_) => const LoginDialog(),
+                    ),
+              child: const Text('登录'),
+            ),
     );
   }
 }

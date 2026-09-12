@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:live_parser/live_parser.dart';
 
 /// 平台品牌规格:角标、tabs、筛选 chips 共用。
 class PlatformBrand {
@@ -18,6 +19,9 @@ class PlatformBrand {
 }
 
 /// 平台品牌目录:色值、名称与 SFVideoLive 平台目录对齐。
+///
+/// `navigationPlatforms` / `searchPlatforms` 在真实解析构建中从 live_parser
+/// 注册表能力动态裁剪；fixture 构建保留 `navPlatforms` 全量目录。
 abstract final class PlatformBrandCatalog {
   static const PlatformBrand all = PlatformBrand(
     id: 'all',
@@ -92,7 +96,57 @@ abstract final class PlatformBrandCatalog {
     color: Color(0xFF2B7FFF),
   );
 
-  /// SFVideo 的启用平台顺序:全平台 + 支持 browse/crossBrowse 的平台。
+  static const bool realParserEnabled = bool.fromEnvironment(
+    'ZISHU_REAL_PARSER',
+    defaultValue: false,
+  );
+
+  /// 真实解析模式下按注册表的 browse 能力裁剪导航平台；同时要求实际
+  /// 注册了 browse repository，避免 IPTV 空数据源等「声明能力但不可用」的平台
+  /// 出现在入口里。fixture 模式保留完整视觉目录，避免离线 UI 测试漂移。
+  static List<PlatformBrand> get browsePlatforms => _platformsWith(
+    (registration) =>
+        registration.capabilities.browse && registration.browse != null,
+  );
+
+  /// 搜索页按注册表的 search 能力裁剪平台筛选项；空实现(例如快手当前的
+  /// 占位 search repository)不作为真实搜索入口暴露。
+  static List<PlatformBrand> get searchPlatforms => _platformsWith(
+    (registration) =>
+        (registration.capabilities.roomSearch ||
+            registration.capabilities.anchorSearch) &&
+        registration.search != null,
+  );
+
+  static List<PlatformBrand> _platformsWith(
+    bool Function(SiteRegistration registration) supported,
+  ) {
+    if (!realParserEnabled) return navPlatforms;
+    final registry = buildSiteRegistry();
+    final result = <PlatformBrand>[all];
+    for (final brand in navPlatforms.skip(1)) {
+      final registration = registry[brand.id];
+      if (brand.browseSupported &&
+          registration != null &&
+          supported(registration)) {
+        result.add(brand);
+      }
+    }
+    return result;
+  }
+
+  /// 真实解析构建使用注册表的实际能力;fixture 构建保留完整导航目录。
+  static List<PlatformBrand> get navigationPlatforms => _platformsWith(
+    (registration) =>
+        registration.capabilities.browse && registration.browse != null,
+  );
+
+  static bool supportsBrowse(String site) =>
+      browsePlatforms.any((brand) => brand.id == site);
+
+  static bool supportsSearch(String site) =>
+      searchPlatforms.any((brand) => brand.id == site);
+
   /// CC 已停运,不加入导航;保留在 parser 层但不作为 UI 入口。
   static const List<PlatformBrand> navPlatforms = [
     all,

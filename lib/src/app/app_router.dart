@@ -11,6 +11,7 @@ import '../features/follow/views/settings_view.dart';
 import '../features/play/views/play_view.dart';
 import '../features/search/views/search_view.dart';
 import 'app_shell.dart';
+import '../shared/presentation/platform_brands.dart';
 
 /// 路由语义与 SFVideoLive 对齐(implementation-plan 6.3)。
 /// route 参数只存 site/id/cid,不传大型对象。
@@ -25,11 +26,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/time',
-        pageBuilder: (_, state) => _shellPage(state, 'all', const TimelineView()),
+        pageBuilder: (_, state) =>
+            _shellPage(state, 'all', const TimelineView()),
       ),
       GoRoute(
         path: '/settings',
-        pageBuilder: (_, state) => _shellPage(state, 'all', const SettingsView()),
+        pageBuilder: (_, state) =>
+            _shellPage(state, 'all', const SettingsView()),
       ),
       GoRoute(
         path: '/search',
@@ -37,7 +40,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/all',
-        pageBuilder: (_, state) => _shellPage(state, 'all', const HomeView(site: 'all')),
+        pageBuilder: (_, state) =>
+            _shellPage(state, 'all', const HomeView(site: 'all')),
       ),
       // 分类落地页(不带子分类):对齐 SFVideoLive `/${site}/category`,
       // 进入后由 CategoryView 默认选中第一组。
@@ -78,30 +82,40 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/:site/category',
-        pageBuilder: (_, state) => _shellPage(
-          state,
-          state.pathParameters['site']!,
-          CategoryView(site: state.pathParameters['site']!),
-        ),
+        redirect: (_, state) {
+          final site = state.pathParameters['site']!;
+          return PlatformBrandCatalog.supportsBrowse(site) ? null : '/all';
+        },
+        pageBuilder: (_, state) {
+          final site = state.pathParameters['site']!;
+          return _shellPage(state, site, CategoryView(site: site));
+        },
       ),
       GoRoute(
         path: '/:site/category/:cid',
-        pageBuilder: (_, state) => _shellPage(
-          state,
-          state.pathParameters['site']!,
-          CategoryView(
-            site: state.pathParameters['site']!,
-            cid: state.pathParameters['cid'],
-          ),
-        ),
+        redirect: (_, state) {
+          final site = state.pathParameters['site']!;
+          return PlatformBrandCatalog.supportsBrowse(site) ? null : '/all';
+        },
+        pageBuilder: (_, state) {
+          final site = state.pathParameters['site']!;
+          return _shellPage(
+            state,
+            site,
+            CategoryView(site: site, cid: state.pathParameters['cid']),
+          );
+        },
       ),
       GoRoute(
         path: '/:site',
-        pageBuilder: (_, state) => _shellPage(
-          state,
-          state.pathParameters['site']!,
-          HomeView(site: state.pathParameters['site']!),
-        ),
+        redirect: (_, state) {
+          final site = state.pathParameters['site']!;
+          return PlatformBrandCatalog.supportsBrowse(site) ? null : '/all';
+        },
+        pageBuilder: (_, state) {
+          final site = state.pathParameters['site']!;
+          return _shellPage(state, site, HomeView(site: site));
+        },
       ),
     ],
   );

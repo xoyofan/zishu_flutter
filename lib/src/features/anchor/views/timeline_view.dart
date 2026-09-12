@@ -58,7 +58,7 @@ class TimelineView extends ConsumerWidget {
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                 children: [
-                  for (final brand in PlatformBrandCatalog.navPlatforms)
+                  for (final brand in PlatformBrandCatalog.navigationPlatforms)
                     Padding(
                       padding: const EdgeInsets.only(right: AppSpacing.sm),
                       child: _SiteFilterChip(
@@ -74,9 +74,7 @@ class TimelineView extends ConsumerWidget {
                 ],
               ),
             ),
-            Expanded(
-              child: _buildBody(context, ref, async),
-            ),
+            Expanded(child: _buildBody(context, ref, async)),
           ],
         ),
       ),

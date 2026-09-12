@@ -61,17 +61,18 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
     final categoriesAsync = ref.watch(browseCategoriesProvider(widget.site));
     return switch (categoriesAsync) {
       // value 非 null 即有数据。
-      AsyncValue(:final value?) => value.groups.isEmpty
-          ? _HintPlaceholder(
-              icon: Icons.category_rounded,
-              message: '暂无分类数据,下拉或稍后再试',
-            )
-          : _content(context, value),
+      AsyncValue(:final value?) =>
+        value.groups.isEmpty
+            ? _HintPlaceholder(
+                icon: Icons.category_rounded,
+                message: '暂无分类数据,下拉或稍后再试',
+              )
+            : _content(context, value),
       AsyncValue(:final error?) => _ErrorRetry(
-          message: '分类加载失败：$error',
-          onRetry: () =>
-              ref.read(browseCategoriesProvider(widget.site).notifier).refresh(),
-        ),
+        message: '分类加载失败：$error',
+        onRetry: () =>
+            ref.read(browseCategoriesProvider(widget.site).notifier).refresh(),
+      ),
       _ => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
     };
   }
@@ -197,7 +198,7 @@ class _GroupTabs extends StatelessWidget {
 
   /// 按名称 hash 稳定取一个导航平台色,保证同名组色点不闪烁。
   static Color _platformDotColor(String name) {
-    final platforms = PlatformBrandCatalog.navPlatforms;
+    final platforms = PlatformBrandCatalog.navigationPlatforms;
     return platforms[name.hashCode.abs() % platforms.length].color;
   }
 }
@@ -392,7 +393,11 @@ class _CategoryTile extends StatelessWidget {
 
 /// 选中子分类后的房间列表:复用 [browseRoomsProvider] 的分页与刷新。
 class _RoomSection extends ConsumerWidget {
-  const _RoomSection({required this.site, required this.cid, required this.isAll});
+  const _RoomSection({
+    required this.site,
+    required this.cid,
+    required this.isAll,
+  });
 
   final String site;
   final String cid;
@@ -424,9 +429,9 @@ class _RoomSection extends ConsumerWidget {
                 ),
               ),
       AsyncValue(:final error?) => _ErrorRetry(
-          message: '房间列表加载失败：$error',
-          onRetry: controller.refresh,
-        ),
+        message: '房间列表加载失败：$error',
+        onRetry: controller.refresh,
+      ),
       _ => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
     };
   }
