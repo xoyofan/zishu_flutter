@@ -120,7 +120,7 @@
 - [x] 验证:`flutter analyze` No issues found(master=`e8e3715`,领先 origin/master 1)。
 - [x] 推送:将 `e8e3715`(+ 本进度更新 commit)push 到 origin/master,同步远端主线(fs-only,安全)。
 
-## 2026-09-13 播放器对齐 pure_live:多线路自动切换 + RTMP 协议放行(完成,未提交)
+## 2026-09-13 播放器对齐 pure_live:多线路自动切换 + RTMP 协议放行(完成,已提交推送)
 
 **结论**:跨平台播放参考 pure_live 落两处关键改进——(1) 选中画质的全部线路拼成 mpv `Playlist` 一次打开,某条断流 mpv 内部自动跳下一条,Flutter 侧不再逐条轮询;(2) mpv `protocol_whitelist` 放开 rtmp/rtmps/rtsp/srt,**斗鱼主线路(`rtmp://…`,`flvFromApiData` 拼 `rtmpUrl/rtmpLive`)此前无此白名单会整条打不开**。顺手修回看门狗计数被 `open` 重置导致「放弃重试」分支永远走不到的隐患,并按错误类型给出更精准的兜底提示。
 
@@ -142,10 +142,10 @@
 
 ### 验证
 - [x] `flutter analyze` 全仓库 No issues found(含 21 个测试替身)。
-- [ ] 真机未重建运行;建议 `flutter build windows --release` 后带 `ZISHU_REAL_PARSER=true` 拉起,测斗鱼 RTMP 线路与各平台断流自动切线下一条。
-- [ ] 未提交/未推送(用户本轮未要求);待验收后可提交。
+- [x] 真机重建运行:已 `flutter build windows --release --dart-define=ZISHU_REAL_PARSER=true` 重建(产物 `data/app.so` mtime 16:34:37,`zishu_flutter.exe` 14:56:47);schtasks 拉起运行(PID 13612,Console 会话 1,用户可见 GUI)。可手动验证:斗鱼 RTMP 主线路(此前无 `protocol_whitelist` 打不开 → 现在应直连)、各平台断流时 mpv 播放列表内部自动跳下一条线路。
+- [x] 提交推送:`9d6afa9`(播放器修复)+ `8f216fd`(benchmark)已上 `origin/master`。
 
-## 2026-09-13 真实解析 benchmark(多平台耗时,未提交)
+## 2026-09-13 真实解析 benchmark(多平台耗时,已提交推送)
 
 **结论**:直连 live_parser 重跑真实解析,各平台列表/房间解析耗时见下表(冷=首次,热=重复解析中位);多线路数据充分,断流 mpv 播放列表内部跳线下一条有料。benchmark 脚本:`packages/live_parser/tool/bench_real_parse.dart`(结果写同目录 `bench_real_parse.md`)。
 
@@ -167,4 +167,4 @@
 - 国内平台解析普遍 <1s,热解析 <200ms,体感即时。
 - 多线路印证(断流自动切换数据基础):虎牙 36 / B站 32 / YouTube 6 / Twitch 5 / 斗鱼 4 / 快手 4 / 抖音 4 / YY 3 均 >1 线;**SOOP 仅 1 线**(退化为单线,断流只能走 completed→整组轮转)。
 - 海外站:Twitch 偶发「未获取到播放令牌」(GQL 令牌接口抖动,需重试或 Cookie);YouTube 冷解析受 yt-dlp 子进程拉起开销(≈8s),热解析命中内部缓存近 0ms。
-- [ ] 未提交/未推送;可选:`flutter build windows --release --dart-define=ZISHU_REAL_PARSER=true` 重建真实解析 exe 做真机播放验证(尤其斗鱼 RTMP + 各平台断流切线下一条)。
+- [x] 已提交推送:benchmark 脚本(`tool/bench_real_parse.dart`)+ 结果(`bench_real_parse.md`)随 `8f216fd` 上 `origin/master`;真实解析 exe 已重建并拉起运行(见上节验证)。
