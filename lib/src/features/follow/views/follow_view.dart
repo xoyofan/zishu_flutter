@@ -50,11 +50,18 @@ class _FollowViewState extends ConsumerState<FollowView> {
   /// 卡片密度下封面卡最大宽(对齐 Vue minmax(240px, 1fr))。
   static const double _cardMaxExtent = 240;
 
-  /// 列视图单列目标宽(对齐 Vue 300–400px/列,取中位 340)。
-  static const double _rowColumnExtent = 380;
-
-  /// 卡片元信息区固定高:上下 12px padding + 标题/主播/操作行。
-  static const double _cardMetaHeight = 106;
+  /// 卡片元信息区高度预算(上下 padding + 主播名 + 标题 + 统计/操作行)。
+  ///
+  /// 这里是**含 padding 的总高**,不是内容净高:内层 `Padding(6, 4)` 占 10dp,
+  /// 故可用高 = 本值 − 10。
+  /// - 内容净高实测 75dp(textScale 1.0):主播名行 + 2 + 标题行 + 三枚操作行;
+  /// - 原 106 在卡片底部留约 21dp 空白;曾一度收到 76 —— 那是把内容净高当成了
+  ///   总高,可用高只剩 66 → 手机宽度(360~430)下纵向**溢出 9~11dp**
+  ///   (`follow_entry_card.dart` 的元信息 Column)。
+  /// - 取 88 = 内容 75 + padding 10 + 3dp 浮动,既不留空也不溢出。
+  /// - 大字体由 [metaHeightFor] 按 textScaler 再放大(其放大量大于文字增长量,
+  ///   故 1.15x/1.3x 本就富余,此前唯独 1.0x 溢出)。
+  static const double _cardMetaHeight = 88;
 
   String _siteFilter = 'all';
   FollowSort _sort = FollowSort.liveFirst;
@@ -411,23 +418,16 @@ class _FollowViewState extends ConsumerState<FollowView> {
             child: _buildItem(items[index]),
           ),
         ),
-      // 列视图:宽屏按 300–400px/列拆成多列(对齐 `FollowRoomRowView`
-      // 的 `multiColumn`),行高固定 34px,纵横比由列宽推导。
-      FollowDensity.row => LayoutBuilder(builder: (context, constraints) {
-          final width = math.max(0.0, constraints.maxWidth - padding.horizontal);
-          final columns = math.max(1, (width / _rowColumnExtent).floor());
-          final columnWidth = width / columns;
-          return GridView.builder(
-            padding: padding,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columns,
-              crossAxisSpacing: AppSpacing.md,
-              childAspectRatio: columnWidth / kFollowRowHeight,
-            ),
-            itemCount: items.length,
-            itemBuilder: (context, index) => _buildItem(items[index]),
-          );
-        }),
+      // 名单视图:纯文字流式 Wrap —— 每项宽按「主播名 + 人数」内容自适应,
+      // 横向排满即换行(用户诉求:不要缩略图/分类/标题,只留主播名和人数)。
+      FollowDensity.row => SingleChildScrollView(
+          padding: padding,
+          child: Wrap(
+            spacing: AppSpacing.sm,
+            runSpacing: AppSpacing.sm,
+            children: [for (final item in items) _buildItem(item)],
+          ),
+        ),
     };
   }
 
