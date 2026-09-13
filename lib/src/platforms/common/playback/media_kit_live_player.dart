@@ -17,7 +17,7 @@ import 'playback_retry.dart';
 import 'player_error.dart';
 import 'window_presentation.dart';
 
-class MediaKitLivePlayer implements LivePlayer {
+class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   MediaKitLivePlayer() {
     _wire();
     // 参照 pure_live 的直播卡顿根治:mpv 属性调优让断流/卡死的直播流
@@ -73,6 +73,19 @@ class MediaKitLivePlayer implements LivePlayer {
 
   /// 有界重连策略(上限 / 退避 / 健康窗口的唯一来源)。
   static const PlaybackRetryPolicy _policy = PlaybackRetryPolicy();
+
+  /// 恢复重解析的节流策略:避免"重试→恢复→重试"高速空转。
+  static const PlaybackRecoveryPolicy _recoveryPolicy = PlaybackRecoveryPolicy();
+
+  /// 宿主注入的恢复回调:自动重连耗尽时用它换一份**重新解析**的地址。
+  /// 为 null 表示宿主不支持(如 fixture 源),此时直接走放弃分支。
+  LineRecoveryHandler? _lineRecovery;
+
+  /// 上次发起恢复的时刻,供 [_recoveryPolicy] 节流。离房/释放时重置。
+  DateTime? _lastRecoverAt;
+
+  @override
+  void setLineRecovery(LineRecoveryHandler? handler) => _lineRecovery = handler;
 
   bool get _disposedOrEmpty => _disposed || _currentLines.isEmpty;
 
@@ -191,13 +204,10 @@ class MediaKitLivePlayer implements LivePlayer {
     if (_disposedOrEmpty) return;
     _stallTimer = null;
     if (!_policy.canRetry(_stallRetries)) {
-      _emit(
-        (s) => s.copyWith(
-          buffering: false,
-          error: _policy.giveUpMessage(_lastErrorKind),
-          errorKind: _lastErrorKind,
-        ),
-      );
+      // 自动重试耗尽:**先尝试向宿主重新解析**,而不是直接把错误卡片交出去。
+      // 虎牙等签名平台的地址在连续失败期间多半已过期,继续复用 _currentLines
+      // 就是"反复重开一个失效源" —— 恰是"流反复中断来尝试"的成因。
+      unawaited(_recoverOrGiveUp());
       return;
     }
     _stallRetries++;
@@ -207,6 +217,42 @@ class MediaKitLivePlayer implements LivePlayer {
         _currentLines.first,
         _currentLines.skip(1).toList(),
         false,
+      ),
+    );
+  }
+
+  /// 自动重连耗尽后的最后一步:向宿主请求**重新解析**后的线路。
+  ///
+  /// 拿到新线路 → 重置失败计数重开(等于一次带新地址的全新会话);拿不到
+  /// (宿主不支持 / 解析失败 / 尚在节流窗口内)→ 发出终局错误卡片交出控制权。
+  /// 恢复失败仍要走终止路径:既不返回新地址又不报错会把用户悬在"缓冲中"。
+  Future<void> _recoverOrGiveUp() async {
+    final handler = _lineRecovery;
+    final now = DateTime.now();
+    if (handler != null &&
+        !_disposed &&
+        _recoveryPolicy.canRecover(now: now, lastRecoverAt: _lastRecoverAt)) {
+      _lastRecoverAt = now;
+      List<StreamLine>? fresh;
+      try {
+        fresh = await handler();
+      } catch (_) {
+        // 解析异常按"拿不到新地址"处理,不吞掉下面的终止路径。
+        fresh = null;
+      }
+      if (!_disposed && fresh != null && fresh.isNotEmpty) {
+        _stallRetries = 0;
+        // resetRetries 保持默认 true:新地址开启新一轮有界重试。
+        await open(fresh.first, fresh.skip(1).toList());
+        return;
+      }
+    }
+    if (_disposed) return;
+    _emit(
+      (s) => s.copyWith(
+        buffering: false,
+        error: _policy.giveUpMessage(_lastErrorKind),
+        errorKind: _lastErrorKind,
       ),
     );
   }
@@ -332,6 +378,8 @@ class MediaKitLivePlayer implements LivePlayer {
     _stallTimer = null;
     _cancelHealthTimer();
     _currentLines = const [];
+    // 离房即重置恢复节流:下一次进房应能立刻恢复,而不是继承上一间的窗口。
+    _lastRecoverAt = null;
     await _player.stop();
     // 卸载媒体后回到空闲快照:清播放/缓冲/错误,保留音量与静音语义。
     _emit(

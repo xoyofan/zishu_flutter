@@ -82,3 +82,28 @@ class PlaybackRetryPolicy {
     return hint.isEmpty ? '直播流反复中断，请点击重试或切换线路' : hint;
   }
 }
+
+/// 恢复重解析的节流策略。
+///
+/// 自动重连耗尽后,播放器可向宿主请求「重新解析」拿一份全新地址(签名平台的
+/// 地址时效短于观看会话,复用旧地址=无限重开失效源,见 [LineRecoveryAware])。
+/// 但恢复不能无节制:若宿主侧解析持续返回同一批已失效地址,「重试 → 恢复 →
+/// 重试」会变成一个高速空转循环,用户看到的仍是"反复中断来尝试"。
+///
+/// 故以 [minInterval] 约束两次恢复的最小间隔,让恢复节奏低于正常重连周期
+/// (一轮重试 ≈ 8+12+16+20+24+28 = 108s),不会叠加成抖动。
+class PlaybackRecoveryPolicy {
+  const PlaybackRecoveryPolicy({this.minInterval = const Duration(seconds: 40)});
+
+  /// 两次恢复之间的最小间隔。
+  final Duration minInterval;
+
+  /// 此刻是否允许发起恢复。[lastRecoverAt] 为 null 表示本会话尚未恢复过。
+  ///
+  /// 刻意把"上次恢复时刻"作为参数而非内部状态:策略保持纯函数,便于单测
+  /// 覆盖边界(恰好等于间隔、刚恢复过、跨会话重置)。
+  bool canRecover({required DateTime now, DateTime? lastRecoverAt}) {
+    if (lastRecoverAt == null) return true;
+    return now.difference(lastRecoverAt) >= minInterval;
+  }
+}

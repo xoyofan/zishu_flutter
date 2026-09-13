@@ -150,4 +150,61 @@ void main() {
       }
     });
   });
+
+  group('恢复节流策略(PlaybackRecoveryPolicy)', () {
+    const policy = PlaybackRecoveryPolicy();
+
+    test('默认最小间隔 40s', () {
+      expect(policy.minInterval, const Duration(seconds: 40));
+    });
+
+    test('本会话尚未恢复过 → 允许', () {
+      expect(
+        policy.canRecover(now: DateTime(2026, 9, 13, 18), lastRecoverAt: null),
+        isTrue,
+      );
+    });
+
+    test('刚恢复过 → 拒绝(避免"重试→恢复→重试"高速空转)', () {
+      final now = DateTime(2026, 9, 13, 18);
+      expect(
+        policy.canRecover(
+          now: now,
+          lastRecoverAt: now.subtract(const Duration(seconds: 5)),
+        ),
+        isFalse,
+      );
+    });
+
+    test('恰好满间隔 → 允许(边界含等号)', () {
+      final now = DateTime(2026, 9, 13, 18);
+      expect(
+        policy.canRecover(
+          now: now,
+          lastRecoverAt: now.subtract(policy.minInterval),
+        ),
+        isTrue,
+      );
+    });
+
+    test('超过间隔 → 允许', () {
+      final now = DateTime(2026, 9, 13, 18);
+      expect(
+        policy.canRecover(
+          now: now,
+          lastRecoverAt: now.subtract(const Duration(minutes: 3)),
+        ),
+        isTrue,
+      );
+    });
+
+    test('节流间隔必须短于一轮重试总时长,否则恢复永远来不及兜底', () {
+      const retry = PlaybackRetryPolicy();
+      var oneCycle = Duration.zero;
+      for (var i = 0; i < retry.maxAttempts; i++) {
+        oneCycle += retry.backoffFor(i);
+      }
+      expect(policy.minInterval, lessThan(oneCycle));
+    });
+  });
 }

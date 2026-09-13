@@ -197,3 +197,22 @@ abstract class LivePlayer {
   /// 释放底层资源。全局播放器由应用根统一管理生命周期。
   void dispose();
 }
+
+/// 线路恢复回调:返回**重新解析**后的一组线路(首选在前,其余作回退)。
+/// 为空列表表示宿主无法提供(非真实解析源 / 解析失败),播放器应走放弃分支。
+typedef LineRecoveryHandler = Future<List<StreamLine>> Function();
+
+/// 可选能力:自动重连耗尽时向宿主请求「重新解析」后的线路。
+///
+/// 为什么需要它:签名平台(虎牙)的播放地址带时效参数,其生命周期**短于**
+/// 观看会话。播放器内部所有重连用的都是开流时那一批地址,地址过期后就会
+/// 反复重开一个失效源(症状:流反复中断、每次都在重试却永远起不来)。
+/// 正解是回到解析层重新取地址(见 live_parser 的 `RoomRecoveryResolver`)。
+///
+/// 刻意做成**独立接口**而非往 [LivePlayer] 加方法:全仓有 20+ 个测试替身
+/// 实现 [LivePlayer],往接口上添成员会强制它们全部跟进;恢复能力只有真实
+/// media_kit 实现需要,以可选能力暴露即可由宿主按需探测。
+abstract interface class LineRecoveryAware {
+  /// 注册恢复回调;传 `null` 关闭恢复能力。
+  void setLineRecovery(LineRecoveryHandler? handler);
+}

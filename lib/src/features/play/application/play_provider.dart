@@ -10,6 +10,7 @@ import 'package:live_parser/live_parser.dart';
 
 import '../../../platforms/common/playback/live_player.dart';
 import '../../../platforms/common/playback/media_kit_live_player.dart';
+import '../../../shared/application/browse_source.dart';
 import '../../../shared/application/providers.dart';
 import '../../follow/application/settings_provider.dart';
 
@@ -128,7 +129,9 @@ class PlayController extends AsyncNotifier<PlayState> {
     if (!next.isFixture && line != null) {
       // 开流不阻塞状态落地;错误经快照流呈现在舞台 overlay。
       // 同画质其余线路作回退送进播放器,断流时 mpv 自动跳下一条(pure_live 式)。
-      unawaited(ref.read(playerProvider).open(line, _fallbackLines(quality, line)));
+      // 必须走 _open:首次进房就要装上恢复回调,否则签名平台地址过期后,
+      // 播放器在放弃分支拿不到"重新解析"的新地址。
+      _open(line, _fallbackLines(quality, line));
     }
     return next;
   }
@@ -163,7 +166,7 @@ class PlayController extends AsyncNotifier<PlayState> {
     state = AsyncData(
       current.copyWith(quality: quality, line: line, generation: generation),
     );
-    unawaited(ref.read(playerProvider).open(line, _fallbackLines(quality, line)));
+    _open(line, _fallbackLines(quality, line));
   }
 
   /// 同画质内切换线路。
@@ -201,7 +204,60 @@ class PlayController extends AsyncNotifier<PlayState> {
     final current = state.value;
     final line = current?.line;
     if (current == null || current.isFixture || line == null) return;
-    unawaited(ref.read(playerProvider).open(line, _fallbackLines(current.quality, line)));
+    _open(line, _fallbackLines(current.quality, line));
+  }
+
+  /// 统一开流入口:确保播放器已装上「恢复重解析」回调再开流。
+  ///
+  /// 回调只能由编排层提供 —— 自动重连是播放器内部看门狗驱动的,编排层无法
+  /// 感知"它已耗尽上限"。装上后,播放器在放弃前会回头向本层要一份**重新
+  /// 解析**的地址(签名平台地址此时多半已过期,复用旧地址=无限重开失效源)。
+  void _open(StreamLine line, List<StreamLine> fallbacks) {
+    final player = ref.read(playerProvider);
+    // LineRecoveryAware 不是 LivePlayer 的子类型,is 探测不产生类型提升,
+    // 用 if-case 对象模式探测并绑定(免显式 as)。
+    if (player case LineRecoveryAware aware) {
+      aware.setLineRecovery(_recoverLines);
+    }
+    unawaited(player.open(line, fallbacks));
+  }
+
+  /// 播放器请求恢复:重新解析当前房间,返回选中画质的**全新**线路。
+  ///
+  /// 故意走 [RoomRecoverer](绕开短缓存)而非 `resolveRoom` —— 后者可能命中
+  /// 60s 短缓存,把过期地址原样交回去。非真实解析源(fixture)或解析异常时
+  /// 返回空列表,由播放器走放弃分支给出终局建议。
+  Future<List<StreamLine>> _recoverLines() async {
+    final current = state.value;
+    final source = ref.read(roomSourceProvider);
+    final quality = current?.quality;
+    if (current == null || current.payload == null || source is! RoomRecoverer) {
+      return const [];
+    }
+    try {
+      final payload = await source.recoverRoom(
+        site: params.site,
+        roomIdOrUrl: params.roomId,
+        preferredQuality: quality?.name,
+      );
+      if (!ref.mounted) return const [];
+      final next = _pickQuality(payload, quality?.name);
+      final line = next?.preferredLine;
+      if (line == null) return const [];
+      // 新地址落回状态:用户随后手动切线路 / 切档时用的才是同一批,
+      // 否则又会退回那批过期地址。generation 推进以作废旧异步结果。
+      state = AsyncData(
+        current.copyWith(
+          payload: payload,
+          quality: next,
+          line: line,
+          generation: ++_generation,
+        ),
+      );
+      return [line, ..._fallbackLines(next, line)];
+    } catch (_) {
+      return const [];
+    }
   }
 
   /// 同画质下除 [line] 外的线路,作为 mpv 播放列表回退线路

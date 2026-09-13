@@ -39,7 +39,7 @@ class ParserBrowseSource implements BrowseSource {
   }
 }
 
-class ParserRoomSource implements RoomSource {
+class ParserRoomSource implements RoomSource, RoomRecoverer {
   ParserRoomSource({SiteRegistry? registry})
     : _registry = registry ?? buildSiteRegistry();
 
@@ -62,5 +62,33 @@ class ParserRoomSource implements RoomSource {
         preferredQuality: preferredQuality,
       ),
     );
+  }
+
+  /// 恢复重解析:必须绕开短缓存拿全新地址。
+  ///
+  /// 站点注册项把 resolver 统一包成 `CachedRoomResolver`,它同时实现了
+  /// `RoomRecoveryResolver`(先失效键再委托内层),故这里按能力探测即可 ——
+  /// 平台侧无需逐个改注册项。极少数未实现该能力的 resolver 退化为普通解析,
+  /// 语义仍强于"复用播放器手里的旧地址"。
+  @override
+  Future<RoomPayload> recoverRoom({
+    required String site,
+    required String roomIdOrUrl,
+    String? preferredQuality,
+  }) async {
+    final registration = _registry[site];
+    if (registration == null) {
+      throw StateError('未注册站点 $site');
+    }
+    final request = RoomRequest(
+      site: site,
+      roomIdOrUrl: roomIdOrUrl,
+      preferredQuality: preferredQuality,
+    );
+    final resolver = registration.resolver;
+    if (resolver is RoomRecoveryResolver) {
+      return resolver.recoverRoom(request);
+    }
+    return resolver.resolveRoom(request);
   }
 }
