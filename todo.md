@@ -203,7 +203,7 @@
 **结论**:新建 UI 专用分支 `feat/ui-follow-layout`(基于 `86b1417`)。针对「关注页列表/视图模式不对齐 + 卡片高度过高底部留白」三处修正:(1) 卡片密度元信息区高度预算 106→76,消除底部约 30dp 空白;(2) 单行密度由四列表格改为**纯文字流式 Wrap** —— 只留主播名(平台色)+ 在线人数,宽度按内容自适应、横向排满换行(对齐用户诉求:不要缩略图/分类/标题);(3) 播放页侧栏推荐/关注卡片由固定 `childAspectRatio=0.86` 改为按实际列宽推导,窄侧栏下不再把卡片拉高留白。参考基准:SFVideoLive `web/src/components/follow/`(FollowRoomPreviewView/RowView/TileView/Views)。
 
 ### 本轮完成项
-- [x] `features/follow/views/follow_view.dart`:`_cardMetaHeight` 106→76;`FollowDensity.row` 分支 GridView 多列表格 → `SingleChildScrollView + Wrap`;删 `_rowColumnExtent`。
+- [x] `features/follow/views/follow_view.dart`:`_cardMetaHeight` 106→76(**合并后回归修复已改为 88,见本文档最后一节**);`FollowDensity.row` 分支 GridView 多列表格 → `SingleChildScrollView + Wrap`;删 `_rowColumnExtent`。
 - [x] `features/follow/widgets/follow_entry_row.dart`(重写):纯文字 chip —— 主播名(FollowAnchorName 平台色)+ 人形图标/时钟 + 人数(离线「未开播」)+ 特别关注 ★;批量模式前置复选框;保留 `follow-entry-{site}-{roomId}` 锚点与组件签名(21 处调用/测试兼容)。
 - [x] `features/play/widgets/play_room_grid.dart`:`PlayRoomGrid` 改 `LayoutBuilder` 按列宽推导纵横比(封面 16:9 + 元信息 36dp),替换固定 0.86。
 - [x] `test/ui/follow_view_test.dart`:「特别关注星标」用例由单行模式改为卡片模式(单行已无行内操作按钮,操作仅卡片密度提供)。
@@ -217,3 +217,45 @@
 ### 待确认/后续 UI 项
 - [ ] 「横向按长度顺序往下排列」当前实现为**宽度按内容自适应 + 保留开播优先排序**;若需按主播名长度重排,可再调。
 - [ ] 单行密度已无行内操作(特别关注/提醒/删除),增删改走「批量管理」;若需单行快捷操作需另议。
+
+
+## 2026-09-13 主分支合并 UI 分支并推送 + 关注页卡片溢出回归修复
+
+**结论**:master 已合入 `feat/ui-follow-layout` 并推送;合并后跑全量用例时暴露一处**分支引入的回归**,已定位修掉。
+
+### 提交链
+| commit | 内容 |
+|---|---|
+| `943fd5f` | `feat(play)`: 播放页三态全屏 + 画中画 + 控制条交互修复(UI 轨 34 文件) |
+| `81bcbef` | `feat(ui)`: 关注页视图/列表布局 + 推荐卡片高度修正(来自分支) |
+| `5f1b9d3` | `merge(ui)`: 合并提交(含冲突解决与回归修复) |
+
+- 推送:`86b1417..5f1b9d3 master -> master`(fast-forward,远端原在 `86b1417`;本地 `refs/remotes/origin/master` 之前的 `a9d560b` 是过期引用,已按新 sha 直接写文件纠正)。
+- `packages/live_parser/tool/bench_real_parse.dart`(解析轨,其他会话改动)**未纳入**本次提交。
+
+### 合并冲突与解决
+- `todo.md`:两侧小节都保留,全屏小节状态改为「已提交 943fd5f」。
+- `test/ui/play_style_follow.png` / `play_style_recommend.png`:两侧都基于同一基线改过 → 二进制冲突。**不取任一侧**,在合并后代码上 `--update-goldens` 重生成。
+- `test/ui/follow_view_test.dart`:自动合并成功(分支的「星标用例改卡片密度」与本次 21 处 `wrapPipSurface` 替身补丁共存,无冲突)。
+
+### 分支引入的回归(已修)
+- **现象**:合并后 `test/ui` 从 120/120 掉到 118/120 —— `mobile_phones_test` 的溢出矩阵在 5 个手机宽度(360/375/393/412/430)全挂 `follow` 页;`mobile_accessibility_test` 的 `textScaleNoOverflow` 也挂。
+- **报错**:`follow_entry_card.dart:83` 的元信息 `Column` 纵向溢出 **9~11dp**(constraints `h=66.0`、内容 75.0)。
+- **诡异点**:`[textScale] follow@1.0x: FAIL`,但 `1.15x`/`1.3x` **OK** —— 大字体反而没事。
+- **根因**:分支把 `_cardMetaHeight` 定为 **76**,那是**内容净高**而非含 padding 的总高。内层 `Padding(6,4)` 占 10dp → 可用高只有 66,而内容实测 75 → 溢出 9。大字体不溢出的原因是 `metaHeightFor` 的放大量(系数 0.8)大于文字实际增长量,唯独 `scale=1.0` 时预算恰好不足。分支作者只跑了 2 个桌面尺寸用例(1900+ 宽),漏了移动端矩阵与字体档。
+- **修法**:`_cardMetaHeight` **76→88**(内容 75 + padding 10 + 3dp 浮动)。保留分支「去掉底部空白」的意图(原 106 留约 21dp 空白),同时留足余量;`metaHeightFor` 继续负责大字体放大。
+- 连带:卡片变高 → `follow_style_card.png` 按新高度重生成。
+
+### 验证
+- [x] `flutter analyze`:**No issues found**。
+- [x] `test/ui` 全量:**120/120 通过**(含此前失败的移动端溢出矩阵与三档大字体)。
+- [x] 远端核验:`git ls-remote origin master` = `5f1b9d3`;`git status -sb` 显示 `## master...origin/master` 无 ahead/behind。
+
+### 未纳入本次提交(待用户决定)
+- `docs/ui-compare/`、`docs/ui-reference/`(未跟踪,SFVideoLive 基准截图与 DOM 测量,抓取于 2026-09-09);
+- `.flutter_tool_state`、`build_realparser_log.txt`(未跟踪的本机产物);
+- `packages/live_parser/tool/bench_real_parse.dart`(解析轨)。
+
+### 后续
+- [ ] 真机验证:控制条三按钮 + F/W/M/Space/Esc + 淡出唤醒 + 进出全屏聚焦复位;关注页卡片高度真机观感复核。
+- [ ] 本地分支 `feat/ui-follow-layout` 已合入且保留(远端无此分支);如不需要可删。
