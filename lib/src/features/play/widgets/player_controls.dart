@@ -1,11 +1,15 @@
 /// 播放控制条:播放/暂停(快照驱动)、音量滑杆+静音、直播延迟占位文案、
 /// 画质/线路 selectbox(2026-09-11 裁决:从独立 QualityLineBar 行移入控制栏,
-/// 对齐参考播放器的控制栏布局)、弹幕显隐开关、画中画、刷新视频与全屏按钮。
-/// 只经 LivePlayer 接口下达指令,不触碰 media_kit。
+/// 对齐参考播放器的控制栏布局)、弹幕显隐开关、画中画、刷新视频、网页全屏与
+/// 全屏按钮。只经 LivePlayer 接口下达指令,不触碰 media_kit。
 ///
-/// 本组件同时是播放页的键盘绑定宿主(桌面快捷键):`CallbackShortcuts` 内联在
-/// 组件树上——焦点在控制条内任意控件(含音量 Slider)时按键依然可达,无需
-/// 抢占 `Focus`/`FocusScope`;未聚焦时事件照旧冒泡,不影响其它输入。
+/// **本组件不再自带键盘绑定**:快捷键的唯一宿主是播放页(见 play_view.dart)。
+/// 旧实现在此内联了一份 Space/M/F 的 `CallbackShortcuts`,而 `Shortcuts` 沿焦点链
+/// 由内向外命中即停——用户点过控制条任意按钮/滑杆后焦点留在条内,再按 F 会被
+/// 内层截获,只切窗口不进沉浸态(全屏按钮失效的同一类错位)。
+///
+/// 呈现态由 `screenMode` 传入(单一真源在 playScreenProvider):全屏/网页全屏
+/// 按钮的图标、tooltip 与高亮都由它派生,不再各自维护本地 bool。
 ///
 /// 画质/线路锚点契约(自 QualityLineBar 迁移,保持不变):
 /// - 入口:`play-quality-menu` + 当前档名标签 `play-quality-current`;
@@ -14,12 +18,12 @@
 library;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:live_parser/live_parser.dart';
 
 import '../../../platforms/common/playback/live_player.dart'
     show LivePlayer, PlayerSnapshot;
+import '../../../platforms/common/playback/play_screen_mode.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../application/play_provider.dart';
@@ -31,7 +35,11 @@ class PlayerControlsBar extends ConsumerStatefulWidget {
     required this.roomId,
     required this.showDanmaku,
     required this.danmakuEnabled,
+    required this.screenMode,
     required this.onDanmakuToggle,
+    required this.onToggleWidescreen,
+    required this.onToggleFullscreen,
+    required this.onTogglePip,
   });
 
   final String site;
@@ -43,38 +51,26 @@ class PlayerControlsBar extends ConsumerStatefulWidget {
   /// 设置项「弹幕」总开关:决定控制条上这枚按钮是否可见。
   final bool danmakuEnabled;
 
+  /// 当前呈现态(控制条图标/tooltip 据此切换)。
+  final PlayScreenMode screenMode;
+
   /// 切换舞台弹幕显示。
   final VoidCallback onDanmakuToggle;
+
+  /// 切换网页全屏(视频区占满窗口,但不请求系统窗口全屏)。
+  final VoidCallback onToggleWidescreen;
+
+  /// 切换全屏(同时请求系统窗口全屏)。
+  final VoidCallback onToggleFullscreen;
+
+  /// 切换画中画小窗。
+  final VoidCallback onTogglePip;
 
   @override
   ConsumerState<PlayerControlsBar> createState() => _PlayerControlsBarState();
 }
 
 class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
-  /// 播放/暂停切换:与点击视频帧共用同一条通路(快照驱动)。
-  void _togglePlayback() {
-    final snapshot =
-        ref.read(playerSnapshotProvider).value ?? const PlayerSnapshot();
-    final player = ref.read(playerProvider);
-    if (snapshot.playing) {
-      player.pause();
-    } else {
-      player.play();
-    }
-  }
-
-  /// 静音切换:muted 为 true 表示当前静音,再按即取消静音。
-  void _toggleMuted() {
-    final snapshot =
-        ref.read(playerSnapshotProvider).value ?? const PlayerSnapshot();
-    ref.read(playerProvider).setMuted(!snapshot.muted);
-  }
-
-  /// 全屏切换:接口在平台层当前为空实现(Windows 全屏后续迭代),
-  /// 这里照常调用接口,不伪造本地全屏态。
-  void _toggleFullscreen() => ref.read(playerProvider).toggleFullscreen();
-
-  /// 桌面键盘绑定。固定三组单选键(Space/M/F),不抢 Ctrl/Alt 组合键。
   @override
   Widget build(BuildContext context) {
     // 画质/线路 selectbox 的数据源:本房间的解析结果(未解析成功时不渲染)。
@@ -89,34 +85,28 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
     // 不可在本组件内套 Scaffold:控制条位于无界高度的 Stack 内,Scaffold 的
     // CustomMultiChildLayout 会拿到无限高约束 → performLayout 断言失败,
     // 进而整页渲染不出来(实测连坐 50 个用例)。
-    return CallbackShortcuts(
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.space): _togglePlayback,
-        const SingleActivator(LogicalKeyboardKey.keyM): _toggleMuted,
-        const SingleActivator(LogicalKeyboardKey.keyF): _toggleFullscreen,
-      },
-      child: Material(
-        type: MaterialType.transparency,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-          // 收缩判据用控制条「自身可用宽」而非视口宽:宽视口也可能因常驻
-          // 侧栏挤压出 ~390dp 的窄控制条(实测 800 视口 → 392dp 溢出)。
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final snapshot =
-                  ref.watch(playerSnapshotProvider).value ??
-                  const PlayerSnapshot();
-              final player = ref.read(playerProvider);
-              final compact = constraints.maxWidth < 560;
-              return buildRow(context, snapshot, player, compact, play);
-            },
-          ),
+    return Material(
+      type: MaterialType.transparency,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        // 收缩判据用控制条「自身可用宽」而非视口宽:宽视口也可能因常驻
+        // 侧栏挤压出 ~390dp 的窄控制条(实测 800 视口 → 392dp 溢出)。
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final snapshot =
+                ref.watch(playerSnapshotProvider).value ??
+                const PlayerSnapshot();
+            final player = ref.read(playerProvider);
+            final compact = constraints.maxWidth < 560;
+            return buildRow(context, snapshot, player, compact, play);
+          },
         ),
       ),
     );
   }
 
-  /// 控制条主行;[compact] 为 true 时隐藏音量滑杆/延迟文案/画中画。
+  /// 控制条主行;[compact] 为 true 时隐藏音量滑杆/延迟文案/画中画/网页全屏,
+  /// 只留播放/静音/画质/线路/弹幕/刷新/全屏等核心按钮。
   Widget buildRow(
     BuildContext context,
     PlayerSnapshot snapshot,
@@ -225,10 +215,10 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
           ),
         if (!compact)
           IconButton(
+            // 测试锚点:画中画切换。
+            key: const Key('play-toggle-pip'),
             tooltip: '画中画',
-            onPressed: () {
-              // 画中画为占位 action,平台接入后续迭代。
-            },
+            onPressed: widget.onTogglePip,
             icon: Icon(
               Icons.picture_in_picture_alt_rounded,
               size: 20,
@@ -264,15 +254,35 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
             color: tokens.textPrimary,
           ),
         ),
+        if (!compact)
+          IconButton(
+            // 测试锚点:网页全屏切换(视频铺满窗口,不动系统窗口)。
+            key: const Key('play-toggle-widescreen'),
+            tooltip: widget.screenMode.isWidescreen ? '退出网页全屏 (W)' : '网页全屏 (W)',
+            onPressed: widget.onToggleWidescreen,
+            icon: Icon(
+              widget.screenMode.isWidescreen
+                  ? Icons.close_fullscreen_rounded
+                  : Icons.open_in_full_rounded,
+              size: 20,
+              color: widget.screenMode.isWidescreen
+                  ? tokens.brand
+                  : tokens.textPrimary,
+            ),
+          ),
         IconButton(
-          // 测试锚点:全屏切换按钮。
+          // 测试锚点:全屏切换按钮。图标随呈现态切换(对齐 pure_live)。
           key: const Key('play-toggle-fullscreen'),
-          tooltip: '全屏 (F)',
-          onPressed: () => player.toggleFullscreen(),
+          tooltip: widget.screenMode.isFullscreen ? '退出全屏 (F)' : '全屏 (F)',
+          onPressed: widget.onToggleFullscreen,
           icon: Icon(
-            Icons.fullscreen_rounded,
+            widget.screenMode.isFullscreen
+                ? Icons.fullscreen_exit_rounded
+                : Icons.fullscreen_rounded,
             size: 20,
-            color: tokens.textPrimary,
+            color: widget.screenMode.isFullscreen
+                ? tokens.brand
+                : tokens.textPrimary,
           ),
         ),
       ],

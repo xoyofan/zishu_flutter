@@ -168,3 +168,32 @@
 - 多线路印证(断流自动切换数据基础):虎牙 36 / B站 32 / YouTube 6 / Twitch 5 / 斗鱼 4 / 快手 4 / 抖音 4 / YY 3 均 >1 线;**SOOP 仅 1 线**(退化为单线,断流只能走 completed→整组轮转)。
 - 海外站:Twitch 偶发「未获取到播放令牌」(GQL 令牌接口抖动,需重试或 Cookie);YouTube 冷解析受 yt-dlp 子进程拉起开销(≈8s),热解析命中内部缓存近 0ms。
 - [x] 已提交推送:benchmark 脚本(`tool/bench_real_parse.dart`)+ 结果(`bench_real_parse.md`)随 `8f216fd` 上 `origin/master`;真实解析 exe 已重建并拉起运行(见上节验证)。
+
+## 2026-09-13 播放页全屏重构:三态呈现模型 + 统一入口(完成,未提交)
+
+**结论**:全屏"坏"的根因不是实现不完整,而是**同一功能被两套互不通信的实现各管一半** —— `PlayView._immersive`(UI 本地 bool)与 `MediaKitLivePlayer.toggleFullscreen()`(window_manager 窗口全屏)互不读取,控制条又自复刻一份 F 键绑定 → 3 个入口、2 个状态源。已按 pure_live 的「单一真源 + 单一入口」重构为三态(`normal / widescreen / fullscreen`)+ 画中画,并补齐 4 个真 bug。
+
+### 本轮完成项
+- [x] 新增 `lib/src/platforms/common/playback/play_screen_mode.dart`:`PlayScreenMode { normal, widescreen, fullscreen }` + `hidesChrome / wantsSystemFullscreen / isWidescreen / isFullscreen / label`。
+- [x] 新增 `lib/src/platforms/common/playback/window_presentation.dart`:`WindowPresentation` 单例(全屏 + PiP 的唯一去处)。`setFullscreen(bool)` **幂等**(目标态 == 当前窗口态即不调原生)+ `_fullscreenTransitioning` 防重入(桌面重复 `setFullScreen` 会让 Windows 侧边任务栏 work-area 抖动);`enterPip/exitPip` 记忆并恢复窗口 bounds / 置顶 / 最小尺寸,按视频宽高比缩到屏幕右下角。非桌面平台静默空操作 + 全部原生调用 try/catch 吞错。
+- [x] 新增 `lib/src/features/play/application/play_screen_provider.dart`:**单一真源** `playScreenProvider`(autoDispose Notifier)持三态 + PiP;`apply(mode)` 先落 UI 态再驱动窗口;`resolveEscapePresentationAction` 纯函数分派 `pip > fullscreen > widescreen > popRoute`;`ref.onDispose` 复位窗口(用捕获的播放器实例 + 状态镜像,**onDispose 期不读 ref**)。
+- [x] 新增 `lib/src/features/play/widgets/pip_surface.dart`:`PipResizeSurface` 转发 `LivePlayer.wrapPipSurface`(放 feature 层,避免 platforms→features 反向依赖)。
+- [x] `live_player.dart`:`PlayerSnapshot` 不动;接口增 `setFullscreen(bool)` / `enterPictureInPicture` / `exitPictureInPicture` / `wrapPipSurface(Widget)`(后者默认透传;Windows 实现返回 `DragToResizeArea`)。
+- [x] `media_kit_live_player.dart`:窗口相关全部委托 `WindowPresentation`;`wrapPipSurface` 仅 Windows 套原生交互壳(该依赖传递性引入 `dart:io`,只能落平台层,否则 Web 端编译失败)。
+- [x] `main.dart`:补 `windowManager.ensureInitialized()`(原先只有 `MediaKit.ensureInitialized()`,`isFullScreen()` 的边界与状态同步缺保障)。
+- [x] `player_controls.dart`:① 删除内层 `CallbackShortcuts`(快捷键唯一宿主 = 播放页);② 增 `screenMode` + `onToggleFullscreen / onToggleWidescreen / onTogglePip` 三个对称回调;③ 全屏图标/tooltip/激活色随态切 `fullscreen ⇄ fullscreen_exit`;④ 新增「网页全屏」按钮;⑤ 画中画由占位改实装。
+- [x] `play_view.dart`:① 布局按 `hidesChrome` 切(沉浸/网页全屏 = 铺满 + 隐藏房间头与侧栏;PiP = 套 `PipResizeSurface` 且不渲染控制条);② 控制条包 `AbsorbPointer(absorbing: !_controlsVisible)` —— **淡出后不再误触**(旧 `AnimatedOpacity` 淡出后子级仍参与命中测试,不可见按钮可被点中、底部条带持续吞掉「点视频切播放」);③ hover 拆「舞台」「控制条」两处,鼠标停在控制条上时不进入隐藏倒计时;④ Esc 改 `HardwareKeyboard.addHandler` 全局处理,不受焦点影响。
+- [x] **关键坑**:`CallbackShortcuts` 只在「焦点链」上生效;页面内无人持焦时 Flutter 把 primaryFocus 停在 `ModalScope` 根,按键根本不流经播放页节点。实测**点击音量 Slider 并不会把焦点移进控制条**(Slider 不请求焦点)→ F 静默失效。修法对齐 pure_live:舞台焦点 `autofocus: true`,让焦点链始终覆盖播放页。
+- [x] 快捷键分工(**必须互不重叠**):`Space/M/F/W` → 页面级 `CallbackShortcuts`(尊重输入框焦点,且与按钮自身 Space 处理不重复——内层命中即停);`Esc` → 全局 handler。依据:`_dispatchKeyMessage`(焦点树)在 `handleRawKeyMessage` 里是**无条件调用**,与全局 handler 返回值无关,两边同绑会让一次按键被处理两遍。
+- [x] 测试适配:21 个测试替身用 `implements LivePlayer`(默认实现不生效)→ 批量补 `wrapPipSurface`;`fullscreen_test.dart` 重写为三态 + 回归用例(点按钮进沉浸、焦点在滑杆上按 F、淡出后不误触、网页全屏不动系统窗口、PiP 隐藏控制条、Esc 优先级纯函数)。
+- [x] golden 重生成:`play_style_follow.png` / `play_style_recommend.png`(控制条新增按钮导致像素变化,0.20%/2567px)。
+
+### 验证
+- [x] `flutter analyze`:**0 issue**。
+- [x] `test/ui` 全量:**120/120 通过**。
+- [x] `flutter build windows --debug -t lib/main.dart`:**成功**(18s,产物 `build\windows\x64\runner\Debug\zishu_flutter.exe`)。
+
+### 待办(后续)
+- [ ] 提交推送:UI 轨(`lib/src/**` + `test/ui/**` + 两张 golden)单独一个 commit;`packages/live_parser/tool/bench_real_parse.dart` 属解析轨,其他会话的改动,**不要混入**。
+- [ ] 真机验证:控制条「网页全屏 / 全屏 / 画中画」三按钮 + F/W/M/Space/Esc 快捷键 + 淡出唤醒 + 进出全屏聚焦复位。
+- [ ] 可选增强:双击视频进全屏、进房默认全屏设置项、PiP 多显示器 work-area 适配(当前单显示器优先,按主屏逻辑尺寸算右下角)。

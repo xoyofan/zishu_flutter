@@ -26,6 +26,7 @@ import 'package:zishu_flutter/src/features/follow/application/settings_provider.
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/features/play/widgets/player_controls.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
+import 'package:zishu_flutter/src/platforms/common/playback/play_screen_mode.dart';
 
 /// 深链播放页(fixture 样例房间,与 layout/danmaku 基线同房间)。
 const String _playLocation = '/douyu/play/63136';
@@ -68,9 +69,20 @@ class FakeLivePlayer implements LivePlayer {
 
   @override
   Future<void> toggleFullscreen() async => calls.add('fullscreen');
+  @override
+  Future<void> setFullscreen(bool fullscreen) async => calls.add('fullscreen:$fullscreen');
+
+  @override
+  Future<void> enterPictureInPicture({double? aspectRatio}) async => calls.add('pip:enter');
+
+  @override
+  Future<void> exitPictureInPicture() async => calls.add('pip:exit');
 
   @override
   Future<void> stop() async => calls.add('stop');
+
+  @override
+  Widget wrapPipSurface(Widget child) => child;
 
   @override
   void dispose() => calls.add('dispose');
@@ -267,23 +279,24 @@ void main() {
     expect(_player.calls, contains('muted:true'), reason: 'M 应切换静音');
     _player.calls.clear();
 
-    // ── F:全屏接口当前是平台层空实现(见 live_player.dart),这里只断言
-    //        按键确实把调用送到了接口,而不是被吞掉 ────────────────────
+    // ── F:全屏走 playScreenProvider 单一入口 → LivePlayer.setFullscreen(true)。
+    //        呈现态与窗口调用同源,不再是"只切窗口不进沉浸态"的两条分支 ──
     await tester.sendKeyDownEvent(LogicalKeyboardKey.keyF);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.keyF);
     await _pumpFrames(tester, 2);
     expect(
-      _player.calls,
-      contains('fullscreen'),
-      reason: 'F 应调用 toggleFullscreen 接口(平台层当前为空实现)',
+      _player.calls.any((call) => call.startsWith('fullscreen')),
+      isTrue,
+      reason: 'F 应经 setFullscreen 把全屏目标态下达给播放器',
     );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('keyboardShortcuts:按键不能吞掉,输入框仍可正常输入', (tester) async {
     final container = (await _pumpPlay(tester)).container;
 
-    // 把控制条与一个输入框放进同一页,验证 Shortcuts 只在控制条内生效、
-    // 不拦截输入框的按键(未被 Focus 抢占)。
+    // 把控制条与一个输入框放进同一页:控制条自身不再绑快捷键,
+    // 页面级的 Space/M/F 只在播放页宿主内生效,这里不应吞掉输入框的按键。
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
@@ -296,7 +309,11 @@ void main() {
                   roomId: '63136',
                   showDanmaku: true,
                   danmakuEnabled: true,
+                  screenMode: PlayScreenMode.normal,
                   onDanmakuToggle: () {},
+                  onToggleWidescreen: () {},
+                  onToggleFullscreen: () {},
+                  onTogglePip: () {},
                 ),
                 const TextField(key: Key('probe-field')),
               ],

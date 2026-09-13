@@ -63,9 +63,20 @@ class _FakeLivePlayer implements LivePlayer {
 
   @override
   Future<void> toggleFullscreen() async {}
+  @override
+  Future<void> setFullscreen(bool fullscreen) async {}
+
+  @override
+  Future<void> enterPictureInPicture({double? aspectRatio}) async {}
+
+  @override
+  Future<void> exitPictureInPicture() async {}
 
   @override
   Future<void> stop() async {}
+
+  @override
+  Widget wrapPipSurface(Widget child) => child;
 
   @override
   void dispose() {}

@@ -1,14 +1,21 @@
-/// 全屏 / 沉浸模式 workflow test(任务 A5 全屏实装 + A6 沉浸模式)。
+/// 全屏 / 沉浸 / 网页全屏 / 画中画 workflow test
+/// (任务 A5 全屏实装 + A6 沉浸模式;2026-09-13 按 pure_live 三态模型重构)。
 ///
 /// 覆盖:
-/// 1. F 键调用 [LivePlayer.toggleFullscreen](fake 记录 `fullscreen`)并进入
-///    本地沉浸态(全屏容器 `play-immersive-stage` 出现);
-/// 2. Esc 在沉浸态触发退出,回到带房间头/返回键的常态布局;
-/// 3. 全屏后 `_RoomHeader` 不渲染、`play-back` 不可见,退出后恢复;
-/// 4. 控制条静止 ~3s 自动淡出(opacity==0),鼠标移动/悬停即唤出(opacity==1)。
+/// 1. F 键经 playScreenProvider 单源进入全屏:`LivePlayer.setFullscreen(true)`
+///    被调用 + 沉浸容器 `play-immersive-stage` 出现,房间头/返回键隐藏;
+/// 2. Esc 退出全屏并恢复常态布局(Esc 走全局键盘 handler,不依赖焦点);
+/// 3. 控制条全屏按钮与 F 键同源 —— 回归旧实现"点按钮只切窗口、UI 不进沉浸态";
+/// 4. 焦点停在控制条内的音量滑杆上时按 F 依然进入沉浸 —— 回归旧实现
+///    "控制条内层 CallbackShortcuts 截获 F 键";
+/// 5. 网页全屏只做窗口内铺满,不请求系统窗口全屏;
+/// 6. 画中画按钮进入小窗(控制条隐藏、PipResizeSurface 挂载);
+/// 7. 控制条静止 ~3s 自动淡出、鼠标移动即唤出,且淡出后被 AbsorbPointer 阻断
+///    (不可见按钮不再可点、底部条带不再吞掉视频点击);
+/// 8. Esc 分派优先级(纯函数):画中画 > 全屏 > 网页全屏 > 返回上一页。
 ///
-/// 注入 FakeLivePlayer(VM 下不初始化 media_kit);全屏实现刻意「按键切本地
-/// 沉浸态 + try/catch 调平台层」,不依赖 window_manager 返回值,故可在 VM 中验证。
+/// 注入 FakeLivePlayer(VM 下不初始化 media_kit);呈现态与平台窗口调用解耦,
+/// 平台层被替身后 UI 态仍可稳定验证。
 ///
 /// 宿主与 pump 约定同 play_controls_test.dart:固定次数 pump,不用 pumpAndSettle。
 library;
@@ -25,6 +32,8 @@ import 'package:shared_preferences_platform_interface/shared_preferences_async_p
 import 'package:zishu_flutter/src/app/app_router.dart';
 import 'package:zishu_flutter/src/app/app_theme.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
+import 'package:zishu_flutter/src/features/play/application/play_screen_provider.dart';
+import 'package:zishu_flutter/src/features/play/widgets/pip_surface.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 
 /// 播放页深链位置(fixture 样例房间,与 layout/controls 基线同房间)。
@@ -48,7 +57,11 @@ class FakeLivePlayer implements LivePlayer {
       const SizedBox.expand();
 
   @override
-  Future<void> open(StreamLine line, [List<StreamLine> fallbacks = const [], bool resetRetries = true]) async => calls.add('open:${line.url}');
+  Future<void> open(
+    StreamLine line, [
+    List<StreamLine> fallbacks = const [],
+    bool resetRetries = true,
+  ]) async => calls.add('open:${line.url}');
 
   @override
   Future<void> play() async => calls.add('play');
@@ -66,7 +79,21 @@ class FakeLivePlayer implements LivePlayer {
   Future<void> toggleFullscreen() async => calls.add('fullscreen');
 
   @override
+  Future<void> setFullscreen(bool fullscreen) async =>
+      calls.add('fullscreen:$fullscreen');
+
+  @override
+  Future<void> enterPictureInPicture({double? aspectRatio}) async =>
+      calls.add('pip:enter');
+
+  @override
+  Future<void> exitPictureInPicture() async => calls.add('pip:exit');
+
+  @override
   Future<void> stop() async => calls.add('stop');
+
+  @override
+  Widget wrapPipSurface(Widget child) => child;
 
   @override
   void dispose() => calls.add('dispose');
@@ -134,29 +161,45 @@ Future<void> _focusStage(WidgetTester tester) async {
   );
 }
 
+/// 按一次 F 键。
+Future<void> _pressF(WidgetTester tester) async {
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.keyF);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.keyF);
+  await _pumpFrames(tester, 2);
+}
+
+/// 控制条淡出/命中阻断断言用的包装层。
+AnimatedOpacity _controlsWrap(WidgetTester tester) => tester
+    .widget<AnimatedOpacity>(find.byKey(const Key('play-controls-bar-wrap')));
+
+AbsorbPointer _controlsAbsorber(WidgetTester tester) =>
+    tester.widget<AbsorbPointer>(
+      find.descendant(
+        of: find.byKey(const Key('play-controls-bar-wrap')),
+        matching: find.byType(AbsorbPointer),
+      ),
+    );
+
 void main() {
   setUp(() {
     SharedPreferencesAsyncPlatform.instance =
         InMemorySharedPreferencesAsync.withData(<String, Object>{});
   });
 
-  testWidgets('F enters immersive mode and calls toggleFullscreen', (tester) async {
+  testWidgets('F 进入全屏:下达 setFullscreen(true) 并挂载沉浸容器', (tester) async {
     await _pumpPlay(tester);
     await _focusStage(tester);
     _player.calls.clear();
 
-    // F 键:平台层窗口全屏被调用(本地记录),同时进入本地沉浸态。
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyF);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyF);
-    await _pumpFrames(tester, 2);
+    await _pressF(tester);
 
-    // ① 调用记录:平台层 toggleFullscreen 被触发。
+    // ① 平台层:呈现态是单一真源,窗口全屏是它的下游副作用。
     expect(
       _player.calls,
-      contains('fullscreen'),
-      reason: 'F 应调用 toggleFullscreen',
+      contains('fullscreen:true'),
+      reason: 'F 应把"进入系统全屏"的目标态下达给播放器',
     );
-    // 进入沉浸态:全屏容器出现,房间头/返回键不可见。
+    // ② UI:沉浸容器出现,房间头/返回键隐藏。
     expect(
       find.byKey(const Key('play-immersive-stage')),
       findsOneWidget,
@@ -170,22 +213,19 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Esc exits immersive mode and restores header', (tester) async {
+  testWidgets('Esc 退出全屏并恢复房间头(Esc 不依赖焦点)', (tester) async {
     await _pumpPlay(tester);
     await _focusStage(tester);
 
-    // 进入全屏。
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyF);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyF);
-    await _pumpFrames(tester, 2);
+    await _pressF(tester);
     expect(find.byKey(const Key('play-immersive-stage')), findsOneWidget);
     expect(find.byKey(const Key('play-back')), findsNothing);
     _player.calls.clear();
 
-    // ② Esc 在沉浸态触发退出回调:回到带头部/返回键的常态布局。
     await tester.sendKeyDownEvent(LogicalKeyboardKey.escape);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.escape);
     await _pumpFrames(tester, 2);
+
     expect(
       find.byKey(const Key('play-immersive-stage')),
       findsNothing,
@@ -196,58 +236,186 @@ void main() {
       findsOneWidget,
       reason: '退出全屏后房间头(返回键)应恢复',
     );
-    // 进出各调一次平台层全屏。
     expect(
-      _player.calls.where((c) => c == 'fullscreen').length,
-      1,
-      reason: '退出全屏应再调一次平台层 toggleFullscreen',
+      _player.calls,
+      contains('fullscreen:false'),
+      reason: '退出全屏应把 false 下达给播放器',
     );
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('controls bar fades out when idle and returns on mouse move', (
-    tester,
-  ) async {
+  testWidgets('控制条全屏按钮与 F 键同源(回归:按钮曾只切窗口不进沉浸态)', (tester) async {
+    await _pumpPlay(tester);
+    _player.calls.clear();
+
+    await tester.tap(find.byKey(const Key('play-toggle-fullscreen')));
+    await _pumpFrames(tester, 2);
+
+    expect(
+      find.byKey(const Key('play-immersive-stage')),
+      findsOneWidget,
+      reason: '点全屏按钮必须同时进入沉浸布局,而不是只把窗口全屏',
+    );
+    expect(find.byKey(const Key('play-back')), findsNothing);
+    expect(_player.calls, contains('fullscreen:true'));
+
+    // 再点一次:退出全屏(图标随态切换为「退出全屏」)。
+    await tester.tap(find.byKey(const Key('play-toggle-fullscreen')));
+    await _pumpFrames(tester, 2);
+    expect(find.byKey(const Key('play-immersive-stage')), findsNothing);
+    expect(_player.calls, contains('fullscreen:false'));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('焦点在音量滑杆上时按 F 仍进入沉浸(回归:控制条截获快捷键)', (tester) async {
+    await _pumpPlay(tester);
+
+    // 宽视口下控制条非 compact,音量滑杆挂载;点它把焦点收进控制条子树。
+    expect(
+      find.byType(Slider),
+      findsOneWidget,
+      reason: '宽视口控制条应挂载音量滑杆(用于构造"焦点在控制条内"的场景)',
+    );
+    await tester.tap(find.byType(Slider));
+    await _pumpFrames(tester, 2);
+    expect(
+      tester.binding.focusManager.primaryFocus,
+      isNotNull,
+      reason: '点击滑杆后应有焦点落在控制条内',
+    );
+    _player.calls.clear();
+
+    await _pressF(tester);
+
+    expect(
+      find.byKey(const Key('play-immersive-stage')),
+      findsOneWidget,
+      reason: '控制条不再自带快捷键,焦点在条内时 F 也必须进入沉浸态',
+    );
+    expect(_player.calls, contains('fullscreen:true'));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('网页全屏:铺满窗口但不请求系统窗口全屏', (tester) async {
+    await _pumpPlay(tester);
+    _player.calls.clear();
+
+    await tester.tap(find.byKey(const Key('play-toggle-widescreen')));
+    await _pumpFrames(tester, 2);
+
+    expect(
+      find.byKey(const Key('play-immersive-stage')),
+      findsOneWidget,
+      reason: '网页全屏同样隐藏房间头与侧栏、视频铺满',
+    );
+    expect(
+      _player.calls.contains('fullscreen:true'),
+      isFalse,
+      reason: '网页全屏不应请求系统窗口全屏',
+    );
+    expect(_player.calls, contains('fullscreen:false'));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('画中画:进入小窗并隐藏控制条', (tester) async {
+    await _pumpPlay(tester);
+    _player.calls.clear();
+
+    await tester.tap(find.byKey(const Key('play-toggle-pip')));
+    await _pumpFrames(tester, 2);
+
+    expect(_player.calls, contains('pip:enter'));
+    expect(find.byType(PipResizeSurface), findsOneWidget);
+    expect(
+      find.byKey(const Key('play-controls-bar-wrap')),
+      findsNothing,
+      reason: '小窗内不渲染控制条',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('控制条静止淡出、被 AbsorbPointer 阻断、鼠标移动即唤出', (tester) async {
     await _pumpPlay(tester);
     await _focusStage(tester);
 
-    // 进入全屏:控制条初始可见。
-    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyF);
-    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyF);
-    await _pumpFrames(tester, 2);
-    final wrap0 = tester.widget<AnimatedOpacity>(
-      find.byKey(const Key('play-controls-bar-wrap')),
-    );
-    expect(wrap0.opacity, 1.0, reason: '进入全屏控制条应立即可见');
-
-    // ④ 静止 4s:控制条自动淡出(opacity==0)。
-    await tester.pump(const Duration(seconds: 4));
-    final wrapHidden = tester.widget<AnimatedOpacity>(
-      find.byKey(const Key('play-controls-bar-wrap')),
-    );
+    await _pressF(tester);
+    expect(_controlsWrap(tester).opacity, 1.0, reason: '进入全屏控制条应立即可见');
     expect(
-      wrapHidden.opacity,
+      _controlsAbsorber(tester).absorbing,
+      isFalse,
+      reason: '控制条可见时不应阻断命中',
+    );
+
+    // 静止 4s:控制条自动淡出。
+    await tester.pump(const Duration(seconds: 4));
+    expect(
+      _controlsWrap(tester).opacity,
       0.0,
       reason: '全屏静止后控制条应自动淡出(opacity==0)',
     );
+    expect(
+      _controlsAbsorber(tester).absorbing,
+      isTrue,
+      reason: '淡出后必须阻断命中,否则不可见按钮仍会被点中、底部条带会吞掉视频点击',
+    );
 
-    // 鼠标移动(悬停控制条区域):立即唤出(opacity==1)。
+    // 淡出态点全屏按钮:应被阻断,仍停留在全屏。
+    await tester.tap(
+      find.byKey(const Key('play-toggle-fullscreen')),
+      warnIfMissed: false,
+    );
+    await _pumpFrames(tester, 2);
+    expect(
+      find.byKey(const Key('play-immersive-stage')),
+      findsOneWidget,
+      reason: '淡出后按钮不应可点(不退出全屏)',
+    );
+
+    // 鼠标移动(悬停控制条区域):立即唤出。
     final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
     await gesture.addPointer(location: Offset.zero);
     addTearDown(gesture.removePointer);
-    final center = tester.getCenter(
-      find.byKey(const Key('play-controls-bar-wrap')),
+    await gesture.moveTo(
+      tester.getCenter(find.byKey(const Key('play-controls-bar-wrap'))),
     );
-    await gesture.moveTo(center);
     await tester.pump(const Duration(milliseconds: 300));
-    final wrapShown = tester.widget<AnimatedOpacity>(
-      find.byKey(const Key('play-controls-bar-wrap')),
+    expect(_controlsWrap(tester).opacity, 1.0, reason: '鼠标移动/悬停应立即可见控制条');
+    expect(_controlsAbsorber(tester).absorbing, isFalse);
+    expect(tester.takeException(), isNull);
+  });
+
+  test('Esc 分派优先级:画中画 > 全屏 > 网页全屏 > 返回上一页', () {
+    expect(
+      resolveEscapePresentationAction(
+        pip: true,
+        fullscreen: true,
+        widescreen: true,
+      ),
+      EscapePresentationAction.exitPip,
     );
     expect(
-      wrapShown.opacity,
-      1.0,
-      reason: '鼠标移动/悬停应立即可见控制条',
+      resolveEscapePresentationAction(
+        pip: false,
+        fullscreen: true,
+        widescreen: true,
+      ),
+      EscapePresentationAction.exitFullscreen,
     );
-    expect(tester.takeException(), isNull);
+    expect(
+      resolveEscapePresentationAction(
+        pip: false,
+        fullscreen: false,
+        widescreen: true,
+      ),
+      EscapePresentationAction.exitWidescreen,
+    );
+    expect(
+      resolveEscapePresentationAction(
+        pip: false,
+        fullscreen: false,
+        widescreen: false,
+      ),
+      EscapePresentationAction.popRoute,
+    );
   });
 }

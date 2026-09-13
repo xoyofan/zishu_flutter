@@ -7,6 +7,14 @@ library;
 import 'package:flutter/widgets.dart' show BoxFit, Size, Widget;
 import 'package:live_parser/live_parser.dart' show StreamLine;
 
+/// [PlayerSnapshot.copyWith] 的"未显式传入"哨兵。
+///
+/// [PlayerSnapshot.error] 是唯一可空字段:若直接以 `null` 作默认值,
+/// `copyWith(error: null)` 与"不修改 error"无法区分,导致**错误一旦出现就
+/// 永远清不掉**(播放恢复后错误卡片仍悬在画面上)。传哨兵即可区分二者:
+/// 不传 = 保持原值,null = 显式清空。
+const Object _kErrorUnset = Object();
+
 /// 播放器状态快照:由实现把底层事件流归一后发出。
 /// 带字段级相等性,便于下游做去重与 UI 局部重建。
 class PlayerSnapshot {
@@ -39,9 +47,11 @@ class PlayerSnapshot {
   /// 最近一次归一化错误文案;null 表示无错误。
   final String? error;
 
-  Size? get size =>
-      width == null || height == null ? null : Size(width!.toDouble(), height!.toDouble());
+  Size? get size => width == null || height == null
+      ? null
+      : Size(width!.toDouble(), height!.toDouble());
 
+  /// [error] 传 `null` 表示**显式清空**错误;不传则保持原值(见 [_kErrorUnset])。
   PlayerSnapshot copyWith({
     bool? playing,
     bool? buffering,
@@ -49,7 +59,7 @@ class PlayerSnapshot {
     bool? muted,
     int? width,
     int? height,
-    String? error,
+    Object? error = _kErrorUnset,
   }) {
     return PlayerSnapshot(
       playing: playing ?? this.playing,
@@ -58,7 +68,7 @@ class PlayerSnapshot {
       muted: muted ?? this.muted,
       width: width ?? this.width,
       height: height ?? this.height,
-      error: error ?? this.error,
+      error: identical(error, _kErrorUnset) ? this.error : error as String?,
     );
   }
 
@@ -75,7 +85,8 @@ class PlayerSnapshot {
           other.error == error;
 
   @override
-  int get hashCode => Object.hash(playing, buffering, volume, muted, width, height, error);
+  int get hashCode =>
+      Object.hash(playing, buffering, volume, muted, width, height, error);
 
   @override
   String toString() =>
@@ -117,8 +128,29 @@ abstract class LivePlayer {
 
   Future<void> setMuted(bool muted);
 
-  /// 可选:切换全屏。实现未支持时保持空操作。
+  /// 幂等设置系统窗口全屏。调用方已经知道目标态时用本方法,而非"切换":
+  /// 切换语义在 UI 态与窗口态漂移时会反向操作窗口(旧实现的错位根因)。
+  /// 实现未支持时保持空操作。
+  Future<void> setFullscreen(bool fullscreen) async {}
+
+  /// 兼容"切换"语义的调用点保留;实现层按当前窗口态取反。
+  /// 新代码应优先用 [setFullscreen]。
   Future<void> toggleFullscreen() async {}
+
+  /// 进入画中画:把应用窗口缩成置顶小窗(仅桌面实现,其余平台空操作)。
+  /// [aspectRatio] 为视频宽高比(宽/高),用于小窗尺寸。
+  Future<void> enterPictureInPicture({double? aspectRatio}) async {}
+
+  /// 退出画中画并恢复进入前的窗口几何与置顶态。
+  Future<void> exitPictureInPicture() async {}
+
+  /// 给画中画内容套上「桌面窗口外壳」:窗口边缘拖拽/缩放热区等原生窗口交互。
+  ///
+  /// 默认直接透传子级。桌面实现返回带原生交互的包壳——这笔依赖只能落在
+  /// 平台层:实现它的 Widget(如 window_manager 的 `DragToResizeArea`)会
+  /// 传递性引入 `dart:io`,而播放页 UI 是三端共享的,不能在共享依赖图里
+  /// 出现 `dart:io`(Web 端会直接编译失败)。
+  Widget wrapPipSurface(Widget child) => child;
 
   /// 释放底层资源。全局播放器由应用根统一管理生命周期。
   void dispose();

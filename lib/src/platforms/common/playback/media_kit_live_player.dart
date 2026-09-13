@@ -6,13 +6,14 @@ library;
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/widgets.dart' show BoxFit, Widget;
+import 'package:flutter/widgets.dart' show BoxFit, Color, Widget;
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import 'package:window_manager/window_manager.dart';
 import 'package:live_parser/live_parser.dart' show StreamLine;
+import 'package:window_manager/window_manager.dart' show DragToResizeArea;
 
 import 'live_player.dart';
+import 'window_presentation.dart';
 
 /// 直播卡顿/断流的错误类型(对齐 pure_live 的 PlayerErrorType 子集)。
 enum _StallErrorKind { network, codec, source, other }
@@ -36,6 +37,11 @@ class MediaKitLivePlayer implements LivePlayer {
   PlayerSnapshot _latest = const PlayerSnapshot();
 
   bool _muted = false;
+
+  /// 窗口表现(系统全屏 / 画中画)统一委托给 [WindowPresentation]:幂等设置、
+  /// 防重入与 PiP 进出的 bounds 记忆都在那一层,本类只转发,保持
+  /// "播放器管播放、窗口管窗口"的边界。
+  final WindowPresentation _windowPresentation = WindowPresentation.instance;
 
   /// 已释放标记:app 退出时根容器可能先销毁播放器再触发页面级 stop,
   /// 此标记保证 stop 不会打到已释放的原生播放内核。
@@ -329,14 +335,35 @@ class MediaKitLivePlayer implements LivePlayer {
   }
 
   @override
-  Future<void> toggleFullscreen() async {
-    // Windows 桌面全屏:取当前状态再取反。VM / 无窗口环境(单测注入 Fake 时
-    // 不调用本实现,这里仍做静默降级,避免原生插件不可用时抛错)。
-    try {
-      await windowManager.setFullScreen(!await windowManager.isFullScreen());
-    } catch (_) {
-      // 平台不支持 / 插件未就绪:静默降级,不阻断上层沉浸态切换。
+  Future<void> setFullscreen(bool fullscreen) =>
+      _windowPresentation.setFullscreen(fullscreen);
+
+  @override
+  Future<void> toggleFullscreen() => _windowPresentation.toggleFullscreen();
+
+  @override
+  Future<void> enterPictureInPicture({double? aspectRatio}) =>
+      _windowPresentation.enterPip(aspectRatio: aspectRatio ?? _videoAspectRatio);
+
+  @override
+  Future<void> exitPictureInPicture() => _windowPresentation.exitPip();
+
+  @override
+  Widget wrapPipSurface(Widget child) {
+    // 仅 Windows 需要桌面包壳;其余平台(含单测 VM 之外的非桌面宿主)透传。
+    // `DragToResizeArea` 自身传递性依赖 dart:io,只允许出现在平台层。
+    if (!Platform.isWindows) return child;
+    return DragToResizeArea(resizeEdgeColor: const Color(0x00000000), child: child);
+  }
+
+  /// 当前视频宽高比(PiP 小窗据此定尺寸);未出画面时返回 null,由 PiP 侧退回 16:9。
+  double? get _videoAspectRatio {
+    final width = _latest.width;
+    final height = _latest.height;
+    if (width == null || height == null || width <= 0 || height <= 0) {
+      return null;
     }
+    return width / height;
   }
 
   @override

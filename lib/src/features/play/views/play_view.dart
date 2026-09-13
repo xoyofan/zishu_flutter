@@ -16,13 +16,20 @@ import '../../danmaku/application/danmaku_session_provider.dart'
 import '../../danmaku/application/danmaku_tail_forwarder.dart';
 import '../../danmaku/widgets/danmaku_overlay.dart';
 import '../application/play_provider.dart';
+import '../application/play_screen_provider.dart';
 import '../../follow/application/settings_provider.dart';
+import '../widgets/pip_surface.dart';
 import '../widgets/play_side_panel.dart';
 import '../widgets/player_controls.dart';
 
 /// 播放页(U5 布局基线):44px 房间头 + 视频舞台/控制条/画质线路条 +
 /// 右侧 328px 信息栏。编排全部收敛在 playControllerProvider/LivePlayer,
 /// Widget 只消费状态与接口,不直接触碰 media_kit。
+///
+/// 呈现态(normal / widescreen / fullscreen / PiP)由 [playScreenProvider] 单一
+/// 维护:布局、控制条图标、自动隐藏、快捷键与平台窗口调用全部由它派生。
+/// 旧实现把沉浸态放在页面本地 bool、窗口全屏放在播放器里,两边互不感知,
+/// 是全屏按钮与 F 键错位的根因(见 play_screen_provider.dart 顶部说明)。
 class PlayView extends ConsumerStatefulWidget {
   const PlayView({super.key, required this.site, required this.roomId});
 
@@ -41,20 +48,41 @@ class _PlayViewState extends ConsumerState<PlayView> {
   /// 用 GlobalKey 保活元素与内部焦点节点,使快捷键在进出全屏后仍可达。
   final GlobalKey _stageKey = GlobalKey(debugLabel: 'play-stage-host');
 
-  /// 沉浸(全屏)本地态:按键即切,不落持久化。真实窗口全屏由平台层
-  /// [LivePlayer.toggleFullscreen] 负责,try/catch 静默降级(VM / 无窗口环境)。
-  bool _immersive = false;
+  /// 呈现态控制器(三态 + PiP)。initState 取一次:dispose 期不再经过 ref,
+  /// 规避"离开页面时读已销毁 provider"的风险。
+  late final PlayScreenController _screen;
 
-  /// 控制条是否可见:沉浸态下鼠标静止 ~3s 或进入全屏后淡出,移动/悬停即显示。
-  /// 非沉浸态恒为可见。
+  /// 控制条是否可见:隐藏 chrome 的呈现态下鼠标静止 ~3s 后淡出,移动/悬停即
+  /// 显示;常规态恒为可见。
   bool _controlsVisible = true;
 
-  /// 控制条自动隐藏计时器(沉浸态专用)。
+  /// 控制条自动隐藏计时器(仅 [PlayScreenState.hidesChrome] 态生效)。
   Timer? _hideTimer;
 
-  /// 桌面快捷键:Space / M / F 走与按钮完全相同的通路。
-  /// 播放/暂停按快照取反;`toggleFullscreen` 由本地沉浸态承接,F 键即可切
-  /// 换全屏,真实窗口全屏由平台层异步完成(失败不阻断 UI 态)。
+  /// 鼠标是否停在控制条上:停靠期间不进入隐藏倒计时(对齐参考实现的
+  /// `_isMouseOverController`),避免鼠标还在按钮上时控制条自己消失。
+  bool _hoveringControls = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _screen = ref.read(playScreenProvider.notifier);
+    // Esc 走全局键盘 handler(见 _onGlobalKey),与 Space/M/F/W 的
+    // CallbackShortcuts 分工:字母键尊重输入框焦点,Esc 必须不依赖焦点。
+    HardwareKeyboard.instance.addHandler(_onGlobalKey);
+  }
+
+  @override
+  void dispose() {
+    HardwareKeyboard.instance.removeHandler(_onGlobalKey);
+    _hideTimer?.cancel();
+    // 窗口呈现(全屏/PiP)的复位由 playScreenProvider 的 onDispose 负责
+    // (autoDispose:离开播放页即触发),此处不再手动调用,避免与 provider
+    // 销毁时序打架——旧做法在 dispose 期走 ref,会撞上"provider 已销毁"。
+    super.dispose();
+  }
+
+  /// 播放/暂停切换:与点击视频帧共用同一条通路(快照驱动)。
   void _togglePlayback() {
     final snapshot =
         ref.read(playerSnapshotProvider).value ?? const PlayerSnapshot();
@@ -72,60 +100,70 @@ class _PlayViewState extends ConsumerState<PlayView> {
     ref.read(playerProvider).setMuted(!snapshot.muted);
   }
 
-  /// 切换全屏:本地沉浸态翻转,平台层窗口全屏 try/catch 静默降级。
-  /// 测试里平台层被 FakeLivePlayer 替换,只记录调用,不影响本地态切换。
-  void _toggleFullscreen() {
-    if (_immersive) {
-      _exitImmersive();
-    } else {
-      _enterImmersive();
+  /// 切换全屏:呈现态由 provider 单源维护,系统窗口全屏是它的下游副作用。
+  /// 按钮 / F 键 / Esc 全部走这一条通路,不再有"本地沉浸态"与"平台全屏"
+  /// 两条互不感知的分支。
+  void _toggleFullscreen() => unawaited(_screen.toggleFullscreen());
+
+  /// 网页全屏:视频区占满窗口,但不请求系统窗口全屏。
+  void _toggleWidescreen() => unawaited(_screen.toggleWidescreen());
+
+  /// 画中画小窗切换。
+  void _togglePip() => unawaited(_screen.togglePip());
+
+  /// 全局键盘 handler:**只接管 Esc**,其余键一律放行。
+  ///
+  /// 职责必须与 `CallbackShortcuts` 严格分工、互不重叠 ——
+  /// `HardwareKeyboard.addHandler` 注册的 handler 由 `DispatchKeyMessage` 在
+  /// **焦点树之前**无条件调用,而调用结果**不会**阻止事件继续流向
+  /// `FocusManager`(见 hardware_keyboard.dart 的 handleRawKeyMessage:
+  /// `handled = _dispatchKeyMessage(...) || handled`)。因此若这里也处理
+  /// Space/M/F/W,同一次按键会被"全局 handler + 页面 CallbackShortcuts"
+  /// 各处理一遍:F 会 enter 又立即 exit(=没切)、Space 会 toggle 两次(=没动)。
+  ///
+  /// 为什么只有 Esc 走全局:`Shortcuts` 沿焦点链由内向外查找,焦点残留在已隐藏
+  /// 的侧栏输入框或页面之外时会漏键,而 Esc 必须"随时可退出全屏"。字母/空格键
+  /// 则必须留在焦点树内,否则焦点在聊天输入框时打字会被抢(参考实现同样只把
+  /// Escape 放进 addHandler,见 pure_live video_keyboard.dart:31-62)。
+  bool _onGlobalKey(KeyEvent event) {
+    if (event is! KeyDownEvent ||
+        event.logicalKey != LogicalKeyboardKey.escape) {
+      return false;
     }
+    // 常规态放行:不打扰输入框与路由自身的 Esc 语义。
+    if (!ref.read(playScreenProvider).hidesChrome) return false;
+    unawaited(_screen.handleEscape());
+    return true;
   }
 
-  /// Esc 在沉浸态触发退出;非沉浸态无操作(快捷键不吞键)。
-  void _onEscape() {
-    if (_immersive) _exitImmersive();
-  }
-
-  void _enterImmersive() {
-    if (_immersive) return;
-    setState(() => _immersive = true);
-    _controlsVisible = true;
-    // 进入全屏:稍后(3s 无操作)自动淡出控制条。
-    _scheduleHideControls();
-    _invokePlatformFullscreen();
-  }
-
-  void _exitImmersive() {
-    if (!_immersive) return;
-    setState(() => _immersive = false);
-    _controlsVisible = true;
-    _hideTimer?.cancel();
-    _invokePlatformFullscreen();
-  }
-
-  /// 调平台层真实窗口全屏。失败(VM / 无窗口 / 未初始化)静默降级:
-  /// 本地沉浸态不依赖其返回值,故测试可稳定验证 UI 态。
-  void _invokePlatformFullscreen() {
-    try {
-      unawaited(ref.read(playerProvider).toggleFullscreen());
-    } catch (_) {
-      // 同步抛错也吞掉,避免阻断 UI 态切换。
-    }
-  }
-
-  /// 控制条唤醒:取消隐藏计时、立即可见,沉浸态下重新排程 3s 自动隐藏。
+  /// 控制条唤醒:取消隐藏计时、立即可见,隐藏 chrome 态下重新排程自动隐藏。
   void _wakeControls() {
     _hideTimer?.cancel();
     if (!_controlsVisible) setState(() => _controlsVisible = true);
-    if (_immersive) _scheduleHideControls();
+    _scheduleHideControls();
   }
 
-  /// 排程 3s 后淡出控制条(仅沉浸态生效)。
+  /// 鼠标进入控制条:停靠期间不排程隐藏。
+  void _enterControls() {
+    _hoveringControls = true;
+    _wakeControls();
+  }
+
+  /// 鼠标离开控制条:恢复隐藏倒计时。
+  void _exitControls() {
+    _hoveringControls = false;
+    _scheduleHideControls();
+  }
+
+  /// 排程 3s 后淡出控制条。仅隐藏 chrome 的呈现态生效;鼠标停在控制条上或
+  /// 已回到常规态时不排程。
   void _scheduleHideControls() {
     _hideTimer?.cancel();
+    if (!ref.read(playScreenProvider).hidesChrome || _hoveringControls) {
+      return;
+    }
     _hideTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted && _immersive && _controlsVisible) {
+      if (mounted && _controlsVisible) {
         setState(() => _controlsVisible = false);
       }
     });
@@ -155,12 +193,6 @@ class _PlayViewState extends ConsumerState<PlayView> {
   }
 
   @override
-  void dispose() {
-    _hideTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final async = ref.watch(playControllerProvider(_params));
     final play = async.value;
@@ -172,6 +204,20 @@ class _PlayViewState extends ConsumerState<PlayView> {
     final showDanmaku = play?.showDanmaku ?? true;
     final brand = PlatformBrandCatalog.byId(widget.site);
     final size = MediaQuery.sizeOf(context);
+    // 呈现态(三态 + PiP):布局、控制条图标、自动隐藏、快捷键的唯一依据。
+    final screen = ref.watch(playScreenProvider);
+    // 呈现态切换时同步控制条可见性:进入隐藏 chrome 的态立即显示并起 3s 倒计时;
+    // 回到常规态则恒显。用 listen 而非在 build 里做副作用。
+    ref.listen<PlayScreenState>(playScreenProvider, (previous, next) {
+      if (previous?.hidesChrome == next.hidesChrome &&
+          previous?.pip == next.pip) {
+        return;
+      }
+      _hoveringControls = false;
+      _hideTimer?.cancel();
+      if (!_controlsVisible) setState(() => _controlsVisible = true);
+      _scheduleHideControls();
+    });
     // U9 响应式:
     // - 窄屏(<768):328px 信息栏堆叠到视频区下方,否则固定宽侧栏会把
     //   视频舞台挤成 0 宽(实测 360dp 下只剩 3dp);
@@ -184,78 +230,98 @@ class _PlayViewState extends ConsumerState<PlayView> {
     // 侧栏宽度按视口分档(268/328/392/425),对齐 main.css:228-244。
     final sidePanelWidth = AppSpacing.playSidePanelWidthFor(size.width);
 
-    // 桌面快捷键宿主:套在播放页内容外层,焦点落在页内任意位置(含控制条
-    // 按钮、右侧侧栏)时按键都可达;未聚焦/事件没被消费时照旧冒泡,不会
-    // 吞掉输入框的按键(输入框自身的 Shortcuts 优先级更高)。
-    // 全屏态由本地 _immersive 承接:Esc / 再按 F 退出,与按钮完全同路。
-    final stage = CallbackShortcuts(
-      key: _stageKey,
-      bindings: {
-        const SingleActivator(LogicalKeyboardKey.space): _togglePlayback,
-        const SingleActivator(LogicalKeyboardKey.keyM): _toggleMuted,
-        const SingleActivator(LogicalKeyboardKey.keyF): _toggleFullscreen,
-        const SingleActivator(LogicalKeyboardKey.escape): _onEscape,
-      },
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          _VideoStage(
-            async: async,
-            showDanmaku: showDanmaku,
-            onRetry: () =>
-                ref.read(playControllerProvider(_params).notifier).retry(),
-          ),
-          // 弹幕叠加层:位于视频之上、控制条之下(参考 play 布局层级)。
-          // 与右侧侧栏聊天共用 danmakuSessionProvider 的同一会话,不重复建连。
-          _DanmakuLayer(
-            site: widget.site,
-            roomId: widget.roomId,
-            visible: showDanmaku && danmakuEnabled,
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            // MouseRegion 悬停/移动即唤醒控制条(沉浸态下重新排程自动隐藏)。
-            // 即便 opacity==0,Widget 仍参与命中测试,悬停可触发 onHover。
-            child: MouseRegion(
-              onHover: (_) => _wakeControls(),
-              onEnter: (_) => _wakeControls(),
-              child: AnimatedOpacity(
-                // 测试锚点:控制条容器(沉浸态淡出/唤醒可断言其 opacity)。
-                key: const Key('play-controls-bar-wrap'),
-                duration: const Duration(milliseconds: 200),
-                opacity: _controlsVisible ? 1.0 : 0.0,
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        AppColors.background.withValues(alpha: 0.0),
-                        AppColors.background.withValues(alpha: 0.72),
-                      ],
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      PlayerControlsBar(
-                        site: widget.site,
-                        roomId: widget.roomId,
-                        showDanmaku: showDanmaku,
-                        danmakuEnabled: danmakuEnabled,
-                        onDanmakuToggle: () => ref
-                            .read(playControllerProvider(_params).notifier)
-                            .toggleDanmaku(),
+    // 舞台整块挂 MouseRegion:鼠标在视频任意位置移动都唤醒控制条(隐藏
+    // chrome 态下重新排程自动隐藏),这是"淡出后移动鼠标即唤出"的入口。
+    //
+    // 快捷键分工(两者必须互不重叠,否则同一次按键会被处理两遍):
+    // - Space / M / F / W → 本 `CallbackShortcuts`,沿焦点链查找;焦点在舞台或
+    //   控制条内(同为舞台子树)时可达,且焦点在聊天输入框时会被输入框先消费,
+    //   不会抢打字。控制条**不再**内联自己的一份绑定:那会让内层先命中,F 键
+    //   只切窗口不进沉浸态(旧实现的病灶)。
+    // - Esc → 全局 handler [_onGlobalKey],不依赖焦点,只 4 个键之外的键都放行。
+    final stage = MouseRegion(
+      onHover: (_) => _wakeControls(),
+      child: CallbackShortcuts(
+        key: _stageKey,
+        bindings: {
+          const SingleActivator(LogicalKeyboardKey.space): _togglePlayback,
+          const SingleActivator(LogicalKeyboardKey.keyM): _toggleMuted,
+          const SingleActivator(LogicalKeyboardKey.keyF): _toggleFullscreen,
+          const SingleActivator(LogicalKeyboardKey.keyW): _toggleWidescreen,
+        },
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            _VideoStage(
+              async: async,
+              showDanmaku: showDanmaku,
+              onRetry: () =>
+                  ref.read(playControllerProvider(_params).notifier).retry(),
+            ),
+            // 弹幕叠加层:位于视频之上、控制条之下(参考 play 布局层级)。
+            // 与右侧侧栏聊天共用 danmakuSessionProvider 的同一会话,不重复建连。
+            _DanmakuLayer(
+              site: widget.site,
+              roomId: widget.roomId,
+              visible: showDanmaku && danmakuEnabled,
+            ),
+            // PiP 小窗不渲染控制条(小窗只留画面,退出走 Esc)。
+            if (!screen.pip)
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                // 控制条区域悬停:停留期间不进入隐藏倒计时;离开恢复倒计时。
+                child: MouseRegion(
+                  onEnter: (_) => _enterControls(),
+                  onExit: (_) => _exitControls(),
+                  child: AnimatedOpacity(
+                    // 测试锚点:控制条容器(淡出/唤醒可断言其 opacity)。
+                    key: const Key('play-controls-bar-wrap'),
+                    duration: const Duration(milliseconds: 200),
+                    opacity: _controlsVisible ? 1.0 : 0.0,
+                    // 淡出后必须阻断命中:否则不可见的按钮仍会被点中,
+                    // 且底部条带会持续吞掉"点视频切播放/暂停"的点击。
+                    child: AbsorbPointer(
+                      absorbing: !_controlsVisible,
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              AppColors.background.withValues(alpha: 0.0),
+                              AppColors.background.withValues(alpha: 0.72),
+                            ],
+                          ),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            PlayerControlsBar(
+                              site: widget.site,
+                              roomId: widget.roomId,
+                              showDanmaku: showDanmaku,
+                              danmakuEnabled: danmakuEnabled,
+                              screenMode: screen.mode,
+                              onDanmakuToggle: () => ref
+                                  .read(
+                                    playControllerProvider(_params).notifier,
+                                  )
+                                  .toggleDanmaku(),
+                              onToggleWidescreen: _toggleWidescreen,
+                              onToggleFullscreen: _toggleFullscreen,
+                              onTogglePip: _togglePip,
+                            ),
+                          ],
+                        ),
                       ),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
 
@@ -263,10 +329,13 @@ class _PlayViewState extends ConsumerState<PlayView> {
     // 宿主(控制条「刷新视频」的 SnackBar 需要 descendant Scaffold 才能呈现)。
     // 播放页不套 AppShell,但这一层必须自己提供,理由见 player_controls.dart。
     late final Widget body;
-    // 沉浸(全屏)态:视频占满窗口,隐藏房间头与右侧侧栏,控制条自动隐藏可唤醒。
-    if (_immersive) {
+    if (screen.pip) {
+      // 画中画小窗:只铺画面,桌面下由包壳提供拖拽/缩放边缘。
+      body = PipResizeSurface(child: stage);
+    } else if (screen.hidesChrome) {
+      // 网页全屏 / 全屏:视频占满窗口,隐藏房间头与侧栏;控制条自动隐藏可唤醒。
       body = SizedBox.expand(
-        // 测试锚点:全屏沉浸容器。
+        // 测试锚点:全屏 / 网页全屏的沉浸容器。
         key: const Key('play-immersive-stage'),
         child: stage,
       );
@@ -580,10 +649,20 @@ class _VideoStageState extends ConsumerState<_VideoStage> {
     // 点视频帧 = 播放/暂停,同时把键盘焦点收到舞台:焦点落在播放页子树后,
     // 页面级 Space/M/F 快捷键才沿焦点树冒泡生效(与「先点视频区再用快捷键」
     // 的桌面直觉一致)。子层 overlay(重试按钮等)自行消费点击。
+    //
+    // `autofocus: true` 是快捷键可达性的**前提**,不是可选优化(对齐参考实现
+    // pure_live,其播放器包在 `Focus(autofocus: true)` 里)。
+    // 原因:`Shortcuts`/`CallbackShortcuts` 只在「焦点链」上生效;而 Flutter 在
+    // 页面内无人持焦时把 primaryFocus 停在 `ModalScope` 根上,此时按键根本不
+    // 会流经播放页的快捷键节点。实测:点击音量滑杆**不会**把焦点移进控制条
+    // (Slider 不请求焦点),焦点仍在 ModalScope → F 键静默失效。让舞台默认
+    // 持焦即可让焦点链始终覆盖播放页;点控制条按钮时焦点落在按钮(舞台子树
+    // 内)同样可达,且按钮自身对 Space 的处理在前面命中、不会被重复触发。
     return Focus(
       // 测试锚点:定位舞台焦点节点(测试里点是命中舞台本身)。
       key: const Key('play-stage-focus'),
       focusNode: _focusNode,
+      autofocus: true,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {
