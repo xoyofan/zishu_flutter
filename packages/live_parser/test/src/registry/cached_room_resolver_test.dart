@@ -51,6 +51,28 @@ class _FakeResolver implements RoomResolver {
   }
 }
 
+/// 同时具备恢复能力的解析器:用于验证 [CachedRoomResolver.recoverRoom]
+/// 会**优先委托**内层而非自己重新解析。
+class _FakeRecoveringResolver implements RoomResolver, RoomRecoveryResolver {
+  _FakeRecoveringResolver(this.respond);
+
+  final Future<RoomPayload> Function(RoomRequest request) respond;
+  final List<RoomRequest> resolveCalls = [];
+  final List<RoomRequest> recoverCalls = [];
+
+  @override
+  Future<RoomPayload> resolveRoom(RoomRequest request) {
+    resolveCalls.add(request);
+    return respond(request);
+  }
+
+  @override
+  Future<RoomPayload> recoverRoom(RoomRequest request) {
+    recoverCalls.add(request);
+    return respond(request);
+  }
+}
+
 void main() {
   const request = RoomRequest(
     site: 'demo',
@@ -143,5 +165,68 @@ void main() {
     await cached.resolveRoom(request);
 
     expect(inner.calls, hasLength(2));
+  });
+
+  group('恢复重解析(CachedRoomResolver.recoverRoom)', () {
+    test('绕开缓存重新解析 —— 恢复绝不能复用已解析的地址', () async {
+      final inner = _FakeResolver((_) async => _payload(RoomState.live));
+      final cached = CachedRoomResolver(inner);
+
+      await cached.resolveRoom(request);
+      await cached.resolveRoom(request);
+      expect(inner.calls, hasLength(1), reason: 'TTL 内应命中缓存');
+
+      await cached.recoverRoom(request);
+
+      expect(
+        inner.calls,
+        hasLength(2),
+        reason: '恢复必须绕开缓存 —— 缓存里的签名地址可能已过期,'
+            '复用即等于反复重开失效源',
+      );
+    });
+
+    test('恢复会失效缓存键,后续解析也拿新结果', () async {
+      final inner = _FakeResolver((_) async => _payload(RoomState.live));
+      final cached = CachedRoomResolver(inner);
+
+      await cached.resolveRoom(request);
+      await cached.recoverRoom(request);
+      await cached.resolveRoom(request);
+
+      expect(inner.calls, hasLength(3), reason: '恢复失效键后,下一次解析不再命中旧缓存');
+    });
+
+    test('内层具备恢复能力时优先委托 recoverRoom(而非 resolveRoom)', () async {
+      final inner = _FakeRecoveringResolver((_) async => _payload(RoomState.live));
+      final cached = CachedRoomResolver(inner);
+
+      await cached.resolveRoom(request);
+      await cached.recoverRoom(request);
+
+      expect(inner.recoverCalls, hasLength(1));
+      expect(inner.resolveCalls, hasLength(1), reason: '内层 resolveRoom 只被首次解析用过');
+    });
+
+    test('内层无恢复能力时退化为重新解析(仍强于复用播放器手里的旧地址)', () async {
+      final inner = _FakeResolver((_) async => _payload(RoomState.live));
+      final cached = CachedRoomResolver(inner);
+
+      final payload = await cached.recoverRoom(request);
+
+      expect(payload.roomState, RoomState.live);
+      expect(inner.calls, hasLength(1));
+    });
+
+    test('不带偏好档的恢复同样可用(裸解析本就不缓存)', () async {
+      final inner = _FakeResolver((_) async => _payload(RoomState.live));
+      final cached = CachedRoomResolver(inner);
+
+      await cached.recoverRoom(
+        const RoomRequest(site: 'demo', roomIdOrUrl: '42'),
+      );
+
+      expect(inner.calls, hasLength(1));
+    });
   });
 }

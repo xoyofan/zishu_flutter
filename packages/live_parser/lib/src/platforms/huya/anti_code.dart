@@ -9,6 +9,15 @@ import '../../http/parser_http.dart';
 
 String _md5Hex(String text) => md5.convert(utf8.encode(text)).toString();
 
+/// 取两个 16 进制时间戳中较晚的一个。[server] 无法解析(缺失/非 16 进制)时
+/// 直接返回 [fallback](调用方保证其可解析)。
+String _laterHexTime(String server, String fallback) {
+  final parsedServer = int.tryParse(server, radix: 16);
+  if (parsedServer == null) return fallback;
+  final parsedFallback = int.tryParse(fallback, radix: 16) ?? 0;
+  return parsedServer >= parsedFallback ? server : fallback;
+}
+
 /// 签名核心(纯函数,可做固定向量测试):
 /// `wsSecret = md5(pf_uid_streamName_md5(seqId|ctype|t)_wsTime)`。
 String computeHuyaWsSecret({
@@ -50,7 +59,17 @@ String buildHuyaAntiCode(String oldAntiCode, String streamName) {
   final initUuid = ((t13 % 10000000000) * 1000 + (t13 % 1000)) % 4294967295;
   final uid = 1400000000000 + (t13 % 9999999);
   final seqId = uid + sdkSid;
-  final wsTime = ((t13 + 110624) ~/ 1000).toRadixString(16).toLowerCase();
+
+  // wsTime 决定**地址租约**:CDN 以「wsTime 是否已过」判定有效性(实测过期
+  // 一律 403、未来值放行,故租约 ≈ wsTime - now)。上游 anti_code 自带一个
+  // wsTime(实测 ≈ now+284s),自造值 `(now+110624ms)` 只有 ≈ now+110s —— 
+  // 把地址寿命砍掉了约 60%,是「看一两分钟就断」的直接成因。取两者中更晚者:
+  // 沿用服务端值拉长租约,但若上游给的是已过期的旧值则退回自造值,避免直接用
+  // 一个开场即 403 的地址。参考 pure_live `huya_site.dart` 的 `mapAnti['wsTime']`。
+  final wsTime = _laterHexTime(
+    (query['wsTime'] ?? '').trim(),
+    ((t13 + 110624) ~/ 1000).toRadixString(16).toLowerCase(),
+  );
 
   final wsSecret = computeHuyaWsSecret(
     fmPrefix: huyaFmPrefix(fm),

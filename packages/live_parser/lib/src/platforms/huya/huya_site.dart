@@ -30,10 +30,19 @@ class HuyaClient {
   void close() => parserHttp.close();
 }
 
-class HuyaRoomResolver implements RoomResolver {
+/// 虎牙房间解析。
+///
+/// 同时实现 [RoomRecoveryResolver]:虎牙播放地址带时效签名,恢复时必须拿到
+/// **全新**的 anti_code 与流名。本实现不保存任何地址状态 —— `resolveRoom`
+/// 每次都重新走 `resolveHuyaNumericRoomId` → `fetchHuyaWebStreamData` →
+/// `buildHuyaAntiCode` 重新签名,故恢复语义与普通解析同源,单点维护避免漂移。
+class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver {
   HuyaRoomResolver(this._client);
 
   final HuyaClient _client;
+
+  @override
+  Future<RoomPayload> recoverRoom(RoomRequest request) => resolveRoom(request);
 
   @override
   Future<RoomPayload> resolveRoom(RoomRequest request) async {
