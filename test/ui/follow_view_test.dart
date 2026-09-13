@@ -160,17 +160,15 @@ void main() {
     expect(entryAnchorCount(tester), 6);
   });
 
-  testWidgets('点击条目特别关注星标:条目数不变,★ 状态翻转', (tester) async {
+  testWidgets('卡片模式点击特别关注星标:条目数不变,★ 状态翻转', (tester) async {
     suppressRenderFlexOverflow();
     await pumpFollowApp(tester);
 
-    // 切到单行密度:行内操作按钮全部可见,便于定位星标。
-    await tester.tap(find.byKey(const Key('follow-density-row')));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
-
-    // 「红莲」初始非特别关注:行内不应有 ★(star_rounded)。
+    // 默认即卡片密度。单行密度现已收敛为纯文字流(只有主播名+人数),
+    // 行内操作改由卡片密度提供,故星标交互在卡片模式下验证。
     const entryKey = Key('follow-entry-douyu-288016');
+
+    // 「红莲」初始非特别关注:卡片封面左上不应有 ★(star_rounded)。
     expect(
       find.descendant(
         of: find.byKey(entryKey),
@@ -179,7 +177,7 @@ void main() {
       findsNothing,
     );
 
-    // 点击该条目的「设为特别关注」操作。
+    // 点击该卡片的「设为特别关注」操作。
     await tester.tap(
       find.descendant(
         of: find.byKey(entryKey),
@@ -189,9 +187,9 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
 
-    // 条目数不变;★ 图标出现(行首标记 + 操作按钮激活态);
+    // 条目数不变;★ 图标出现(封面左上标记 + 操作按钮激活态);
     // 状态层同步:isSpecial 已翻转。
-    expect(find.byType(FollowEntryRow), findsNWidgets(6));
+    expect(find.byType(FollowEntryCard), findsNWidgets(6));
     expect(
       find.descendant(
         of: find.byKey(entryKey),

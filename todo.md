@@ -168,3 +168,23 @@
 - 多线路印证(断流自动切换数据基础):虎牙 36 / B站 32 / YouTube 6 / Twitch 5 / 斗鱼 4 / 快手 4 / 抖音 4 / YY 3 均 >1 线;**SOOP 仅 1 线**(退化为单线,断流只能走 completed→整组轮转)。
 - 海外站:Twitch 偶发「未获取到播放令牌」(GQL 令牌接口抖动,需重试或 Cookie);YouTube 冷解析受 yt-dlp 子进程拉起开销(≈8s),热解析命中内部缓存近 0ms。
 - [x] 已提交推送:benchmark 脚本(`tool/bench_real_parse.dart`)+ 结果(`bench_real_parse.md`)随 `8f216fd` 上 `origin/master`;真实解析 exe 已重建并拉起运行(见上节验证)。
+
+## 2026-09-13 UI 分支:关注页视图/列表布局 + 推荐卡片高度修正(feat/ui-follow-layout)
+
+**结论**:新建 UI 专用分支 `feat/ui-follow-layout`(基于 `86b1417`)。针对「关注页列表/视图模式不对齐 + 卡片高度过高底部留白」三处修正:(1) 卡片密度元信息区高度预算 106→76,消除底部约 30dp 空白;(2) 单行密度由四列表格改为**纯文字流式 Wrap** —— 只留主播名(平台色)+ 在线人数,宽度按内容自适应、横向排满换行(对齐用户诉求:不要缩略图/分类/标题);(3) 播放页侧栏推荐/关注卡片由固定 `childAspectRatio=0.86` 改为按实际列宽推导,窄侧栏下不再把卡片拉高留白。参考基准:SFVideoLive `web/src/components/follow/`(FollowRoomPreviewView/RowView/TileView/Views)。
+
+### 本轮完成项
+- [x] `features/follow/views/follow_view.dart`:`_cardMetaHeight` 106→76;`FollowDensity.row` 分支 GridView 多列表格 → `SingleChildScrollView + Wrap`;删 `_rowColumnExtent`。
+- [x] `features/follow/widgets/follow_entry_row.dart`(重写):纯文字 chip —— 主播名(FollowAnchorName 平台色)+ 人形图标/时钟 + 人数(离线「未开播」)+ 特别关注 ★;批量模式前置复选框;保留 `follow-entry-{site}-{roomId}` 锚点与组件签名(21 处调用/测试兼容)。
+- [x] `features/play/widgets/play_room_grid.dart`:`PlayRoomGrid` 改 `LayoutBuilder` 按列宽推导纵横比(封面 16:9 + 元信息 36dp),替换固定 0.86。
+- [x] `test/ui/follow_view_test.dart`:「特别关注星标」用例由单行模式改为卡片模式(单行已无行内操作按钮,操作仅卡片密度提供)。
+- [x] golden 重生成 5 张(follow_style_card/tile/row + play_style_recommend/follow)。
+
+### 验证
+- [x] `dart analyze lib/src/features/follow lib/src/features/play`:No issues found。
+- [x] `flutter test test/ui/follow_view_test.dart`:4/4 通过;`follow_style_shot_test.dart`:5/5(golden 更新)。
+- [ ] 分支待 review/合并 master;后续可重建 exe 做真机视觉验证。
+
+### 待确认/后续 UI 项
+- [ ] 「横向按长度顺序往下排列」当前实现为**宽度按内容自适应 + 保留开播优先排序**;若需按主播名长度重排,可再调。
+- [ ] 单行密度已无行内操作(特别关注/提醒/删除),增删改走「批量管理」;若需单行快捷操作需另议。

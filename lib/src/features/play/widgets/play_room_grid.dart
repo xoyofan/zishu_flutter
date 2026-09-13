@@ -9,6 +9,8 @@
 /// - 封面下方:主播名(单行省略)→ 标题(单行省略,次级色)。
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:live_parser/live_parser.dart';
 
@@ -45,30 +47,44 @@ class PlayRoomGrid extends StatelessWidget {
 
   final void Function(RoomSummary room)? onTap;
 
+  /// 卡片元信息区(封面下两行文本)的高度预算。
+  static const double _cardMetaHeight = 36;
+
   @override
   Widget build(BuildContext context) {
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.sm,
-        0,
-        AppSpacing.sm,
-        AppSpacing.sm,
-      ),
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: columns,
-        mainAxisSpacing: AppSpacing.sm,
-        crossAxisSpacing: AppSpacing.sm,
-        // 封面 16:9 + 下方两行文本(主播名 15 + 标题 13 + padding 4)。
-        childAspectRatio: 0.86,
-      ),
-      itemCount: rooms.length,
-      itemBuilder: (context, index) {
-        final room = rooms[index];
-        return PlayRoomCard(
-          key: ValueKey('$keyPrefix${room.site}-${room.roomId}'),
-          room: room,
-          isSpecial: superKeys.contains('${room.site}:${room.roomId}'),
-          onTap: onTap == null ? null : () => onTap!(room),
+    const padding = EdgeInsets.fromLTRB(
+      AppSpacing.sm,
+      0,
+      AppSpacing.sm,
+      AppSpacing.sm,
+    );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // 由实际列宽推导纵横比,让卡片高恰好 = 封面(16:9) + 元信息两行。
+        // 原固定 0.86 在窄侧栏(2 列约 158dp/列)下把卡片拉高近 60dp,
+        // 元信息区只剩空底 —— 这里按内容收紧。
+        final width = math.max(0.0, constraints.maxWidth - padding.horizontal);
+        final gaps = AppSpacing.sm * (columns - 1);
+        final columnWidth = math.max(1.0, (width - gaps) / columns);
+        final metaHeight = metaHeightFor(_cardMetaHeight, context);
+        return GridView.builder(
+          padding: padding,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: AppSpacing.sm,
+            crossAxisSpacing: AppSpacing.sm,
+            childAspectRatio: columnWidth / (columnWidth * 9 / 16 + metaHeight),
+          ),
+          itemCount: rooms.length,
+          itemBuilder: (context, index) {
+            final room = rooms[index];
+            return PlayRoomCard(
+              key: ValueKey('$keyPrefix${room.site}-${room.roomId}'),
+              room: room,
+              isSpecial: superKeys.contains('${room.site}:${room.roomId}'),
+              onTap: onTap == null ? null : () => onTap!(room),
+            );
+          },
         );
       },
     );
