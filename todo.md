@@ -300,3 +300,26 @@
 
 **验证**:`analyze` 0 issue;全量测试 **306 passed**(原 294 + 新增 11 + 1);golden 已重生成。
 
+## 2026-09-13 虎牙「流反复中断」根因修复:恢复重解析链路 + 上游对齐工具
+
+用户症状:看虎牙直播一段时间后,直播流反复中断、每次都在自动重试却起不来。
+
+**根因(两个,都已修)**:
+1. **wsTime 租约被砍 60%**(live_parser anti_code.dart):自造 `wsTime=(now+110624ms)/1000` ≈ now+110s,而服务端 anti_code 自带 wsTime ≈ now+284s。CDN 按「wsTime 是否已过」判有效性(过期一律 403、未来值放行)→ 我们生成的地址天生短命。修:取两者中更晚者(服务端值已过期则退回自造值,避免开场即 403)。
+2. **恢复路径复用已过期地址**(play_provider.dart):所有重开路径(retry/_openSelected/看门狗轮转)都用开流时那批地址,只有首次 build 才 resolveRoom。虎牙是签名平台,地址时效 < 观看会话 → 播放器反复重开失效源。这正是 pure_live `LivePlayRecoveryResolver` 契约注释警告的情形。
+
+**修复链路(三层对齐)**:
+- live_parser:`RoomRecoveryResolver` 契约(继承 RoomResolver,使 is 探测可类型提升)+ `CachedRoomResolver` 实现之(recoverRoom 先失效键再委托内层)+ 虎牙实现(无状态,恢复即重新签名取流)。
+- 播放层:`LineRecoveryAware` 可选能力接口(不动 LivePlayer 本体,20+ 测试替身零改动)+ `PlaybackRecoveryPolicy` 恢复节流(最小间隔 40s,必须 < 一轮重试总时长 108s,否则恢复来不及兜底);重试耗尽先恢复、拿不到新地址才交终局错误卡片;stop() 重置节流。
+- 编排层:play_provider `_open` 统一装恢复回调(首次进房也要有);`_recoverLines` 走 `RoomRecoverer` 绕开 60s 短缓存重新解析,并把新地址落回状态(否则手动切线/切档又退回过期地址)。
+
+**踩坑**:
+- Dart 的 `is` 探测对「非子类型接口」不产生类型提升:`RoomResolver` 变量 `is RoomRecoveryResolver` 通过后仍调不到 `recoverRoom`(三处连环报错)。解:能力接口继承基础接口(RoomRecoveryResolver→RoomResolver、RoomRecoverer→RoomSource);LivePlayer/LineRecoveryAware 无继承关系,用 `if (player case LineRecoveryAware aware)` 对象模式探测+绑定。
+- Dart `Process.runSync` 跑 git 按系统 GBK 解码,中文 commit 标题乱码 → 须显式 `stdoutEncoding: utf8`。
+
+**验证**:live_parser `dart analyze` 0 issue、`dart test` 260 passed(+9 新);App `flutter analyze` 0 issue、全量 **312 passed**(+6 恢复节流)。
+
+**上游对齐工具**(「解析直接用 pure_live 代码」讨论的落地):不抽它的库(解析层被 UI 层 GetX 反向绑死 + AGPL-3.0 传染 + 对上游做手术后反而更难合并),改为「抄契约不抄代码」:新增 `packages/live_parser/tool/upstream_parity.dart`,`dart run tool/upstream_parity.dart --since 60` 产出平台对照矩阵(上游独有=cc、我方独有=youtube)+ 上游近期变更映射 + 待人工审阅清单。
+
+遗留:真机验证虎牙长看(>10 分钟)不再反复中断。
+
