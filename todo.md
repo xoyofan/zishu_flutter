@@ -259,3 +259,25 @@
 ### 后续
 - [ ] 真机验证:控制条三按钮 + F/W/M/Space/Esc + 淡出唤醒 + 进出全屏聚焦复位;关注页卡片高度真机观感复核。
 - [ ] 本地分支 `feat/ui-follow-layout` 已合入且保留(远端无此分支);如不需要可删。
+
+## 2026-09-13 关注页卡片亚像素溢出修复(`_cardMetaHeight` 88 → 92)
+
+**背景**:上一轮把 106 → 76 修「底部留白」时把内容净高当成了总高;合并后又发现手机宽度溢出 9~11dp,改为 88。本轮发现 **88 在 1024 宽下仍差 0.194dp**。
+
+**发现过程(排查链)**:
+1. `follow_style_card.png` 每张卡片底部有一条深红横带(`#900000`,约 8dp 高)。像素扫描确认它**只在卡片密度 golden 出现**(tile / row / play_style_* / hover_* 均无)。
+2. 逐一排除:overflow 传统黄黑指示器(全图搜 YELLOW=0)、颜色 token(无 #900000)、组件代码(无条纹绘制)、角标/封面元素(位置与宽度不符)。
+3. 最终用**渲染树探针**(临时测试遍历 Element 树 + 打印 RenderBox 位置)定位:`FollowEntryCard` 元信息 Column 报 **`A RenderFlex overflowed by 0.194 pixels on the bottom` ×6**(正好 6 张卡片)。那条带就是 Flutter 的溢出警戒带 —— 新版 Flutter 在深色卡片上呈现为半透明红,不是传统黄黑。
+
+**根因**:`_cardMetaHeight = 88` 时可用高 = 88 − 10(padding) = 78,而内容实测 **78.2** —— 差 0.194dp。溢出按字体 metrics 浮点累积,所以「整数估算卡临界值」必踩。
+
+**为什么测试没抓到**:`suppressRenderFlexOverflow`(仓库 8 处测试共有的截图防噪约定)**吞掉了** `RenderFlex overflowed` 异常,金测试仍全绿;而真正做溢出断言的 `test/ui/workflows/`(layout_harness / mobile_phones / mobile_tablets / mobile_accessibility)只跑手机与平板宽度 —— **1024 桌面宽只存在于 suppress 的 golden 用例里**,构成尺寸矩阵盲区。
+
+**修复**:`_cardMetaHeight` 88 → 92(= 内容 78.2 + padding 10 + 3.8dp 余量),保留「去底部空白」意图(原 106 留约 21dp 空白,现约 15dp)。
+
+**验证**:
+- 探针溢出事件 **0**;`test/ui` **120/120**;`analyze` 0 issue。
+- `follow_style_card.png` 重生成,**22856 → 21988 B**(警戒带消失,图更简单故体积变小)。
+
+**后续建议**:溢出矩阵应补一档桌面宽度(如 1024/1280),否则同类亚像素溢出只会继续被 suppress 掩盖。
+

@@ -58,10 +58,15 @@ class _FollowViewState extends ConsumerState<FollowView> {
   /// - 原 106 在卡片底部留约 21dp 空白;曾一度收到 76 —— 那是把内容净高当成了
   ///   总高,可用高只剩 66 → 手机宽度(360~430)下纵向**溢出 9~11dp**
   ///   (`follow_entry_card.dart` 的元信息 Column)。
-  /// - 取 88 = 内容 75 + padding 10 + 3dp 浮动,既不留空也不溢出。
+  /// - 取 92 = 内容净高 78.2 + padding 10 + ~3.8dp 浮动。
+  /// - ⚠️ 88 看似够(75+10+3)实则差 0.194dp:探针实测元信息 Column 溢出
+  ///   `A RenderFlex overflowed by 0.194 pixels`。亚像素溢出虽不影响真机
+  ///   release(警戒带只画在 debug),但会让 golden 每张卡片底部多一条 10dp
+  ///   高的警戒带 —— 被 `suppressRenderFlexOverflow` 吞掉后无人察觉。
+  ///   溢出量按字体 metrics 浮点累积,不要用整数估算卡到临界值。
   /// - 大字体由 [metaHeightFor] 按 textScaler 再放大(其放大量大于文字增长量,
   ///   故 1.15x/1.3x 本就富余,此前唯独 1.0x 溢出)。
-  static const double _cardMetaHeight = 88;
+  static const double _cardMetaHeight = 92;
 
   String _siteFilter = 'all';
   FollowSort _sort = FollowSort.liveFirst;
