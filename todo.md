@@ -119,3 +119,52 @@
 - [x] `feat/A2-danmaku`:仅 `a568579` 领先(弹幕纯逻辑早期草稿);master 已有更完整 danmaku 模块(`e6f1513`/`f1397e4` 引入 settings_provider / tail_forwarder / style / track / overlay / settings_panel 等),`danmaku_settings.dart` 触发 add/add 冲突且无净新增 → `git merge --abort` 中止,不合并。
 - [x] 验证:`flutter analyze` No issues found(master=`e8e3715`,领先 origin/master 1)。
 - [x] 推送:将 `e8e3715`(+ 本进度更新 commit)push 到 origin/master,同步远端主线(fs-only,安全)。
+
+## 2026-09-13 播放器对齐 pure_live:多线路自动切换 + RTMP 协议放行(完成,未提交)
+
+**结论**:跨平台播放参考 pure_live 落两处关键改进——(1) 选中画质的全部线路拼成 mpv `Playlist` 一次打开,某条断流 mpv 内部自动跳下一条,Flutter 侧不再逐条轮询;(2) mpv `protocol_whitelist` 放开 rtmp/rtmps/rtsp/srt,**斗鱼主线路(`rtmp://…`,`flvFromApiData` 拼 `rtmpUrl/rtmpLive`)此前无此白名单会整条打不开**。顺手修回看门狗计数被 `open` 重置导致「放弃重试」分支永远走不到的隐患,并按错误类型给出更精准的兜底提示。
+
+### 本轮完成项
+- [x] `platforms/common/playback/live_player.dart`:`open(StreamLine line, [List<StreamLine> fallbacks = const [], bool resetRetries = true])` —— fallbacks 即同画质回退线路。
+- [x] `platforms/common/playback/media_kit_live_player.dart`:
+  - `open` 把 `[line, ...fallbacks]` 拼成 `Playlist` 一次 `_player.open(playlist, play:true)`;mpv 自动线路切换。
+  - `_applyLiveTuning` 增补 `protocol_whitelist`(含 rtmp/rtmps/rtsp/srt)+ `volume-max=100`,并 `setPlaylistMode(PlaylistMode.none)`。
+  - 断流恢复策略收敛:单条死亡交给 mpv 播放列表内部跳转;仅「全组耗尽」(`events.completed`)或冻结卡顿(缓冲看门狗)才整组轮转(`_reopenIfStalled`);新增 `_onCompleted`。
+  - 修正:`open` 仅在用户切换(`resetRetries=true`)时清零计数,看门狗重连传 `false`,否则 `_kMaxStallRetries=6` 放弃分支不可达;`_onPlaying` 出帧即清残留 error 文案。
+  - 错误分类 `_classifyError`/`_retryGiveUpMessage`:network/codec/source/other 四类精准提示。
+- [x] `features/play/application/play_provider.dart`:`build`/`switchQuality`/`switchLine`/`_openSelected` 全部传 `quality.lines` 中除首选外的线路作回退(`_fallbackLines` 辅助)。
+- [x] 21 个 `test/ui` FakeLivePlayer 的 `open` 签名同步追加可选参数(`analyze` 全绿,未改调用语义)。
+
+### 受益平台(均返回多线路,自动切换生效)
+- 斗鱼:多档多 CDN + HLS 回退,且 FLV 主线路为 `rtmp://`(协议白名单直接解阻塞)。
+- 虎牙(`线路1 FLV`/`线路1 HLS`)、B 站(多档 tier 线路)、快手、Twitch、抖音(HLS/FLV)等。
+- iptv 等单线路平台:退化为单线,但「全组耗尽」仍走 completed→轮转恢复。
+
+### 验证
+- [x] `flutter analyze` 全仓库 No issues found(含 21 个测试替身)。
+- [ ] 真机未重建运行;建议 `flutter build windows --release` 后带 `ZISHU_REAL_PARSER=true` 拉起,测斗鱼 RTMP 线路与各平台断流自动切线下一条。
+- [ ] 未提交/未推送(用户本轮未要求);待验收后可提交。
+
+## 2026-09-13 真实解析 benchmark(多平台耗时,未提交)
+
+**结论**:直连 live_parser 重跑真实解析,各平台列表/房间解析耗时见下表(冷=首次,热=重复解析中位);多线路数据充分,断流 mpv 播放列表内部跳线下一条有料。benchmark 脚本:`packages/live_parser/tool/bench_real_parse.dart`(结果写同目录 `bench_real_parse.md`)。
+
+| 平台 | browse 列表 | resolve(冷/热,中位) | 线路数 | 画质档 | 状态 |
+|---|---|---|---|---|---|
+| 斗鱼 | 225ms / 10间 | 795 / 76ms / 79 | 4 | 2 | live |
+| 虎牙 | 229ms / 120间 | 190 / 118ms / 125 | 36 | 6 | live |
+| B站 | 323ms / 22间 | 285 / 104ms / 285 | 32 | 4 | live |
+| iptv | 0ms / 0间 | — | — | — | 占位无源,跳过 |
+| Twitch | 504ms / 10间 | FAIL(播放令牌) | — | — | GQL 令牌偶发失败 |
+| YY | 139ms / 10间 | 421 / 132ms / 164 | 3 | 3 | live |
+| SOOP | 728ms / 10间 | 1770 / 0ms / 0 | 1 | 4 | live(仅 1 线) |
+| 快手 | 659ms / 10间 | 617 / 364ms / 434 | 4 | 4 | live |
+| 抖音 | 1344ms / 10间 | 401 / 188ms / 205 | 4 | 2 | live |
+| YouTube | 1587ms / 10间 | 8096 / 0ms / 0 | 6 | 6 | live(冷受 yt-dlp 拉起开销 ≈8s,热命中缓存≈0ms) |
+
+### 汇总
+- 总耗时 25.6s(顺序串行全平台);resolve 成功 8 / 失败 1(Twitch 令牌)。
+- 国内平台解析普遍 <1s,热解析 <200ms,体感即时。
+- 多线路印证(断流自动切换数据基础):虎牙 36 / B站 32 / YouTube 6 / Twitch 5 / 斗鱼 4 / 快手 4 / 抖音 4 / YY 3 均 >1 线;**SOOP 仅 1 线**(退化为单线,断流只能走 completed→整组轮转)。
+- 海外站:Twitch 偶发「未获取到播放令牌」(GQL 令牌接口抖动,需重试或 Cookie);YouTube 冷解析受 yt-dlp 子进程拉起开销(≈8s),热解析命中内部缓存近 0ms。
+- [ ] 未提交/未推送;可选:`flutter build windows --release --dart-define=ZISHU_REAL_PARSER=true` 重建真实解析 exe 做真机播放验证(尤其斗鱼 RTMP + 各平台断流切线下一条)。

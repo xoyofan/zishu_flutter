@@ -48,7 +48,7 @@ class FakeLivePlayer implements LivePlayer {
       const SizedBox.expand();
 
   @override
-  Future<void> open(StreamLine line) async => calls.add('open:${line.url}');
+  Future<void> open(StreamLine line, [List<StreamLine> fallbacks = const [], bool resetRetries = true]) async => calls.add('open:${line.url}');
 
   @override
   Future<void> play() async => calls.add('play');

@@ -203,7 +203,7 @@ class _FakeLivePlayer implements LivePlayer {
       const SizedBox.expand();
 
   @override
-  Future<void> open(StreamLine line) async {}
+  Future<void> open(StreamLine line, [List<StreamLine> fallbacks = const [], bool resetRetries = true]) async {}
 
   @override
   Future<void> play() async {}

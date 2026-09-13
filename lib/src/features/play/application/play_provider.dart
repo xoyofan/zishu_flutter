@@ -127,7 +127,8 @@ class PlayController extends AsyncNotifier<PlayState> {
 
     if (!next.isFixture && line != null) {
       // 开流不阻塞状态落地;错误经快照流呈现在舞台 overlay。
-      unawaited(ref.read(playerProvider).open(line));
+      // 同画质其余线路作回退送进播放器,断流时 mpv 自动跳下一条(pure_live 式)。
+      unawaited(ref.read(playerProvider).open(line, _fallbackLines(quality, line)));
     }
     return next;
   }
@@ -162,7 +163,7 @@ class PlayController extends AsyncNotifier<PlayState> {
     state = AsyncData(
       current.copyWith(quality: quality, line: line, generation: generation),
     );
-    _openSelected();
+    unawaited(ref.read(playerProvider).open(line, _fallbackLines(quality, line)));
   }
 
   /// 同画质内切换线路。
@@ -171,7 +172,7 @@ class PlayController extends AsyncNotifier<PlayState> {
     if (current == null || current.payload == null) return;
     final generation = ++_generation;
     state = AsyncData(current.copyWith(line: line, generation: generation));
-    _openSelected();
+    unawaited(ref.read(playerProvider).open(line, _fallbackLines(current.quality, line)));
   }
 
   /// 切换舞台弹幕叠加层显隐(纯展示开关,不重开流、不换代际)。
@@ -195,11 +196,18 @@ class PlayController extends AsyncNotifier<PlayState> {
     _openSelected();
   }
 
-  /// 用最新代际把选中线路送进播放器。
+  /// 用最新代际把选中线路(连同同画质回退线路)送进播放器。
   void _openSelected() {
     final current = state.value;
     final line = current?.line;
     if (current == null || current.isFixture || line == null) return;
-    unawaited(ref.read(playerProvider).open(line));
+    unawaited(ref.read(playerProvider).open(line, _fallbackLines(current.quality, line)));
+  }
+
+  /// 同画质下除 [line] 外的线路,作为 mpv 播放列表回退线路
+  /// (参考 pure_live 的线路自动切换)。无画质或线路时返回空列表。
+  List<StreamLine> _fallbackLines(StreamQuality? quality, StreamLine? line) {
+    if (quality == null || line == null) return const [];
+    return [for (final candidate in quality.lines) if (candidate.url != line.url) candidate];
   }
 }

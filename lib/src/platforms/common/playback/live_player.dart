@@ -93,7 +93,16 @@ abstract class LivePlayer {
   Widget buildVideoView({BoxFit fit});
 
   /// 打开一条线路并开始播放(替换当前媒体源)。
-  Future<void> open(StreamLine line);
+  ///
+  /// [fallbacks] 为同画质下的其余线路:整组会拼成 mpv 播放列表一次打开,
+  /// 某条断流/超时时 mpv 自动跳到下一条(参考 pure_live 的线路自动切换),
+  /// 无需 Flutter 侧轮询即可跨线路容错。无回退线路时退化为单线播放。
+  /// [resetRetries] 为 false 时不清空自动重连计数(看门狗内部重连使用)。
+  Future<void> open(
+    StreamLine line, [
+    List<StreamLine> fallbacks = const [],
+    bool resetRetries = true,
+  ]);
 
   Future<void> play();
 
