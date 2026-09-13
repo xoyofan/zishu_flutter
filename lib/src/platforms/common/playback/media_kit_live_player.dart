@@ -13,6 +13,7 @@ import 'package:live_parser/live_parser.dart' show StreamLine;
 import 'package:window_manager/window_manager.dart' show DragToResizeArea;
 
 import 'live_player.dart';
+import 'playback_log.dart';
 import 'playback_retry.dart';
 import 'player_error.dart';
 import 'window_presentation.dart';
@@ -84,6 +85,17 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   /// 上次发起恢复的时刻,供 [_recoveryPolicy] 节流。离房/释放时重置。
   DateTime? _lastRecoverAt;
 
+  /// 上一次已落日志的 mpv 原始诊断:mpv 对同一故障会反复吐同一条日志行,
+  /// 不去重会把文件日志灌满同一条噪音。换房/主动开流时重置。
+  String? _lastLoggedDiag;
+
+  /// 日志里的线路主机名(判断「恢复拿到的地址是否真的换了源」的关键线索)。
+  static String? _hostOf(StreamLine line) => Uri.tryParse(line.url)?.host;
+
+  /// 超长诊断截断,防止单条 mpv 日志把文件撑爆。
+  static String _clamp(String text) =>
+      text.length > 160 ? '${text.substring(0, 160)}…' : text;
+
   @override
   void setLineRecovery(LineRecoveryHandler? handler) => _lineRecovery = handler;
 
@@ -123,6 +135,16 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       if (!classification.isError) {
         return s.copyWith(error: null);
       }
+      // 原始诊断去重后落文件日志:release 环境下 mpv 日志没有别的出口,
+      // 这是外部诊断「为什么反复中断」的第一手材料(含可自愈噪音)。
+      if (v != _lastLoggedDiag) {
+        _lastLoggedDiag = v;
+        PlaybackLog.write('mpv_diag', {
+          'terminal': classification.terminal,
+          'kind': classification.kind.name,
+          'diag': _clamp(v),
+        });
+      }
       if (!classification.terminal) return s;
       _onTerminalError(classification);
       return s.copyWith(
@@ -156,6 +178,8 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     _emit((s) => s.copyWith(error: null));
     final retries = _stallRetries;
     if (retries > 0) {
+      // 出帧即记:配合 reopen/recover 事件,日志里能直接量出每次中断到恢复的耗时。
+      PlaybackLog.write('playing_ok', {'afterRetries': retries});
       _healthTimer?.cancel();
       _healthTimer = Timer(_policy.healthWindow, () {
         _healthTimer = null;
@@ -211,6 +235,12 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       return;
     }
     _stallRetries++;
+    PlaybackLog.write('reopen', {
+      'attempt': _stallRetries,
+      'limit': _policy.maxAttempts,
+      'lines': _currentLines.length,
+      'host': _hostOf(_currentLines.first),
+    });
     _cancelHealthTimer();
     unawaited(
       open(
@@ -229,25 +259,39 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   Future<void> _recoverOrGiveUp() async {
     final handler = _lineRecovery;
     final now = DateTime.now();
-    if (handler != null &&
+    final canAttempt = handler != null &&
         !_disposed &&
-        _recoveryPolicy.canRecover(now: now, lastRecoverAt: _lastRecoverAt)) {
+        _recoveryPolicy.canRecover(now: now, lastRecoverAt: _lastRecoverAt);
+    if (canAttempt) {
       _lastRecoverAt = now;
+      PlaybackLog.write('recover_request', {'lastKind': _lastErrorKind.name});
       List<StreamLine>? fresh;
+      String? failReason;
       try {
         fresh = await handler();
-      } catch (_) {
+      } catch (error) {
         // 解析异常按"拿不到新地址"处理,不吞掉下面的终止路径。
+        failReason = 'error: ${_clamp('$error')}';
         fresh = null;
       }
       if (!_disposed && fresh != null && fresh.isNotEmpty) {
+        PlaybackLog.write('recover_ok', {
+          'lines': fresh.length,
+          'host': _hostOf(fresh.first),
+        });
         _stallRetries = 0;
         // resetRetries 保持默认 true:新地址开启新一轮有界重试。
         await open(fresh.first, fresh.skip(1).toList());
         return;
       }
+      PlaybackLog.write('recover_fail', {'reason': failReason ?? 'empty_lines'});
+    } else {
+      PlaybackLog.write('recover_skip', {
+        'reason': handler == null ? 'no_handler' : 'throttled_or_disposed',
+      });
     }
     if (_disposed) return;
+    PlaybackLog.write('give_up', {'kind': _lastErrorKind.name});
     _emit(
       (s) => s.copyWith(
         buffering: false,
@@ -322,7 +366,15 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     // 整组线路(首选 + 回退)按顺序拼成 mpv 播放列表:某条断流时 mpv 内部
     // 自动跳下一条,耗尽后再由看门狗整体轮转。
     _currentLines = [line, ...fallbacks];
-    if (resetRetries) _stallRetries = 0;
+    if (resetRetries) {
+      _stallRetries = 0;
+      // 新会话(进房/切线/换新地址)重置诊断去重:不同故障的同文案也该再记。
+      _lastLoggedDiag = null;
+      PlaybackLog.write('open', {
+        'lines': _currentLines.length,
+        'host': _hostOf(line),
+      });
+    }
     _stallTimer?.cancel();
     _stallTimer = null;
     _cancelHealthTimer();
@@ -374,6 +426,9 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   Future<void> stop() async {
     if (_disposed) return;
     // 卸载媒体即终止自动重连(离房不应在后台空转重连)。
+    if (_currentLines.isNotEmpty) {
+      PlaybackLog.write('stop', {'retries': _stallRetries});
+    }
     _stallTimer?.cancel();
     _stallTimer = null;
     _cancelHealthTimer();

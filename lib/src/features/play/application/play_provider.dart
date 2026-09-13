@@ -10,6 +10,7 @@ import 'package:live_parser/live_parser.dart';
 
 import '../../../platforms/common/playback/live_player.dart';
 import '../../../platforms/common/playback/media_kit_live_player.dart';
+import '../../../platforms/common/playback/playback_log.dart';
 import '../../../shared/application/browse_source.dart';
 import '../../../shared/application/providers.dart';
 import '../../follow/application/settings_provider.dart';
@@ -232,6 +233,12 @@ class PlayController extends AsyncNotifier<PlayState> {
     final source = ref.read(roomSourceProvider);
     final quality = current?.quality;
     if (current == null || current.payload == null || source is! RoomRecoverer) {
+      PlaybackLog.write('resolve_skip', {
+        'site': params.site,
+        'room': params.roomId,
+        'reason':
+            current == null || current.payload == null ? 'no_state' : 'source_unaware',
+      });
       return const [];
     }
     try {
@@ -243,9 +250,23 @@ class PlayController extends AsyncNotifier<PlayState> {
       if (!ref.mounted) return const [];
       final next = _pickQuality(payload, quality?.name);
       final line = next?.preferredLine;
-      if (line == null) return const [];
+      if (line == null) {
+        PlaybackLog.write('resolve_fail', {
+          'site': params.site,
+          'room': params.roomId,
+          'reason': 'no_line',
+        });
+        return const [];
+      }
       // 新地址落回状态:用户随后手动切线路 / 切档时用的才是同一批,
       // 否则又会退回那批过期地址。generation 推进以作废旧异步结果。
+      PlaybackLog.write('resolve_ok', {
+        'site': params.site,
+        'room': params.roomId,
+        'quality': next?.name,
+        'lines': 1 + _fallbackLines(next, line).length,
+        'host': Uri.tryParse(line.url)?.host,
+      });
       state = AsyncData(
         current.copyWith(
           payload: payload,
@@ -255,7 +276,12 @@ class PlayController extends AsyncNotifier<PlayState> {
         ),
       );
       return [line, ..._fallbackLines(next, line)];
-    } catch (_) {
+    } catch (error) {
+      PlaybackLog.write('resolve_fail', {
+        'site': params.site,
+        'room': params.roomId,
+        'error': '$error',
+      });
       return const [];
     }
   }

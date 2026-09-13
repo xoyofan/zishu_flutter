@@ -323,3 +323,31 @@
 
 遗留:真机验证虎牙长看(>10 分钟)不再反复中断。
 
+## 2026-09-13 播放事件文件日志:让真机验证可被外部观测(「执行测试验证,但是你能检测到Log吗」)
+
+**问题**:用户问「你能检测到 Log 吗」。实测答案分两半:
+- 测试 runner 的输出能全量捕获(这是"测试验证"的部分);
+- **运行中 exe 的日志此前完全看不到**:release 的 Windows GUI 进程无控制台,
+  `print` 输出被丢弃;schtasks 拉起时连 stdout 管道都没有。`lib/src` 里原有
+  日志设施为**零**(grep 证实)。真机验证虎牙断流修复时,外部只能看画面,内部
+  发生了什么(reopen 几次?恢复拿到新地址没?)全靠猜。
+
+**方案**:新增 `lib/src/platforms/common/playback/playback_log.dart`——
+低频播放事件落文件 `%APPDATA%\zishu_flutter\logs\playback.log`:
+- 只记生命周期事件:open(进房/换新地址) / reopen(看门狗重连,含 attempt/limit/host) /
+  recover_request|ok|fail|skip(恢复重解析) / resolve_ok|fail|skip(编排层重新解析,
+  含站点与主机名) / mpv_diag(mpv 原始诊断,**去重后**落盘,截断 160 字) /
+  playing_ok(出帧,含 afterRetries,可量出中断→恢复耗时) / give_up / stop;
+- 同步追加、>2MB 轮转 playback.old.log、任何 IO 异常熔断静默——日志器绝不弄崩播放;
+- `Uri.tryParse(url).host` 记入每条线路事件:验证「恢复是否真的换了源」的关键线索。
+
+**接线点**:`media_kit_live_player.dart`(mpv 事件归一层)+ `play_provider.dart`
+的 `_recoverLines`(解析层)。测试替身走 FakeLivePlayer,不触日志,零影响。
+
+**回答用户**:现在能检测到了——读那个文件即可。验证姿势:看虎牙 2-3 分钟
+(或等到断流),说一声,读日志就能判断:断流时走了 reopen 还是 recover、
+恢复拿到的 host 是否变化、give_up 是否出现。
+
+**验证**:`flutter analyze` 0 issue;test/features/playback 56 passed(+3);
+live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带日志重建。
+
