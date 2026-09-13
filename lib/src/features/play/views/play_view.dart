@@ -8,6 +8,8 @@ import 'package:live_parser/live_parser.dart' show DanmakuMessage, RoomPayload;
 
 import '../../../platforms/common/playback/live_player.dart'
     show PlayerSnapshot;
+import '../../../platforms/common/playback/playback_retry.dart'
+    show retryProgressLabel;
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
@@ -639,6 +641,14 @@ class _VideoStageState extends ConsumerState<_VideoStage> {
             Center(
               child: _ErrorCard(
                 message: snapshot.error!,
+                // 自动重连中显示进度,让"程序在自救"这件事对用户可见;
+                // 未在重连(或已放弃)时为空串,不占位。
+                progress: snapshot.reconnecting
+                    ? retryProgressLabel(
+                        snapshot.retryAttempt,
+                        snapshot.retryLimit,
+                      )
+                    : '',
                 onRetry: widget.onRetry,
               ),
             ),
@@ -715,11 +725,19 @@ class _StagePlaceholder extends StatelessWidget {
   }
 }
 
-/// 播放错误浮层卡片:错误文案 + 重试。
+/// 播放错误浮层卡片:错误文案(已由播放器归类为处置建议) + 重连进度 + 重试。
 class _ErrorCard extends StatelessWidget {
-  const _ErrorCard({required this.message, required this.onRetry});
+  const _ErrorCard({
+    required this.message,
+    required this.onRetry,
+    this.progress = '',
+  });
 
   final String message;
+
+  /// 自动重连进度文案;空串表示未在重连。
+  final String progress;
+
   final VoidCallback onRetry;
 
   @override
@@ -749,6 +767,10 @@ class _ErrorCard extends StatelessWidget {
               ),
             ),
           ),
+          if (progress.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.xs),
+            Text(progress, style: AppTypography.caption),
+          ],
           const SizedBox(height: AppSpacing.md),
           _RetryButton(onRetry: onRetry),
         ],

@@ -7,6 +7,8 @@ library;
 import 'package:flutter/widgets.dart' show BoxFit, Size, Widget;
 import 'package:live_parser/live_parser.dart' show StreamLine;
 
+import 'player_error.dart';
+
 /// [PlayerSnapshot.copyWith] 的"未显式传入"哨兵。
 ///
 /// [PlayerSnapshot.error] 是唯一可空字段:若直接以 `null` 作默认值,
@@ -26,6 +28,9 @@ class PlayerSnapshot {
     this.width,
     this.height,
     this.error,
+    this.errorKind = PlayerErrorKind.none,
+    this.retryAttempt = 0,
+    this.retryLimit = 0,
   });
 
   /// 是否正在播放。
@@ -47,11 +52,25 @@ class PlayerSnapshot {
   /// 最近一次归一化错误文案;null 表示无错误。
   final String? error;
 
+  /// [error] 的语义类别,供 UI 决定处置提示(见 [playerErrorHint])。
+  /// 与 [error] 同步维护:[error] 为 null 时恒为 [PlayerErrorKind.none]。
+  final PlayerErrorKind errorKind;
+
+  /// 已进行的自动重连次数(0 表示当前流健康或尚未失败)。
+  final int retryAttempt;
+
+  /// 自动重连次数上限(由重连策略给出);0 表示该实现不做自动重连。
+  final int retryLimit;
+
+  /// 是否正处于自动重连过程中(有错误且计数已推进)。
+  bool get reconnecting => retryAttempt > 0 && error != null;
+
   Size? get size => width == null || height == null
       ? null
       : Size(width!.toDouble(), height!.toDouble());
 
   /// [error] 传 `null` 表示**显式清空**错误;不传则保持原值(见 [_kErrorUnset])。
+  /// 清空时 [errorKind] 一并归位,避免"没错误却有类别"的漂移态。
   PlayerSnapshot copyWith({
     bool? playing,
     bool? buffering,
@@ -60,7 +79,11 @@ class PlayerSnapshot {
     int? width,
     int? height,
     Object? error = _kErrorUnset,
+    PlayerErrorKind? errorKind,
+    int? retryAttempt,
+    int? retryLimit,
   }) {
+    final clearing = identical(error, _kErrorUnset) ? this.error == null : error == null;
     return PlayerSnapshot(
       playing: playing ?? this.playing,
       buffering: buffering ?? this.buffering,
@@ -69,6 +92,11 @@ class PlayerSnapshot {
       width: width ?? this.width,
       height: height ?? this.height,
       error: identical(error, _kErrorUnset) ? this.error : error as String?,
+      errorKind: clearing
+          ? PlayerErrorKind.none
+          : errorKind ?? this.errorKind,
+      retryAttempt: retryAttempt ?? this.retryAttempt,
+      retryLimit: retryLimit ?? this.retryLimit,
     );
   }
 
@@ -82,16 +110,30 @@ class PlayerSnapshot {
           other.muted == muted &&
           other.width == width &&
           other.height == height &&
-          other.error == error;
+          other.error == error &&
+          other.errorKind == errorKind &&
+          other.retryAttempt == retryAttempt &&
+          other.retryLimit == retryLimit;
 
   @override
-  int get hashCode =>
-      Object.hash(playing, buffering, volume, muted, width, height, error);
+  int get hashCode => Object.hash(
+    playing,
+    buffering,
+    volume,
+    muted,
+    width,
+    height,
+    error,
+    errorKind,
+    retryAttempt,
+    retryLimit,
+  );
 
   @override
   String toString() =>
       'PlayerSnapshot(playing: $playing, buffering: $buffering, volume: $volume, '
-      'muted: $muted, size: ${width}x$height, error: $error)';
+      'muted: $muted, size: ${width}x$height, error: $error, '
+      'errorKind: $errorKind, retry: $retryAttempt/$retryLimit)';
 }
 
 /// 直播播放器统一接口。

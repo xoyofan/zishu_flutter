@@ -13,10 +13,9 @@ import 'package:live_parser/live_parser.dart' show StreamLine;
 import 'package:window_manager/window_manager.dart' show DragToResizeArea;
 
 import 'live_player.dart';
+import 'playback_retry.dart';
+import 'player_error.dart';
 import 'window_presentation.dart';
-
-/// 直播卡顿/断流的错误类型(对齐 pure_live 的 PlayerErrorType 子集)。
-enum _StallErrorKind { network, codec, source, other }
 
 class MediaKitLivePlayer implements LivePlayer {
   MediaKitLivePlayer() {
@@ -59,11 +58,23 @@ class MediaKitLivePlayer implements LivePlayer {
   /// 缓冲看门狗:缓冲态持续超过退避时长即视为断流,自动重开。
   Timer? _stallTimer;
 
-  /// 连续重开计数:成功后归零,超过上限停止自动重试(交还手动重连)。
+  /// 健康观察窗:出帧后持续播满 [PlaybackRetryPolicy.healthWindow] 才把
+  /// 连续失败计数归零。**这是"有限重试"能真正收敛的关键** —— 抖动的死流会
+  /// 反复 `buffering true→false→true`,若在 false 就清零,计数永远涨不上去,
+  /// 放弃分支不可达,退化为无限空转(旧实现的真实缺陷)。
+  Timer? _healthTimer;
+
+  /// 连续重开计数:健康窗口走完才归零,超过上限停止自动重试(交还手动重连)。
   int _stallRetries = 0;
 
-  /// 自动重试上限:超过则不再空转,留下错误快照让用户切线路/点重试。
-  static const int _kMaxStallRetries = 6;
+  /// 最后一次**终局**错误的类别:用于自动重试耗尽后给出对症的处置建议。
+  /// 刻意不存原始诊断文本 —— 那是 mpv 日志原文,其中大量条目是可自愈噪音。
+  PlayerErrorKind _lastErrorKind = PlayerErrorKind.native;
+
+  /// 有界重连策略(上限 / 退避 / 健康窗口的唯一来源)。
+  static const PlaybackRetryPolicy _policy = PlaybackRetryPolicy();
+
+  bool get _disposedOrEmpty => _disposed || _currentLines.isEmpty;
 
   void _wire() {
     final events = _player.stream;
@@ -88,114 +99,109 @@ class MediaKitLivePlayer implements LivePlayer {
       return s;
     });
     // 错误统一归一为快照字段;copyWith 无法回置 null,空串需显式重建清错。
+    //
+    // media_kit 的 error 流转发的是 **mpv 的 error 级日志行**,并非每条都是
+    // 终局失败(硬解被拒后已自动软解、丢包后跟上了关键帧等)。因此这里先过
+    // [PlayerErrorClassifier]:只有 `terminal` 的诊断才展示给用户,其余交给
+    // mpv 自愈。旧实现把每一条都当"播放失败"弹卡片,会出现「画面照常在播、
+    // 错误卡片却悬在中间」的假错误。
     bind(events.error, (s, v) {
-      if (v.isEmpty) {
-        return PlayerSnapshot(
-          playing: s.playing,
-          buffering: s.buffering,
-          volume: s.volume,
-          muted: s.muted,
-          width: s.width,
-          height: s.height,
-        );
+      final classification = PlayerErrorClassifier.classify(v);
+      if (!classification.isError) {
+        return s.copyWith(error: null);
       }
-      // 非空错误:直播流异常(断流/鉴权失效),尝试自动重连。
-      _onError(v);
-      return s.copyWith(error: v);
+      if (!classification.terminal) return s;
+      _onTerminalError(classification);
+      return s.copyWith(
+        error: playerErrorHint(classification.kind),
+        errorKind: classification.kind,
+      );
     });
   }
 
-  /// 缓冲态切换:进入缓冲即起看门狗;退出缓冲(开始出帧)取消看门狗并归零计数。
+  /// 缓冲态切换:进入缓冲即起看门狗;退出缓冲仅撤销看门狗。
+  ///
+  /// **退出缓冲不清零失败计数**(旧实现清了,是收敛缺陷):直播流的 buffering
+  /// 标志在死流上也会短暂回落再拉起,清零会让计数永远追不上"放弃"上限。
+  /// 计数只由 [PlaybackRetryPolicy.healthWindow] 观察窗确认健康后归零。
   void _onBuffering(bool buffering) {
     if (buffering) {
-      _stallTimer?.cancel();
-      _stallTimer = Timer(_stallBackoff, _reopenIfStalled);
+      _cancelHealthTimer();
+      _armStallTimer();
     } else {
       _stallTimer?.cancel();
       _stallTimer = null;
-      _stallRetries = 0;
     }
   }
 
-  /// 正常播放:清看门狗与失败计数(说明流健康),并清掉可能残留的错误文案
-  /// (自动切到下一条线路后 mpv 未必主动清空 error 属性)。
+  /// 出帧开始播放:撤看门狗、清残留错误文案(自动切到下一条线路后 mpv 未必
+  /// 主动清空 error 属性),并启动健康观察窗 —— 只有持续播满观察窗才把连续
+  /// 失败计数归零,避免"短暂出帧即视为康复"导致重试上限形同虚设。
   void _onPlaying() {
     _stallTimer?.cancel();
     _stallTimer = null;
-    _stallRetries = 0;
     _emit((s) => s.copyWith(error: null));
+    final retries = _stallRetries;
+    if (retries > 0) {
+      _healthTimer?.cancel();
+      _healthTimer = Timer(_policy.healthWindow, () {
+        _healthTimer = null;
+        if (_disposed) return;
+        _stallRetries = 0;
+        // 计数归零后进度文案要跟着退场,否则会残留"自动重连中 2/6"。
+        _emit((s) => s.copyWith(retryAttempt: 0));
+      });
+    }
   }
 
-  /// 非空错误:不再由 Flutter 侧重连——整组线路已作为 mpv 播放列表打开,
-  /// 某条断流时 mpv 内部自动跳下一条(pure_live 式)。错误仅归一到快照展示;
-  /// 真正"全组耗尽"由 [_onCompleted] 触发整组轮转,冻结型卡顿由缓冲看门狗兜底。
-  void _onError(String error) {}
+  /// 按当前连续失败次数起看门狗。
+  ///
+  /// **已挂起则不重启**(幂等):mpv 对同一个故障会反复吐同一条诊断,缓冲标志也
+  /// 会反复置位。若每次都 cancel + 重新计时,看门狗会被永久推迟 —— 表现为
+  /// "自动重连永远不触发"的看门狗饥饿。已挂起就让它按原定时刻到期。
+  void _armStallTimer() {
+    if (_stallTimer != null) return;
+    _stallTimer = Timer(_policy.backoffFor(_stallRetries), _reopenIfStalled);
+  }
+
+  void _cancelHealthTimer() {
+    _healthTimer?.cancel();
+    _healthTimer = null;
+  }
+
+  /// 收到**终局**诊断:记录类别(供放弃时给出对症建议)。不在此处重连 ——
+  /// 整组线路已作为 mpv 播放列表打开,某条断流时 mpv 内部自动跳下一条;
+  /// Flutter 侧若同时重连会与 mpv 的自动跳转形成重开循环(踩坑记录)。
+  /// 唯一例外:整组只有一条线路时 mpv 无处可跳,此时才由看门狗兜底。
+  void _onTerminalError(PlayerErrorClassification classification) {
+    _lastErrorKind = classification.kind;
+    if (_currentLines.length <= 1 && !_disposed) _armStallTimer();
+  }
 
   /// 播放列表自然结束(直播不该发生):视为整组线路失效,触发轮转重连。
   void _onCompleted() {
-    if (_currentLines.isNotEmpty && !_disposed) _reopenIfStalled();
-  }
-
-  /// 退避随连续失败增长(8→12→16…),封顶 30s,避免对死流空转过密。
-  Duration get _stallBackoff {
-    final seconds = 8 + _stallRetries * 4;
-    return Duration(seconds: seconds.clamp(8, 30));
-  }
-
-  /// 错误归类(对齐 pure_live 的 _mapErrorType):用于给出更贴近失败类型的提示。
-  _StallErrorKind _classifyError(String error) {
-    final lower = error.toLowerCase();
-    if (lower.contains('network') ||
-        lower.contains('timeout') ||
-        lower.contains('io') ||
-        lower.contains('rtmp') ||
-        lower.contains('rtsp')) {
-      return _StallErrorKind.network;
-    }
-    if (lower.contains('codec') ||
-        lower.contains('mediacodec') ||
-        lower.contains('decode')) {
-      return _StallErrorKind.codec;
-    }
-    if (lower.contains('404') ||
-        lower.contains('source') ||
-        lower.contains('open')) {
-      return _StallErrorKind.source;
-    }
-    return _StallErrorKind.other;
-  }
-
-  /// 自动重试耗尽后的兜底提示:结合最后一次错误类型给出可操作文案。
-  String _retryGiveUpMessage(String? lastError) {
-    final kind = _classifyError(lastError ?? '');
-    final hint = switch (kind) {
-      _StallErrorKind.network =>
-        '网络中断或直播源失效',
-      _StallErrorKind.codec =>
-        '解码失败(该线路编码可能不被支持)',
-      _StallErrorKind.source =>
-        '直播地址失效,可能需要重新解析房间',
-      _StallErrorKind.other => '直播流反复中断',
-    };
-    return '$hint,请点击重试或切换线路';
+    if (!_disposedOrEmpty) _reopenIfStalled();
   }
 
   /// 卡顿/错误/结束回调:把整组线路(首选 + 回退)作为 mpv 播放列表重新打开。
-  /// 连续失败达上限时放弃自动重试,留错误快照交还手动重连。
+  /// 连续失败达上限时放弃自动重试,留错误快照(含对症建议)交还手动重连。
   /// 注意:此处走 [resetRetries]=false 的 open,避免清空正在累积的失败计数
-  /// (否则"放弃"分支永远走不到)。计数只在真正出帧(_onPlaying)或退出缓冲时归零。
+  /// (否则"放弃"分支永远走不到)。计数只在健康观察窗走完后归零。
   void _reopenIfStalled() {
-    if (_currentLines.isEmpty || _disposed) return;
-    if (_stallRetries >= _kMaxStallRetries) {
+    if (_disposedOrEmpty) return;
+    _stallTimer = null;
+    if (!_policy.canRetry(_stallRetries)) {
       _emit(
         (s) => s.copyWith(
           buffering: false,
-          error: _retryGiveUpMessage(s.error),
+          error: _policy.giveUpMessage(_lastErrorKind),
+          errorKind: _lastErrorKind,
         ),
       );
       return;
     }
     _stallRetries++;
+    _cancelHealthTimer();
     unawaited(
       open(
         _currentLines.first,
@@ -242,9 +248,10 @@ class MediaKitLivePlayer implements LivePlayer {
   }
 
   /// 以 [mutate] 生成新快照,仅在发生变化时广播。
+  /// 统一补上重连上限,[retryLimit] 因此不需要每个发出点各自记得填。
   void _emit(PlayerSnapshot Function(PlayerSnapshot) mutate) {
     if (_output.isClosed) return;
-    final next = mutate(_latest);
+    final next = mutate(_latest).copyWith(retryLimit: _policy.maxAttempts);
     if (next == _latest) return;
     _latest = next;
     _output.add(next);
@@ -272,11 +279,22 @@ class MediaKitLivePlayer implements LivePlayer {
     if (resetRetries) _stallRetries = 0;
     _stallTimer?.cancel();
     _stallTimer = null;
+    _cancelHealthTimer();
+    // 保留已出画面的宽高:自动重连期间 PiP 小窗要沿用原宽高比,不该退回 16:9。
+    // 错误文案的区别对待很关键:用户主动切源([resetRetries] 为 true)才清错误,
+    // 让卡片退出;自动重连([resetRetries] 为 false)要**留着**错误 + 计数,
+    // 这样阶段浮层能显示"自动重连中 n/上限",用户知道程序在自救而非卡死。
+    final keepError = !resetRetries && _latest.error != null;
     _emit(
-      (_) => PlayerSnapshot(
-        volume: _latest.volume,
+      (s) => PlayerSnapshot(
+        volume: s.volume,
         muted: _muted,
+        width: s.width,
+        height: s.height,
         buffering: true,
+        error: keepError ? s.error : null,
+        errorKind: keepError ? s.errorKind : PlayerErrorKind.none,
+        retryAttempt: _stallRetries,
       ),
     );
     try {
@@ -287,7 +305,16 @@ class MediaKitLivePlayer implements LivePlayer {
       );
       await _player.open(playlist, play: true);
     } catch (error) {
-      _emit((snapshot) => snapshot.copyWith(error: '播放失败:$error'));
+      // 原始异常(ArgumentError / PlatformException 等)不是 mpv 日志,直接展示
+      // 对用户无意义;归类后给处置建议,归类不出则退到兜底文案。
+      final classification = PlayerErrorClassifier.classify('$error');
+      final kind = classification.isError
+          ? classification.kind
+          : PlayerErrorKind.native;
+      _lastErrorKind = kind;
+      _emit(
+        (s) => s.copyWith(error: playerErrorHint(kind), errorKind: kind),
+      );
     }
   }
 
@@ -303,6 +330,7 @@ class MediaKitLivePlayer implements LivePlayer {
     // 卸载媒体即终止自动重连(离房不应在后台空转重连)。
     _stallTimer?.cancel();
     _stallTimer = null;
+    _cancelHealthTimer();
     _currentLines = const [];
     await _player.stop();
     // 卸载媒体后回到空闲快照:清播放/缓冲/错误,保留音量与静音语义。
@@ -372,6 +400,8 @@ class MediaKitLivePlayer implements LivePlayer {
     _disposed = true;
     _stallTimer?.cancel();
     _stallTimer = null;
+    _cancelHealthTimer();
+    _currentLines = const [];
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
     }
