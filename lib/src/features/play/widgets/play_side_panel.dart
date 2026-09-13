@@ -18,6 +18,7 @@ import 'package:live_parser/live_parser.dart';
 import '../../danmaku/application/danmaku_session_provider.dart';
 import '../../browse/application/browse_provider.dart';
 import '../../follow/application/follow_provider.dart';
+import '../../follow/application/follow_sort.dart';
 import '../../follow/application/settings_provider.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
@@ -1047,18 +1048,11 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
   bool _grid = true;
   String _siteFilter = 'all';
 
-  List<FollowEntry> _visible(List<FollowEntry> entries) {
-    final filtered = _siteFilter == 'all'
-        ? List<FollowEntry>.of(entries)
-        : entries.where((e) => e.room.site == _siteFilter).toList();
-    // 开播在前;同状态特别关注置前。
-    filtered.sort((a, b) {
-      if (a.isLive != b.isLive) return a.isLive ? -1 : 1;
-      if (a.isSpecial != b.isSpecial) return a.isSpecial ? -1 : 1;
-      return b.followedAt.compareTo(a.followedAt);
-    });
-    return filtered;
-  }
+  /// 关注面板只列**在播**房间:正在看直播时,侧栏里列一串没开播的房间
+  /// 既占位置也点不进去。口径与「我的关注」页同源(follow_sort.dart),
+  /// 差异仅在 liveOnly。
+  List<FollowEntry> _visible(List<FollowEntry> entries) =>
+      visibleFollowEntries(entries, site: _siteFilter, liveOnly: true);
 
   @override
   Widget build(BuildContext context) {

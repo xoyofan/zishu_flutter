@@ -7,6 +7,8 @@
 /// 卡片结构(对齐 `.follow-preview-item`):
 /// - 16:9 封面:右上平台角标、右下在线角标、左上特别关注 ★,离线压暗 + 底部「未开播」条;
 /// - 封面下方:主播名(单行省略)→ 标题(单行省略,次级色)。
+///
+/// 另有 [PlayRoomList] 紧凑列表视图(纯文字两行,无缩略图),供侧栏切换。
 library;
 
 import 'dart:math' as math;
@@ -277,7 +279,11 @@ class PlayRoomList extends StatelessWidget {
   }
 }
 
-/// 紧凑列表单行:44x44 封面 + 主播名/标题 + 特别关注 ★。
+/// 紧凑列表单行:主播名 + 特别关注 ★ + 标题。
+///
+/// 用户口径「列表模式前面不用房间缩略图」:列表视图的价值是**扫得快**,
+/// 行首再塞一张 44dp 封面只是挤压文字、把行高撑到 52dp,一屏少看几条。
+/// 想看封面切回网格视图即可,两种视图各司其职。
 class PlayRoomRow extends StatelessWidget {
   const PlayRoomRow({
     super.key,
@@ -295,9 +301,6 @@ class PlayRoomRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    final initial = room.anchorName.isNotEmpty
-        ? room.anchorName.substring(0, 1)
-        : '?';
     return Material(
       color: tokens.surface,
       borderRadius: AppRadius.allSm,
@@ -305,57 +308,35 @@ class PlayRoomRow extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(4),
-          child: Row(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              SizedBox(
-                width: 44,
-                height: 44,
-                child: ClipRRect(
-                  borderRadius: AppRadius.allSm,
-                  child: FollowCoverImage(
-                    cover: room.cover,
-                    fallbackLabel: initial,
-                    offline: !_live,
-                    width: 44,
-                    height: 44,
+              Row(
+                children: [
+                  Flexible(
+                    child: FollowAnchorName(
+                      site: room.site,
+                      name: room.anchorName,
+                      live: _live,
+                      fontSize: 12,
+                    ),
                   ),
-                ),
-              ),
-              const SizedBox(width: 7),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: FollowAnchorName(
-                            site: room.site,
-                            name: room.anchorName,
-                            live: _live,
-                            fontSize: 12,
-                          ),
-                        ),
-                        if (isSpecial) ...[
-                          const SizedBox(width: 3),
-                          Icon(Icons.star_rounded,
-                              size: 11, color: tokens.brand),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      room.title.isEmpty ? room.category : room.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: AppTypography.bodySecondary.copyWith(
-                        fontSize: 10.5,
-                        color: tokens.textSecondary,
-                      ),
-                    ),
+                  if (isSpecial) ...[
+                    const SizedBox(width: 3),
+                    Icon(Icons.star_rounded, size: 11, color: tokens.brand),
                   ],
+                ],
+              ),
+              const SizedBox(height: 2),
+              Text(
+                room.title.isEmpty ? room.category : room.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: AppTypography.bodySecondary.copyWith(
+                  fontSize: 10.5,
+                  color: tokens.textSecondary,
                 ),
               ),
             ],

@@ -12,21 +12,12 @@ import 'package:go_router/go_router.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../application/follow_provider.dart';
+import '../application/follow_sort.dart';
 import '../widgets/follow_empty_state.dart';
 import '../widgets/follow_entry_card.dart';
 import '../widgets/follow_entry_row.dart';
 import '../widgets/follow_entry_tile.dart';
 import '../widgets/follow_platform_filter.dart';
-
-/// 列表排序方式。
-enum FollowSort {
-  liveFirst('开播优先'),
-  recentlyFollowed('最近关注');
-
-  const FollowSort(this.label);
-
-  final String label;
-}
 
 /// 列表密度:封面卡 / 横向小图 Tile / 纯文字行。
 enum FollowDensity {
@@ -76,24 +67,11 @@ class _FollowViewState extends ConsumerState<FollowView> {
   final Set<String> _selectedKeys = {};
 
   /// 平台筛选 + 排序(纯视图计算,不改动 controller 状态)。
-  List<FollowEntry> _visible(List<FollowEntry> entries) {
-    final filtered = _siteFilter == 'all'
-        ? List<FollowEntry>.of(entries)
-        : entries.where((e) => e.room.site == _siteFilter).toList();
-    int byFollowedDesc(FollowEntry a, FollowEntry b) =>
-        b.followedAt.compareTo(a.followedAt);
-    switch (_sort) {
-      case FollowSort.recentlyFollowed:
-        return filtered..sort(byFollowedDesc);
-      case FollowSort.liveFirst:
-        return filtered..sort((a, b) {
-          // 开播在前;同状态特别关注置前;再按关注时间倒序。
-          if (a.isLive != b.isLive) return a.isLive ? -1 : 1;
-          if (a.isSpecial != b.isSpecial) return a.isSpecial ? -1 : 1;
-          return byFollowedDesc(a, b);
-        });
-    }
-  }
+  ///
+  /// 排序口径见 [visibleFollowEntries]:**超关 → 开播 → 未开播**,档内按关注时间倒序。
+  /// 抽到 follow_sort.dart 是为了与播放页侧栏关注面板共用同一口径。
+  List<FollowEntry> _visible(List<FollowEntry> entries) =>
+      visibleFollowEntries(entries, site: _siteFilter, sort: _sort);
 
   /// 模拟刷新封面与状态(fixture 恒定,仅模拟耗时反馈)。
   Future<void> _refresh() async {
