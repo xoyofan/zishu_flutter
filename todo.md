@@ -104,5 +104,18 @@
 | 3 | 右组「我的关注」静态态 | 开播头像堆叠,1.48rem、重叠 32% | 仅文字 + hover 网格,静态无堆叠头像 | 补 `_FollowAvatarStack`(最多 3 枚,重叠 32%) |
 | 4 | 时间线 /time 入口 | 顶栏/底栏有入口 | 路由 `/time` 在,但顶栏占位已被「我的分类」取代,**无入口可达** | 底栏或「我的」里补时间线入口 |
 | 5 | 播放页底部工具栏 + 全屏右侧抽屉折叠 | 桌面底部工具条;全屏可收侧栏 | 控制条在舞台上,无底部工具条/全屏抽屉 | 与既有「桌面 1920 布局对齐」合并做 |
+- **更新(2026-09-13)**:#3 右组关注头像堆叠、#4 时间线 `/time` 入口、以及下方「手机端登录入口」待办,已随远端分支 `feat/a11-nav-capability`(提交 `e8e3715`)合并进 master 落地;该分支另含导航能力过滤 + golden 更新。
 - [ ] 我的分类:在分类页/hover 浮层内加「收藏当前分类」快捷星标(当前需进管理弹窗勾选)。
-- [ ] 手机端(<768)无顶栏头像:后续在设置页补登录入口,并把登录跃迁监听同步过去。
+- [x] 手机端(<768)无顶栏头像:已由 a11 分支(e8e3715)补设置页登录入口 + 登录跃迁监听,随 a11 合入 master。
+- [ ] 桌面 1920x1080 布局对齐(含 #5 播放页底部工具栏/全屏抽屉):仍待办。
+
+## 2026-09-13 合并远端特性分支到 master
+
+**结论**:`git fetch --all` 发现 3 个远端特性分支;经 ahead/behind 分析,仅 `feat/a11-nav-capability` 真正领先 master(基于最新 `61e2fe7` + 1 提交),已 fast-forward 合入;`feat/A1-search`、`feat/A2-danmaku` 内容均已被 master 吸收/超越,判定无需合并(避免无意义冲突)。
+
+### 合并明细
+- [x] `feat/a11-nav-capability` → master:`git merge --ff-only` 到 `e8e3715`(导航能力过滤 / 时间线入口 / 手机端登录 / 关注头像堆叠 / golden 更新);`flutter analyze` 零问题。
+- [x] `feat/A1-search`:ahead=0、落后 master 26,全部提交已被 master 包含,合并零变化 → 跳过。
+- [x] `feat/A2-danmaku`:仅 `a568579` 领先(弹幕纯逻辑早期草稿);master 已有更完整 danmaku 模块(`e6f1513`/`f1397e4` 引入 settings_provider / tail_forwarder / style / track / overlay / settings_panel 等),`danmaku_settings.dart` 触发 add/add 冲突且无净新增 → `git merge --abort` 中止,不合并。
+- [x] 验证:`flutter analyze` No issues found(master=`e8e3715`,领先 origin/master 1)。
+- [x] 推送:将 `e8e3715`(+ 本进度更新 commit)push 到 origin/master,同步远端主线(fs-only,安全)。
