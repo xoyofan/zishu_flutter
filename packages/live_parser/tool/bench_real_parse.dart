@@ -70,14 +70,14 @@ Future<void> main() async {
       browseCell = '无浏览';
     }
 
-    if (reg.resolver != null && roomId != null) {
+    if (roomId != null) {
       final samples = <int>[];
       RoomPayload? last;
       String? err;
       for (var i = 0; i < 3; i++) {
         final sw = Stopwatch()..start();
         try {
-          last = await reg.resolver!.resolveRoom(
+          last = await reg.resolver.resolveRoom(
             RoomRequest(site: site, roomIdOrUrl: roomId),
           );
           samples.add(sw.elapsedMilliseconds);
@@ -90,7 +90,7 @@ Future<void> main() async {
         final lines = last.streams.fold<int>(0, (s, q) => s + q.lines.length);
         final cold = samples.first;
         final hot = samples.length > 1 ? samples.skip(1).reduce((a, b) => a < b ? a : b) : samples.first;
-        resolveCell = '${cold}/${hot}ms 中位${_median(samples)}';
+        resolveCell = '$cold/${hot}ms 中位${_median(samples)}';
         lineCell = '$lines';
         qualityCell = '${last.streams.length}';
         status.add('resolve OK(${last.roomState.name},${last.anchorName})');
@@ -100,11 +100,9 @@ Future<void> main() async {
         status.add('resolve FAIL: $err');
         fail++;
       }
-    } else if (reg.resolver != null) {
+    } else {
       resolveCell = '无房间ID';
       status.add('无可用房间');
-    } else {
-      resolveCell = '无解析';
     }
 
     rows.add('| $site | $browseCell | $resolveCell | $lineCell | $qualityCell | ${status.join('; ')} |');

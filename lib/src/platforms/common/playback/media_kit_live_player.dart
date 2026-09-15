@@ -326,6 +326,14 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       await platform.setProperty('demuxer-lavf-analyzeduration', '2');
       await platform.setProperty('network-timeout', '15');
       await platform.setProperty('hwdec-software-fallback', '1');
+      // 音频输出必须显式指定:mpv `ao=auto` 在部分 Windows 环境会退化成 null
+      // (实测 AO: [null] → 完全无声,且 mpv 自身仍报 vol=100/muted=false)。
+      if (Platform.isWindows) {
+        await platform.setProperty('ao', 'wasapi,openal,null');
+      }
+      // 直播以音频为同步基准(对齐 pure_live 的 media_kit_video/windows/video_output.cc),
+      // 避免视频按显示时钟追帧造成的周期性小回退(观感为"回跳")。
+      await platform.setProperty('video-sync', 'audio');
       await platform.setProperty('volume-max', '100');
       await platform.setProperty('demuxer-max-bytes', '33554432');
       await platform.setProperty('demuxer-max-back-bytes', '4194304');
