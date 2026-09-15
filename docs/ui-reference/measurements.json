@@ -1,0 +1,3285 @@
+{
+ "count": 35,
+ "playRoute": null,
+ "results": [
+  {
+   "route": "/all",
+   "vp": "390x844",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/home-all_390x844.png",
+   "viewport": {
+    "w": 390,
+    "h": 844
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 788,
+     "w": 390,
+     "h": 56
+    },
+    "position": "fixed",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgba(255, 255, 255, 0.87)"
+   },
+   "brand": {
+    "x": 7,
+    "y": 803,
+    "w": 28,
+    "h": 28
+   },
+   "navItem": {
+    "rect": {
+     "x": 43,
+     "y": 793,
+     "w": 48,
+     "h": 48
+    },
+    "color": "rgb(243, 208, 78)",
+    "fontSize": "21.6px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 0,
+     "h": 0
+    },
+    "activeRect": {
+     "x": 0,
+     "y": 0,
+     "w": 0,
+     "h": 0
+    },
+    "size": "28px x 34px",
+    "activeBorder": "rgba(243, 208, 78, 0.88)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "0px"
+   },
+   "rail": null,
+   "drawer": {
+    "rect": null,
+    "open": false
+   },
+   "main": {
+    "marginLeft": "0px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--mobile-strip"
+   },
+   "grid": {
+    "cols": 2,
+    "gap": "13.6px 16px",
+    "rect": {
+     "x": 27,
+     "y": 118,
+     "w": 336,
+     "h": 768
+    },
+    "cards": 10
+   },
+   "card": {
+    "rect": {
+     "x": 33,
+     "y": 118,
+     "w": 154,
+     "h": 142
+    },
+    "radius": "4px",
+    "bg": "rgb(36, 36, 36)",
+    "titleSize": "14.4px",
+    "coverRatio": 1.78
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/douyu",
+   "vp": "390x844",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/home-douyu_390x844.png",
+   "viewport": {
+    "w": 390,
+    "h": 844
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 788,
+     "w": 390,
+     "h": 56
+    },
+    "position": "fixed",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgba(255, 255, 255, 0.87)"
+   },
+   "brand": {
+    "x": 7,
+    "y": 803,
+    "w": 28,
+    "h": 28
+   },
+   "navItem": {
+    "rect": {
+     "x": 43,
+     "y": 793,
+     "w": 48,
+     "h": 48
+    },
+    "color": "rgb(243, 208, 78)",
+    "fontSize": "21.6px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 0,
+     "h": 0
+    },
+    "activeRect": {
+     "x": 0,
+     "y": 0,
+     "w": 0,
+     "h": 0
+    },
+    "size": "28px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "0px"
+   },
+   "rail": null,
+   "drawer": {
+    "rect": null,
+    "open": false
+   },
+   "main": {
+    "marginLeft": "0px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--mobile-strip"
+   },
+   "grid": {
+    "cols": 2,
+    "gap": "13.6px 16px",
+    "rect": {
+     "x": 27,
+     "y": 118,
+     "w": 336,
+     "h": 2320
+    },
+    "cards": 30
+   },
+   "card": {
+    "rect": {
+     "x": 33,
+     "y": 118,
+     "w": 154,
+     "h": 142
+    },
+    "radius": "4px",
+    "bg": "rgb(36, 36, 36)",
+    "titleSize": "14.4px",
+    "coverRatio": 1.78
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/douyu/category",
+   "vp": "390x844",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/category-index_390x844.png",
+   "viewport": {
+    "w": 390,
+    "h": 844
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 788,
+     "w": 390,
+     "h": 56
+    },
+    "position": "fixed",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgba(255, 255, 255, 0.87)"
+   },
+   "brand": {
+    "x": 7,
+    "y": 803,
+    "w": 28,
+    "h": 28
+   },
+   "navItem": {
+    "rect": {
+     "x": 43,
+     "y": 793,
+     "w": 48,
+     "h": 48
+    },
+    "color": "rgba(255, 255, 255, 0.55)",
+    "fontSize": "21.6px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 0,
+     "h": 0
+    },
+    "activeRect": {
+     "x": 0,
+     "y": 0,
+     "w": 0,
+     "h": 0
+    },
+    "size": "28px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "0px"
+   },
+   "rail": null,
+   "drawer": {
+    "rect": null,
+    "open": false
+   },
+   "main": {
+    "marginLeft": "0px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--mobile-strip app-main--category"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/douyu/category/1",
+   "vp": "390x844",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/category-rooms_390x844.png",
+   "viewport": {
+    "w": 390,
+    "h": 844
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 788,
+     "w": 390,
+     "h": 56
+    },
+    "position": "fixed",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgba(255, 255, 255, 0.87)"
+   },
+   "brand": {
+    "x": 7,
+    "y": 803,
+    "w": 28,
+    "h": 28
+   },
+   "navItem": {
+    "rect": {
+     "x": 43,
+     "y": 793,
+     "w": 48,
+     "h": 48
+    },
+    "color": "rgb(243, 208, 78)",
+    "fontSize": "21.6px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 0,
+     "h": 0
+    },
+    "activeRect": {
+     "x": 0,
+     "y": 0,
+     "w": 0,
+     "h": 0
+    },
+    "size": "28px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "0px"
+   },
+   "rail": null,
+   "drawer": {
+    "rect": null,
+    "open": false
+   },
+   "main": {
+    "marginLeft": "0px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--mobile-strip"
+   },
+   "grid": {
+    "cols": 2,
+    "gap": "13.6px 16px",
+    "rect": {
+     "x": 14,
+     "y": 167,
+     "w": 363,
+     "h": 2441
+    },
+    "cards": 30
+   },
+   "card": {
+    "rect": {
+     "x": 19,
+     "y": 167,
+     "w": 168,
+     "h": 150
+    },
+    "radius": "4px",
+    "bg": "rgb(36, 36, 36)",
+    "titleSize": "14.4px",
+    "coverRatio": 1.78
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/follow",
+   "vp": "390x844",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/follow_390x844.png",
+   "viewport": {
+    "w": 390,
+    "h": 844
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 788,
+     "w": 390,
+     "h": 56
+    },
+    "position": "fixed",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgba(255, 255, 255, 0.87)"
+   },
+   "brand": {
+    "x": 7,
+    "y": 803,
+    "w": 28,
+    "h": 28
+   },
+   "navItem": {
+    "rect": {
+     "x": 43,
+     "y": 793,
+     "w": 48,
+     "h": 48
+    },
+    "color": "rgba(255, 255, 255, 0.55)",
+    "fontSize": "21.6px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 0,
+     "h": 0
+    },
+    "activeRect": {
+     "x": 0,
+     "y": 0,
+     "w": 0,
+     "h": 0
+    },
+    "size": "28px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "0px"
+   },
+   "rail": null,
+   "drawer": {
+    "rect": null,
+    "open": false
+   },
+   "main": {
+    "marginLeft": "0px",
+    "padX": "13.6px",
+    "class": "app-main"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/time",
+   "vp": "390x844",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/time_390x844.png",
+   "viewport": {
+    "w": 390,
+    "h": 844
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 788,
+     "w": 390,
+     "h": 56
+    },
+    "position": "fixed",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgba(255, 255, 255, 0.87)"
+   },
+   "brand": {
+    "x": 7,
+    "y": 803,
+    "w": 28,
+    "h": 28
+   },
+   "navItem": {
+    "rect": {
+     "x": 43,
+     "y": 793,
+     "w": 48,
+     "h": 48
+    },
+    "color": "rgba(255, 255, 255, 0.55)",
+    "fontSize": "21.6px"
+   },
+   "platformTab": {
+    "rect": null,
+    "activeRect": null,
+    "size": null,
+    "activeBorder": null,
+    "activeBg": null,
+    "centerGap": null
+   },
+   "rail": null,
+   "drawer": {
+    "rect": null,
+    "open": false
+   },
+   "main": {
+    "marginLeft": "0px",
+    "padX": "13.6px",
+    "class": "app-main"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": null
+  },
+  {
+   "route": "/all",
+   "vp": "800x600",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/home-all_800x600.png",
+   "viewport": {
+    "w": 800,
+    "h": 600
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 800,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 53,
+     "y": -2,
+     "w": 48,
+     "h": 48
+    },
+    "color": "rgb(243, 208, 78)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 232,
+     "y": 5,
+     "w": 28,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 232,
+     "y": 5,
+     "w": 28,
+     "h": 34
+    },
+    "size": "28px x 34px",
+    "activeBorder": "rgba(243, 208, 78, 0.88)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "0px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 183,
+    "w": 0,
+    "h": 278
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 556
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer app-main--drawer-open"
+   },
+   "grid": {
+    "cols": 4,
+    "gap": "13.6px 16px",
+    "rect": {
+     "x": 247,
+     "y": 44,
+     "w": 526,
+     "h": 531
+    },
+    "cards": 16
+   },
+   "card": {
+    "rect": {
+     "x": 253,
+     "y": 44,
+     "w": 117,
+     "h": 121
+    },
+    "radius": "4px",
+    "bg": "rgb(36, 36, 36)",
+    "titleSize": "14.4px",
+    "coverRatio": 1.78
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/douyu",
+   "vp": "800x600",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/home-douyu_800x600.png",
+   "viewport": {
+    "w": 800,
+    "h": 600
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 800,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 53,
+     "y": -2,
+     "w": 48,
+     "h": 48
+    },
+    "color": "rgb(243, 208, 78)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 232,
+     "y": 5,
+     "w": 28,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 260,
+     "y": 4,
+     "w": 28,
+     "h": 34
+    },
+    "size": "28px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "0px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 183,
+    "w": 0,
+    "h": 278
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 556
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer app-main--drawer-open"
+   },
+   "grid": {
+    "cols": 4,
+    "gap": "13.6px 16px",
+    "rect": {
+     "x": 247,
+     "y": 44,
+     "w": 526,
+     "h": 1068
+    },
+    "cards": 30
+   },
+   "card": {
+    "rect": {
+     "x": 253,
+     "y": 44,
+     "w": 117,
+     "h": 121
+    },
+    "radius": "4px",
+    "bg": "rgb(36, 36, 36)",
+    "titleSize": "14.4px",
+    "coverRatio": 1.78
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/douyu/category",
+   "vp": "800x600",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/category-index_800x600.png",
+   "viewport": {
+    "w": 800,
+    "h": 600
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 800,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 53,
+     "y": -2,
+     "w": 48,
+     "h": 48
+    },
+    "color": "rgba(255, 255, 255, 0.55)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 232,
+     "y": 5,
+     "w": 28,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 260,
+     "y": 4,
+     "w": 28,
+     "h": 34
+    },
+    "size": "28px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "0px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 183,
+    "w": 0,
+    "h": 278
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 556
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer app-main--drawer-open app-main--category"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/douyu/category/1",
+   "vp": "800x600",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/category-rooms_800x600.png",
+   "viewport": {
+    "w": 800,
+    "h": 600
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 800,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 53,
+     "y": -2,
+     "w": 48,
+     "h": 48
+    },
+    "color": "rgb(243, 208, 78)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 232,
+     "y": 5,
+     "w": 28,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 260,
+     "y": 4,
+     "w": 28,
+     "h": 34
+    },
+    "size": "28px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "0px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 183,
+    "w": 0,
+    "h": 278
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 556
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer app-main--drawer-open"
+   },
+   "grid": {
+    "cols": 4,
+    "gap": "13.6px 16px",
+    "rect": {
+     "x": 234,
+     "y": 93,
+     "w": 553,
+     "h": 1100
+    },
+    "cards": 30
+   },
+   "card": {
+    "rect": {
+     "x": 239,
+     "y": 93,
+     "w": 123,
+     "h": 125
+    },
+    "radius": "4px",
+    "bg": "rgb(36, 36, 36)",
+    "titleSize": "14.4px",
+    "coverRatio": 1.78
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/follow",
+   "vp": "800x600",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/follow_800x600.png",
+   "viewport": {
+    "w": 800,
+    "h": 600
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 800,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 53,
+     "y": -2,
+     "w": 48,
+     "h": 48
+    },
+    "color": "rgba(255, 255, 255, 0.55)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 232,
+     "y": 5,
+     "w": 28,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 260,
+     "y": 4,
+     "w": 28,
+     "h": 34
+    },
+    "size": "28px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "0px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 183,
+    "w": 0,
+    "h": 278
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 556
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home-drawer app-main--drawer-open"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/time",
+   "vp": "800x600",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/time_800x600.png",
+   "viewport": {
+    "w": 800,
+    "h": 600
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 800,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 53,
+     "y": -2,
+     "w": 48,
+     "h": 48
+    },
+    "color": "rgba(255, 255, 255, 0.55)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": null,
+    "activeRect": null,
+    "size": null,
+    "activeBorder": null,
+    "activeBg": null,
+    "centerGap": null
+   },
+   "rail": {
+    "x": 220,
+    "y": 183,
+    "w": 0,
+    "h": 278
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 556
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home-drawer app-main--drawer-open"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": null
+  },
+  {
+   "route": "/all",
+   "vp": "1366x768",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/home-all_1366x768.png",
+   "viewport": {
+    "w": 1366,
+    "h": 768
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 1366,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": -2,
+     "w": 74,
+     "h": 48
+    },
+    "color": "rgb(243, 208, 78)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 461,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 461,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "size": "34px x 34px",
+    "activeBorder": "rgba(243, 208, 78, 0.88)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "3.2px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 225,
+    "w": 0,
+    "h": 362
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 724
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer app-main--drawer-open"
+   },
+   "grid": {
+    "cols": 5,
+    "gap": "13.6px 16px",
+    "rect": {
+     "x": 247,
+     "y": 44,
+     "w": 1092,
+     "h": 724
+    },
+    "cards": 20
+   },
+   "card": {
+    "rect": {
+     "x": 253,
+     "y": 44,
+     "w": 203,
+     "h": 170
+    },
+    "radius": "4px",
+    "bg": "rgb(36, 36, 36)",
+    "titleSize": "14.4px",
+    "coverRatio": 1.78
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/douyu",
+   "vp": "1366x768",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/home-douyu_1366x768.png",
+   "viewport": {
+    "w": 1366,
+    "h": 768
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 1366,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": -2,
+     "w": 74,
+     "h": 48
+    },
+    "color": "rgb(243, 208, 78)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 461,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 499,
+     "y": 4,
+     "w": 34,
+     "h": 34
+    },
+    "size": "34px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "3.2px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 225,
+    "w": 0,
+    "h": 362
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 724
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer app-main--drawer-open"
+   },
+   "grid": {
+    "cols": 5,
+    "gap": "13.6px 16px",
+    "rect": {
+     "x": 247,
+     "y": 44,
+     "w": 1092,
+     "h": 1092
+    },
+    "cards": 30
+   },
+   "card": {
+    "rect": {
+     "x": 253,
+     "y": 44,
+     "w": 203,
+     "h": 170
+    },
+    "radius": "4px",
+    "bg": "rgb(36, 36, 36)",
+    "titleSize": "14.4px",
+    "coverRatio": 1.78
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/douyu/category",
+   "vp": "1366x768",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/category-index_1366x768.png",
+   "viewport": {
+    "w": 1366,
+    "h": 768
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 1366,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": -2,
+     "w": 74,
+     "h": 48
+    },
+    "color": "rgba(255, 255, 255, 0.55)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 461,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 499,
+     "y": 4,
+     "w": 34,
+     "h": 34
+    },
+    "size": "34px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "3.2px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 225,
+    "w": 0,
+    "h": 362
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 724
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer app-main--drawer-open app-main--category"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/douyu/category/1",
+   "vp": "1366x768",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/category-rooms_1366x768.png",
+   "viewport": {
+    "w": 1366,
+    "h": 768
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 1366,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": -2,
+     "w": 74,
+     "h": 48
+    },
+    "color": "rgb(243, 208, 78)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 461,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 499,
+     "y": 4,
+     "w": 34,
+     "h": 34
+    },
+    "size": "34px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "3.2px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 225,
+    "w": 0,
+    "h": 362
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 724
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer app-main--drawer-open"
+   },
+   "grid": {
+    "cols": 5,
+    "gap": "13.6px 16px",
+    "rect": {
+     "x": 234,
+     "y": 93,
+     "w": 1119,
+     "h": 1111
+    },
+    "cards": 30
+   },
+   "card": {
+    "rect": {
+     "x": 239,
+     "y": 93,
+     "w": 209,
+     "h": 173
+    },
+    "radius": "4px",
+    "bg": "rgb(36, 36, 36)",
+    "titleSize": "14.4px",
+    "coverRatio": 1.78
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/follow",
+   "vp": "1366x768",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/follow_1366x768.png",
+   "viewport": {
+    "w": 1366,
+    "h": 768
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 1366,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": -2,
+     "w": 74,
+     "h": 48
+    },
+    "color": "rgba(255, 255, 255, 0.55)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 461,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 499,
+     "y": 4,
+     "w": 34,
+     "h": 34
+    },
+    "size": "34px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "3.2px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 225,
+    "w": 0,
+    "h": 362
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 724
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home-drawer app-main--drawer-open"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/time",
+   "vp": "1366x768",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/time_1366x768.png",
+   "viewport": {
+    "w": 1366,
+    "h": 768
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 1366,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": -2,
+     "w": 74,
+     "h": 48
+    },
+    "color": "rgba(255, 255, 255, 0.55)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": null,
+    "activeRect": null,
+    "size": null,
+    "activeBorder": null,
+    "activeBg": null,
+    "centerGap": null
+   },
+   "rail": {
+    "x": 220,
+    "y": 225,
+    "w": 0,
+    "h": 362
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 724
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home-drawer app-main--drawer-open"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": null
+  },
+  {
+   "route": "/all",
+   "vp": "1920x1080",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/home-all_1920x1080.png",
+   "viewport": {
+    "w": 1920,
+    "h": 1080
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 1920,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": 4,
+     "w": 74,
+     "h": 36
+    },
+    "color": "rgb(243, 208, 78)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 738,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 738,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "size": "34px x 34px",
+    "activeBorder": "rgba(243, 208, 78, 0.88)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "3.2px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 303,
+    "w": 0,
+    "h": 518
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 1036
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer app-main--drawer-open"
+   },
+   "grid": {
+    "cols": 5,
+    "gap": "13.6px 16px",
+    "rect": {
+     "x": 247,
+     "y": 44,
+     "w": 1646,
+     "h": 1465
+    },
+    "cards": 30
+   },
+   "card": {
+    "rect": {
+     "x": 253,
+     "y": 44,
+     "w": 314,
+     "h": 232
+    },
+    "radius": "4px",
+    "bg": "rgb(36, 36, 36)",
+    "titleSize": "14.4px",
+    "coverRatio": 1.78
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/douyu",
+   "vp": "1920x1080",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/home-douyu_1920x1080.png",
+   "viewport": {
+    "w": 1920,
+    "h": 1080
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 1920,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": 4,
+     "w": 74,
+     "h": 36
+    },
+    "color": "rgb(243, 208, 78)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 738,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 776,
+     "y": 4,
+     "w": 34,
+     "h": 34
+    },
+    "size": "34px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "3.2px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 303,
+    "w": 0,
+    "h": 518
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 1036
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer app-main--drawer-open"
+   },
+   "grid": {
+    "cols": 5,
+    "gap": "13.6px 16px",
+    "rect": {
+     "x": 247,
+     "y": 44,
+     "w": 1646,
+     "h": 1466
+    },
+    "cards": 30
+   },
+   "card": {
+    "rect": {
+     "x": 253,
+     "y": 44,
+     "w": 314,
+     "h": 232
+    },
+    "radius": "4px",
+    "bg": "rgb(36, 36, 36)",
+    "titleSize": "14.4px",
+    "coverRatio": 1.78
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/douyu/category",
+   "vp": "1920x1080",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/category-index_1920x1080.png",
+   "viewport": {
+    "w": 1920,
+    "h": 1080
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 1920,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": 4,
+     "w": 74,
+     "h": 36
+    },
+    "color": "rgba(255, 255, 255, 0.55)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 738,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 776,
+     "y": 4,
+     "w": 34,
+     "h": 34
+    },
+    "size": "34px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "3.2px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 303,
+    "w": 0,
+    "h": 518
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 1036
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer app-main--drawer-open app-main--category"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/douyu/category/1",
+   "vp": "1920x1080",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/category-rooms_1920x1080.png",
+   "viewport": {
+    "w": 1920,
+    "h": 1080
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 1920,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": 4,
+     "w": 74,
+     "h": 36
+    },
+    "color": "rgb(243, 208, 78)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 738,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 776,
+     "y": 4,
+     "w": 34,
+     "h": 34
+    },
+    "size": "34px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "3.2px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 303,
+    "w": 0,
+    "h": 518
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 1036
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer app-main--drawer-open"
+   },
+   "grid": {
+    "cols": 5,
+    "gap": "13.6px 16px",
+    "rect": {
+     "x": 234,
+     "y": 93,
+     "w": 1673,
+     "h": 1485
+    },
+    "cards": 30
+   },
+   "card": {
+    "rect": {
+     "x": 239,
+     "y": 93,
+     "w": 320,
+     "h": 235
+    },
+    "radius": "4px",
+    "bg": "rgb(36, 36, 36)",
+    "titleSize": "14.4px",
+    "coverRatio": 1.78
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/follow",
+   "vp": "1920x1080",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/follow_1920x1080.png",
+   "viewport": {
+    "w": 1920,
+    "h": 1080
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 1920,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": 4,
+     "w": 74,
+     "h": 36
+    },
+    "color": "rgba(255, 255, 255, 0.55)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 738,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 776,
+     "y": 4,
+     "w": 34,
+     "h": 34
+    },
+    "size": "34px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "3.2px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 303,
+    "w": 0,
+    "h": 518
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 1036
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home-drawer app-main--drawer-open"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/time",
+   "vp": "1920x1080",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/time_1920x1080.png",
+   "viewport": {
+    "w": 1920,
+    "h": 1080
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 1920,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": 4,
+     "w": 74,
+     "h": 36
+    },
+    "color": "rgba(255, 255, 255, 0.55)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": null,
+    "activeRect": null,
+    "size": null,
+    "activeBorder": null,
+    "activeBg": null,
+    "centerGap": null
+   },
+   "rail": {
+    "x": 220,
+    "y": 303,
+    "w": 0,
+    "h": 518
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 1036
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home-drawer app-main--drawer-open"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": null
+  },
+  {
+   "route": "/all",
+   "vp": "2560x1440",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/home-all_2560x1440.png",
+   "viewport": {
+    "w": 2560,
+    "h": 1440
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 2560,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": 4,
+     "w": 74,
+     "h": 36
+    },
+    "color": "rgb(243, 208, 78)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 1058,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 1058,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "size": "34px x 34px",
+    "activeBorder": "rgba(243, 208, 78, 0.88)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "3.2px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 393,
+    "w": 0,
+    "h": 698
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 1396
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer app-main--drawer-open"
+   },
+   "grid": {
+    "cols": 6,
+    "gap": "13.6px 16px",
+    "rect": {
+     "x": 247,
+     "y": 44,
+     "w": 2286,
+     "h": 1916
+    },
+    "cards": 42
+   },
+   "card": {
+    "rect": {
+     "x": 253,
+     "y": 44,
+     "w": 366,
+     "h": 261
+    },
+    "radius": "4px",
+    "bg": "rgb(36, 36, 36)",
+    "titleSize": "14.4px",
+    "coverRatio": 1.78
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/douyu",
+   "vp": "2560x1440",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/home-douyu_2560x1440.png",
+   "viewport": {
+    "w": 2560,
+    "h": 1440
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 2560,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": 4,
+     "w": 74,
+     "h": 36
+    },
+    "color": "rgb(243, 208, 78)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 1058,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 1096,
+     "y": 4,
+     "w": 34,
+     "h": 34
+    },
+    "size": "34px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "3.2px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 393,
+    "w": 0,
+    "h": 698
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 1396
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer app-main--drawer-open"
+   },
+   "grid": {
+    "cols": 6,
+    "gap": "13.6px 16px",
+    "rect": {
+     "x": 247,
+     "y": 44,
+     "w": 2286,
+     "h": 2740
+    },
+    "cards": 60
+   },
+   "card": {
+    "rect": {
+     "x": 253,
+     "y": 44,
+     "w": 366,
+     "h": 261
+    },
+    "radius": "4px",
+    "bg": "rgb(36, 36, 36)",
+    "titleSize": "14.4px",
+    "coverRatio": 1.78
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/douyu/category",
+   "vp": "2560x1440",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/category-index_2560x1440.png",
+   "viewport": {
+    "w": 2560,
+    "h": 1440
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 2560,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": 4,
+     "w": 74,
+     "h": 36
+    },
+    "color": "rgba(255, 255, 255, 0.55)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 1058,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 1096,
+     "y": 4,
+     "w": 34,
+     "h": 34
+    },
+    "size": "34px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "3.2px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 393,
+    "w": 0,
+    "h": 698
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 1396
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer app-main--drawer-open app-main--category"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/douyu/category/1",
+   "vp": "2560x1440",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/category-rooms_2560x1440.png",
+   "viewport": {
+    "w": 2560,
+    "h": 1440
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 2560,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": 4,
+     "w": 74,
+     "h": 36
+    },
+    "color": "rgb(243, 208, 78)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 1058,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 1096,
+     "y": 4,
+     "w": 34,
+     "h": 34
+    },
+    "size": "34px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "3.2px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 393,
+    "w": 0,
+    "h": 698
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 1396
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer app-main--drawer-open"
+   },
+   "grid": {
+    "cols": 6,
+    "gap": "13.6px 16px",
+    "rect": {
+     "x": 234,
+     "y": 93,
+     "w": 2313,
+     "h": 2759
+    },
+    "cards": 60
+   },
+   "card": {
+    "rect": {
+     "x": 239,
+     "y": 93,
+     "w": 370,
+     "h": 264
+    },
+    "radius": "4px",
+    "bg": "rgb(36, 36, 36)",
+    "titleSize": "14.4px",
+    "coverRatio": 1.78
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/follow",
+   "vp": "2560x1440",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/follow_2560x1440.png",
+   "viewport": {
+    "w": 2560,
+    "h": 1440
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 2560,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": 4,
+     "w": 74,
+     "h": 36
+    },
+    "color": "rgba(255, 255, 255, 0.55)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 1058,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 1096,
+     "y": 4,
+     "w": 34,
+     "h": 34
+    },
+    "size": "34px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "3.2px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 393,
+    "w": 0,
+    "h": 698
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 1396
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home-drawer app-main--drawer-open"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/time",
+   "vp": "2560x1440",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/time_2560x1440.png",
+   "viewport": {
+    "w": 2560,
+    "h": 1440
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 2560,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": 4,
+     "w": 74,
+     "h": 36
+    },
+    "color": "rgba(255, 255, 255, 0.55)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": null,
+    "activeRect": null,
+    "size": null,
+    "activeBorder": null,
+    "activeBg": null,
+    "centerGap": null
+   },
+   "rail": {
+    "x": 220,
+    "y": 393,
+    "w": 0,
+    "h": 698
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 1396
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home-drawer app-main--drawer-open"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": null
+  },
+  {
+   "route": "/all",
+   "vp": "1920x1080-drawer-closed",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/home-all_desktop_1920x1080_drawer-closed.png",
+   "viewport": {
+    "w": 1920,
+    "h": 1080
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 1920,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": 4,
+     "w": 74,
+     "h": 36
+    },
+    "color": "rgb(243, 208, 78)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 738,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 738,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "size": "34px x 34px",
+    "activeBorder": "rgba(243, 208, 78, 0.88)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "3.2px"
+   },
+   "rail": {
+    "x": 52,
+    "y": 303,
+    "w": 0,
+    "h": 518
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 52,
+     "h": 1036
+    },
+    "open": false
+   },
+   "main": {
+    "marginLeft": "52px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer"
+   },
+   "grid": {
+    "cols": 6,
+    "gap": "13.6px 16px",
+    "rect": {
+     "x": 79,
+     "y": 44,
+     "w": 1814,
+     "h": 1145
+    },
+    "cards": 30
+   },
+   "card": {
+    "rect": {
+     "x": 85,
+     "y": 44,
+     "w": 287,
+     "h": 217
+    },
+    "radius": "4px",
+    "bg": "rgb(36, 36, 36)",
+    "titleSize": "14.4px",
+    "coverRatio": 1.78
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/all",
+   "vp": "1920x1080-drawer-open",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/home-all_desktop_1920x1080_drawer-open.png",
+   "viewport": {
+    "w": 1920,
+    "h": 1080
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 1920,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": 4,
+     "w": 74,
+     "h": 36
+    },
+    "color": "rgb(243, 208, 78)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 738,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 738,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "size": "34px x 34px",
+    "activeBorder": "rgba(243, 208, 78, 0.88)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "3.2px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 303,
+    "w": 0,
+    "h": 518
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 1036
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer app-main--drawer-open"
+   },
+   "grid": {
+    "cols": 5,
+    "gap": "13.6px 16px",
+    "rect": {
+     "x": 247,
+     "y": 44,
+     "w": 1646,
+     "h": 1465
+    },
+    "cards": 30
+   },
+   "card": {
+    "rect": {
+     "x": 253,
+     "y": 44,
+     "w": 314,
+     "h": 232
+    },
+    "radius": "4px",
+    "bg": "rgb(36, 36, 36)",
+    "titleSize": "14.4px",
+    "coverRatio": 1.78
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/douyu/category",
+   "vp": "1920x1080-drawer-closed",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/category-index_desktop_1920x1080_drawer-closed.png",
+   "viewport": {
+    "w": 1920,
+    "h": 1080
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 1920,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": 4,
+     "w": 74,
+     "h": 36
+    },
+    "color": "rgba(255, 255, 255, 0.55)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 738,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 776,
+     "y": 4,
+     "w": 34,
+     "h": 34
+    },
+    "size": "34px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "3.2px"
+   },
+   "rail": {
+    "x": 52,
+    "y": 303,
+    "w": 0,
+    "h": 518
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 52,
+     "h": 1036
+    },
+    "open": false
+   },
+   "main": {
+    "marginLeft": "52px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer app-main--category"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/douyu/category",
+   "vp": "1920x1080-drawer-open",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/category-index_desktop_1920x1080_drawer-open.png",
+   "viewport": {
+    "w": 1920,
+    "h": 1080
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 1920,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(31, 31, 31)",
+    "border": "rgb(58, 58, 58)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": 4,
+     "w": 74,
+     "h": 36
+    },
+    "color": "rgba(255, 255, 255, 0.55)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 738,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 776,
+     "y": 4,
+     "w": 34,
+     "h": 34
+    },
+    "size": "34px x 34px",
+    "activeBorder": "rgb(255, 106, 0)",
+    "activeBg": "color(srgb 0.415294 0.415294 0.415294)",
+    "centerGap": "3.2px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 303,
+    "w": 0,
+    "h": 518
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 1036
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer app-main--drawer-open app-main--category"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)",
+    "color": "rgba(255, 255, 255, 0.87)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/all",
+   "vp": "1920x1080-light",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/home-all_desktop_1920x1080_light.png",
+   "viewport": {
+    "w": 1920,
+    "h": 1080
+   },
+   "nav": {
+    "rect": {
+     "x": 0,
+     "y": 0,
+     "w": 1920,
+     "h": 44
+    },
+    "position": "sticky",
+    "bg": "rgb(235, 232, 227)",
+    "border": "rgb(208, 205, 198)"
+   },
+   "brand": {
+    "x": 14,
+    "y": 7,
+    "w": 30,
+    "h": 30
+   },
+   "navItem": {
+    "rect": {
+     "x": 128,
+     "y": 4,
+     "w": 74,
+     "h": 36
+    },
+    "color": "rgb(243, 208, 78)",
+    "fontSize": "17.28px"
+   },
+   "platformTab": {
+    "rect": {
+     "x": 738,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "activeRect": {
+     "x": 738,
+     "y": 5,
+     "w": 34,
+     "h": 34
+    },
+    "size": "34px x 34px",
+    "activeBorder": "color(srgb 0.952941 0.815686 0.305882 / 0.72)",
+    "activeBg": "color(srgb 0.832157 0.805333 0.72)",
+    "centerGap": "3.2px"
+   },
+   "rail": {
+    "x": 220,
+    "y": 303,
+    "w": 0,
+    "h": 518
+   },
+   "drawer": {
+    "rect": {
+     "x": 0,
+     "y": 44,
+     "w": 220,
+     "h": 1036
+    },
+    "open": true
+   },
+   "main": {
+    "marginLeft": "220px",
+    "padX": "13.6px",
+    "class": "app-main app-main--home app-main--home-drawer app-main--drawer-open"
+   },
+   "grid": {
+    "cols": 5,
+    "gap": "13.6px 16px",
+    "rect": {
+     "x": 247,
+     "y": 44,
+     "w": 1646,
+     "h": 1465
+    },
+    "cards": 30
+   },
+   "card": {
+    "rect": {
+     "x": 253,
+     "y": 44,
+     "w": 314,
+     "h": 232
+    },
+    "radius": "4px",
+    "bg": "rgb(255, 255, 255)",
+    "titleSize": "14.4px",
+    "coverRatio": 1.78
+   },
+   "body": {
+    "bg": "rgb(228, 225, 220)",
+    "color": "rgb(26, 26, 26)",
+    "fontSize": "16px"
+   },
+   "accent": "rgb(243, 208, 78)"
+  },
+  {
+   "route": "/douyu/play/63136",
+   "vp": "390x844",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/play_390x844.png",
+   "viewport": {
+    "w": 390,
+    "h": 844
+   },
+   "main": {
+    "class": "app-main app-main--play",
+    "padX": "0px"
+   },
+   "player": {
+    "rect": {
+     "x": 0,
+     "y": 53,
+     "w": 390,
+     "h": 219
+    },
+    "cls": "play-layout play-layout--stack"
+   },
+   "layout": "play-layout play-layout--stack",
+   "aside": {
+    "rect": {
+     "x": 0,
+     "y": 273,
+     "w": 390,
+     "h": 617
+    },
+    "cls": "room-aside"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)"
+   }
+  },
+  {
+   "route": "/douyu/play/63136",
+   "vp": "800x600",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/play_800x600.png",
+   "viewport": {
+    "w": 800,
+    "h": 600
+   },
+   "main": {
+    "class": "app-main app-main--play",
+    "padX": "0px"
+   },
+   "player": {
+    "rect": {
+     "x": 0,
+     "y": 11,
+     "w": 800,
+     "h": 252
+    },
+    "cls": "play-layout play-layout--stack"
+   },
+   "layout": "play-layout play-layout--stack",
+   "aside": {
+    "rect": {
+     "x": 0,
+     "y": 263,
+     "w": 800,
+     "h": 391
+    },
+    "cls": "room-aside"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)"
+   }
+  },
+  {
+   "route": "/douyu/play/63136",
+   "vp": "1366x768",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/play_1366x768.png",
+   "viewport": {
+    "w": 1366,
+    "h": 768
+   },
+   "main": {
+    "class": "app-main app-main--play",
+    "padX": "0px"
+   },
+   "player": {
+    "rect": {
+     "x": 0,
+     "y": 11,
+     "w": 1038,
+     "h": 757
+    },
+    "cls": "play-layout"
+   },
+   "layout": "play-layout",
+   "aside": {
+    "rect": {
+     "x": 1038,
+     "y": 0,
+     "w": 328,
+     "h": 768
+    },
+    "cls": "room-aside"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)"
+   }
+  },
+  {
+   "route": "/douyu/play/63136",
+   "vp": "1920x1080",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/play_1920x1080.png",
+   "viewport": {
+    "w": 1920,
+    "h": 1080
+   },
+   "main": {
+    "class": "app-main app-main--play",
+    "padX": "0px"
+   },
+   "player": {
+    "rect": {
+     "x": 0,
+     "y": 76,
+     "w": 1495,
+     "h": 1004
+    },
+    "cls": "play-layout"
+   },
+   "layout": "play-layout",
+   "aside": {
+    "rect": {
+     "x": 1495,
+     "y": 44,
+     "w": 425,
+     "h": 1036
+    },
+    "cls": "room-aside"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)"
+   }
+  },
+  {
+   "route": "/douyu/play/63136",
+   "vp": "2560x1440",
+   "shot": "F:/project/zishu_flutter/docs/ui-reference/shots/play_2560x1440.png",
+   "viewport": {
+    "w": 2560,
+    "h": 1440
+   },
+   "main": {
+    "class": "app-main app-main--play",
+    "padX": "0px"
+   },
+   "player": {
+    "rect": {
+     "x": 0,
+     "y": 76,
+     "w": 2135,
+     "h": 1364
+    },
+    "cls": "play-layout"
+   },
+   "layout": "play-layout",
+   "aside": {
+    "rect": {
+     "x": 2135,
+     "y": 44,
+     "w": 425,
+     "h": 1396
+    },
+    "cls": "room-aside"
+   },
+   "body": {
+    "bg": "rgb(24, 24, 24)"
+   }
+  }
+ ]
+}
