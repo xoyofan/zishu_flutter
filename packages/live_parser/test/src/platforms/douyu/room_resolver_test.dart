@@ -56,26 +56,32 @@ void main() {
         [('蓝光8M', 0), ('超清', 2)],
       );
 
-      // 每档:HLS 在前 + 各 CDN FLV;ali-h5 在超清档 error 被跳过
+      // 每档:各 CDN FLV;ali-h5 在超清档 error 被跳过。
+      // HLS preview 不再插在列表头(预览流 token 寿命短,会抢走首选),仅 FLV 全灭时兜底。
       expect(payload.streams, hasLength(2));
       final blueRay = payload.streams[0];
       expect(blueRay.name, '蓝光8M');
       expect(blueRay.lines.map((l) => (l.name, l.format)).toList(), [
-        ('HLS', 'hls'),
         ('线路1 FLV', 'flv'),
         ('线路2 FLV', 'flv'),
         ('线路3 FLV', 'flv'),
       ]);
-      expect(blueRay.preferredLine?.format, 'hls');
+      expect(blueRay.preferredLine?.format, 'flv',
+          reason: '首选线路必须是 FLV,不得是 hlsH5Preview 预览流');
       expect(
         blueRay.preferredLine?.url,
-        'https://hw-tct.douyucdn.cn/live/9527probe_0_0.m3u8?wsSecret=abc123&wsTime=1700000000',
+        'https://hw-tct.douyucdn.cn/live/9527probe_0_0.flv',
       );
+      // 播放请求头:参考实现同源的 Referer/Origin/UA/Cookie(缺头会被 CDN 拒/半开)
+      expect(blueRay.preferredLine?.headers['referer'],
+          'https://www.douyu.com/9527');
+      expect(blueRay.preferredLine?.headers['user-agent'], contains('Chrome/'));
+      expect(blueRay.preferredLine?.headers['cookie'], contains('dy_did='));
 
       final hd = payload.streams[1];
-      expect(hd.lines, hasLength(3), reason: 'ali-h5 error 响应被跳过');
-      expect(hd.lines.map((l) => l.name), ['HLS', '线路1 FLV', '线路2 FLV']);
-      expect(hd.lines[1].url, 'https://hw-tct.douyucdn.cn/live/9527hw_2_1000.flv');
+      expect(hd.lines, hasLength(2), reason: 'ali-h5 error 响应被跳过');
+      expect(hd.lines.map((l) => l.name), ['线路1 FLV', '线路2 FLV']);
+      expect(hd.lines[0].url, 'https://hw-tct.douyucdn.cn/live/9527hw_2_1000.flv');
 
       // playUrl = 首选画质首选线路
       expect(payload.playUrl, blueRay.preferredLine?.url);

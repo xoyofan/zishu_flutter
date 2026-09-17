@@ -236,19 +236,26 @@ class DouyuRoomResolver implements RoomResolver {
     }
 
     final hlsUrl = await hlsFuture;
+    // 媒体流请求头:按房间上下文解析一次(Referer 带房间号),整档线路共用。
+    final playHeaders = douyuPlaybackHeaders(rid);
     final streams = <StreamQuality>[];
     if (lazyRate != null) {
       // 懒取流:解析出的偏好档放首位(playUrl / 播放侧回退都取 streams.first),
       // 其余档位保持原顺序以空线路占位,点击后再按该档重新解析。
       final target = multirates.firstWhere((item) => item.rate == lazyRate);
-      final lines = appendHlsLine(draftsByRate[lazyRate]!, hlsUrl);
+      final lines = appendHlsFallbackLine(draftsByRate[lazyRate]!, hlsUrl);
       streams.add(
         StreamQuality(
           name: _douyuTierName(target),
           rate: target.rate,
           lines: [
             for (final draft in lines)
-              StreamLine(name: draft.name, url: draft.url, format: draft.format),
+              StreamLine(
+                name: draft.name,
+                url: draft.url,
+                format: draft.format,
+                headers: playHeaders,
+              ),
           ],
         ),
       );
@@ -262,7 +269,7 @@ class DouyuRoomResolver implements RoomResolver {
       for (final item in multirates) {
         final drafts = draftsByRate[item.rate];
         if (drafts == null || drafts.isEmpty) continue;
-        final lines = appendHlsLine(drafts, hlsUrl);
+        final lines = appendHlsFallbackLine(drafts, hlsUrl);
         if (lines.isEmpty) continue;
         streams.add(
           StreamQuality(
@@ -270,7 +277,12 @@ class DouyuRoomResolver implements RoomResolver {
             rate: item.rate,
             lines: [
               for (final draft in lines)
-                StreamLine(name: draft.name, url: draft.url, format: draft.format),
+                StreamLine(
+                  name: draft.name,
+                  url: draft.url,
+                  format: draft.format,
+                  headers: playHeaders,
+                ),
             ],
           ),
         );

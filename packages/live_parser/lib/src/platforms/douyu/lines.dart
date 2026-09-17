@@ -1,4 +1,5 @@
-/// 线路构建:CDN 列表解析排序、按画质档拉取各 CDN 的 FLV 线路、附加 HLS。
+/// 线路构建:CDN 列表解析排序、按画质档拉取各 CDN 的 FLV 线路、HLS 兜底线、
+/// 媒体流请求头。
 library;
 
 import '../../http/parser_http.dart';
@@ -124,8 +125,43 @@ Future<PlayV1Response> _fetchOrCached(
   return response;
 }
 
-/// 在线路列表头部追加 HLS preview 线(无 HLS 时原样返回)。
-List<DouyuLineDraft> appendHlsLine(List<DouyuLineDraft> lines, String hlsUrl) {
-  if (hlsUrl.isEmpty) return lines;
-  return [DouyuLineDraft(name: 'HLS', url: hlsUrl, format: 'hls'), ...lines];
+/// 在线路列表尾部追加 HLS preview 线，**仅当没有任何 FLV 线路时**。
+///
+/// 历史实现把 hlsH5Preview 插在列表头，而 [StreamQuality.preferredLine]
+/// 是「有 hls 就选 hls」，于是斗鱼每档的首选线路恒为此预览流。
+/// 但 `hlsH5Preview` 返回的是 `preview=1&edge_slice=true&pt=3` 的**预览切片**:
+/// 边缘切片播放列表与 token 寿命都短，实测实机 mpv 每几秒就
+/// `Failed to open …m3u8?txSecret=…&txTime=…` → 缓冲看门狗整组重开 → 观感
+/// 「黑屏闪一下又恢复」。参考实现 pure_live 从不使用该接口，只用 getH5PlayV1
+/// 的 FLV / 混合地址。故这里改为**兜底**:FLV 全灭时仍可播，FLV 可用时不再抢首选。
+List<DouyuLineDraft> appendHlsFallbackLine(
+  List<DouyuLineDraft> lines,
+  String hlsUrl,
+) {
+  if (hlsUrl.isEmpty || lines.isNotEmpty) return lines;
+  return [DouyuLineDraft(name: 'HLS', url: hlsUrl, format: 'hls')];
 }
+
+/// 斗鱼媒体流请求头(与 pure_live `DouyuUtils.playbackHeaders` 同源)。
+///
+/// 斗鱼 CDN 的 `token=web-h5-…` / `web-douyu-…` 是按浏览器上下文签发的，
+/// 缺 Referer/UA/Cookie 时部分边缘节点直接拒绝或半开连接 —— 宿主播放器侧
+/// 表现为 mpv `Failed to open` → 重开循环。之前斗鱼线路 `headers` 为空，
+/// 而参考实现对**每个平台**都注入该组头。
+Map<String, String> douyuPlaybackHeaders(String roomId) {
+  final rid = roomId.trim();
+  return {
+    'origin': 'https://www.douyu.com',
+    'referer': rid.isEmpty
+        ? 'https://www.douyu.com/'
+        : 'https://www.douyu.com/$rid',
+    'user-agent': kDouyuPlaybackUserAgent,
+    'cookie': 'dy_did=$kDouyuDefaultDid; acf_did=$kDouyuDefaultDid',
+  };
+}
+
+/// 斗鱼页面对应浏览器 UA(token 按该 UA 签发)。
+const String kDouyuPlaybackUserAgent =
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+    'AppleWebKit/537.36 (KHTML, like Gecko) '
+    'Chrome/128.0.0.0 Safari/537.36';

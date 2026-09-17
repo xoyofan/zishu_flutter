@@ -1,3 +1,4 @@
+import 'package:live_parser/src/platforms/douyu/encryption.dart';
 import 'package:live_parser/src/platforms/douyu/lines.dart';
 import 'package:live_parser/src/platforms/douyu/play_api.dart';
 import 'package:test/test.dart';
@@ -104,22 +105,46 @@ void main() {
     });
   });
 
-  group('appendHlsLine', () {
-    test('HLS 插入列表头', () {
-      final lines = appendHlsLine(
+  group('appendHlsFallbackLine', () {
+    test('有 FLV 线路时不插 HLS(避免预览流抢占首选)', () {
+      final lines = appendHlsFallbackLine(
         const [DouyuLineDraft(name: '线路1 FLV', url: 'https://a.douyucdn.cn/1.flv', format: 'flv')],
         'https://a.douyucdn.cn/1.m3u8',
       );
-      expect(lines, hasLength(2));
-      expect(lines.first.name, 'HLS');
-      expect(lines.first.format, 'hls');
+      expect(lines, hasLength(1));
+      expect(lines.single.name, '线路1 FLV');
+      expect(lines.single.format, 'flv');
+    });
+
+    test('FLV 全灭时以 HLS 兑底', () {
+      final lines = appendHlsFallbackLine(
+        const <DouyuLineDraft>[],
+        'https://a.douyucdn.cn/1.m3u8',
+      );
+      expect(lines, hasLength(1));
+      expect(lines.single.name, 'HLS');
+      expect(lines.single.format, 'hls');
     });
 
     test('无 HLS 时原样返回', () {
       final lines = [
         const DouyuLineDraft(name: '线路1 FLV', url: 'https://a.douyucdn.cn/1.flv', format: 'flv'),
       ];
-      expect(identical(appendHlsLine(lines, ''), lines), isTrue);
+      expect(identical(appendHlsFallbackLine(lines, ''), lines), isTrue);
+    });
+  });
+
+  group('douyuPlaybackHeaders', () {
+    test('Referer 带房间号,并带 UA 与匿名 did Cookie', () {
+      final headers = douyuPlaybackHeaders('9527');
+      expect(headers['referer'], 'https://www.douyu.com/9527');
+      expect(headers['origin'], 'https://www.douyu.com');
+      expect(headers['user-agent'], contains('Chrome/'));
+      expect(headers['cookie'], contains('dy_did=$kDouyuDefaultDid'));
+    });
+
+    test('空房间号回退站点根 Referer', () {
+      expect(douyuPlaybackHeaders('')['referer'], 'https://www.douyu.com/');
     });
   });
 }
