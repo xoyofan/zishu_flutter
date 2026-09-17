@@ -19,14 +19,17 @@ import 'player_error.dart';
 import 'window_presentation.dart';
 
 class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
-  MediaKitLivePlayer() {
+  /// [player] 是单测注入点:VM 测试无法加载原生 libmpv(`Player()` 会构造
+  /// `NativePlayer` 并 `DynamicLibrary.open`),只能注入 `Player(platformPlayer:)`
+  /// 的假后端来驱动事件与命令。生产调用点一律不传,行为与原先完全一致。
+  MediaKitLivePlayer({Player? player}) : _player = player ?? Player() {
     _wire();
     // 参照 pure_live 的直播卡顿根治:mpv 属性调优让断流/卡死的直播流
     // 主动报错而非无限缓冲,再由错误/看门狗路径重连。属性调优失败不阻断播放。
     unawaited(_applyLiveTuning());
   }
 
-  final Player _player = Player();
+  final Player _player;
   late final VideoController _videoController = VideoController(_player);
 
   /// 向 UI 广播的快照流。
@@ -46,6 +49,32 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   /// 已释放标记:app 退出时根容器可能先销毁播放器再触发页面级 stop,
   /// 此标记保证 stop 不会打到已释放的原生播放内核。
   bool _disposed = false;
+
+  /// 生命周期串行队列:open / stop / play / pause 依调用顺序逐条执行。
+  ///
+  /// 切房竞态(调用方 `unawaited(stop())` 与新房的 `unawaited(open(...))` 交错,
+  /// 旧 stop 落到新 open 之后把新源卸载 → 黑屏/无声且日志无错)的根治。
+  /// 队尾吞错:单步失败不得卡死后续生命周期调用(仿 pure_live 的 player_manager)。
+  /// 窗口/PiP 调用不入队 —— 它们与媒体源无关,排队只会让窗口操作变迟钝。
+  Future<void> _lifecycleQueue = Future.value();
+
+  /// 源代际计数:每次 open / stop 同步自增;在途的旧 open 在下一个 await
+  /// 回来后若代际已变即作废。与编排层 `PlayState.generation`(房间/画质场景
+  /// 代际)无关,本字段只服务播放器内部「旧指令不得覆盖新指令」。
+  int _sourceGeneration = 0;
+
+  /// 事件围栏:open 在途期间屏蔽底层事件。
+  ///
+  /// 旧源的 `completed` / `error` 会在切源瞬间才吐出,放过去会污染新房状态
+  /// (推高失败计数、覆写错误文案)。刻意按「open 在途窗口」而非媒体 path 做
+  /// 门禁:path 门禁会误杀 mpv 播放列表内部自动跳到下一条线路时发出的事件。
+  /// open 落地后由 [_resyncAfterOpen] 解除并补发真实状态。
+  bool _eventsFenced = false;
+
+  /// 放弃闩锁:自动重试 + 恢复重解析都耗尽后置位,此后不再自动重试
+  /// (补 R3 缺陷:无终局标记时看门狗会持续空转)。只在 `open(resetRetries: true)`
+  /// (用户主动重试/切源)时清除。
+  bool _givenUp = false;
 
   /// 静音前音量,解除静音时恢复。
   double _volumeBeforeMute = 100;
@@ -101,10 +130,27 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
 
   bool get _disposedOrEmpty => _disposed || _currentLines.isEmpty;
 
+  /// 把 [task] 串到生命周期队尾执行。
+  ///
+  /// 返回值是**队尾**(已吞掉本次失败),而非原始 task 结果:调用点大多
+  /// `unawaited(...)`,若让异常沿返回的 Future 逃逸会产生未处理异步异常。
+  Future<void> _enqueueLifecycle(Future<void> Function() task) {
+    final result = _lifecycleQueue.then<void>((_) => task());
+    _lifecycleQueue = result.catchError((Object _) {});
+    return _lifecycleQueue;
+  }
+
   void _wire() {
     final events = _player.stream;
     void bind<T>(Stream<T> source, PlayerSnapshot Function(PlayerSnapshot, T) patch) {
-      _subscriptions.add(source.listen((value) => _emit((snapshot) => patch(snapshot, value))));
+      _subscriptions.add(
+        source.listen((value) {
+          // 围栏:open 在途期间的事件可能是旧源残留(completed/error),
+          // 直接丢弃;open 落地后 [_resyncAfterOpen] 会补发真实状态。
+          if (_eventsFenced) return;
+          _emit((snapshot) => patch(snapshot, value));
+        }),
+      );
     }
 
     bind(events.playing, (s, v) {
@@ -196,14 +242,50 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   /// **已挂起则不重启**(幂等):mpv 对同一个故障会反复吐同一条诊断,缓冲标志也
   /// 会反复置位。若每次都 cancel + 重新计时,看门狗会被永久推迟 —— 表现为
   /// "自动重连永远不触发"的看门狗饥饿。已挂起就让它按原定时刻到期。
+  /// 已闩锁放弃时也不再挂:自动重试已终结,挂上只会白跑一趟。
   void _armStallTimer() {
-    if (_stallTimer != null) return;
-    _stallTimer = Timer(_policy.backoffFor(_stallRetries), _reopenIfStalled);
+    if (_stallTimer != null || _givenUp) return;
+    final backoff = _policy.backoffFor(_stallRetries);
+    _stallTimer = Timer(backoff, _reopenIfStalled);
+    PlaybackLog.write('stall_watchdog', {
+      'armed': true,
+      'backoffMs': backoff.inMilliseconds,
+      'retries': _stallRetries,
+    });
   }
 
   void _cancelHealthTimer() {
     _healthTimer?.cancel();
     _healthTimer = null;
+  }
+
+  /// open 落地后的收尾:解除围栏并补发一帧**真实**状态。
+  ///
+  /// 围栏在 open 在途期间会丢掉底层事件(含健康流在打开瞬间就发出的 playing),
+  /// 若只解围栏不补发,UI 会停在「缓冲中」直到下一次状态变化 —— 可能几秒后,
+  /// 也可能永远不来。这里直接读底层 state:先把真实态推给 UI,再据其恢复
+  /// 看门狗 / 健康观察窗的记账。
+  void _resyncAfterOpen() {
+    final state = _player.state;
+    final width = state.width;
+    final height = state.height;
+    _emit(
+      (s) => s.copyWith(
+        playing: state.playing,
+        buffering: state.buffering,
+        // 未出画面时 mpv 报 null/0,沿用旧宽高(PiP 小窗不该退回 16:9)。
+        width: width != null && width > 0 ? width : null,
+        height: height != null && height > 0 ? height : null,
+      ),
+    );
+    if (state.playing) {
+      _onPlaying();
+    } else if (state.buffering) {
+      _onBuffering(true);
+    }
+    // 看门狗重挂(补 R4 饥饿缺陷):open 开头撤掉看门狗后,若 mpv 重组播放
+    // 列表不再发出 buffering 状态变化,自动重连会静默停摆。已挂则不覆盖(幂等)。
+    if (!state.playing) _armStallTimer();
   }
 
   /// 收到**终局**诊断:记录类别(供放弃时给出对症建议)。不在此处重连 ——
@@ -216,8 +298,12 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   }
 
   /// 播放列表自然结束(直播不该发生):视为整组线路失效,触发轮转重连。
+  ///
+  /// **不立即重开**,走与缓冲看门狗同一退避入口(补 R8 缺陷:立即重开会对
+  /// 已失效的整批地址高频空转,并把日志刷成每秒一条)。
   void _onCompleted() {
-    if (!_disposedOrEmpty) _reopenIfStalled();
+    if (_disposedOrEmpty) return;
+    _armStallTimer();
   }
 
   /// 卡顿/错误/结束回调:把整组线路(首选 + 回退)作为 mpv 播放列表重新打开。
@@ -225,7 +311,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   /// 注意:此处走 [resetRetries]=false 的 open,避免清空正在累积的失败计数
   /// (否则"放弃"分支永远走不到)。计数只在健康观察窗走完后归零。
   void _reopenIfStalled() {
-    if (_disposedOrEmpty) return;
+    if (_disposedOrEmpty || _givenUp) return;
     _stallTimer = null;
     if (!_policy.canRetry(_stallRetries)) {
       // 自动重试耗尽:**先尝试向宿主重新解析**,而不是直接把错误卡片交出去。
@@ -235,7 +321,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       return;
     }
     _stallRetries++;
-    PlaybackLog.write('reopen', {
+    PlaybackLog.write('reopen_requested', {
       'attempt': _stallRetries,
       'limit': _policy.maxAttempts,
       'lines': _currentLines.length,
@@ -291,6 +377,10 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       });
     }
     if (_disposed) return;
+    // 放弃闩锁:置位后看门狗/终止错误/列表结束都不再触发重开(补 R3),
+    // 只在 resetRetries 的 open(用户主动重试/切源)清除。
+    _givenUp = true;
+    PlaybackLog.write('give_up_latched', {'kind': _lastErrorKind.name});
     PlaybackLog.write('give_up', {'kind': _lastErrorKind.name});
     _emit(
       (s) => s.copyWith(
@@ -314,7 +404,8 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     if (platform is! NativePlayer) return; // Web/测试等非原生后端跳过。
     try {
       await platform.waitForPlayerInitialization;
-      final cacheDir = '${Directory.systemTemp.path}\\zishu_demuxer_cache';
+      final cacheDir =
+          '${Directory.systemTemp.path}${Platform.pathSeparator}zishu_demuxer_cache';
       await Directory(cacheDir).create(recursive: true);
       await platform.setProperty('force-seekable', 'yes');
       await platform.setProperty(
@@ -369,85 +460,136 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     StreamLine line, [
     List<StreamLine> fallbacks = const [],
     bool resetRetries = true,
-  ]) async {
-    // 切源即重置快照:清错误、退出播放态,进入缓冲。
-    // 整组线路(首选 + 回退)按顺序拼成 mpv 播放列表:某条断流时 mpv 内部
-    // 自动跳下一条,耗尽后再由看门狗整体轮转。
-    _currentLines = [line, ...fallbacks];
-    if (resetRetries) {
-      _stallRetries = 0;
-      // 新会话(进房/切线/换新地址)重置诊断去重:不同故障的同文案也该再记。
-      _lastLoggedDiag = null;
-      PlaybackLog.write('open', {
-        'lines': _currentLines.length,
-        'host': _hostOf(line),
-      });
-    }
-    _stallTimer?.cancel();
-    _stallTimer = null;
-    _cancelHealthTimer();
-    // 保留已出画面的宽高:自动重连期间 PiP 小窗要沿用原宽高比,不该退回 16:9。
-    // 错误文案的区别对待很关键:用户主动切源([resetRetries] 为 true)才清错误,
-    // 让卡片退出;自动重连([resetRetries] 为 false)要**留着**错误 + 计数,
-    // 这样阶段浮层能显示"自动重连中 n/上限",用户知道程序在自救而非卡死。
-    final keepError = !resetRetries && _latest.error != null;
-    _emit(
-      (s) => PlayerSnapshot(
-        volume: s.volume,
-        muted: _muted,
-        width: s.width,
-        height: s.height,
-        buffering: true,
-        error: keepError ? s.error : null,
-        errorKind: keepError ? s.errorKind : PlayerErrorKind.none,
-        retryAttempt: _stallRetries,
-      ),
-    );
-    try {
-      final playlist = Playlist(
-        _currentLines
-            .map((item) => Media(item.url, httpHeaders: item.headers))
-            .toList(growable: false),
-      );
-      await _player.open(playlist, play: true);
-    } catch (error) {
-      // 原始异常(ArgumentError / PlatformException 等)不是 mpv 日志,直接展示
-      // 对用户无意义;归类后给处置建议,归类不出则退到兜底文案。
-      final classification = PlayerErrorClassifier.classify('$error');
-      final kind = classification.isError
-          ? classification.kind
-          : PlayerErrorKind.native;
-      _lastErrorKind = kind;
+  ]) {
+    // 同步自增代际:后续任何 await 回来后若代际已变,说明有更新的 open/stop
+    // 覆盖了本次指令,直接作废(不写快照、不动计时器)。
+    final myGen = ++_sourceGeneration;
+    return _enqueueLifecycle(() async {
+      if (myGen != _sourceGeneration) {
+        PlaybackLog.write('open_superseded', {
+          'gen': myGen,
+          'current': _sourceGeneration,
+          'phase': 'queued',
+        });
+        return;
+      }
+      // 进入开流:屏蔽底层事件,直到本次 open 落地再补发真实状态。
+      _eventsFenced = true;
+      // 切源即重置快照:清错误、退出播放态,进入缓冲。
+      // 整组线路(首选 + 回退)按顺序拼成 mpv 播放列表:某条断流时 mpv 内部
+      // 自动跳下一条,耗尽后再由看门狗整体轮转。
+      _currentLines = [line, ...fallbacks];
+      if (resetRetries) {
+        _stallRetries = 0;
+        // 用户主动重试/切源是唯一的闩锁解除点。
+        _givenUp = false;
+        // 新会话(进房/切线/换新地址)重置诊断去重:不同故障的同文案也该再记。
+        _lastLoggedDiag = null;
+        PlaybackLog.write('open', {
+          'lines': _currentLines.length,
+          'host': _hostOf(line),
+        });
+      }
+      _stallTimer?.cancel();
+      _stallTimer = null;
+      _cancelHealthTimer();
+      // 保留已出画面的宽高:自动重连期间 PiP 小窗要沿用原宽高比,不该退回 16:9。
+      // 错误文案的区别对待很关键:用户主动切源([resetRetries] 为 true)才清错误,
+      // 让卡片退出;自动重连([resetRetries] 为 false)要**留着**错误 + 计数,
+      // 这样阶段浮层能显示"自动重连中 n/上限",用户知道程序在自救而非卡死。
+      final keepError = !resetRetries && _latest.error != null;
       _emit(
-        (s) => s.copyWith(error: playerErrorHint(kind), errorKind: kind),
+        (s) => PlayerSnapshot(
+          volume: s.volume,
+          muted: _muted,
+          width: s.width,
+          height: s.height,
+          buffering: true,
+          error: keepError ? s.error : null,
+          errorKind: keepError ? s.errorKind : PlayerErrorKind.none,
+          retryAttempt: _stallRetries,
+        ),
       );
-    }
+      try {
+        final playlist = Playlist(
+          _currentLines
+              .map((item) => Media(item.url, httpHeaders: item.headers))
+              .toList(growable: false),
+        );
+        await _player.open(playlist, play: true);
+      } catch (error) {
+        // 被更新的指令顶掉:连错误都不该写(否则旧源的异常会覆写新房文案)。
+        if (myGen != _sourceGeneration) {
+          PlaybackLog.write('open_superseded', {
+            'gen': myGen,
+            'current': _sourceGeneration,
+            'phase': 'failed',
+          });
+          return;
+        }
+        // 原始异常(ArgumentError / PlatformException 等)不是 mpv 日志,直接展示
+        // 对用户无意义;归类后给处置建议,归类不出则退到兜底文案。
+        final classification = PlayerErrorClassifier.classify('$error');
+        final kind = classification.isError
+            ? classification.kind
+            : PlayerErrorKind.native;
+        _lastErrorKind = kind;
+        _eventsFenced = false;
+        _emit(
+          (s) => s.copyWith(error: playerErrorHint(kind), errorKind: kind),
+        );
+        return;
+      }
+      // open 途中被更新的 open/stop 顶掉:作废,不写快照、不动计时器。
+      if (myGen != _sourceGeneration) {
+        PlaybackLog.write('open_superseded', {
+          'gen': myGen,
+          'current': _sourceGeneration,
+          'phase': 'in_flight',
+        });
+        return;
+      }
+      if (_disposed) return;
+      // 解围栏并补发真实状态(含看门狗重挂,见 [_resyncAfterOpen])。
+      _eventsFenced = false;
+      _resyncAfterOpen();
+    });
   }
 
   @override
-  Future<void> play() => _player.play();
+  Future<void> play() => _enqueueLifecycle(() => _player.play());
 
   @override
-  Future<void> pause() => _player.pause();
+  Future<void> pause() => _enqueueLifecycle(() => _player.pause());
 
   @override
-  Future<void> stop() async {
-    if (_disposed) return;
-    // 卸载媒体即终止自动重连(离房不应在后台空转重连)。
-    if (_currentLines.isNotEmpty) {
-      PlaybackLog.write('stop', {'retries': _stallRetries});
-    }
-    _stallTimer?.cancel();
-    _stallTimer = null;
-    _cancelHealthTimer();
-    _currentLines = const [];
-    // 离房即重置恢复节流:下一次进房应能立刻恢复,而不是继承上一间的窗口。
-    _lastRecoverAt = null;
-    await _player.stop();
-    // 卸载媒体后回到空闲快照:清播放/缓冲/错误,保留音量与静音语义。
-    _emit(
-      (_) => PlayerSnapshot(volume: _latest.volume, muted: _muted),
-    );
+  Future<void> stop() {
+    // 同步自增代际:作废在途的 open —— 离房后旧的 open 不得再把源挂上。
+    _sourceGeneration++;
+    return _enqueueLifecycle(() async {
+      if (_disposed) return;
+      // 若上一个被作废的 open 死在围栏里,这里负责解围栏。
+      _eventsFenced = false;
+      // 卸载媒体即终止自动重连(离房不应在后台空转重连)。
+      if (_currentLines.isNotEmpty) {
+        PlaybackLog.write('stop', {'retries': _stallRetries});
+      }
+      _stallTimer?.cancel();
+      _stallTimer = null;
+      _cancelHealthTimer();
+      _currentLines = const [];
+      // 离房即重置恢复节流与重试记账:下一次进房从干净状态开始,
+      // 而不是继承上一间的窗口 / 已放弃闩锁(否则重进同一间永不自动重连)。
+      _lastRecoverAt = null;
+      _stallRetries = 0;
+      _givenUp = false;
+      _lastErrorKind = PlayerErrorKind.native;
+      await _player.stop();
+      // 卸载媒体后回到空闲快照:清播放/缓冲/错误,保留音量与静音语义。
+      _emit(
+        (_) => PlayerSnapshot(volume: _latest.volume, muted: _muted),
+      );
+    });
   }
 
   @override
