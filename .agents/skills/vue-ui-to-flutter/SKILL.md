@@ -5,18 +5,18 @@ description: 把 SFVideoLive/web 的 Vue 组件与视图移植为 zishu_flutter 
 
 # Vue UI → Flutter Widget 移植
 
-把 `D:\gitProject\SFVideoLive\web\src` 下的 Vue 3 组件移植为 `D:\gitProject\zishu_flutter\lib\src` 下的 Flutter Widget。目标是**布局、样式、交互对齐**,不是逐行翻译;禁止把 Vue 运行时/WebF 嵌入 Flutter,禁止复制 Vue 文件到新工程。
+把 `F:\project\SFVideoLive\apps\web\src` 下的 Vue 3 组件移植为 `F:\project\zishu_flutter\lib\src` 下的 Flutter Widget。目标是**布局、样式、交互对齐**,不是逐行翻译;禁止把 Vue 运行时/WebF 嵌入 Flutter,禁止复制 Vue 文件到新工程。
 
 ## 开始前必读(按需加载,不要跳过)
 
-1. `D:\gitProject\zishu_flutter\AGENTS.md` — 目录与依赖边界(新代码在 `lib/src/`,禁止 import `lib/legacy/`)。
-2. `D:\gitProject\zishu_flutter\docs\implementation-plan.md` 第 6 节 — 视觉基线、路由清单、页面功能目标。
+1. `F:\project\zishu_flutter\AGENTS.md` — 目录与依赖边界(新代码在 `lib/src/`,禁止 import `lib/legacy/`)。
+2. `F:\project\zishu_flutter\docs\implementation-plan.md` 第 6 节 — 视觉基线、路由清单、页面功能目标。
 3. 待移植的 Vue 源文件(views + 它 import 的 components/composables/styles)。
-4. `D:\gitProject\zishu_flutter\lib\src\shared\presentation\` — 已有 design tokens,禁止在 Widget 里写裸色值/裸数字。
+4. `F:\project\zishu_flutter\lib\src\shared\presentation\` — 已有 design tokens,禁止在 Widget 里写裸色值/裸数字。
 
 ## 工作流
 
-1. **定位源**:在 `SFVideoLive/web/src/views/` 与 `components/` 找到目标组件;`.vue` 文件的 `<style>`(含 scoped 和引入的 `src/styles/*.css`)是样式的唯一真源。
+1. **定位源**:在 `SFVideoLive/apps/web/src/views/` 与 `components/` 找到目标组件;`.vue` 文件的 `<style>`(含 scoped 和引入的 `src/styles/*.css`)是样式的唯一真源。
 2. **提取视觉规格**:颜色、间距、圆角、字号、断点先归一到 design tokens(见下表);tokens 里没有的新值先补进 tokens 文件再使用。
 3. **映射结构**:按下方对照表把 template → Widget 树,数据绑定 → 构造参数/controller 状态;composables 逻辑不放 UI,放 `features/<f>/application/` 的 controller。
 4. **数据解耦**:Widget 只消费稳定 Dart model(来自 `shared/domain` 或 fixtures),禁止 `Map<String, dynamic>` 直接进 UI;解析数据未就绪时用 `FixtureLiveRepository` 样例数据驱动样式。

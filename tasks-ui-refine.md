@@ -1,7 +1,7 @@
 # tasks-ui-refine.md — UI 截图对齐：并行分工看板
 
 > 基线：`feat/a11-nav-capability` 分支，`flutter analyze` 0 issue / 已有 UI 测试通过。
-> 对照源：`tool/screenshots/sfvideo/` + `SFVideoLive/web/src/styles/theme.css` + `docs/ui-parity/spec-layout.md`。
+> 对照源：`tool/screenshots/sfvideo/` + `SFVideoLive/apps/web/src/styles/theme.css` + `docs/ui-parity/spec-layout.md`。
 > 规则：每个轨只改自己独占文件；收口轨最后改 `play_view.dart` / `play_side_panel.dart` / `app_shell.dart`。
 
 ## 已确认对齐（不需要再动）
@@ -98,7 +98,7 @@ T5 串行更新 golden
 ## 收口验证
 
 ```bash
-cd D:\gitProject\zishu_flutter-a11
-D:\flutter-sdk\flutter-3.47.0\flutter\bin\flutter.bat analyze
-D:\flutter-sdk\flutter-3.47.0\flutter\bin\flutter.bat test
+cd F:\project\zishu_flutter
+F:\flutter\bin\flutter.bat analyze
+F:\flutter\bin\flutter.bat test
 ```

@@ -15,9 +15,9 @@
 
 ```bash
 # streaming-server
-cd F:/project/SFVideoLive/streaming-server && npm run dev     # :8766
+cd F:/project/SFVideoLive/services/streaming-server && npm run dev  # :8766
 # web（注意：清空 NODE_OPTIONS，避免 WorkBuddy safe-delete shim 拦截 vite 依赖预构建导致崩溃）
-cd F:/project/SFVideoLive/web && NODE_OPTIONS= npm run dev    # :9000
+cd F:/project/SFVideoLive/apps/web && NODE_OPTIONS= npm run dev  # :9000
 ```
 
 路由：`/all` 全平台首页 ｜ `/:site` 单平台首页 ｜ `/:site/category` 分类图标页 ｜ `/:site/category/:cid` 分类房间页 ｜ `/follow` 关注 ｜ `/time` 时间线 ｜ `/:site/play/:id` 播放页（样例房间 `/douyu/play/63136`）

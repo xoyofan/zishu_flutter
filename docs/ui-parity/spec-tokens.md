@@ -1,6 +1,6 @@
 # SFVideo 设计 Token 规格（规格驱动复刻 · 色板与基础常量）
 
-> 源：`/d/SFVideoLive/web`（Vue 3 + Element Plus），分支 `feat/flutter-native-windows`
+> 源：`F:/project/SFVideoLive/apps/web`（Vue 3 + Element Plus），分支 `desktop-native`
 > 抽取日期：2026-09-10
 > 口径：**几何 + 配色 + 断点行为 + 交互等价**，不追求逐像素（跨框架字体渲染不可对齐）
 
