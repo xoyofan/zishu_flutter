@@ -7,7 +7,15 @@ library;
 
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
+import '../../utils/header_sanitizer.dart';
 import '../douyu/json_utils.dart';
+
+/// SOOP 媒体流(HLS)请求头:CDN 以 Referer/Origin 做防盗链,
+/// 与解析请求头(SoopClient.defaultHeaders / player_live_api)同源。
+final Map<String, String> soopPlaybackHeaders = sanitizeHeaders(const {
+  'origin': 'https://www.sooplive.co.kr',
+  'referer': 'https://www.sooplive.co.kr/',
+});
 
 /// player_live_api 业务码:1 在播、0 未开播、-2 封禁、-6 需登录。
 const int kSoopResultLive = 1;
@@ -340,7 +348,12 @@ Future<StreamQuality?> buildSoopTier(
     name: quality.name,
     rate: quality.rate,
     lines: [
-      StreamLine(name: '线路', url: '$cdnUrl?aid=$aid', format: 'hls'),
+      StreamLine(
+        name: '线路',
+        url: '$cdnUrl?aid=$aid',
+        format: 'hls',
+        headers: soopPlaybackHeaders,
+      ),
     ],
   );
 }

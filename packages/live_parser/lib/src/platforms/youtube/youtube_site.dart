@@ -131,7 +131,14 @@ class YoutubeRoomResolver implements RoomResolver {
         StreamQuality(
           name: '自动',
           rate: 0,
-          lines: [StreamLine(name: '线路', url: master, format: 'hls')],
+          lines: [
+            StreamLine(
+              name: '线路',
+              url: master,
+              format: 'hls',
+              headers: youtubePlaybackHeaders,
+            ),
+          ],
         ),
         ...variants,
       ];

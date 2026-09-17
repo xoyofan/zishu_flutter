@@ -82,6 +82,12 @@ void main() {
       expect(hdFlv.format, 'flv');
       expect(hdFlv.url, contains('&ratio=2000'));
 
+      // 播放头:防盗链 Referer/Origin + 解析期 UA
+      final playHeaders = blueRay.lines.first.headers;
+      expect(playHeaders['referer'], 'https://www.huya.com/9527');
+      expect(playHeaders['origin'], 'https://www.huya.com');
+      expect(playHeaders['user-agent'], contains('Chrome/'));
+
       expect(payload.playUrl, payload.streams.first.preferredLine?.url);
       final restored = RoomPayload.fromJson(payload.toJson());
       expect(restored.toJson(), equals(payload.toJson()));
@@ -114,6 +120,11 @@ void main() {
       expect(flv.url, contains('ctype=huya_webh5'), reason: 'TX 线路 ctype=tars_mp 需替换');
       expect(flv.url, contains('fs=bgct'), reason: 'TX 线路 fs=bhct 需替换');
       expect(only.lines.any((l) => l.format == 'hls'), isTrue);
+      expect(
+        flv.headers['referer'],
+        'https://www.huya.com/9527',
+        reason: 'app 回退线路同样带播放头',
+      );
     });
   });
 

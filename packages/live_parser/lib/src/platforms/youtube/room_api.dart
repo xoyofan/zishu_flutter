@@ -208,6 +208,7 @@ List<StreamQuality> parseYoutubeMasterPlaylist(
                 name: '线路 ${i + 1}',
                 url: entry.urls[i],
                 format: 'hls',
+                headers: youtubePlaybackHeaders,
               ),
           ],
         ),

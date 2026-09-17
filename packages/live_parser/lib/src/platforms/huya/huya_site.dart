@@ -50,6 +50,7 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver {
     final url = normalizeHuyaUrl(request.roomIdOrUrl);
     final rid = await resolveHuyaNumericRoomId(http, url);
     final canonicalUrl = 'https://www.huya.com/$rid';
+    final playHeaders = huyaPlaybackHeaders(rid);
 
     // 页面与 profile 互不依赖(仅需 rid):并行发,页面失败仍可用 profile 判三态。
     final profileFuture = fetchHuyaProfileBrief(http, rid)..ignore();
@@ -84,7 +85,7 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver {
 
     // 页面无流数据:三态判定完全依赖 profileRoom。
     if (webData == null || webData.streamInfoList.isEmpty) {
-      final appStreams = _appFallbackStreams(profileData);
+      final appStreams = _appFallbackStreams(profileData, playHeaders);
       if (appStreams == null) {
         if (profileData == null && webData == null) {
           return _payload(baseInfo, RoomState.notFound, error: '房间不存在');
@@ -108,10 +109,24 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver {
         final hls = buildHuyaHlsUrl(streamInfo, quality.rate);
         final flv = buildHuyaFlvUrl(streamInfo, quality.rate);
         if (hls != null) {
-          lines.add(StreamLine(name: '$lineName HLS', url: hls, format: 'hls'));
+          lines.add(
+            StreamLine(
+              name: '$lineName HLS',
+              url: hls,
+              format: 'hls',
+              headers: playHeaders,
+            ),
+          );
         }
         if (flv != null) {
-          lines.add(StreamLine(name: '$lineName FLV', url: flv, format: 'flv'));
+          lines.add(
+            StreamLine(
+              name: '$lineName FLV',
+              url: flv,
+              format: 'flv',
+              headers: playHeaders,
+            ),
+          );
         }
       }
       if (lines.isNotEmpty) {
@@ -131,7 +146,10 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver {
   }
 
   /// profileRoom 流列表兜底(TX 优先,ctype/fs 换 webh5 参数)。
-  List<StreamQuality>? _appFallbackStreams(Map<String, dynamic>? profileData) {
+  List<StreamQuality>? _appFallbackStreams(
+    Map<String, dynamic>? profileData,
+    Map<String, String> playHeaders,
+  ) {
     if (profileData == null) return null;
     if (huyaRoomState(profileData, null) != HuyaRoomState.live) return null;
     final baseList = jsonMapOfList(jsonMapOf(profileData['stream'])['baseSteamInfoList']);
@@ -170,9 +188,19 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver {
     }
 
     final lines = <StreamLine>[
-      StreamLine(name: '线路1 FLV', url: httpsHuyaUrl(selectedFlv), format: 'flv'),
+      StreamLine(
+        name: '线路1 FLV',
+        url: httpsHuyaUrl(selectedFlv),
+        format: 'flv',
+        headers: playHeaders,
+      ),
       if (selectedHls != null)
-        StreamLine(name: '线路1 HLS', url: httpsHuyaUrl(selectedHls), format: 'hls'),
+        StreamLine(
+          name: '线路1 HLS',
+          url: httpsHuyaUrl(selectedHls),
+          format: 'hls',
+          headers: playHeaders,
+        ),
     ];
     return [StreamQuality(name: '默认', rate: 0, lines: lines)];
   }

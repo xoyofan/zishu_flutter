@@ -12,6 +12,7 @@ import 'dart:io';
 
 import '../../models/models.dart';
 import '../douyu/json_utils.dart';
+import 'normalize.dart';
 
 /// yt-dlp 提取的一档直播。
 class YoutubeDlpTier {
@@ -221,12 +222,22 @@ List<YoutubeDlpTier> parseYoutubeDlpTiers(Object? formats) {
 }
 
 /// dlp 档位 -> 统一 StreamQuality(每档一条线路)。
+///
+/// dlp 下发的是同一批 googlevideo 媒体地址,沿用 [youtubePlaybackHeaders]:
+/// 首档预校验(validateYoutubeChain)即以此组头探测。
 List<StreamQuality> youtubeDlpQualities(List<YoutubeDlpTier> tiers) => [
   for (final tier in tiers)
     StreamQuality(
       name: tier.label,
       rate: tier.height * 1000 + tier.fps,
-      lines: [StreamLine(name: '线路', url: tier.url, format: 'hls')],
+      lines: [
+        StreamLine(
+          name: '线路',
+          url: tier.url,
+          format: 'hls',
+          headers: youtubePlaybackHeaders,
+        ),
+      ],
     ),
 ];
 

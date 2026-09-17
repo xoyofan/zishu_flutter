@@ -37,6 +37,11 @@ void main() {
       ]);
       expect(payload.playUrl, 'https://stream.yy.com/blue.m3u8');
 
+      // 播放头:CDN 以 Referer/Origin 做防盗链
+      final lineHeaders = payload.streams.first.lines.first.headers;
+      expect(lineHeaders['origin'], 'https://www.yy.com');
+      expect(lineHeaders['referer'], 'https://www.yy.com/');
+
       final streamRequest = fake.requests.firstWhere(
         (request) => request.url.host == 'stream-manager.yy.com',
       );

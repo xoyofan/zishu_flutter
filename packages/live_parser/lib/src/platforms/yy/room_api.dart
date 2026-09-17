@@ -5,12 +5,20 @@ import 'dart:convert';
 
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
+import '../../utils/header_sanitizer.dart';
 import '../douyu/json_utils.dart';
 import 'normalize.dart';
 
 const String kYySource = 'live_parser/yy';
 const String kYyStreamSdkVersion = '5.23.0-beta.2';
 const List<String> kYyMobileHlsRates = ['1200', '4000'];
+
+/// YY 媒体流(HLS/FLV)请求头:CDN 以 Referer/Origin 做防盗链,
+/// 与解析请求头(YyClient.defaultHeaders)同源。
+final Map<String, String> yyPlaybackHeaders = sanitizeHeaders(const {
+  'origin': 'https://www.yy.com',
+  'referer': 'https://www.yy.com/',
+});
 
 class YyRoomDetail {
   const YyRoomDetail({
@@ -310,6 +318,7 @@ Future<StreamQuality?> buildYyTier(
             name: '线路',
             url: url,
             format: url.toLowerCase().contains('.m3u8') ? 'hls' : 'flv',
+            headers: yyPlaybackHeaders,
           ),
       ],
     );
@@ -321,6 +330,13 @@ Future<StreamQuality?> buildYyTier(
   return StreamQuality(
     name: quality.name,
     rate: quality.gear,
-    lines: [StreamLine(name: '线路', url: hls, format: 'hls')],
+    lines: [
+      StreamLine(
+        name: '线路',
+        url: hls,
+        format: 'hls',
+        headers: yyPlaybackHeaders,
+      ),
+    ],
   );
 }

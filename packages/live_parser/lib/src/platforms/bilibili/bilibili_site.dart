@@ -8,6 +8,7 @@ import '../../http/parser_http.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
 import '../../registry/cached_room_resolver.dart';
+import '../../utils/header_sanitizer.dart';
 import 'browse.dart';
 import 'danmaku.dart';
 import '../douyu/json_utils.dart';
@@ -18,6 +19,15 @@ import 'wbi.dart';
 
 /// B 站解析源标识。
 const String kBilibiliSource = 'live_parser/bilibili';
+
+/// B 站直播流(HLS/FLV)请求头:CDN 以 Referer/Origin 做防盗链,
+/// 与解析请求头(BilibiliClient.defaultHeaders)同源。
+/// 默认不带 Cookie —— 匿名即可取流,也避免单测噪声;
+/// 若上层配置了登录 Cookie,由调用方按需追加。
+final Map<String, String> bilibiliPlaybackHeaders = sanitizeHeaders(const {
+  'referer': 'https://live.bilibili.com/',
+  'origin': 'https://live.bilibili.com',
+});
 
 class BilibiliClient {
   BilibiliClient({
@@ -120,7 +130,12 @@ class BilibiliRoomResolver implements RoomResolver {
           rate: quality.qn,
           lines: [
             for (final line in lines)
-              StreamLine(name: line.name, url: line.url, format: line.format),
+              StreamLine(
+                name: line.name,
+                url: line.url,
+                format: line.format,
+                headers: bilibiliPlaybackHeaders,
+              ),
           ],
         ),
       );

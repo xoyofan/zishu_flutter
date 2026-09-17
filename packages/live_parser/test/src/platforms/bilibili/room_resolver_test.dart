@@ -90,6 +90,10 @@ void main() {
     expect(flvLine.url, contains('live-bvc/9527?proto=flv'));
     expect(flvLine.url, contains('expires='));
 
+    // 播放头:CDN 以 Referer/Origin 做防盗链
+    expect(original.lines.first.headers['referer'], 'https://live.bilibili.com/');
+    expect(original.lines.first.headers['origin'], 'https://live.bilibili.com');
+
     // 超清档(qn=250):hls ts 精确匹配 250
     final hd = payload.streams[1];
     expect(hd.name, '超清');

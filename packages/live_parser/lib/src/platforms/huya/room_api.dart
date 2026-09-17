@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 import '../../http/parser_http.dart';
+import '../../utils/header_sanitizer.dart';
 import 'anti_code.dart';
 import '../douyu/json_utils.dart';
 import 'normalize.dart';
@@ -26,6 +27,21 @@ const Map<String, String> kHuyaMobileHeaders = {
   'referer': 'https://servicewechat.com/wx74767bf0b684f7d3/301/page-frame.html',
   'accept-language': 'zh-CN,zh;q=0.9',
 };
+
+/// 虎牙媒体流(HLS/FLV)请求头。
+///
+/// 虎牙 CDN 以 Referer/Origin 做防盗链,缺头时地址可能 403 或半开连接。
+/// UA 取本 package 解析链路实际使用的 [kDefaultParserUserAgent]:上游有进程级
+/// `HuyaSite.playUserAgent`(由远端配置刷新),本 package 未维护该字段,
+/// 而**不为头再发一次网络请求**,直接沿用解析期 UA。
+Map<String, String> huyaPlaybackHeaders(String roomId) {
+  final rid = roomId.trim();
+  return sanitizeHeaders({
+    'user-agent': kDefaultParserUserAgent,
+    'origin': 'https://www.huya.com',
+    'referer': rid.isEmpty ? 'https://www.huya.com/' : 'https://www.huya.com/$rid',
+  });
+}
 
 String httpsHuyaUrl(String text) {
   final value = text.trim();

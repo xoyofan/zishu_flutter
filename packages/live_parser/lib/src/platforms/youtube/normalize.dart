@@ -1,6 +1,8 @@
 /// YouTube 输入归一与公共请求头。
 library;
 
+import '../../utils/header_sanitizer.dart';
+
 /// YouTube 站点标识(与 UI PlatformBrandCatalog / nav 对齐)。
 const String kYoutubeSiteId = 'youtube';
 
@@ -53,3 +55,12 @@ Map<String, String> youtubePageHeaders({
   'Referer': referer,
   if (cookie != null && cookie.trim().isNotEmpty) 'Cookie': cookie.trim(),
 };
+
+/// YouTube 媒体流(HLS master/变体/分片)请求头。
+///
+/// googlevideo 分发以 UA/Referer 做反爬校验,与拉取媒体清单(fetchYoutubePlaylist)
+/// 及链路预校验(validateYoutubeChain)同源;下发给播放器时必须带同一组头。
+final Map<String, String> youtubePlaybackHeaders = sanitizeHeaders(const {
+  'user-agent': kYoutubeUserAgent,
+  'referer': 'https://www.youtube.com/',
+});

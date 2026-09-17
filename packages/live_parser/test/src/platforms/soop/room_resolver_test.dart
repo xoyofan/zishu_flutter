@@ -45,6 +45,11 @@ void main() {
       );
       expect(payload.streams.first.preferredLine?.format, 'hls');
 
+      // 播放头:CDN 以 Referer/Origin 做防盗链
+      final lineHeaders = payload.streams.first.preferredLine?.headers ?? {};
+      expect(lineHeaders['origin'], 'https://www.sooplive.co.kr');
+      expect(lineHeaders['referer'], 'https://www.sooplive.co.kr/');
+
       final assign = fake.requests.firstWhere(
         (request) => request.url.path.endsWith('/broad_stream_assign.html'),
       );

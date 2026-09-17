@@ -49,6 +49,10 @@ void main() {
         qualities.single.lines.map((line) => line.url).toList(),
         ['https://x.test/v1.m3u8', 'https://x.test/v2.m3u8'],
       );
+      expect(qualities.single.lines.first.headers, {
+        'user-agent': kYoutubeUserAgent,
+        'referer': 'https://www.youtube.com/',
+      });
     });
 
     test('yt-dlp formats 归一:仅 HLS、同名去重、按高度降序', () {
@@ -59,6 +63,11 @@ void main() {
       expect(tiers.first.fps, 60);
       final qualities = youtubeDlpQualities(tiers);
       expect(qualities.first.lines.single.url, 'https://x/1080p60.m3u8');
+      expect(
+        qualities.first.lines.single.headers['referer'],
+        'https://www.youtube.com/',
+        reason: 'dlp 主路线与页面链路带同一组播放头',
+      );
     });
 
     test('竖屏 resolution 按短边取档名(1080x1920 -> 1080p)', () {
@@ -123,6 +132,11 @@ void main() {
         isTrue,
         reason: '应做分片 Range 预检,避免交付 403 死地址',
       );
+
+      // '自动' master 线路就是 playUrl,必须带 googlevideo 校验头
+      final masterHeaders = payload.streams.first.lines.single.headers;
+      expect(masterHeaders['user-agent'], kYoutubeUserAgent);
+      expect(masterHeaders['referer'], 'https://www.youtube.com/');
     });
 
     test('dlp 主路线:优先使用 yt-dlp 档位并做首档预校验', () async {
