@@ -8,6 +8,7 @@ import '../features/browse/views/category_view.dart';
 import '../features/browse/views/home_view.dart';
 import '../features/follow/views/follow_view.dart';
 import '../features/follow/views/settings_view.dart';
+import '../features/play/application/play_screen_provider.dart';
 import '../features/play/views/play_view.dart';
 import '../features/search/views/search_view.dart';
 import 'app_shell.dart';
@@ -58,12 +59,14 @@ final routerProvider = Provider<GoRouter>((ref) {
           CategoryView(site: 'all', categoryKey: state.pathParameters['key']),
         ),
       ),
-      // 播放页不套应用壳层(视频占主空间)。
+      // 播放页同样套应用壳层(对齐参考实现:`AppLayout` 包裹 `PlayView`,
+      // 顶栏在播放页常驻);沉浸态(网页全屏/全屏/画中画)由 _PlayRoute
+      // 收起 chrome,视频占满窗口。
       GoRoute(
         path: '/:site/play/:id',
         pageBuilder: (_, state) => NoTransitionPage(
           key: state.pageKey,
-          child: PlayView(
+          child: _PlayRoute(
             site: state.pathParameters['site']!,
             roomId: state.pathParameters['id']!,
           ),
@@ -127,3 +130,25 @@ Page<dynamic> _shellPage(GoRouterState state, String site, Widget child) =>
       key: state.pageKey,
       child: AppShell(site: site, child: child),
     );
+
+/// 播放页宿主:壳层 + 播放页。
+///
+/// 沉浸态(网页全屏/全屏/画中画)收 chrome 的判定放在路由层,由
+/// [playScreenProvider] 单源驱动 —— 播放页内部不需要知道壳层是否存在。
+class _PlayRoute extends ConsumerWidget {
+  const _PlayRoute({required this.site, required this.roomId});
+
+  final String site;
+  final String roomId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // 必须 watch(而非 read):chrome 显隐要随呈现态切换立即重建。
+    final chromeHidden = ref.watch(playScreenProvider).hidesChrome;
+    return AppShell(
+      site: site,
+      chromeHidden: chromeHidden,
+      child: PlayView(site: site, roomId: roomId),
+    );
+  }
+}

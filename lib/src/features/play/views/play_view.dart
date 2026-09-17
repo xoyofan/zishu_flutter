@@ -84,6 +84,24 @@ class _PlayViewState extends ConsumerState<PlayView> {
     super.dispose();
   }
 
+  /// 返回上一页。
+  ///
+  /// 正常路径栈里必有上一层(浏览页/壳层);仅当播放页处于栈底(深链直达、
+  /// 或壳层被 `go` 重置的历史遗留)时退化为回该平台首页 —— 无条件 pop 会让
+  /// go_router 抛出 `GoError: There is nothing to pop`,按钮表现为"点了没反应"。
+  void _goBack() {
+    final router = GoRouter.of(context);
+    if (router.canPop()) {
+      router.pop();
+      return;
+    }
+    router.go(
+      PlatformBrandCatalog.supportsBrowse(widget.site)
+          ? '/${widget.site}'
+          : '/all',
+    );
+  }
+
   /// 播放/暂停切换:与点击视频帧共用同一条通路(快照驱动)。
   void _togglePlayback() {
     final snapshot =
@@ -329,7 +347,8 @@ class _PlayViewState extends ConsumerState<PlayView> {
 
     // 播放页根级 Scaffold:给内容有界的宽高约束,同时提供 ScaffoldMessenger
     // 宿主(控制条「刷新视频」的 SnackBar 需要 descendant Scaffold 才能呈现)。
-    // 播放页不套 AppShell,但这一层必须自己提供,理由见 player_controls.dart。
+    // 播放页虽已套 AppShell(顶栏常在),沉浸态下壳层 chrome 会收起,
+    // 因此这一层 Scaffold 必须自己提供,理由见 player_controls.dart。
     late final Widget body;
     if (screen.pip) {
       // 画中画小窗:只铺画面,桌面下由包壳提供拖拽/缩放边缘。
@@ -350,6 +369,7 @@ class _PlayViewState extends ConsumerState<PlayView> {
             category: play?.payload?.category ?? '',
             brandColor: brand?.color ?? context.tokens.brand,
             sidePanelVisible: _sidePanelVisible,
+            onBack: _goBack,
             onToggleSidePanel: isLandscapePhone
                 ? () => _showSidePanelSheet(play?.payload)
                 : () => setState(() => _sidePanelVisible = !_sidePanelVisible),
@@ -409,6 +429,7 @@ class _RoomHeader extends StatelessWidget {
     required this.category,
     required this.brandColor,
     required this.sidePanelVisible,
+    required this.onBack,
     required this.onToggleSidePanel,
   });
 
@@ -416,6 +437,9 @@ class _RoomHeader extends StatelessWidget {
   final String category;
   final Color brandColor;
   final bool sidePanelVisible;
+
+  /// 返回上一页(栈底时退化为平台首页,见 _PlayViewState._goBack)。
+  final VoidCallback onBack;
   final VoidCallback onToggleSidePanel;
 
   @override
@@ -434,7 +458,7 @@ class _RoomHeader extends StatelessWidget {
             // 测试锚点:返回上一页按钮。
             key: const Key('play-back'),
             tooltip: '返回',
-            onPressed: () => context.pop(),
+            onPressed: onBack,
             icon: const Icon(Icons.arrow_back_rounded, size: 18),
           ),
           const SizedBox(width: AppSpacing.xs),

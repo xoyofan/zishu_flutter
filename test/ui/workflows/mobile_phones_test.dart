@@ -159,7 +159,7 @@ Widget _categoryPage() => const AppShell(
   child: CategoryView(site: 'douyu', cid: '1'),
 );
 
-/// `/douyu/play/63136` 等价:播放页不套壳层。
+/// `/douyu/play/63136` 等价:直接 pump 播放页本体。
 Widget _playPage() => const PlayView(site: 'douyu', roomId: '63136');
 
 /// `/follow` 等价。

@@ -113,7 +113,7 @@ Widget _mobileHost(Widget page) {
 Widget _shellPage(Widget child) =>
     _mobileHost(AppShell(site: 'all', child: child));
 
-/// 播放页:不套壳,fixture 房间(douyu/63136)经 roomSourceProvider 解析。
+/// 播放页:直接 pump 页面本体(fixture 房间 douyu/63136 经 roomSourceProvider 解析)。
 Widget _playPage() => _mobileHost(const PlayView(site: 'douyu', roomId: '63136'));
 
 /// 矩阵覆盖的四个页面构造器(每次调用产出一棵全新宿主树)。

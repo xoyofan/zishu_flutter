@@ -501,7 +501,14 @@ void main() {
     await tester.tap(find.byKey(const Key('play-side-tab-follow')));
     await _pumpStable(tester);
     expect(find.byKey(const Key('play-side-follow-panel')), findsOneWidget);
-    expect(find.text('我的关注'), findsOneWidget);
+    // 侧栏面板内的标题(壳层顶栏也有「我的关注」入口,故限定在面板子树内)。
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('play-side-follow-panel')),
+        matching: find.text('我的关注'),
+      ),
+      findsOneWidget,
+    );
 
     // 切「推荐」:推荐面板出现。
     await tester.tap(find.byKey(const Key('play-side-tab-recommend')));

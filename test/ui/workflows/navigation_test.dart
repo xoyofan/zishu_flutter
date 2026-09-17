@@ -2,7 +2,7 @@
 ///
 /// 覆盖四条链路:
 /// 1. routeReachability:逐个深链路由表全部路径,断言标志性锚点/文本出现且无异常;
-///    播放页额外断言不渲染 AppShell 顶导航(nav-home 不存在)。
+///    播放页同样渲染 AppShell 顶导航(nav-home 存在)。
 /// 2. navTraversal:从 /all 起经顶部导航锚点遍历 Follow/Settings/Home/Search,
 ///    每步断言前一页锚点消失、新页锚点出现。
 /// 3. platformSwitch:platform-tab chip 点击切换平台路由与选中态。
@@ -10,7 +10,7 @@
 ///
 /// 宿主约定(与 workflow_browse_play_test.dart 一致):
 /// - media_kit 禁止在 VM 初始化:注入 FakeLivePlayer。
-/// - 播放页不套 AppShell(无 Scaffold/Material),QualityLineBar 的 ChoiceChip、
+/// - 播放页套 AppShell(自身也有 Scaffold),QualityLineBar 的 ChoiceChip、
 ///   PlayerControlsBar 的 Slider 依赖 Material 祖先,测试宿主用
 ///   MaterialApp.router 的 builder 统一补一层透明 Material。
 /// - 全程固定次数 pump,不使用 pumpAndSettle(封面图片在 VM 中不会真正加载)。
@@ -214,11 +214,12 @@ void main() {
     expect(find.byKey(const Key('room-card-douyu-63136')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    // 8. /douyu/play/63136 播放页:不套 AppShell(无顶导航),返回锚点存在。
+    // 8. /douyu/play/63136 播放页:同样套 AppShell(顶导航常在,对齐参考实现
+    //    AppLayout 包裹 PlayView),播放页自身锚点齐备。
     await goAndStabilize(tester, router, '/douyu/play/63136');
     expect(find.byKey(const Key('play-back')), findsOneWidget);
-    expect(find.byType(AppShell), findsNothing, reason: '播放页不套应用壳层');
-    expect(find.byKey(const Key('nav-home')), findsNothing);
+    expect(find.byType(AppShell), findsOneWidget, reason: '播放页套应用壳层');
+    expect(find.byKey(const Key('nav-home')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     // 9. /douyu/anchor/神超 主播主页:昵称 + 进入直播间 + 关注按钮锚点。

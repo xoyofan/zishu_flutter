@@ -11,9 +11,9 @@
 ///
 /// 宿主约定(与 test/ui/ 既有 23 例锚点测试一致):
 /// - media_kit 禁止在 VM 初始化:内部注入 FakeLivePlayer(playerProvider override);
-/// - 走真实路由宿主(go_router + ZishuTheme):播放页路由不套 AppShell(无
-///   Material 祖先),与 workflow_browse_play_test 相同,在 builder 统一补一层
-///   透明 Material,否则 QualityLineBar 的 ChoiceChip 抛 "No Material widget";
+/// - 走真实路由宿主(go_router + ZishuTheme):播放页路由现也套 AppShell,但
+///   与 workflow_browse_play_test 相同,仍在 builder 统一补一层透明 Material,
+///   保证脱离壳层单独 pump 的用例也有 Material 祖先;
 /// - fixture 数据源走默认 provider,新平台接入只需批次 2 加
 ///   `platform_<site>_test.dart`,本 driver 零改动;
 /// - 全程固定次数 pump(duration),不用 pumpAndSettle(封面图 VM 中不会真正加载);
@@ -41,8 +41,8 @@ import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 const Duration _kFrame = Duration(milliseconds: 50);
 
 /// 测试宿主:与 WindowsApp 相同的 router/theme,额外在 builder 补一层透明
-/// Material——播放页路由无壳(不套 AppShell/Scaffold),QualityLineBar 的
-/// ChoiceChip 与 PlayerControlsBar 的 Slider 都需要 Material 祖先
+/// Material——播放页最小宿主场景下 QualityLineBar 的 ChoiceChip 与
+/// PlayerControlsBar 的 Slider 都需要 Material 祖先
 /// (同 workflow_browse_play_test 的 _TestApp 约定)。
 class _TestApp extends ConsumerWidget {
   const _TestApp();

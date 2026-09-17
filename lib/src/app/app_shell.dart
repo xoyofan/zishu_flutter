@@ -17,13 +17,24 @@ import '../shared/presentation/widgets/platform_icon.dart';
 /// 应用壳层:桌面/平板(>=768)为 44px 顶部导航;
 /// 手机(<768)为平台条 + 56px 底部主导航。结构对齐 SFVideoLive
 /// `NavSidebar.vue` 的品牌区、中心平台区与右侧工具区。
-/// 播放页不套壳。
+///
+/// 播放页同样套本壳(对齐参考实现:`AppLayout` 包裹 `PlayView`,顶栏在播放页
+/// 常驻);仅沉浸态(网页全屏/全屏/画中画)把 chrome 收起,口径与
+/// `html.play-webscreen .nav-sidebar { display:none }` 一致。
 class AppShell extends ConsumerStatefulWidget {
-  const AppShell({super.key, required this.site, required this.child});
+  const AppShell({
+    super.key,
+    required this.site,
+    required this.child,
+    this.chromeHidden = false,
+  });
 
   /// 当前选中的平台 id(`all` = 全平台聚合)。
   final String site;
   final Widget child;
+
+  /// 沉浸态:收起顶部/底部导航与 hover 浮层,让内容(视频)占满窗口。
+  final bool chromeHidden;
 
   @override
   ConsumerState<AppShell> createState() => _AppShellState();
@@ -71,6 +82,17 @@ class _AppShellState extends ConsumerState<AppShell> {
         _myCatHover = false;
       });
     });
+  }
+
+  /// 关注浮层点主播格:先收浮层,再 push 播放页。
+  ///
+  /// 必须是 push 而非 go:go 会把壳层页也一并从栈里换掉,播放页左上角
+  /// 「返回」就无栈可回(go_router 抛 `GoError: There is nothing to pop`,
+  /// 表现为点返回没反应)。
+  void _openRoom(FollowEntry entry) {
+    _closeAll();
+    final room = entry.room;
+    unawaited(context.push('/${room.site}/play/${room.roomId}'));
   }
 
   void _openPlatform(String id, double centerX) {
@@ -123,10 +145,14 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   Widget build(BuildContext context) {
     final isPhone = MediaQuery.sizeOf(context).width < AppBreakpoints.phone;
+    // 沉浸态(播放页网页全屏/全屏/画中画)不渲染 chrome:浮层也一并停用,
+    // 避免鼠标划过不可见顶栏时飘出浮层盖住视频。
+    final showChrome = !widget.chromeHidden;
     // hover 浮层只走桌面/平板(触屏无 hover 语义)。
-    final showPlatformFlyout = !isPhone && _hoveredPlatform != null;
-    final showFollowFlyout = !isPhone && _followHover;
-    final showMyCatFlyout = !isPhone && _myCatHover;
+    final showPlatformFlyout =
+        showChrome && !isPhone && _hoveredPlatform != null;
+    final showFollowFlyout = showChrome && !isPhone && _followHover;
+    final showMyCatFlyout = showChrome && !isPhone && _myCatHover;
 
     return Stack(
       children: [
@@ -135,23 +161,24 @@ class _AppShellState extends ConsumerState<AppShell> {
           body: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (isPhone)
-                _PlatformStrip(currentSite: widget.site)
-              else
-                _TopNav(
-                  currentSite: widget.site,
-                  onPlatformHover: _openPlatform,
-                  onPlatformHoverEnd: _scheduleClose,
-                  onFollowHover: _openFollow,
-                  onFollowHoverEnd: _scheduleClose,
-                  onMyCategoryHover: _openMyCategory,
-                  onMyCategoryTap: _toggleMyCategory,
-                  onMyCategoryHoverEnd: _scheduleClose,
-                ),
+              if (showChrome)
+                if (isPhone)
+                  _PlatformStrip(currentSite: widget.site)
+                else
+                  _TopNav(
+                    currentSite: widget.site,
+                    onPlatformHover: _openPlatform,
+                    onPlatformHoverEnd: _scheduleClose,
+                    onFollowHover: _openFollow,
+                    onFollowHoverEnd: _scheduleClose,
+                    onMyCategoryHover: _openMyCategory,
+                    onMyCategoryTap: _toggleMyCategory,
+                    onMyCategoryHoverEnd: _scheduleClose,
+                  ),
               Expanded(child: widget.child),
             ],
           ),
-          bottomNavigationBar: isPhone
+          bottomNavigationBar: showChrome && isPhone
               ? _BottomNav(currentSite: widget.site)
               : null,
         ),
@@ -169,7 +196,11 @@ class _AppShellState extends ConsumerState<AppShell> {
           _HoverOverlay(
             centerX: _followX,
             width: _kFollowFlyoutWidth,
-            child: _FollowFlyout(onEnter: _cancelClose, onExit: _scheduleClose),
+            child: _FollowFlyout(
+              onEnter: _cancelClose,
+              onExit: _scheduleClose,
+              onOpenRoom: _openRoom,
+            ),
           ),
         if (showMyCatFlyout)
           _HoverOverlay(
@@ -1476,7 +1507,11 @@ class _CategoryChipState extends State<_CategoryChip> {
 /// `FollowHoverAvatarGrid.vue`(7 列、头像 1.85rem、名字 .56rem、最多 5 行滚动)。
 /// 开播中优先;无开播时退化为全部关注,避免空面板。
 class _FollowFlyout extends ConsumerWidget {
-  const _FollowFlyout({required this.onEnter, required this.onExit});
+  const _FollowFlyout({
+    required this.onEnter,
+    required this.onExit,
+    required this.onOpenRoom,
+  });
 
   /// 头像 1.85rem ≈ 29.6px。
   static const double _kAvatarSize = 29.6;
@@ -1494,6 +1529,9 @@ class _FollowFlyout extends ConsumerWidget {
 
   final VoidCallback onEnter;
   final VoidCallback onExit;
+
+  /// 点主播格进播放页:由壳层提供(负责先收起浮层再入栈)。
+  final void Function(FollowEntry entry) onOpenRoom;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -1520,8 +1558,10 @@ class _FollowFlyout extends ConsumerWidget {
                   mainAxisSpacing: _kRowGap,
                   crossAxisSpacing: _kColumnGap,
                 ),
-                itemBuilder: (context, index) =>
-                    _FollowAvatarTile(entry: list[index]),
+                itemBuilder: (context, index) => _FollowAvatarTile(
+                  entry: list[index],
+                  onTap: () => onOpenRoom(list[index]),
+                ),
               ),
       ),
     );
@@ -1533,9 +1573,10 @@ class _FollowFlyout extends ConsumerWidget {
 /// 每格底色与名字都取**平台品牌色**:底为低透明度品牌色,hover 时加深,
 /// 让「哪个平台的主播」在网格里一眼可辨(未收录平台回退主文字色)。
 class _FollowAvatarTile extends StatelessWidget {
-  const _FollowAvatarTile({required this.entry});
+  const _FollowAvatarTile({required this.entry, required this.onTap});
 
   final FollowEntry entry;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -1548,7 +1589,7 @@ class _FollowAvatarTile extends StatelessWidget {
         color: color.withValues(alpha: 0.16),
         child: InkWell(
           hoverColor: color.withValues(alpha: 0.3),
-          onTap: () => context.go('/${room.site}/play/${room.roomId}'),
+          onTap: onTap,
           child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: 0.96,

@@ -27,8 +27,8 @@
 /// 宿主约定(与 layout_test.dart 的 FakeLivePlayer 注入一致):
 /// - media_kit 禁止在 VM 初始化:playerProvider override 注入 FakeLivePlayer;
 /// - 直接构造页面树(不经 router),pumpOnDevice 注入视口后 MaterialApp 与
-///   设备逻辑分辨率一致;播放页真实路由不套 AppShell,宿主统一补透明
-///   Material 祖先(QualityLineBar 的 ChoiceChip 依赖);
+///   设备逻辑分辨率一致;宿主统一补透明 Material 祖先
+///   (QualityLineBar 的 ChoiceChip 依赖);
 /// - 全程固定次数 pump(50ms/帧),不使用 pumpAndSettle。
 library;
 
@@ -136,7 +136,7 @@ Widget _followPage() => _shellPage(const FollowView());
 /// 搜索页(空查询初始态,search-input 锚点可用)。
 Widget _searchPage() => _shellPage(const SearchView());
 
-/// 播放页(无壳,真实路由 '/douyu/play/63136' 同样不套 AppShell)。
+/// 播放页(直接 pump,不经 router;真实路由下会额外套一层 AppShell)。
 Widget _playPage() => _hostPage(const PlayView(site: 'douyu', roomId: '63136'));
 
 /// pump [page] 到 [device] 视口并落完 fixture 数据帧(初始帧 + 2 数据帧)。

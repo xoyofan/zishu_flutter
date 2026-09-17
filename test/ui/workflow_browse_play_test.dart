@@ -1,9 +1,9 @@
 /// 完整链路 workflow test:首页网格 → 点击房间卡进播放页 → 切换画质 → 返回首页。
 ///
 /// - media_kit 禁止在 VM 初始化:注入 FakeLivePlayer。
-/// - 走真实 go_router 导航(push/pop 全程有效);播放页不套 AppShell,真实宿主
-///   缺少 Material 祖先(PlayerControlsBar 的 Slider 依赖),测试宿主用
-///   MaterialApp.router 的 builder 统一补一层 Material,不影响业务断言。
+/// - 走真实 go_router 导航(push/pop 全程有效);播放页套 AppShell,测试宿主仍在
+///   MaterialApp.router 的 builder 统一补一层 Material,保证 Slider 等
+///   Material 依赖脱离壳层也成立,不影响业务断言。
 /// - 全程固定次数 pump,不用 pumpAndSettle(封面图片在 VM 中不会真正加载)。
 library;
 

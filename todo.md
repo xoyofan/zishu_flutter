@@ -351,3 +351,70 @@
 **验证**:`flutter analyze` 0 issue;test/features/playback 56 passed(+3);
 live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带日志重建。
 
+## 2026-09-16 拉取最新代码 + 健康基线盘点(现状记录,无代码改动)
+
+**结论**:`master` = `origin/master` = `a29ec00`,ahead/behind **0/0**;fetch 走仓库内 `http.version=HTTP/1.1` + `http.sslBackend=schannel` 直接成功(未走 REST 兜底)。四道门禁全绿,工作区只剩 2 个已知排除的本地产物。**发现一处需裁决的产物问题**:`docs/ui-compare/baseline/` 24 张截图全是 404 错误页。
+
+### 仓库与分支
+- [x] `git fetch origin --prune` 正常;master 与远端零偏差,无待合并内容。
+- [x] `feat/ui-follow-layout`(81bcbef,本地+远端,已全量合入 master)。
+- [x] `origin/feat/A2-danmaku`(a568579)仅 1 个早期草稿领先,内容已被 master 超越 → 维持 09-13 的「不合并」判定。
+- [x] 09-15 两次提交此前未记入 memory,已补记(`e94c207` mpv `ao=wasapi`+`video-sync=audio` 修无声/周期性回退;`a29ec00` 收录 UI 参考与比对产物)。
+
+### 健康基线(实跑)
+| 门 | 结果 |
+|---|---|
+| `flutter analyze` | No issues found(6.7s) |
+| `flutter test` 全量 | **315 passed / 0 failed**(56s) |
+| `packages/live_parser` `dart analyze` | No issues found |
+| `packages/live_parser` `dart test` | **260 passed / 10 skipped** |
+
+无 generated_* 幻影 diff。
+
+### 待裁决:`docs/ui-compare/baseline/` 是 24 张 404 错误页
+- 同一视口下不同页面 **md5 完全相同**(1920 档 4 张 = `31c90f021d67`);打开内容是 `Error response / 404 - Nothing matches the given URI`。
+- 抓取 URL 打偏产生的空壳,却已随 `a29ec00` 入 master → **按它做像素比对只会得到全错结论**;应替换为 `docs/ui-reference/shots/`(40 张真图)或直接删掉。
+- [ ] 处置 baseline 404;`docs/ui-compare/replica/`(Flutter 侧)当前为空目录,需抓真机/离屏截图填上。
+
+### 看板状态与现实不符(需回写)
+- [ ] `tasks.md` 的 A3/A5/A6/A8/A9/A10/A11 表格仍写 `[ ]`,但已落地:实测 **A11 导航能力过滤确已落地**(`platform_brands.dart` 按 `capabilities.browse/roomSearch/anchorSearch` 过滤,随 `e8e3715` 合入);G1/G2 同理(`parser_sources.dart` + `useRealParser` 已实装且真机流过真实播放)。
+- [x] 核实 **A14 确未落地**:`features/danmaku/domain/` 只有 settings/style/track,无 `danmaku_track_allocator.dart`(A2 版调度器仍在 `a568579`)。
+
+### 下一步候选(按优先级,待用户裁决)
+1. [ ] **UI 对齐复刻主线**:处置 baseline 404 → 抓 Flutter replica → 做 `tasks-ui-refine.md` T1-T5(error 色 `#E55050`/动效 150/250ms、抽屉 rail 28px、房卡平台 badge 左下→右下、底栏 6 项、golden 更新),文件级隔离可并行。
+2. [ ] **`docs/ui-parity/visual-confirm.md` 5 项待办**:底栏 4 vs 6 项复核、四象限徽章模板入 spec-layout、PlayMetaBar 规格、顶栏分断点高度实测、mobile 顶栏拆两行。
+3. [ ] **真机验收遗留**(09-13 挂至今):控制条三按钮 + F/W/M/Space/Esc + 淡出唤醒 + 进出全屏聚焦复位;可配合 `%APPDATA%\zishu_flutter\logs\playback.log` 复核。
+4. [ ] **A14 弹幕轨道调度对齐 SFVideo**:取回 `a568579` 的 `danmaku_track_allocator.dart`,保留主线 `widthRatio` 安全间隙 + `allocateReusingEarliest`。
+5. [ ] **看板状态对齐** + **P8 Dart streaming-server**(唯一未开始的 P 卡)。
+
+
+## 2026-09-18 播放页套壳 + 返回可用 + 全局返回快捷键 + 斗鱼黑屏闪断根治(完成)
+
+**结论**:三处真机问题在同轮闭环——(1) 点推荐房切房后左上角「返回」失效(go 重置整栈 → `GoError: There is nothing to pop`);(2) 播放页缺应用顶栏,与参考实现 `AppLayout` 包裹 `PlayView` 的结构不一致;(3) 斗鱼**每几秒黑屏闪一下再恢复**,根因是解析侧把 `hlsH5Preview` 预览流插在每档线路**表头**,而 `StreamQuality.preferredLine` 是「有 hls 就选 hls」,于是首选恒为秒级 token 的预览切片。
+
+### UI 轨
+- [x] `app_router.dart`:播放页路由改由 `_PlayRoute` 承载 —— 套 `AppShell`(顶栏常在),`watch(playScreenProvider).hidesChrome` 驱动 `chromeHidden`。
+- [x] `app_shell.dart`:新增 `chromeHidden`;沉浸态不渲染顶栏/底栏与 hover 浮层(对齐 `html.play-webscreen .nav-sidebar{display:none}`)。关注浮层点主播格改 `push` + 先收浮层(`_openRoom`),不再用 `go` 把壳层页换掉。
+- [x] `windows_app.dart` + 新增 `app_back_shortcuts.dart`:全局返回快捷键 —— **鼠标侧键(kBackMouseButton/0x08)** 与 **Alt+←**;`canPop()` 为假时静默,绝不抛 GoError(Alt+→ 未接:go_router 无 forward)。
+- [x] `play_side_panel.dart`:关注/推荐切房由 `go` 改 **`pushReplacement`** —— 旧播放页被卸载(media-kit 会话随 autoDispose 收干净),下层浏览页保留为返回目标。
+- [x] `play_view.dart`:`_goBack()` 取代裸 `context.pop()`(栈底退化为该平台首页);返回回调由 `_RoomHeader` 显式注入。
+- [x] 测试:新增 `test/ui/workflows/back_shortcuts_test.dart` 5 例(Alt+← / 侧键 / 栈底静默 / 左上角返回 / **切房后仍能返回**)。
+- [x] 既有用例按新契约更新:`layout_test` 改「套壳 + 新增沉浸态收 chrome」2 例、`navigation_test` 播放页期望改为有壳、`danmaku_test` 「我的关注」限定侧栏子树、`mobile_*`/`platform_workflow` 注释口径。
+- [x] golden 重生成(`play_style_card/follow/recommend/row` 中两张播放页)并同步 `tool/screenshots/zishu/`。
+
+### 解析轨(斗鱼)
+- [x] `douyu/lines.dart`:`appendHlsLine`(表头插入)→ **`appendHlsFallbackLine`**(仅 FLV 全灭时兜底);新增 `douyuPlaybackHeaders(roomId)`(Referer/Origin/UA/`dy_did` Cookie,与 pure_live `DouyuUtils.playbackHeaders` 同源)。
+- [x] `douyu/douyu_site.dart`:两处 `StreamLine` 注入播放请求头。
+- [x] 对照 pure_live 认定差异:pure_live **从不使用** `hlsH5Preview`,只用 getH5PlayV1 的 FLV/混合地址;且对每个平台都注入播放头(本仓此前斗鱼 line headers 为空)。
+- [x] 实网探针验证:改后各档 `preferred=线路7 FLV`,`headers` 非空;实机日志此前为 `host=hlshw3a.douyucdn2.cn`(HLS)+ 每 5s 一次 `reopen`/`Failed to open …m3u8`。
+- [x] 测试:`lines_test` 改 HLS 兜底 3 例 + 播放头 2 例;`room_resolver_test` 期望改「FLV 优先 + 带头」。
+
+### 验证
+- `flutter analyze` 0 issue;App 全量 **320 passed / 1 failed**(唯一失败为 `latency_test` 斗鱼墙钟基准,单跑 151ms 通过 → 已知网络抖动)。
+- `packages/live_parser`:`dart analyze` 0 issue;**263 passed / 10 skipped**。
+- Release 重建(`--dart-define=ZISHU_REAL_PARSER=true`)并拉起真机验证。
+
+### 待办
+- [ ] 真机复核斗鱼长播(≥10min)不再出现周期性闪断;必要时再对比 FLV 各 CDN 的稳定性。
+- [ ] Alt+→(前进)未实现:需要宿主自维护前进栈。
+- [ ] `latency_test` 墙钟 500ms 阈值在整机跑套件时过紧,建议改「单跑计分 + 套件内只告警」。

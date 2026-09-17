@@ -231,14 +231,14 @@ void main() {
   });
 
   testWidgets(
-    'playPageShellFree:播放页不套 AppShell,侧栏宽按视口分档',
+    'playPageShellHosted:播放页套壳(顶导航常在)且沉浸态收起 chrome,侧栏宽按视口分档',
     (tester) async {
       final router = await pumpApp(tester);
       await pumpPlayRoute(tester, router);
 
-      // 播放页无壳:顶导航锚点与 AppShell 均不存在。
-      expect(find.byKey(const Key('nav-home')), findsNothing);
-      expect(find.byType(AppShell), findsNothing);
+      // 播放页套壳:顶导航与 AppShell 均在(对齐参考实现 AppLayout 包裹 PlayView)。
+      expect(find.byKey(const Key('nav-home')), findsOneWidget);
+      expect(find.byType(AppShell), findsOneWidget);
 
       // 播放页自身锚点可用。
       expect(find.byKey(const Key('play-back')), findsOneWidget);
@@ -254,6 +254,31 @@ void main() {
       );
     },
   );
+
+  testWidgets('playImmersive:网页全屏/全屏收起壳层 chrome,视频占满窗口', (tester) async {
+    final router = await pumpApp(tester);
+    await pumpPlayRoute(tester, router);
+    expect(find.byKey(const Key('nav-home')), findsOneWidget);
+
+    // 按钮切「网页全屏」:对齐 `html.play-webscreen .nav-sidebar{display:none}`。
+    await tester.tap(find.byKey(const Key('play-toggle-widescreen')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.byKey(const Key('play-immersive-stage')), findsOneWidget);
+    expect(
+      find.byKey(const Key('nav-home')),
+      findsNothing,
+      reason: '沉浸态必须收起壳层顶栏,否则视频不占满窗口',
+    );
+
+    // 再点一次回到常规态:chrome 回来。
+    await tester.tap(find.byKey(const Key('play-toggle-widescreen')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byKey(const Key('nav-home')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('sidePanelToggle:点 toggle 侧栏消失,再点恢复且宽度不变', (tester) async {
     final router = await pumpApp(tester);

@@ -1113,10 +1113,15 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
     );
   }
 
-  /// 用 go(替换当前播放页)而非 push:直播切房若 push,旧播放页连同其
-  /// media-kit 会话被压在栈下继续存活,与「切房不泄漏」的目标相悖。
+  /// 切房：用 pushReplacement（只替换栈顶播放页）而非 go。
+  ///
+  /// - push：旧播放页连同其 media-kit 会话被压在栈下继续存活 → 切房泄漏；
+  /// - go：整条历史栈被重置（go_router 会把壳层页也换掉）→ 播放页左上角
+  ///   「返回」无栈可回，抛 `GoError: There is nothing to pop`，表现为点了没反应；
+  /// - pushReplacement：旧播放页被卸载（会话随 autoDispose 收干净），
+  ///   下层浏览页保留为返回目标 —— 两者兼得。
   void _goRoom(RoomSummary room) =>
-      context.go('/${room.site}/play/${room.roomId}');
+      context.pushReplacement('/${room.site}/play/${room.roomId}');
 }
 
 /// 侧栏平台筛选 chips:横向滚动的小 chip(侧栏窄,Wrap 会折成多行)。
@@ -1248,8 +1253,7 @@ class _RecommendPanel extends ConsumerWidget {
                 rooms: rooms,
                 // 锚点沿用既有测试契约 play-recommend-room-{site}-{roomId}。
                 keyPrefix: 'play-recommend-room-',
-                onTap: (room) =>
-                    context.go('/${room.site}/play/${room.roomId}'),
+                onTap: (room) => _goRoom(context, room),
               );
             },
           ),
@@ -1257,6 +1261,12 @@ class _RecommendPanel extends ConsumerWidget {
       ],
     );
   }
+
+  /// 切房语义与「关注」tab 一致:pushReplacement 只换栈顶播放页 ——
+  /// 旧播放页被卸载(media-kit 会话随 autoDispose 收干净),下层浏览页
+  /// 保留为返回目标(go 会重置整条栈,导致左上角「返回」无栈可回)。
+  void _goRoom(BuildContext context, RoomSummary room) =>
+      context.pushReplacement('/${room.site}/play/${room.roomId}');
 }
 
 class _SettingsPanel extends ConsumerWidget {
