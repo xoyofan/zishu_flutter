@@ -63,6 +63,9 @@ class SettingsState {
     required this.preferredLineFormat,
     required this.serverUrl,
     this.defaultQualityBySite = const {},
+    this.roomVolumes = const {},
+    this.globalMuted = false,
+    this.defaultVolume = defaultVolumeLevel,
     this.hydrated = false,
   });
 
@@ -77,6 +80,20 @@ class SettingsState {
   /// 平台回落 [defaultQuality]。房间缺档不在这里处理,由播放侧
   /// `PlayController._pickQuality` 回退 streams.first。
   final Map<String, String> defaultQualityBySite;
+
+  /// 每房间独立音量表:键 `room_vol_{site}_{roomId}`(见
+  /// `features/play/application/room_volume_provider.dart`),值 0-100。
+  ///
+  /// 上游 pure_live 的 `live_room_volume_manager` 同一张表但为 0-1 口径;
+  /// 本仓与 `LivePlayer.setVolume` 统一走 **0-100**,解析/写入时钳制。
+  final Map<String, double> roomVolumes;
+
+  /// 全局静音:开启时所有房间的有效音量恒为 0(压过房间值与默认值)。
+  final bool globalMuted;
+
+  /// 默认音量(0-100):房间无记忆值时的回落值。
+  final double defaultVolume;
+
   final bool danmakuEnabled;
 
   /// 聊天 tab 总开关:关闭时聊天 tab 内容区显示「聊天已关闭」占位(聊天 provider 不停,只藏 UI)。
@@ -130,10 +147,20 @@ class SettingsState {
   /// 服务器地址默认值。
   static const String defaultServerUrl = 'http://127.0.0.1:8787';
 
+  /// 音量统一口径上界/下界(与 `LivePlayer.setVolume` 一致,0-100)。
+  static const double volumeMax = 100;
+  static const double volumeMin = 0;
+
+  /// 出厂默认音量(满音量)。
+  static const double defaultVolumeLevel = volumeMax;
+
   SettingsState copyWith({
     ThemeModeChoice? themeMode,
     String? defaultQuality,
     Map<String, String>? defaultQualityBySite,
+    Map<String, double>? roomVolumes,
+    bool? globalMuted,
+    double? defaultVolume,
     bool? danmakuEnabled,
     bool? chatEnabled,
     PreferredLineFormat? preferredLineFormat,
@@ -144,6 +171,9 @@ class SettingsState {
       themeMode: themeMode ?? this.themeMode,
       defaultQuality: defaultQuality ?? this.defaultQuality,
       defaultQualityBySite: defaultQualityBySite ?? this.defaultQualityBySite,
+      roomVolumes: roomVolumes ?? this.roomVolumes,
+      globalMuted: globalMuted ?? this.globalMuted,
+      defaultVolume: defaultVolume ?? this.defaultVolume,
       danmakuEnabled: danmakuEnabled ?? this.danmakuEnabled,
       chatEnabled: chatEnabled ?? this.chatEnabled,
       preferredLineFormat: preferredLineFormat ?? this.preferredLineFormat,
@@ -167,6 +197,11 @@ class SettingsController extends Notifier<SettingsState> {
   static const String _kPreferredLineFormat =
       'zishu.settings.preferredLineFormat';
   static const String _kServerUrl = 'zishu.settings.serverUrl';
+
+  /// 每房间独立音量表,存 JSON `Map<String, double>`。
+  static const String _kRoomVolumes = 'zishu.settings.roomVolumes';
+  static const String _kGlobalMuted = 'zishu.settings.globalMuted';
+  static const String _kDefaultVolume = 'zishu.settings.defaultVolume';
 
   @override
   SettingsState build() {
@@ -195,6 +230,9 @@ class SettingsController extends Notifier<SettingsState> {
       final chat = await prefs.getBool(_kChatEnabled);
       final format = await prefs.getString(_kPreferredLineFormat);
       final server = await prefs.getString(_kServerUrl);
+      final roomVolumesRaw = await prefs.getString(_kRoomVolumes);
+      final globalMuted = await prefs.getBool(_kGlobalMuted);
+      final defaultVolume = await prefs.getDouble(_kDefaultVolume);
       state = state.copyWith(
         themeMode: mode == null ? null : ThemeModeChoice.fromName(mode),
         defaultQuality:
@@ -202,6 +240,11 @@ class SettingsController extends Notifier<SettingsState> {
             ? quality
             : null,
         defaultQualityBySite: _decodeQualityBySite(bySiteRaw),
+        roomVolumes: _decodeRoomVolumes(roomVolumesRaw),
+        globalMuted: globalMuted,
+        defaultVolume: defaultVolume
+            ?.clamp(SettingsState.volumeMin, SettingsState.volumeMax)
+            .toDouble(),
         danmakuEnabled: danmaku,
         chatEnabled: chat,
         preferredLineFormat: PreferredLineFormat.fromValue(format),
@@ -313,6 +356,69 @@ class SettingsController extends Notifier<SettingsState> {
     try {
       await SharedPreferencesAsync().setString(_kServerUrl, trimmed);
     } catch (_) {}
+  }
+
+  /// 覆盖整张房间音量表并持久化。
+  ///
+  /// 写入入口在 `features/play/application/room_volume_provider.dart`:
+  /// 那里先做整表 copy 再交给本方法落盘,避免两处各写一遍复制逻辑。
+  Future<void> setRoomVolumes(Map<String, double> volumes) async {
+    final sanitized = <String, double>{
+      for (final entry in volumes.entries)
+        entry.key: entry.value
+            .clamp(SettingsState.volumeMin, SettingsState.volumeMax)
+            .toDouble(),
+    };
+    state = state.copyWith(roomVolumes: sanitized);
+    try {
+      await SharedPreferencesAsync().setString(
+        _kRoomVolumes,
+        jsonEncode(sanitized),
+      );
+    } catch (_) {}
+  }
+
+  /// 设置全局静音并持久化。
+  Future<void> setGlobalMuted(bool muted) async {
+    state = state.copyWith(globalMuted: muted);
+    try {
+      await SharedPreferencesAsync().setBool(_kGlobalMuted, muted);
+    } catch (_) {}
+  }
+
+  /// 设置默认音量(0-100)并持久化;越界值钳制到合法区间。
+  Future<void> setDefaultVolume(double volume) async {
+    final clamped = volume
+        .clamp(SettingsState.volumeMin, SettingsState.volumeMax)
+        .toDouble();
+    state = state.copyWith(defaultVolume: clamped);
+    try {
+      await SharedPreferencesAsync().setDouble(_kDefaultVolume, clamped);
+    } catch (_) {}
+  }
+
+  /// 解析房间音量表(JSON `Map<String, double>`);非数值/非法键剔除,
+  /// 整体解析失败返回 null(保留出厂默认,与其它字段同口径)。
+  static Map<String, double>? _decodeRoomVolumes(String? raw) {
+    if (raw == null || raw.isEmpty) return null;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return null;
+      final result = <String, double>{};
+      for (final entry in decoded.entries) {
+        final key = entry.key;
+        final value = entry.value;
+        if (key is String && key.isNotEmpty && value is num) {
+          result[key] = value
+              .toDouble()
+              .clamp(SettingsState.volumeMin, SettingsState.volumeMax)
+              .toDouble();
+        }
+      }
+      return result;
+    } catch (_) {
+      return null;
+    }
   }
 }
 

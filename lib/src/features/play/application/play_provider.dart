@@ -14,6 +14,7 @@ import '../../../platforms/common/playback/playback_log.dart';
 import '../../../shared/application/browse_source.dart';
 import '../../../shared/application/providers.dart';
 import '../../follow/application/settings_provider.dart';
+import 'room_volume_provider.dart';
 
 /// 播放器单例:app 生命周期内复用,不随页面销毁。
 /// dispose 由根 ProviderContainer 统一触发(仅 app 退出时执行)。
@@ -95,7 +96,16 @@ class PlayController extends AsyncNotifier<PlayState> {
     // 仅卸载媒体源,不 dispose 实例(下次进房复用同一 Player)。捕获实例而非在
     // 回调里 ref.read,避免 provider 销毁期再去读依赖。
     final player = ref.read(playerProvider);
-    ref.onDispose(() => unawaited(player.stop()));
+    ref.onDispose(() {
+      // 先注销恢复回调再 stop:回调是播放器持有的**指向本 controller** 的活引用,
+      // autoDispose 后播放器仍可能在自动重连里调用它,而那时 ref/state 已失效
+      // (`_recoverLines` 读 state 会报 “Cannot use Ref after dispose”)。
+      // 回调只能在本层注销 —— 播放器不知道宿主已离场。
+      if (player case LineRecoveryAware aware) {
+        aware.setLineRecovery(null);
+      }
+      unawaited(player.stop());
+    });
     // 数据源端口变化(G1 换真实解析)时自动重建,Widget 无感。
     final source = ref.watch(roomSourceProvider);
     // 默认画质:平台单独配置 > 平台默认档 > 全平台默认(设置页可改)。
@@ -221,6 +231,22 @@ class PlayController extends AsyncNotifier<PlayState> {
       aware.setLineRecovery(_recoverLines);
     }
     unawaited(player.open(line, fallbacks));
+    // 开流后套用本房间的独立音量(全局静音 → 房间记忆值 → 默认音量,0-100)。
+    // 放在 open 之后:切源会重建媒体管线,音量要在新会话上重新生效。
+    unawaited(_applyRoomVolume(player));
+  }
+
+  /// 把本房间的有效音量套到播放器。
+  ///
+  /// 全局静音走 [LivePlayer.setMuted](让控制条的静音图标同步点亮),其余情况
+  /// 直接给音量 —— `setVolume(>0)` 本身就会解除会话内静音(见实现层)。
+  Future<void> _applyRoomVolume(LivePlayer player) async {
+    final decision = ref.read(roomVolumeProvider(params));
+    if (decision.globalMuted) {
+      await player.setMuted(true);
+      return;
+    }
+    await player.setVolume(decision.volume);
   }
 
   /// 播放器请求恢复:重新解析当前房间,返回选中画质的**全新**线路。
@@ -229,6 +255,9 @@ class PlayController extends AsyncNotifier<PlayState> {
   /// 60s 短缓存,把过期地址原样交回去。非真实解析源(fixture)或解析异常时
   /// 返回空列表,由播放器走放弃分支给出终局建议。
   Future<List<StreamLine>> _recoverLines() async {
+    // 宿主已离场(autoDispose)时一律拒答:下面要读 state,而销毁后读会抛错。
+    // 回调注销是主动防护,这里再兜一道 —— 注销与调用之间存在竞态窗口。
+    if (!ref.mounted) return const [];
     final current = state.value;
     final source = ref.read(roomSourceProvider);
     final quality = current?.quality;

@@ -19,6 +19,7 @@ import '../../danmaku/application/danmaku_tail_forwarder.dart';
 import '../../danmaku/widgets/danmaku_overlay.dart';
 import '../application/play_provider.dart';
 import '../application/play_screen_provider.dart';
+import '../application/sleep_timer_provider.dart';
 import '../../follow/application/settings_provider.dart';
 import '../widgets/pip_surface.dart';
 import '../widgets/play_side_panel.dart';
@@ -222,6 +223,24 @@ class _PlayViewState extends ConsumerState<PlayView> {
     );
     // 舞台弹幕叠加层显隐:控制条按钮/后续快捷键切换(不进设置持久化)。
     final showDanmaku = play?.showDanmaku ?? true;
+    // 睡眠定时:app 级 provider(不随播放页 autoDispose),这里只读剩余时间
+    // 与到点次数。
+    final sleepTimer = ref.watch(sleepTimerProvider);
+    ref.listen<int>(sleepTimerProvider.select((state) => state.firedCount), (
+      previous,
+      next,
+    ) {
+      // 到点即停播(由 controller 完成),这里只负责告知用户"是被定时停的"。
+      if (previous == null || next <= previous) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text('睡眠定时已到，已停止播放'),
+            duration: Duration(seconds: 3),
+          ),
+        );
+    });
     final brand = PlatformBrandCatalog.byId(widget.site);
     final size = MediaQuery.sizeOf(context);
     // 呈现态(三态 + PiP):布局、控制条图标、自动隐藏、快捷键的唯一依据。
@@ -285,6 +304,14 @@ class _PlayViewState extends ConsumerState<PlayView> {
               roomId: widget.roomId,
               visible: showDanmaku && danmakuEnabled,
             ),
+            // 睡眠定时剩余时间:舞台右上角常驻徒标,不进控制条随时间变化的
+            // 可见性(控制条淡出后仍需可见)。
+            if (sleepTimer.active)
+              Positioned(
+                top: AppSpacing.sm,
+                right: AppSpacing.sm,
+                child: _SleepTimerBadge(remaining: sleepTimer.remainingLabel),
+              ),
             // PiP 小窗不渲染控制条(小窗只留画面,退出走 Esc)。
             if (!screen.pip)
               Positioned(
@@ -818,6 +845,43 @@ class _RetryButton extends StatelessWidget {
       style: OutlinedButton.styleFrom(
         foregroundColor: tokens.brand,
         side: BorderSide(color: tokens.brand.withValues(alpha: 0.6)),
+      ),
+    );
+  }
+}
+
+/// 舞台右上角的睡眠定时倒计时标注(锚点 `play-sleep-remaining`)。
+///
+/// 不放进控制条:控制条在沉浸态会淡出,而"还有多久停"属于需要一直可见的状态。
+class _SleepTimerBadge extends StatelessWidget {
+  const _SleepTimerBadge({required this.remaining});
+
+  /// 剩余时间文案(`mm:ss` / `h:mm:ss`,由 SleepTimerState.remainingLabel 给出)。
+  final String remaining;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    return Container(
+      key: const Key('play-sleep-remaining'),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: AppSpacing.xs,
+      ),
+      decoration: BoxDecoration(
+        color: tokens.surfaceRaised.withValues(alpha: 0.72),
+        borderRadius: AppRadius.allPill,
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.bedtime_rounded, size: 14, color: tokens.brand),
+          const SizedBox(width: AppSpacing.xs),
+          Text(
+            '定时 $remaining',
+            style: AppTypography.caption.copyWith(color: tokens.textPrimary),
+          ),
+        ],
       ),
     );
   }

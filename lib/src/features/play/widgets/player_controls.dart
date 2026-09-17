@@ -17,6 +17,8 @@
 /// - 线路入口:`play-line-menu`。
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:live_parser/live_parser.dart';
@@ -27,6 +29,8 @@ import '../../../platforms/common/playback/play_screen_mode.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../application/play_provider.dart';
+import '../application/room_volume_provider.dart';
+import '../application/sleep_timer_provider.dart';
 
 class PlayerControlsBar extends ConsumerStatefulWidget {
   const PlayerControlsBar({
@@ -157,7 +161,20 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
                 max: 100,
                 activeColor: tokens.brand,
                 inactiveColor: tokens.border,
-                onChanged: (value) => player.setVolume(value),
+                onChanged: (value) {
+                  player.setVolume(value);
+                  // 房间独立音量:拖动即记入本房间(键 room_vol_{site}_{roomId}),
+                  // 下次进同一房间按全局静音 → 房间值 → 默认音量的顺序恢复。
+                  unawaited(
+                    ref
+                        .read(roomVolumeStoreProvider)
+                        .save(
+                          site: widget.site,
+                          roomId: widget.roomId,
+                          volume: value,
+                        ),
+                  );
+                },
               ),
             ),
           ),
@@ -213,6 +230,9 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
               color: widget.showDanmaku ? tokens.brand : tokens.textSecondary,
             ),
           ),
+        // 睡眠定时:与画中画/网页全屏同属非紧凑区控件 —— 窄屏(手机竖屏)下
+        // 控制条横向预算已近满,再添一枚 48px 按钮会溢出(360dp 实测)。
+        if (!compact) const _SleepTimerButton(),
         if (!compact)
           IconButton(
             // 测试锚点:画中画切换。
@@ -400,5 +420,120 @@ class _LineSelectBox extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// 睡眠定时按钮:入口锚点 `play-sleep-timer`,菜单给预设档位 + 自定义分钟数。
+///
+/// 定时状态挂在应用级 `sleepTimerProvider`(非 autoDispose):离开播放页时
+/// 定时不被清掉,到点才停播。本组件只负责下指令与提示,不动播放器。
+class _SleepTimerButton extends ConsumerWidget {
+  const _SleepTimerButton();
+
+  /// 菜单里的「自定义…」项值;预设档位为分钟数,「关闭定时」为 0。
+  static const int _customValue = -1;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = context.tokens;
+    final timer = ref.watch(sleepTimerProvider);
+    final active = timer.active;
+    return PopupMenuButton<int>(
+      // 测试锚点:睡眠定时入口。
+      key: const Key('play-sleep-timer'),
+      tooltip: active ? '睡眠定时 (剩余 ${timer.remainingLabel})' : '睡眠定时',
+      padding: EdgeInsets.zero,
+      onSelected: (value) {
+        if (value == _customValue) {
+          unawaited(_pickCustomMinutes(context, ref));
+          return;
+        }
+        final controller = ref.read(sleepTimerProvider.notifier);
+        if (value <= 0) {
+          controller.cancel();
+          _toast(context, '已取消睡眠定时');
+          return;
+        }
+        controller.start(Duration(minutes: value));
+        _toast(context, '已设定 $value 分钟后停止播放');
+      },
+      itemBuilder: (context) => [
+        if (active)
+          const PopupMenuItem<int>(
+            key: Key('play-sleep-timer-off'),
+            value: 0,
+            child: Text('关闭定时'),
+          ),
+        for (final minutes in SleepTimerController.presetsMinutes)
+          PopupMenuItem<int>(
+            key: Key('play-sleep-timer-$minutes'),
+            value: minutes,
+            child: Text('$minutes 分钟'),
+          ),
+        const PopupMenuItem<int>(
+          key: Key('play-sleep-timer-custom'),
+          value: _customValue,
+          child: Text('自定义…'),
+        ),
+      ],
+      child: Icon(
+        active ? Icons.bedtime_rounded : Icons.bedtime_outlined,
+        size: 20,
+        color: active ? tokens.brand : tokens.textPrimary,
+      ),
+    );
+  }
+
+  /// 弹一次提示;控制条可能处于已隐藏 chrome 的态,故用页面根 Scaffold 的
+  /// ScaffoldMessenger(由 MaterialApp 提供)。
+  void _toast(BuildContext context, String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+      );
+  }
+
+  /// 自定义分钟数:简单数字输入对话框;取消/非法值不改变现有定时。
+  Future<void> _pickCustomMinutes(BuildContext context, WidgetRef ref) async {
+    final controller = TextEditingController();
+    try {
+      final minutes = await showDialog<int>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('自定义睡眠定时'),
+          content: TextField(
+            key: const Key('play-sleep-timer-custom-input'),
+            controller: controller,
+            autofocus: true,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(
+              hintText: '分钟(1-${SleepTimerController.maxCustomMinutes})',
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(
+                dialogContext,
+              ).pop(int.tryParse(controller.text.trim())),
+              child: const Text('确定'),
+            ),
+          ],
+        ),
+      );
+      if (minutes == null || minutes <= 0) return;
+      final clamped = minutes > SleepTimerController.maxCustomMinutes
+          ? SleepTimerController.maxCustomMinutes
+          : minutes;
+      if (!context.mounted) return;
+      ref.read(sleepTimerProvider.notifier).start(Duration(minutes: clamped));
+      _toast(context, '已设定 $clamped 分钟后停止播放');
+    } finally {
+      controller.dispose();
+    }
   }
 }
