@@ -254,3 +254,42 @@ pure_live 与 zishu **技术栈高度同构**（Flutter + media-kit + 11 平台 
 | 3 | **多画面同看是否纳入路线图？** | 纳入 P2（M6 后评估）／明确不做 |
 | 4 | **录制 / 定时 / 纯音频** 三项是否纳入 Windows 目标？ | 全部纳入／仅定时／都不做 |
 | 5 | **数据备份走 WebDAV 还是既有 data-server 云同步？** | data-server（已接入，架构统一）／WebDAV（对齐 pure_live） |
+
+---
+
+## 7. 播放层对照审计结论（2026-09-18 实测，3 路并行只读审计）
+
+> 参照锁定：**上游 `upstream/master` 的 `lib/player/`（43 文件）**。
+> 注意：`F:/project/pure_live` 的本地分支 `ui/zishu-flutter` 是「zishu 风格重写快照」（旧 UI 已删、`lib/player/` 已不在），**不能当 pure_live 的播放实现参照**。
+
+### 7.1 上游那批"成熟播放层"大多是死代码（0 调用点）
+
+逐符号 grep 结果——以下符号在上游全仓**只有定义、无任何调用点**，**不要移植**：
+
+`PlayerPool`、`PreloadPlayerManager`、`TextureKeeper`、`LiveStreamGeometryHintResolver`、`calculateVideoOutputSize`、`SourceEventFence`、`PlaybackLifecycleCoordinator`、`LiveBufferPolicy`。
+
+上游真正接线的韧性命中路径只有：`media_kit_adapter.dart:635-719`（粗糙 `_mapErrorType`）→ `player_manager.dart:1701-1775`（切线路/换内核）→ `video_controller.dart:616-648`（Toast，2s 同签名去重）。
+
+**结论：zishu 的播放韧性整体强于上游**——错误分类器带 `terminal` 终局判定、有界重试带 10s 健康窗（防抖动清零）、恢复重解析 40s 节流、mpv 调优还多出 Windows `ao=wasapi` + `video-sync=audio`。「把 pure_live 播放层搬过来」是伪命题。
+
+### 7.2 本轮补齐（4 轨并行 → worktree 隔离 → cherry-pick）
+
+| 轨 | 内容 | commit |
+|---|---|---|
+| A 播放韧性内核加固 | 切房生命周期串行队列 + 源代际与事件围栏（修「切房黑屏/无声且日志无错」竞态）、看门狗重挂（洞 R4）、`completed` 补退避（R8）、放弃闩锁（R3）、`stop` 重置、缓存目录路径、新增 PlaybackLog 事件 | `d09a701` |
+| B 解析域请求头 | 补 huya/bilibili/youtube/yy/soop 的 `StreamLine.headers` + 头值卫生化工具（斗鱼/抖音/快手已有） | `9b8ec04` |
+| C 窗口/PiP 几何记忆 | PiP 尺寸分档（360/380/280）、PiP 位置记忆（横竖两套）、主窗口几何持久化（debounce 500ms + 退出 flush） | `d0a6106` |
+| D 房间音量 + 睡眠定时 | 房间独立音量记忆 + 全局静音/默认音量、恢复回调注销（`setLineRecovery(null)` + `ref.mounted`）、睡眠定时（app 级） | `9fcc414` |
+
+验证：`flutter analyze` 0 issue；`flutter test` **330 passed**；`live_parser` `dart analyze` 0 issue + `dart test` **270 passed**；`flutter build windows --debug` 成功。
+
+### 7.3 明确排除（勿再评估）
+
+多播放器内核（IJK/EXO/video_player）、`PlayerPool`/`TextureKeeper`/`PreloadPlayerManager`、`calculateVideoOutputSize`、线路黑名单状态机（上游 `markSuccess` 无调用点 = 一次失败永久拉黑）、Android 前台服务/系统 PiP/方向锁/audio_session、MPRIS、RTX VSR、`customPlayerOutput`、录制（独立大域）、GetX/Hive 基建（只搬语义不搬基建）。
+
+### 7.4 待办 / 需产品决策
+
+1. **后台播放 + 系统媒体通知（SMTC）**：会破坏「离页即停」契约（`play_provider.dart` 的 `ref.onDispose(player.stop())` 是注释级契约，`play_controls_test.dart` 有用例锚定），且 `audio_service` 不支持 Web（违反三端单一依赖图）→ 需产品决策 + 平台分层立项。
+2. **睡眠定时/全局静音/默认音量的设置页入口**：本轮只落了状态层（`settings_view.dart` 未改），UI 入口待补。
+3. 抖音流几何提示、竖屏三模式、缓存策略 UI、多画面同看、录制。
+4. 真机验证：切房不再黑屏、huya/bilibili 补头后开流、PiP 记忆、房间音量、睡眠定时到点停止（可用 `%APPDATA%\zishu_flutter\logs\playback.log` 的 `reopen_requested`/`stall_watchdog`/`give_up_latched`/`open_superseded` 事件观测）。
