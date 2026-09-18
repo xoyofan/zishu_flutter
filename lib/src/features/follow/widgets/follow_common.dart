@@ -254,3 +254,19 @@ class FollowIconAction extends StatelessWidget {
     );
   }
 }
+
+/// 离线卡的「上次开播」文案,语义对齐 web
+/// `apps/web/src/utils/follow/followDisplay.ts` 的 `offlineLastLiveLabel`。
+///
+/// - [lastLiveAt] 毫秒 epoch;`<= 0`(从未记录)回落「未开播」;
+/// - 有记录 → 「上次开播 MM-DD HH:mm」(本地时区,与 web 的日级展示同源)。
+///
+/// 纯函数无 UI 依赖,关注卡与后续任何离线展示位共用,禁止再造第二份格式化。
+String offlineLastLiveLabel(int lastLiveAt) {
+  if (lastLiveAt <= 0) return '未开播';
+  final time = DateTime.fromMillisecondsSinceEpoch(lastLiveAt);
+  String two(int value) => value.toString().padLeft(2, '0');
+  return '上次开播 '
+      '${two(time.month)}-${two(time.day)} '
+      '${two(time.hour)}:${two(time.minute)}';
+}

@@ -31,6 +31,8 @@ class FollowEntry {
     required this.isSpecial,
     required this.remindOn,
     required this.followedAt,
+    this.lastLiveAt = 0,
+    this.liveStartAt = 0,
   });
 
   /// 契约房间模型(与解析核心共享,UI 不消费松散 Map)。
@@ -45,6 +47,17 @@ class FollowEntry {
   /// 关注时间,用于「最近关注」排序。
   final DateTime followedAt;
 
+  /// 上次开播时间(毫秒 epoch;0 = 无记录)。离线卡据此显示
+  /// 「上次开播 MM-DD HH:mm」,语义对齐 web `followDisplay.offlineLastLiveLabel`。
+  ///
+  /// 数据来源:云端契约 [RemoteFollow.lastLiveAt] 与本地「在播 → 离线」跃迁
+  /// 检测,合并一律取 max(见 [mergedInt]),防止旧值/0 值抹掉新记录。
+  final int lastLiveAt;
+
+  /// 最近一次开播的起点(毫秒 epoch;0 = 无记录),云端契约透传字段,
+  /// 供后续「直播时长」类展示使用,本轮不参与 UI。
+  final int liveStartAt;
+
   /// 稳定键:平台 + 房间号,批量选择/增删都以它定位。
   String get key => '${room.site}:${room.roomId}';
 
@@ -56,15 +69,25 @@ class FollowEntry {
     bool? isSpecial,
     bool? remindOn,
     DateTime? followedAt,
+    int? lastLiveAt,
+    int? liveStartAt,
   }) {
     return FollowEntry(
       room: room ?? this.room,
       isSpecial: isSpecial ?? this.isSpecial,
       remindOn: remindOn ?? this.remindOn,
       followedAt: followedAt ?? this.followedAt,
+      lastLiveAt: lastLiveAt ?? this.lastLiveAt,
+      liveStartAt: liveStartAt ?? this.liveStartAt,
     );
   }
 }
+
+/// 「上次开播」类时间戳的合并口径:取较大者。
+///
+/// 云端拉回可能是旧值或 0(远端从未见过该房开播),本地跃迁记录又可能比
+/// 云端新 —— 一律取 max,任何一侧都不得把另一侧抹成更早/空。
+int mergedInt(int a, int b) => a > b ? a : b;
 
 /// 关注列表控制器:单条增删、特别关注/提醒开关、批量操作与云端同步。
 class FollowController extends Notifier<List<FollowEntry>> {
@@ -248,12 +271,32 @@ class FollowController extends Notifier<List<FollowEntry>> {
     if (!ref.mounted) return 0;
     if (updated.isEmpty) return 0;
     // 以最新 state 重建:刷新期间用户可能已增删条目,不能被过期快照覆盖。
+    // 离线跃迁:原在播、刷新后离线 → 把当下记为「上次开播」(本地数据源的
+    // lastLiveAt 就来自这里;云端契约透传值在 pullRemote 侧以 max 合并)。
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
     state = [
       for (final entry in state)
-        entry.copyWith(room: updated[entry.key] ?? entry.room),
+        entry.copyWith(
+          room: updated[entry.key] ?? entry.room,
+          lastLiveAt: _bumpedLastLiveAt(entry, updated[entry.key], nowMs),
+        ),
     ];
     await _persist();
     return updated.length;
+  }
+
+  /// 刷新后该条目的 lastLiveAt:仅在「原本在播 → 刷新后离线」跃迁时记为
+  /// [nowMs](与已有值取 max);其余情况维持原值,不得因刷新回填而清零。
+  static int _bumpedLastLiveAt(
+    FollowEntry entry,
+    RoomSummary? fresh,
+    int nowMs,
+  ) {
+    if (fresh == null) return entry.lastLiveAt;
+    final wasLive = entry.isLive;
+    final nowOffline = fresh.online.trim().isEmpty;
+    if (wasLive && nowOffline) return mergedInt(entry.lastLiveAt, nowMs);
+    return entry.lastLiveAt;
   }
 
   /// 取本轮刷新窗口:`limit <= 0` 或超过总数时取全量并复位游标;
@@ -308,7 +351,13 @@ class FollowController extends Notifier<List<FollowEntry>> {
       final remote = await _api.fetchFollows(token);
       if (!ref.mounted) return;
       if (remote.isNotEmpty) {
-        state = [for (final item in remote) _fromRemote(item)];
+        // 整表以云端为准,但「上次开播」类时间戳与本地同 key 条目取 max:
+        // 本地跃迁记录可能比云端新,不得被拉回抹掉。
+        final localByKey = {for (final entry in state) entry.key: entry};
+        state = [
+          for (final item in remote)
+            _fromRemote(item, localByKey['${item.site}:${item.id}']),
+        ];
         await _persist(syncRemote: false);
       } else {
         await _pushRemote(token);
@@ -351,6 +400,8 @@ class FollowController extends Notifier<List<FollowEntry>> {
                   followedAt: item['followedAt'] is String
                       ? DateTime.tryParse(item['followedAt'] as String) ?? DateTime.now()
                       : DateTime.now(),
+                  lastLiveAt: (item['lastLiveAt'] as num?)?.toInt() ?? 0,
+                  liveStartAt: (item['liveStartAt'] as num?)?.toInt() ?? 0,
                 ),
           ];
           if (entries.isNotEmpty) state = entries;
@@ -380,12 +431,17 @@ class FollowController extends Notifier<List<FollowEntry>> {
       superFollow: entry.isSpecial,
       liveNotify: entry.remindOn,
       clientUpdatedAt: nowMs,
+      lastLiveAt: entry.lastLiveAt,
+      liveStartAt: entry.liveStartAt,
     );
   }
 
   /// 远端契约 → 本地条目(开播状态远端不回传,先按离线呈现,待真实解析链路回填)。
-  FollowEntry _fromRemote(RemoteFollow item) {
-    return FollowEntry(
+  ///
+  /// [previous] 为本地已有条目(按同 key 匹配):「上次开播」类时间戳与本地
+  /// 取 max —— 云端可能是旧值/0 值,不得把本地刚记录的跃迁抹掉。
+  FollowEntry _fromRemote(RemoteFollow item, [FollowEntry? previous]) {
+    final entry = FollowEntry(
       room: RoomSummary(
         site: item.site,
         roomId: item.id,
@@ -401,6 +457,13 @@ class FollowController extends Notifier<List<FollowEntry>> {
       followedAt: item.addedAt > 0
           ? DateTime.fromMillisecondsSinceEpoch(item.addedAt)
           : DateTime.now(),
+      lastLiveAt: item.lastLiveAt,
+      liveStartAt: item.liveStartAt,
+    );
+    if (previous == null) return entry;
+    return entry.copyWith(
+      lastLiveAt: mergedInt(entry.lastLiveAt, previous.lastLiveAt),
+      liveStartAt: mergedInt(entry.liveStartAt, previous.liveStartAt),
     );
   }
 
@@ -440,6 +503,8 @@ class FollowController extends Notifier<List<FollowEntry>> {
             'isSpecial': entry.isSpecial,
             'remindOn': entry.remindOn,
             'followedAt': entry.followedAt.toIso8601String(),
+            'lastLiveAt': entry.lastLiveAt,
+            'liveStartAt': entry.liveStartAt,
           },
       ];
       await SharedPreferencesAsync().setString(_kFollowList, jsonEncode(payload));

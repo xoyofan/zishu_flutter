@@ -133,7 +133,11 @@ class FollowEntryCard extends StatelessWidget {
                           const SizedBox(width: 2),
                           Flexible(
                             child: Text(
-                              live ? room.online : '未开播',
+                              // 离线:有开播记录显示「上次开播」,否则「未开播」
+                              // (对齐 web offlineLastLiveLabel)。
+                              live
+                                  ? room.online
+                                  : offlineLastLiveLabel(entry.lastLiveAt),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: AppTypography.caption.copyWith(
@@ -285,7 +289,8 @@ class FollowEntryCard extends StatelessWidget {
                 color: tokens.textPrimary.withValues(alpha: 0.62),
                 alignment: Alignment.center,
                 child: Text(
-                  '未开播',
+                  // 与元信息行同源:有记录显示「上次开播」,否则「未开播」。
+                  offlineLastLiveLabel(entry.lastLiveAt),
                   style: AppTypography.caption.copyWith(
                     fontSize: 10,
                     color: tokens.surface,
