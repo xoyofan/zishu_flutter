@@ -393,6 +393,50 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('danmakuSettings:控制条有「飘屏弹幕设置」入口,点开弹幕样式对话框', (tester) async {
+    final play = await _pumpPlay(tester);
+    await _awaitSettingsHydrated(tester, play.container);
+
+    // 真源:web `components/play/PlayerControls.vue:43-52` 的
+    // `ctrl-danmaku-settings-btn`(title「飘屏弹幕设置」),与弹幕开关同组。
+    final entry = find.byKey(const Key('play-danmaku-settings'));
+    expect(entry, findsOneWidget, reason: '弹幕总开关开启时控制条应有飘屏弹幕设置入口');
+
+    await tester.tap(entry);
+    await _pumpFrames(tester, 6);
+    expect(
+      find.byKey(const Key('danmaku-settings-dialog')),
+      findsOneWidget,
+      reason: '点击应打开与侧栏设置页同一份弹幕样式对话框',
+    );
+    expect(find.text('弹幕样式'), findsOneWidget);
+
+    // 关闭后回到控制条,不应抛异常。
+    await tester.tap(find.text('完成'));
+    await _pumpFrames(tester, 6);
+    expect(find.byKey(const Key('danmaku-settings-dialog')), findsNothing);
+    expect(entry, findsOneWidget, reason: '关闭对话框后控制条入口仍在');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('danmakuSettings:设置总开关关闭时控制条不出现该入口', (tester) async {
+    SharedPreferencesAsyncPlatform.instance =
+        InMemorySharedPreferencesAsync.withData(<String, Object>{
+          'zishu.settings.danmakuEnabled': false,
+        });
+
+    final play = await _pumpPlay(tester);
+    await _awaitSettingsHydrated(tester, play.container);
+    await _pumpFrames(tester, 2);
+
+    expect(
+      find.byKey(const Key('play-danmaku-settings')),
+      findsNothing,
+      reason: '弹幕总开关关闭时设置入口与弹幕开关一起隐藏',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('clickStage:点视频帧切换播放/暂停,不误触控制条', (tester) async {
     await _pumpPlay(tester);
 

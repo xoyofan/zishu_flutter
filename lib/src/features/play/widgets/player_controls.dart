@@ -1,7 +1,7 @@
 /// 播放控制条:播放/暂停(快照驱动)、音量滑杆+静音、直播延迟占位文案、
 /// 画质/线路 selectbox(2026-09-11 裁决:从独立 QualityLineBar 行移入控制栏,
-/// 对齐参考播放器的控制栏布局)、弹幕显隐开关、画中画、刷新视频、网页全屏与
-/// 全屏按钮。只经 LivePlayer 接口下达指令,不触碰 media_kit。
+/// 对齐参考播放器的控制栏布局)、弹幕显隐开关与飘屏弹幕设置入口、画中画、
+/// 刷新视频、网页全屏与全屏按钮。只经 LivePlayer 接口下达指令,不触碰 media_kit。
 ///
 /// **本组件不再自带键盘绑定**:快捷键的唯一宿主是播放页(见 play_view.dart)。
 /// 旧实现在此内联了一份 Space/M/F 的 `CallbackShortcuts`,而 `Shortcuts` 沿焦点链
@@ -28,6 +28,7 @@ import '../../../platforms/common/playback/live_player.dart'
 import '../../../platforms/common/playback/play_screen_mode.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
+import '../../danmaku/widgets/danmaku_settings_dialog.dart';
 import '../application/play_provider.dart';
 import '../application/room_volume_provider.dart';
 import '../application/sleep_timer_provider.dart';
@@ -109,8 +110,8 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
     );
   }
 
-  /// 控制条主行;[compact] 为 true 时隐藏音量滑杆/延迟文案/画中画/网页全屏,
-  /// 只留播放/静音/画质/线路/弹幕/刷新/全屏等核心按钮。
+  /// 控制条主行;[compact] 为 true 时隐藏音量滑杆/延迟文案/画中画/网页全屏/
+  /// 飘屏弹幕设置,只留播放/静音/画质/线路/弹幕开关/刷新/全屏等核心按钮。
   Widget buildRow(
     BuildContext context,
     PlayerSnapshot snapshot,
@@ -228,6 +229,27 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
                   : Icons.subtitles_off_rounded,
               size: 20,
               color: widget.showDanmaku ? tokens.brand : tokens.textSecondary,
+            ),
+          ),
+        // 飘屏弹幕设置入口:与侧栏设置页共用同一对话框(避免两处控件分叉),
+        // 对齐 web `components/play/PlayerControls.vue:43-52` 的
+        // `ctrl-danmaku-settings-btn`(title「飘屏弹幕设置」),与弹幕开关同组。
+        //
+        // 归入非紧凑区(compact 时不渲染):实测 360/375/393dp 手机宽度下再加
+        // 一枚 48px 按钮会让控制条溢出(mobile_phones_test 的 pagesOverflowMatrix
+        // 抓到 play@AndroidSmall/iPhoneSE/iPhone15 三条 FAIL)。窄屏下弹幕样式
+        // 仍可从播放页侧栏「设置」页进入(play_side_panel.dart 的同一对话框),
+        // 桌面/平板则多出这条一步直达的通路。
+        if (widget.danmakuEnabled && !compact)
+          IconButton(
+            // 测试锚点:飘屏弹幕设置(弹幕样式对话框)入口。
+            key: const Key('play-danmaku-settings'),
+            tooltip: '飘屏弹幕设置',
+            onPressed: () => showDanmakuSettingsDialog(context),
+            icon: Icon(
+              Icons.tune_rounded,
+              size: 20,
+              color: tokens.textPrimary,
             ),
           ),
         // 睡眠定时:与画中画/网页全屏同属非紧凑区控件 —— 窄屏(手机竖屏)下
