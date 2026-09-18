@@ -1387,8 +1387,10 @@ class _FollowPanel extends ConsumerStatefulWidget {
 }
 
 class _FollowPanelState extends ConsumerState<_FollowPanel> {
-  /// true = 封面网格(参考实现的默认 preview 布局),false = 紧凑列表。
-  bool _grid = true;
+  /// true = 封面网格,false = 紧凑列表(每条一行)。
+  /// **默认列表**是用户口径(2026-09-19:「默认用列表显示 列表显示每个
+  /// 是一行」);web 真源默认封面预览(`previewCover: true`),此处有意偏离。
+  bool _grid = false;
   String _siteFilter = 'all';
 
   /// 已展示条数(分页窗口)。对齐 web `PLAY_FOLLOW_PAGE_SIZE = 48`:
@@ -1404,11 +1406,13 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
   /// 本轮待渲染的可见条目总数(由 build 写入,供滚动回调判定还有没有下一页)。
   int _visibleTotal = 0;
 
-  /// 侧栏可见性口径:在播 + 离线超关(与 web `isPlayFollowVisible` 一致),
-  /// 排序仍走 follow_sort 的统一档位(超关 → 开播 → 未开播)。
+  /// 侧栏可见性口径:**只显在播**(用户口径 2026-09-19:「不用显示没开播
+  /// 的」)。排序 = 超关在播 → 普通在播(follow_sort 统一档位,未开播档
+  /// 自然为空)。
   ///
-  /// 旧实现传 `liveOnly: true` 把离线一律丢掉 —— 关注的主播恰好都没开播时
-  /// 侧栏整片空白,即用户报的「关注没显示」。
+  /// 口径沿革:2026-09-18 曾对齐 web `isPlayFollowVisible` 保留离线超关
+  /// (当时为修「关注没显示」),随后被本口径覆盖 —— web 真源的离线超关
+  /// 分支为有意偏离,见 follow_sort.dart 注释。
   List<FollowEntry> _visible(List<FollowEntry> entries) =>
       playSidebarFollowEntries(entries, site: _siteFilter);
 
@@ -1472,7 +1476,7 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
               ? const _PanelHint(
                   icon: Icons.star_border_rounded,
                   title: '我的关注',
-                  text: '暂无在播关注；离线超关主播会保留在此列表',
+                  text: '暂无在播关注',
                 )
               : NotificationListener<ScrollNotification>(
                   onNotification: _onScroll,

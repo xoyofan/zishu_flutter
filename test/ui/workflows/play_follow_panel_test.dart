@@ -1,8 +1,10 @@
 /// 播放页侧栏「关注」tab workflow 测试:可见性口径、空态、分页、切房。
 ///
-/// 背景(用户报告 + 根因):面板曾用 `visibleFollowEntries(liveOnly: true)`,
-/// 离线房间一律被丢 —— 关注的主播恰好都没开播时侧栏整片空白(「关注没显示」)。
-/// 现口径对齐 SFVideoLive `isPlayFollowVisible`:在播可见,**离线超关也可见**。
+/// 口径沿革:面板曾用 `visibleFollowEntries(liveOnly: true)` 把离线一律丢掉,
+/// 「关注没显示」后一度改为 web `isPlayFollowVisible` 口径(在播 + 离线超关);
+/// **2026-09-19 用户口径再次更新:不显示没开播的(离线超关也不再保留)**,
+/// 且默认视图为紧凑列表(每条一行)。web 真源 `isPlayFollowVisible` 的
+/// 「离线超关可见」分支为有意偏离(用户口径优先),排序保持 超关 → 在播。
 ///
 /// 宿主写法与 side_panel_features_test.dart 一致:真实 router + 注入
 /// FakeLivePlayer(VM 下禁止初始化 media_kit)+ InMemorySharedPreferencesAsync,
@@ -34,8 +36,8 @@ const Duration _kFrame = Duration(milliseconds: 50);
 /// 侧栏关注面板的分页窗口(与实现/web `PLAY_FOLLOW_PAGE_SIZE` 对齐)。
 const int _kPageSize = 48;
 
-/// 离线超关也被保留时的空态文案(对齐 web `follow-recommend__empty-hint`)。
-const String _kEmptyHint = '暂无在播关注；离线超关主播会保留在此列表';
+/// 用户口径(2026-09-19:不显示没开播的)下的空态文案。
+const String _kEmptyHint = '暂无在播关注';
 
 /// 测试替身:替代 MediaKitLivePlayer,不触碰任何原生播放内核。
 class FakeLivePlayer implements LivePlayer {
@@ -178,30 +180,46 @@ Future<({GoRouter router, ProviderContainer container})> _pumpFollowTab(
   return (router: router, container: container);
 }
 
-/// 关注面板内的房间卡锚点。
+/// 关注面板内的房间卡锚点(网格视图,PlayRoomCard)。
 Finder _card(String site, String roomId) =>
     find.byKey(Key('play-follow-room-$site-$roomId'));
 
-/// 关注面板内的封面网格(PlayRoomGrid 用 GridView.builder)。
-/// 页面上还有别的 GridView(壳层浮层等),必须限定在面板子树内。
-Finder _followGrid() => find
-    .descendant(
-      of: find.byKey(const Key('play-side-follow-panel')),
-      matching: find.byType(GridView),
-    )
-    .first;
+/// 关注面板内的紧凑列表行锚点(列表视图,PlayRoomRow)。
+Finder _row(String site, String roomId) =>
+    find.byKey(Key('play-room-row-$site-$roomId'));
 
-/// 网格当前**窗口**条目数(GridView.builder 的 delegate 计数,不等于已构建的可见项)。
-int _gridChildCount(WidgetTester tester) =>
-    tester
-        .widget<GridView>(_followGrid())
-        .childrenDelegate
-        .estimatedChildCount ??
-    -1;
+/// 面板内是否有 GridView(不带 first,供 findsNothing 断言)。
+Finder _anyGridInPanel() => find.descendant(
+  of: find.byKey(const Key('play-side-follow-panel')),
+  matching: find.byType(GridView),
+);
+
+/// 面板内的**垂直** ListView(关注列表)。面板里还有平台筛选 chips 的水平
+/// ListView(_SidePlatformChips),必须按滚动方向过滤,否则 finder 误中。
+Finder _verticalListsInPanel() => find.descendant(
+  of: find.byKey(const Key('play-side-follow-panel')),
+  matching: find.byWidgetPredicate(
+    (w) => w is ListView && w.scrollDirection == Axis.vertical,
+  ),
+);
+
+/// 面板内的紧凑列表(PlayRoomList 用 ListView.separated)。
+Finder _followList() => _verticalListsInPanel().first;
+
+/// 列表当前**窗口**条目数:读 builder delegate 声明的 childCount
+/// (ListView.separated 把条目与 separator 交错,实际条目数 = (n+1)~/2;
+/// 不能用 estimatedChildCount —— 那是按可视区估算的,GridView 才是精确值)。
+int _listChildCount(WidgetTester tester) {
+  final delegate =
+      tester.widget<ListView>(_followList()).childrenDelegate
+          as SliverChildBuilderDelegate;
+  final count = delegate.childCount ?? -1;
+  return count <= 0 ? 0 : (count + 1) ~/ 2;
+}
 
 void main() {
-  group('侧栏关注面板可见性(web isPlayFollowVisible 口径)', () {
-    testWidgets('在播可见 + 离线超关可见 + 离线非超关隐藏', (tester) async {
+  group('侧栏关注面板可见性(用户口径 2026-09-19:只显在播)', () {
+    testWidgets('在播可见(超关/普通)+ 离线一律隐藏(含超关)', (tester) async {
       SharedPreferencesAsyncPlatform.instance =
           InMemorySharedPreferencesAsync.withData(<String, Object>{
             'zishu.follow.list': jsonEncode([
@@ -222,24 +240,29 @@ void main() {
       await _pumpFrames(tester, 3);
 
       expect(find.byKey(const Key('play-side-follow-panel')), findsOneWidget);
-      expect(_card('douyu', '1001'), findsOneWidget, reason: '在播必须显示');
-      expect(_card('douyu', '1002'), findsOneWidget, reason: '在播超关必须显示');
+      expect(_row('douyu', '1001'), findsOneWidget, reason: '在播必须显示');
+      expect(_row('douyu', '1002'), findsOneWidget, reason: '在播超关必须显示');
       expect(
-        _card('douyu', '1003'),
-        findsOneWidget,
-        reason: '离线超关必须保留 —— 这正是「关注没显示」的根因(liveOnly 把它丢了)',
+        _row('douyu', '1003'),
+        findsNothing,
+        reason: '用户口径(2026-09-19):离线超关也不再保留,不显示没开播的',
       );
-      expect(_card('douyu', '1004'), findsNothing, reason: '离线且非超关隐藏(与参考实现一致)');
+      expect(_row('douyu', '1004'), findsNothing, reason: '离线且非超关隐藏');
       expect(find.text(_kEmptyHint), findsNothing);
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('只剩离线非超关时,展示 web 空态文案', (tester) async {
+    testWidgets('只剩离线(含超关)时,展示空态文案', (tester) async {
       SharedPreferencesAsyncPlatform.instance =
           InMemorySharedPreferencesAsync.withData(<String, Object>{
             'zishu.follow.list': jsonEncode([
-              _seedEntry(roomId: '3001', online: '', title: '离线一'),
-              _seedEntry(roomId: '3002', online: '', title: '离线二'),
+              _seedEntry(roomId: '3001', online: '', title: '离线普通'),
+              _seedEntry(
+                roomId: '3002',
+                online: '',
+                isSpecial: true,
+                title: '离线超关',
+              ),
             ]),
           });
 
@@ -248,7 +271,33 @@ void main() {
       await _pumpFrames(tester, 3);
 
       expect(find.text(_kEmptyHint), findsOneWidget);
-      expect(_card('douyu', '3001'), findsNothing);
+      expect(_row('douyu', '3001'), findsNothing);
+      expect(_row('douyu', '3002'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('排序:超关在播在前,普通在播在后(列表每条一行)', (tester) async {
+      SharedPreferencesAsyncPlatform.instance =
+          InMemorySharedPreferencesAsync.withData(<String, Object>{
+            'zishu.follow.list': jsonEncode([
+              // 普通关注先关注(倒序下本应在前),超关后关注 —— 超关必须置顶。
+              _seedEntry(roomId: '8001', title: '普通在播'),
+              _seedEntry(roomId: '8002', isSpecial: true, title: '超关在播'),
+            ]),
+          });
+
+      final play = await _pumpFollowTab(tester);
+      await _awaitFollowRestored(tester, play.container, 2);
+      await _pumpFrames(tester, 3);
+
+      final normalRect = tester.getRect(_row('douyu', '8001'));
+      final superRect = tester.getRect(_row('douyu', '8002'));
+      expect(
+        superRect.top,
+        lessThan(normalRect.top),
+        reason: '超关在播必须排在普通在播之前(用户口径:按超关、关注排序)',
+      );
+      expect(superRect.left, normalRect.left, reason: '列表视图每条独占一行');
       expect(tester.takeException(), isNull);
     });
   });
@@ -268,14 +317,14 @@ void main() {
       await _awaitFollowRestored(tester, play.container, 60);
       await _pumpFrames(tester, 3);
 
-      expect(_gridChildCount(tester), _kPageSize, reason: '首屏只放一页');
+      expect(_listChildCount(tester), _kPageSize, reason: '首屏只放一页');
       expect(find.text('向下滚动加载更多…'), findsOneWidget);
 
       // 滚到底 → 触发下一页加载(60 < 96,一次到位,提示随之消失)。
-      await tester.drag(_followGrid(), const Offset(0, -6000));
+      await tester.drag(_followList(), const Offset(0, -6000));
       await _pumpFrames(tester, 5);
 
-      expect(_gridChildCount(tester), 60, reason: '滚动到底后应放出全部 60 条');
+      expect(_listChildCount(tester), 60, reason: '滚动到底后应放出全部 60 条');
       expect(find.text('向下滚动加载更多…'), findsNothing);
       expect(tester.takeException(), isNull);
     });
@@ -293,19 +342,19 @@ void main() {
       await _awaitFollowRestored(tester, play.container, 2);
       await _pumpFrames(tester, 3);
 
-      expect(_card('douyu', '4001'), findsOneWidget);
-      expect(_card('huya', '4002'), findsOneWidget);
+      expect(_row('douyu', '4001'), findsOneWidget);
+      expect(_row('huya', '4002'), findsOneWidget);
 
       // 按钮锚点(卡面上的平台角标同样是「虎牙」文本,故按 key 定位 chip)。
       await tester.tap(find.byKey(const Key('play-side-follow-site-huya')));
       await _pumpFrames(tester, 3);
 
-      expect(_card('huya', '4002'), findsOneWidget);
-      expect(_card('douyu', '4001'), findsNothing, reason: '筛虎牙后不应再出现斗鱼条目');
+      expect(_row('huya', '4002'), findsOneWidget);
+      expect(_row('douyu', '4001'), findsNothing, reason: '筛虎牙后不应再出现斗鱼条目');
 
       await tester.tap(find.byKey(const Key('play-side-follow-site-all')));
       await _pumpFrames(tester, 3);
-      expect(_card('douyu', '4001'), findsOneWidget);
+      expect(_row('douyu', '4001'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
 
@@ -321,7 +370,7 @@ void main() {
       await _awaitFollowRestored(tester, play.container, 1);
       await _pumpFrames(tester, 3);
 
-      final target = _card('douyu', '5001');
+      final target = _row('douyu', '5001');
       await tester.ensureVisible(target);
       await tester.tap(target);
       await _pumpFrames(tester, 4);
@@ -335,7 +384,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('视图切换:网格 ⇄ 紧凑列表,条目仍在', (tester) async {
+    testWidgets('默认列表视图;可切换到封面网格再切回', (tester) async {
       SharedPreferencesAsyncPlatform.instance =
           InMemorySharedPreferencesAsync.withData(<String, Object>{
             'zishu.follow.list': jsonEncode([
@@ -346,19 +395,25 @@ void main() {
       final play = await _pumpFollowTab(tester);
       await _awaitFollowRestored(tester, play.container, 1);
       await _pumpFrames(tester, 3);
-      expect(_card('douyu', '6001'), findsOneWidget);
+      expect(
+        _row('douyu', '6001'),
+        findsOneWidget,
+        reason: '用户口径(2026-09-19):默认用列表显示,每条一行',
+      );
+      expect(_anyGridInPanel(), findsNothing, reason: '默认不应是封面网格');
 
       await tester.tap(find.byKey(const Key('play-side-follow-view-toggle')));
       await _pumpFrames(tester, 3);
+      expect(_card('douyu', '6001'), findsOneWidget, reason: '切换后是封面网格');
       expect(
-        find.byKey(const Key('play-room-row-douyu-6001')),
-        findsOneWidget,
-        reason: '紧凑列表视图的锚点',
+        _verticalListsInPanel(),
+        findsNothing,
+        reason: '网格视图下不应残留列表',
       );
 
       await tester.tap(find.byKey(const Key('play-side-follow-view-toggle')));
       await _pumpFrames(tester, 3);
-      expect(_card('douyu', '6001'), findsOneWidget);
+      expect(_row('douyu', '6001'), findsOneWidget, reason: '可切回列表');
       expect(tester.takeException(), isNull);
     });
   });

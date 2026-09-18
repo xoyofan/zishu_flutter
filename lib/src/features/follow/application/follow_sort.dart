@@ -46,20 +46,21 @@ void sortFollowEntries(List<FollowEntry> items, FollowSort sort) {
   }
 }
 
-/// 播放页侧栏的可见性口径(与 SFVideoLive `isPlayFollowVisible` 同源):
-/// **在播显示;离线但超关也显示;其余离线隐藏**。
+/// 播放页侧栏的可见性口径:**只显示在播**。
 ///
-/// 与 [visibleFollowEntries] 的 `liveOnly` 的差别:那个把离线一律丢掉,
-/// 于是「关注的主播恰好都没开播」时侧栏整片空白(用户报的「关注没显示」)。
-/// 而超关是用户亲手标的「最在意的人」——web 的空态文案也写明了这一点:
-/// 离线超关主播会保留在列表里。
-bool isPlayFollowVisible(FollowEntry entry) => entry.isLive || entry.isSpecial;
+/// 用户口径(2026-09-19):「侧边栏关注里不用显示没开播的」。这是对 web
+/// 真源 `isPlayFollowVisible`(`followDisplay.ts:235`,在播 ∨ 离线超关)的
+/// **有意偏离** —— 该口径曾在 2026-09-18 对齐落地(离线超关保留),随后被
+/// 用户口径覆盖;空态文案同步去掉「离线超关会保留」的半句。
+///
+/// 与 [visibleFollowEntries] 的 `liveOnly` 目前语义相同,但侧栏仍走
+/// [playSidebarFollowEntries] 专用入口:口径再变时只改一处。
+bool isPlayFollowVisible(FollowEntry entry) => entry.isLive;
 
 /// 播放页侧栏的关注列表:平台筛选 + 侧栏可见性 + 统一排序。
 ///
-/// 与「我的关注」页([visibleFollowEntries] 不带 `liveOnly`)的差别只在可见性
-/// 谓词 —— 排序仍走 [sortFollowEntries] 同一档位(超关 → 开播 → 未开播),
-/// 保证两个入口顺序一致。
+/// 排序走 [sortFollowEntries] 同一档位(超关 → 在播;只显在播后未开播档
+/// 自然为空),保证侧栏与「我的关注」页在播条目的相对顺序一致。
 List<FollowEntry> playSidebarFollowEntries(
   Iterable<FollowEntry> entries, {
   String site = 'all',
@@ -76,8 +77,8 @@ List<FollowEntry> playSidebarFollowEntries(
 
 /// 平台筛选 + 排序(+ 可选只保留开播),返回新列表(不修改入参)。
 ///
-/// [liveOnly] 保留给「确实只要在播」的调用点;播放页侧栏**不要**再用它
-/// (会把离线超关也丢掉),改用 [playSidebarFollowEntries]。
+/// [liveOnly] 保留给「确实只要在播」的调用点;播放页侧栏走
+/// [playSidebarFollowEntries](口径再变时只改那一处)。
 List<FollowEntry> visibleFollowEntries(
   Iterable<FollowEntry> entries, {
   String site = 'all',

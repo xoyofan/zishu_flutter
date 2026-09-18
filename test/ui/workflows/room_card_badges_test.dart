@@ -23,6 +23,7 @@ import 'package:zishu_flutter/src/app/app_theme.dart';
 import 'package:zishu_flutter/src/apps/windows/windows_app.dart';
 import 'package:zishu_flutter/src/features/browse/widgets/room_card.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
+import 'package:zishu_flutter/src/features/play/widgets/play_room_grid.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 import 'package:zishu_flutter/src/shared/presentation/widgets/cover_badges.dart';
 
@@ -255,7 +256,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('侧栏关注卡四象限:左上平台 / 右上分类 / 右下热度 / 左下★', (tester) async {
+  testWidgets('侧栏关注(用户口径 2026-09-19):默认列表只显在播;网格在播卡四象限', (
+    tester,
+  ) async {
     final app = await _pumpApp(
       tester,
       storage: {
@@ -268,6 +271,26 @@ void main() {
     app.router.go('/douyu/play/63136');
     await _pumpFrames(tester, 4);
     await tester.tap(find.byKey(const Key('play-side-tab-follow')));
+    await _pumpFrames(tester, 8);
+
+    // 口径:离线(含超关)在侧栏任何视图都不出现。
+    expect(
+      find.byKey(const ValueKey('play-room-row-douyu-1002')),
+      findsNothing,
+      reason: '离线超关不再保留(用户口径:不显示没开播的)',
+    );
+    expect(
+      find.byKey(const ValueKey('play-follow-room-douyu-1002')),
+      findsNothing,
+    );
+    // 默认视图为列表(每条一行)。
+    expect(
+      find.byKey(const ValueKey('play-room-row-douyu-1001')),
+      findsOneWidget,
+    );
+
+    // 切到封面网格:在播卡四象限(左上平台 / 右上分类 / 右下热度)。
+    await tester.tap(find.byKey(const Key('play-side-follow-view-toggle')));
     await _pumpFrames(tester, 8);
 
     final liveCard = find.byKey(
@@ -286,10 +309,45 @@ void main() {
         corner,
       );
     }
+    expect(tester.takeException(), isNull);
+  });
 
-    // 离线超关:★ 占左下,热度角标不渲染,整封面覆盖「未开播」。
+  testWidgets('离线关注卡渲染:★ 左下 + 未开播遮罩(直 pump,不经侧栏数据链)', (
+    tester,
+  ) async {
+    // 侧栏口径只显在播后,离线卡的角标/遮罩逻辑不再经面板触达;
+    // 直 pump PlayRoomGrid 钉住渲染契约,防口径回摆时丢行为。
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ZishuTheme.dark(),
+        home: Scaffold(
+          body: SizedBox(
+            width: 320,
+            child: PlayRoomGrid(
+              rooms: const [
+                RoomSummary(
+                  site: 'douyu',
+                  roomId: '9002',
+                  title: '离线超关',
+                  anchorName: '测试主播',
+                  cid: '1',
+                  category: '英雄联盟',
+                  online: '',
+                  cover: '',
+                ),
+              ],
+              superKeys: const {'douyu:9002'},
+              // 与侧栏关注面板同前缀:卡面键 = play-follow-room-douyu-9002。
+              keyPrefix: 'play-follow-room-',
+            ),
+          ),
+        ),
+      ),
+    );
+    await _pumpFrames(tester, 2);
+
     final offlineCard = find.byKey(
-      const ValueKey('play-follow-room-douyu-1002'),
+      const ValueKey('play-follow-room-douyu-9002'),
     );
     expect(offlineCard, findsOneWidget);
     _expectCorner(
