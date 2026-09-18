@@ -4,7 +4,6 @@ import 'package:live_parser/live_parser.dart';
 
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/widgets/cover_badges.dart';
-import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../../follow/widgets/follow_common.dart';
 
@@ -63,7 +62,8 @@ class RoomCard extends StatelessWidget {
 /// 对齐参考实现 `RoomCard.vue` 的 `.room-card__body`(padding 6/8/8)与
 /// `.room-card__meta`(margin-top 4 / gap 6):
 /// - 第 1 行:房间标题(缺标题回退主播名,仍缺则占位不塌陷);
-/// - 第 2 行:主播名 + 特色 chip(促销/画质标签;单平台网格下平台名也作 chip)。
+/// - 第 2 行:主播名 + 特色 chip(促销/画质标签;平台名不进 chip,由封面
+///   平台角标或单平台页签上下文承载)。
 ///
 /// **两行高度必须恒定**:有的主播没有名字、多数房间没有 chip,若不占位,同一
 /// 网格里卡片高度参差(用户报「都保持2行的行高,不要多余 padding」)。
@@ -85,8 +85,8 @@ class _RoomCardMeta extends StatelessWidget {
     final chips = <String>[
       if (room.promoTag != null && room.promoTag!.trim().isNotEmpty)
         room.promoTag!.trim(),
-      // 平台名在封面左下角标隐藏(单平台网格)时改由 chip 承载,避免信息丢失。
-      if (!showPlatformBadge) ?PlatformBrandCatalog.byId(room.site)?.name,
+      // 平台名不进 chip(用户口径 2026-09-18):平台信息由封面平台角标
+      // (CoverPlatformBadge,跨平台网格)或单平台页签上下文承载。
     ];
     return Padding(
       // 参考实现 .room-card__body:padding 6px 8px 8px。

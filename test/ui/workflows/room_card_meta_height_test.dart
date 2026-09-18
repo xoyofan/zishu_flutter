@@ -91,22 +91,22 @@ void main() {
     );
   });
 
-  testWidgets('单平台网格:平台名改由 chip 承载,跨平台网格不重复显示', (tester) async {
+  testWidgets('chip 不显示平台名:单平台/跨平台网格均不把平台名当 chip(用户口径 2026-09-18)', (tester) async {
     await _pumpCards(
       tester,
       [RoomCard(room: _room(id: 'a'), showPlatformBadge: false)],
     );
     expect(
       find.byKey(const Key('room-meta-chip-斗鱼')),
-      findsOneWidget,
-      reason: '平台角标隐藏时平台名进 chip',
+      findsNothing,
+      reason: '平台名不进 chip(平台信息由封面平台角标承载)',
     );
 
     await _pumpCards(tester, [RoomCard(room: _room(id: 'a'))]);
     expect(
       find.byKey(const Key('room-meta-chip-斗鱼')),
       findsNothing,
-      reason: '平台角标已在封面左下角,行内不再重复',
+      reason: '跨平台网格下封面角标已有平台名,行内同样不重复',
     );
   });
 
