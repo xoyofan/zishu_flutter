@@ -296,6 +296,11 @@ String displayCategoryName(
     if (_norm(byName.name) == _norm(raw)) return byName.name;
     return raw;
   }
+  // 全平台(cross site)索引里的 name 已经是跨平台映射表的 canonical 中文名,
+  // 参考实现渲染该列表时从不以 `all` 调用本函数(只对平台站调用),故此处恒等返回。
+  // 若仍走名称映射,「体育」会被登记为「户外」的别名而互相抢占:
+  // 侧栏出现两个「户外」、「体育」整项消失。
+  if (siteId == 'all') return raw;
   final entry = findCrossCategory(site, raw, cid);
   if (entry?.name != null && entry!.name.isNotEmpty) return entry.name;
   return raw;

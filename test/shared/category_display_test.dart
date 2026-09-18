@@ -153,6 +153,22 @@ void main() {
       expect(displayCategoryGroupName('twitch', 'lol'), '英雄联盟');
     });
 
+    test('displayCategoryName:全平台(all)恒等返回,不做二次映射', () {
+      // web 渲染全平台分类列表时从不以 all 调用 displayCategoryName,
+      // 索引项 name 已是 canonical 中文名。
+      expect(displayCategoryName('all', '英雄联盟', 'lol'), '英雄联盟');
+      expect(displayCategoryName('all', '户外', 'huwai'), '户外');
+      expect(displayCategoryName('all', '体育', 'sports'), '体育');
+    });
+
+    test('回归:「体育」是「户外」的别名,但 all 下不被抢走', () {
+      // 平台站仍按别名映射(既有语义不变)。
+      expect(displayCategoryName('twitch', '体育'), '户外');
+      // 全平台索引恒等 → 侧栏不再出现两个「户外」、「体育」不消失。
+      expect(displayCategoryName('all', '体育'), '体育');
+      expect(displayCategoryName('all', '体育', 'sports'), '体育');
+    });
+
     test('分组条目:抖音分区 cid 命中 group-danji(单机)', () {
       final entry = matchCrossCategoryByCid('douyin', '1011136');
       expect(entry, isNotNull);
