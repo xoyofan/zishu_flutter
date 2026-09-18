@@ -134,10 +134,9 @@ void main() {
     );
     expect(Theme.of(app.context).brightness, Brightness.light);
 
-    // TODO(app_shell): 壳层 Scaffold 仍写死 AppColors.background(见静态守则
-    // 的 allowlist),修完后把断言换成 scaffold.backgroundColor == tokens.background。
+    // 壳层 Scaffold 真的用了主题背景色(旧实现写死 AppColors.background)。
     expect(
-      Theme.of(app.context).scaffoldBackgroundColor,
+      tester.widget<Scaffold>(find.byType(Scaffold).first).backgroundColor,
       ZishuTokens.light.background,
     );
 
@@ -148,7 +147,7 @@ void main() {
     await _settleTheme(tester);
     expect(app.context.tokens.background, ZishuTokens.dark.background);
     expect(
-      Theme.of(app.context).scaffoldBackgroundColor,
+      tester.widget<Scaffold>(find.byType(Scaffold).first).backgroundColor,
       ZishuTokens.dark.background,
     );
     expect(tester.takeException(), isNull);
@@ -226,14 +225,11 @@ void main() {
   });
 
   test('静态守则:lib/src 下不得再写死 AppColors.*(主题常量文件除外)', () {
-    // 允许保留的文件:design_tokens.dart(常量定义本身)、zishu_tokens.dart
-    // (旧的深色基线值被浅色主题引用为 fallback 时仍会出现)。
+    // 仅允许两个 tokens 定义文件:常量本体就住在那里。
+    // 其余任何位置写死 AppColors.* 都会让浅色主题失效(背景/chip 纹丝不动)。
     const allowed = {
       'lib/src/shared/presentation/design_tokens.dart',
       'lib/src/shared/presentation/zishu_tokens.dart',
-      // TODO(app_shell): 壳层 74 处写死色等并行轨(app-follow-status-refresh)
-      // 落地后统一替换;替换完成后删掉这一行,守则即对全仓生效。
-      'lib/src/app/app_shell.dart',
     };
     final offenders = <String>[];
     for (final entity in Directory('lib/src').listSync(recursive: true)) {

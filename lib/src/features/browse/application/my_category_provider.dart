@@ -89,11 +89,16 @@ class MyCategoryController extends Notifier<List<MyCategoryEntry>> {
       if (raw == null || raw.isEmpty) return;
       final decoded = jsonDecode(raw);
       if (decoded is! List) return;
-      state = [
+      final restored = [
         for (final item in decoded)
           if (MyCategoryEntry.fromJson(item).isValid)
             MyCategoryEntry.fromJson(item),
       ];
+      // 恢复是**一次性**的:若用户在读盘完成前已收藏/取消(本地已非空),
+      // 不得用存储回放覆盖用户动作 —— 否则刚点的收藏会被静默抹掉,
+      // 且伴随写盘会把被抹掉的结果固化成真实数据(实测:连续 toggle 丢条目)。
+      if (state.isNotEmpty) return;
+      state = restored;
     } catch (_) {
       // 存储不可用/数据损坏:保持空集合,不阻塞 UI。
     }

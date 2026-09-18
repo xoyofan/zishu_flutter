@@ -11,6 +11,7 @@ import '../../../platforms/common/playback/live_player.dart'
 import '../../../platforms/common/playback/playback_retry.dart'
     show retryProgressLabel;
 import '../../../shared/presentation/design_tokens.dart';
+import '../../browse/application/my_category_provider.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../danmaku/application/danmaku_session_provider.dart'
@@ -394,6 +395,8 @@ class _PlayViewState extends ConsumerState<PlayView> {
         children: [
           _RoomHeader(
             title: play?.payload?.title ?? (async.hasError ? '房间解析失败' : '加载中…'),
+            site: widget.site,
+            cid: play?.payload?.cid ?? '',
             category: play?.payload?.category ?? '',
             brandColor: brand?.color ?? context.tokens.brand,
             sidePanelVisible: _sidePanelVisible,
@@ -457,6 +460,8 @@ class _PlayViewState extends ConsumerState<PlayView> {
 class _RoomHeader extends StatelessWidget {
   const _RoomHeader({
     required this.title,
+    required this.site,
+    required this.cid,
     required this.category,
     required this.brandColor,
     required this.sidePanelVisible,
@@ -465,6 +470,12 @@ class _RoomHeader extends StatelessWidget {
   });
 
   final String title;
+
+  /// 当前房间平台(收藏分类的归属站点)。
+  final String site;
+
+  /// 当前房间分类 id;为空表示拿不到分类上下文 → 不显示收藏星。
+  final String cid;
   final String category;
   final Color brandColor;
   final bool sidePanelVisible;
@@ -518,6 +529,8 @@ class _RoomHeader extends StatelessWidget {
               ),
             ),
           ),
+          if (cid.isNotEmpty)
+            _CategoryFavoriteButton(site: site, cid: cid, name: category),
           IconButton(
             // 测试锚点:侧栏折叠/展开按钮。
             key: const Key('play-side-panel-toggle'),
@@ -532,6 +545,45 @@ class _RoomHeader extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// 播放页头部的「收藏当前分类」星标。
+///
+/// 对齐参考实现 `PlayHeader.vue`:`categoryFavoritable` 为真(房间带分类
+/// 上下文)时在分类旁显示星标,点击在「我的分类」里增/删当前分类。
+/// 无分类上下文(cid 为空)时不渲染 —— 不伪造可收藏目标。
+class _CategoryFavoriteButton extends ConsumerWidget {
+  const _CategoryFavoriteButton({
+    required this.site,
+    required this.cid,
+    required this.name,
+  });
+
+  final String site;
+  final String cid;
+  final String name;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = context.tokens;
+    final favorited = ref.watch(myCategoriesProvider).any(
+          (entry) => entry.site == site && entry.cid == cid,
+        );
+    return IconButton(
+      key: const Key('play-category-favorite'),
+      tooltip: favorited ? '取消收藏' : '收藏到我的分类',
+      padding: EdgeInsets.zero,
+      constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
+      onPressed: () => ref
+          .read(myCategoriesProvider.notifier)
+          .toggle(MyCategoryEntry(site: site, cid: cid, name: name)),
+      icon: Icon(
+        favorited ? Icons.star_rounded : Icons.star_border_rounded,
+        size: 16,
+        color: favorited ? tokens.brand : tokens.textSecondary,
       ),
     );
   }

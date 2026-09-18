@@ -19,6 +19,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../../shared/application/auth_provider.dart';
 import '../../../shared/application/data_server_api.dart';
 import '../../../shared/application/fixture_sources.dart';
+import '../../../shared/application/providers.dart' show roomRefresherProvider;
 
 /// 关注列表持久化键(SharedPreferencesAsync,带前缀避免与其它模块冲突)。
 const String _kFollowList = 'zishu.follow.list';
@@ -71,6 +72,10 @@ class FollowController extends Notifier<List<FollowEntry>> {
 
   /// 云同步进行中标记(防 pull/push 重入)。
   bool _syncing = false;
+
+  /// 分批刷新的游标(见 [refreshStatuses]):在关注列表上环状推进,
+  /// 让定时轮询每周期只打一批而不重复同一批。
+  int _refreshCursor = 0;
 
   @override
   List<FollowEntry> build() {
@@ -201,10 +206,97 @@ class FollowController extends Notifier<List<FollowEntry>> {
     _persist();
   }
 
+  /// 刷新关注列表的房间状态(真实解析源才可用;无能力时返回 0)。
+  ///
+  /// 有界并发(4)+ 单条 10s 超时;单条失败保留原数据 —— 网络抖动不得把在播
+  /// 房间刷成离线。成功条目以刷新元信息(在线数/标题/封面/分类)为准,但保留
+  /// 本地 cid:刷新结果没有分类上下文,覆盖会破坏「我的分类」跳转。
+  ///
+  /// [limit] > 0 时按 [_refreshCursor] 取一段**窗口**环状刷新(定时轮询用,
+  /// 关注 N 条时在 ceil(N/limit) 个周期内全覆盖);= 0 时全量刷新(用户
+  /// 主动下拉/点刷新)。返回本轮实际刷新成功的条数。
+  Future<int> refreshStatuses({int limit = 0}) async {
+    final refresher = ref.read(roomRefresherProvider);
+    final entries = state;
+    if (refresher == null || entries.isEmpty) return 0;
+
+    final targets = _pickRefreshWindow(entries, limit);
+    if (targets.isEmpty) return 0;
+
+    final updated = <String, RoomSummary>{};
+    var cursor = 0;
+    Future<void> worker() async {
+      while (true) {
+        final index = cursor++;
+        if (index >= targets.length) return;
+        final entry = targets[index];
+        try {
+          final room = await refresher
+              .refreshRoom(site: entry.room.site, roomId: entry.room.roomId)
+              .timeout(const Duration(seconds: 10));
+          updated[entry.key] = _mergeRefreshed(entry.room, room);
+        } catch (_) {
+          // 单条失败:保留原条目,不翻转离线。
+        }
+      }
+    }
+
+    final workers = targets.length < 4 ? targets.length : 4;
+    await Future.wait([for (var i = 0; i < workers; i++) worker()]);
+
+    // 容器已销毁(应用退出/测试回收)时不再写 state 与存储。
+    if (!ref.mounted) return 0;
+    if (updated.isEmpty) return 0;
+    // 以最新 state 重建:刷新期间用户可能已增删条目,不能被过期快照覆盖。
+    state = [
+      for (final entry in state)
+        entry.copyWith(room: updated[entry.key] ?? entry.room),
+    ];
+    await _persist();
+    return updated.length;
+  }
+
+  /// 取本轮刷新窗口:`limit <= 0` 或超过总数时取全量并复位游标;
+  /// 否则从游标处环状取 [limit] 条,游标同步前进。
+  List<FollowEntry> _pickRefreshWindow(List<FollowEntry> entries, int limit) {
+    if (limit <= 0 || limit >= entries.length) {
+      _refreshCursor = 0;
+      return entries;
+    }
+    final window = <FollowEntry>[
+      for (var i = 0; i < limit; i++)
+        entries[(_refreshCursor + i) % entries.length],
+    ];
+    _refreshCursor = (_refreshCursor + limit) % entries.length;
+    return window;
+  }
+
+  /// 刷新结果与本地条目合并:元信息以刷新为准,本地 cid 保留。
+  static RoomSummary _mergeRefreshed(RoomSummary current, RoomSummary fresh) {
+    return RoomSummary(
+      site: current.site,
+      roomId: current.roomId,
+      title: fresh.title.trim().isNotEmpty ? fresh.title : current.title,
+      anchorName: fresh.anchorName.trim().isNotEmpty
+          ? fresh.anchorName
+          : current.anchorName,
+      cid: current.cid.isNotEmpty ? current.cid : fresh.cid,
+      category: fresh.category.trim().isNotEmpty
+          ? fresh.category
+          : current.category,
+      // online 以刷新为准:空串即平台明确未开播。
+      online: fresh.online,
+      cover: fresh.cover.trim().isNotEmpty ? fresh.cover : current.cover,
+    );
+  }
+
   /// 登录 token:登录态 provider 尚未构建时返回 null,不强制构建
   /// authProvider——播放页等非壳场景不触发其启动登录链(测试零网络)。
+  /// 容器已销毁时同样返回 null:异步恢复任务可能在 dispose 后到达此处。
   String? get _authToken =>
-      ref.exists(authProvider) ? ref.read(authProvider).token : null;
+      ref.mounted && ref.exists(authProvider)
+      ? ref.read(authProvider).token
+      : null;
 
   /// 拉取云端关注并合并到本地(登录态才有效)。
   /// 远端非空 → 替换本地;远端为空 → 把本地整表推上去(首次云同步)。
@@ -214,6 +306,7 @@ class FollowController extends Notifier<List<FollowEntry>> {
     _syncing = true;
     try {
       final remote = await _api.fetchFollows(token);
+      if (!ref.mounted) return;
       if (remote.isNotEmpty) {
         state = [for (final item in remote) _fromRemote(item)];
         await _persist(syncRemote: false);
@@ -270,6 +363,7 @@ class FollowController extends Notifier<List<FollowEntry>> {
     // 尝试拉取云端关注:登录态已就绪(顶栏账号区已构建 authProvider)且
     // token 可用则直接拉;手动登录在后时由顶栏的登录监听触发 pullRemote。
     // 匿名/未就绪时静默跳过,不产生任何网络调用。
+    if (!ref.mounted) return;
     await pullRemote();
   }
 
@@ -312,7 +406,7 @@ class FollowController extends Notifier<List<FollowEntry>> {
 
   /// 整表推送到服务端(登录态才有效)。
   Future<void> _pushRemote(String token) async {
-    if (_syncing) return;
+    if (_syncing || !ref.mounted) return;
     _syncing = true;
     try {
       final now = DateTime.now().millisecondsSinceEpoch;

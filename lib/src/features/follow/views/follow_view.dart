@@ -11,6 +11,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
+import '../../../shared/application/providers.dart';
 import '../application/follow_provider.dart';
 import '../application/follow_sort.dart';
 import '../widgets/follow_empty_state.dart';
@@ -73,11 +74,25 @@ class _FollowViewState extends ConsumerState<FollowView> {
   List<FollowEntry> _visible(List<FollowEntry> entries) =>
       visibleFollowEntries(entries, site: _siteFilter, sort: _sort);
 
-  /// 模拟刷新封面与状态(fixture 恒定,仅模拟耗时反馈)。
+  /// 刷新封面与状态:真实解析源走 [FollowController.refreshStatuses],
+  /// fixture / 未开真实解析保持原「模拟耗时」反馈,不产生任何网络调用。
   Future<void> _refresh() async {
     if (_refreshing) return;
     setState(() => _refreshing = true);
-    await Future<void>.delayed(const Duration(milliseconds: 600));
+    final refresher = ref.read(roomRefresherProvider);
+    if (refresher == null) {
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+    } else {
+      // 用户主动刷新 → 全量(定时轮询走分批,见 follow_status_poller.dart)。
+      final refreshed = await ref
+          .read(followProvider.notifier)
+          .refreshStatuses();
+      if (mounted && refreshed == 0) {
+        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
+          const SnackBar(content: Text('状态刷新失败,请稍后再试')),
+        );
+      }
+    }
     if (!mounted) return;
     setState(() => _refreshing = false);
   }

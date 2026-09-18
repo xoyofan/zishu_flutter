@@ -24,3 +24,11 @@ final browseSourceProvider = Provider<BrowseSource>(
 final roomSourceProvider = Provider<RoomSource>(
   (ref) => useRealParser ? ParserRoomSource() : const FixtureRoomSource(),
 );
+
+/// 房间状态刷新能力:真实解析源实现 [RoomRefresher] 时暴露;
+/// fixture 源不实现 → null,关注列表保持「样例数据、零网络」的既有行为
+/// (定时轮询件也据此不建 timer)。
+final roomRefresherProvider = Provider<RoomRefresher?>((ref) {
+  final source = ref.watch(roomSourceProvider);
+  return source is RoomRefresher ? source : null;
+});

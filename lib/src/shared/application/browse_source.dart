@@ -38,3 +38,23 @@ abstract interface class RoomRecoverer implements RoomSource {
     String? preferredQuality,
   });
 }
+
+/// 轻量房间状态刷新能力(可选)。
+///
+/// 与 [RoomSource.resolveRoom] 的差别:不解析播放地址、不做签名 —— 只拿
+/// 「这个房间此刻在不在播」以及标题/封面/在线数这类元信息。因此它可以被关注
+/// 列表**周期性**调用(顶栏「我的关注」浮层、侧栏最近在播都读它的结果),
+/// 而 [RoomSource.resolveRoom] 的成本无法承受这种频率。
+///
+/// 失败由调用方**按条目隔离**:单条抛错只能保留该条旧值,不得把已有列表刷成
+/// 空、也不得把在播房间翻成离线(网络抖动不是「下播」)。
+///
+/// fixture 源不实现本能力,关注列表据此保持「样例数据、零网络」的既有行为。
+///
+/// 继承 [RoomSource]:让调用点 `is` 探测获得类型提升(同 [RoomRecoverer])。
+abstract interface class RoomRefresher implements RoomSource {
+  Future<RoomSummary> refreshRoom({
+    required String site,
+    required String roomId,
+  });
+}

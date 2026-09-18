@@ -67,6 +67,13 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
     return '$site:$roomId';
   }
 
+  /// 当前房间 → 关注条目用的 [RoomSummary]。
+  ///
+  /// 注意 [RoomSummary.online] 在真实解析场景是**在线人数文案**;而 [RoomPayload]
+  /// 没有携带在线人数(见 live_parser 模型),只有 [RoomPayload.isLive] 状态。
+  /// 这里写入占位文案「直播中」而非空串,是为了让刚加入关注的房间在
+  /// `FollowEntry.isLive`(口径 = online 非空)下立即算作在播,不被误当离线;
+  /// 真实在线人数等下一次状态刷新(`refreshStatuses`)回填。
   RoomSummary _currentRoom(String site, String roomId) {
     final payload = widget.payload;
     return RoomSummary(

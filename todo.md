@@ -490,3 +490,29 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 ### 待办
 - [ ] `app_shell.dart` 74 处写死色(顶栏/底栏/浮层)等 `app-follow-status-refresh` 轨落地后统一替换,并移除静态守则里的 allowlist。
 - [ ] `AppTypography.*` → `context.textX` 的机械替换(127 处/36 文件):去色后颜色已随主题,替换属一致性收口。
+
+## 2026-09-18 在播状态刷新链路 + hover 只列在播 + 我的分类收藏星(完成)
+
+**结论**:顶栏「我的关注」hover 此前显示的是**加入关注时的陈旧快照**(整条在播刷新链路根本不存在),且没有在播时还会兜底列出全部条目。本轮并行两轨补齐「解析能力 → 应用链路 → 定时驱动 → hover 语义」,并顺带修掉收藏竞态、补上分类收藏星。
+
+### 解析轨(commit 8bcca90)
+- [x] 新增契约 `RoomSummaryRefresher`(只取元信息,不解析播放地址/不签名/不缓存)+ douyu/huya/bilibili/douyin 四站实现;`CachedRoomResolver` 透传且**不走短缓存**。
+- [x] 测试:四站 `room_summary_refresh_test` + 注册表透传,逐条断言「刷新不碰取流/签名」;`dart test` 287 passed / 10 skipped。
+- [ ] kuaishou/soop/yy 未实现(成本低可补);twitch/youtube 不宜轻量刷新;iptv 无单房间状态概念。
+
+### 应用轨
+- [x] `RoomRefresher` 契约 + `roomRefresherProvider`(fixture → null,保持零网络);`ParserRoomSource.refreshRoom` 静态 `is RoomSummaryRefresher` 探测(轨内先 dynamic 桥接,合轨后已改回静态)。
+- [x] `FollowController.refreshStatuses({limit})`(移植 pure_live:并发 4 / 单条 10s 超时 / **失败保留原值** / online 以刷新为准但 cid 保留本地 / 最新 state 重建)+ 分批游标轮转 + `ref.mounted` 防御。
+- [x] **定时驱动** `FollowStatusPoller`:周期 60s(对齐 web `followStatusHub` 最小间隔)、每 tick 16 条环状轮转、hover 打开时 `wake()` 补跑、无 refresher 时零 timer 零网络、失败静默。
+- [x] 关注页刷新按钮由「假 600ms 延迟」改为真调 refreshStatuses。
+- [x] hover 浮层:删掉「无在播则列出全部」的兜底(与参考实现相反),空态文案改「暂无开播」。
+- [x] 「类似逻辑」逐处核对:`FollowEntry.isLive`(唯一判据)、`follow_sort` 三档、`play_side_panel._FollowPanel`(在播∨离线超关,与 hover 有意不同)、`browse_sidebar` take(3)、`room_card`、`anchor_provider.isLive`(不同源,仅记录)。
+
+### 父代理补的两处
+- [x] **收藏竞态修复**:`myCategoriesProvider._restore()` 会在用户已收藏后用存储回放覆盖 state(并发用例实测丢条目)→ 改为「本地已非空则不覆盖」。
+- [x] **我的分类收藏星**(web `CategoryGrid.favoritable` + `PlayHeader.categoryFavoritable` 两处入口):分类页子分类 tile 右上角星标 + 播放页头部 `play-category-favorite`;收藏后描边/文字高亮,点击星标不触发 tile 选中(几何断言)。
+- [x] 壳层 74 处写死色主题化完毕;`light_theme_test` 静态守则 allowlist 已清空(全仓仅 tokens 定义文件允许出现 `AppColors.`)。
+
+### 验证
+- `flutter analyze` 0 issue;`dart test`(parser)287 passed;App 全量 **409 passed / 1 failed**(`latency_test` douyu 墙钟基准,并行 lane 抢资源所致)。
+- `play_style_follow/recommend` golden 因新增头部收藏星重生成并同步截图目录。

@@ -10,10 +10,12 @@ import '../features/search/widgets/search_dialog.dart';
 import '../features/browse/application/browse_provider.dart';
 import '../features/browse/application/my_category_provider.dart';
 import '../features/follow/application/follow_provider.dart';
+import '../features/follow/application/follow_status_poller.dart';
 import '../features/follow/application/settings_provider.dart';
 import '../shared/application/auth_provider.dart';
 import '../shared/presentation/design_tokens.dart';
 import '../shared/presentation/platform_brands.dart';
+import '../shared/presentation/zishu_tokens.dart';
 import '../shared/presentation/widgets/platform_icon.dart';
 
 /// 应用壳层:桌面/平板(>=768)为 44px 顶部导航;
@@ -109,6 +111,10 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   void _openFollow(double centerX) {
     _cancelClose();
+    // 浮层一开就补跑一轮状态刷新:用户看到的应是**此刻**在播的主播,
+    // 而不是等到下一个轮询周期。无 refresher(fixture/测试)时 provider 为
+    // null,这里自然退化为无操作。
+    unawaited(ref.read(followStatusPollerProvider)?.wake());
     setState(() {
       _followHover = true;
       _followX = centerX;
@@ -146,6 +152,8 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    // 关注在播状态定时轮询常驻(播放页也常驻——顶栏在),无 refresher 时为 null。
+    ref.watch(followStatusPollerProvider);
     final isPhone = MediaQuery.sizeOf(context).width < AppBreakpoints.phone;
     // 沉浸态(播放页网页全屏/全屏/画中画)不渲染 chrome:浮层也一并停用,
     // 避免鼠标划过不可见顶栏时飘出浮层盖住视频。
@@ -159,7 +167,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     return Stack(
       children: [
         Scaffold(
-          backgroundColor: AppColors.background,
+          backgroundColor: context.tokens.background,
           body: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -318,9 +326,9 @@ class _PlatformStrip extends StatelessWidget {
     ];
     return Container(
       padding: EdgeInsets.only(top: safeTop),
-      decoration: const BoxDecoration(
-        color: AppColors.surfaceSoft,
-        border: Border(bottom: BorderSide(color: AppColors.border)),
+      decoration: BoxDecoration(
+        color: context.tokens.surfaceSoft,
+        border: Border(bottom: BorderSide(color: context.tokens.border)),
       ),
       child: SizedBox(
         height: _kContentHeight,
@@ -348,7 +356,7 @@ class _StripGridCell extends StatelessWidget {
               child: InkWell(
                 key: Key('platform-tab-${brand.id}'),
                 onTap: () => context.go(_platformRoute(brand.id)),
-                hoverColor: AppColors.surfaceRaised,
+                hoverColor: context.tokens.surfaceRaised,
                 child: Container(
                   margin: const EdgeInsets.all(2),
                   decoration: BoxDecoration(
@@ -375,13 +383,13 @@ class _StripGridCell extends StatelessWidget {
             child: InkWell(
               key: Key('platform-category-${brand.id}'),
               onTap: () => context.go(_categoryRoute(brand.id)),
-              hoverColor: AppColors.surfaceRaised,
+              hoverColor: context.tokens.surfaceRaised,
               child: SizedBox(
                 width: _PlatformStrip._kArrowWidth,
-                child: const Icon(
+                child: Icon(
                   Icons.keyboard_arrow_down_rounded,
                   size: 20,
-                  color: AppColors.textSecondary,
+                  color: context.tokens.textSecondary,
                 ),
               ),
             ),
@@ -433,9 +441,9 @@ class _TopNav extends StatelessWidget implements PreferredSizeWidget {
     final showLabels = width >= AppBreakpoints.desktop;
     return Container(
       height: AppSpacing.topNavHeight,
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
-        border: Border(bottom: BorderSide(color: AppColors.border)),
+      decoration: BoxDecoration(
+        color: context.tokens.surface,
+        border: Border(bottom: BorderSide(color: context.tokens.border)),
       ),
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
       child: Row(
@@ -666,9 +674,9 @@ class _UserAvatar extends ConsumerWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const CircleAvatar(
+          CircleAvatar(
             radius: 14,
-            backgroundColor: AppColors.brand,
+            backgroundColor: context.tokens.brand,
             child: Icon(
               Icons.person_outline_rounded,
               size: 16,
@@ -683,8 +691,8 @@ class _UserAvatar extends ConsumerWidget {
                 fontSize: 12,
                 fontWeight: FontWeight.w500,
                 color: authenticated
-                    ? AppColors.textPrimary
-                    : AppColors.textSecondary,
+                    ? context.tokens.textPrimary
+                    : context.tokens.textSecondary,
               ),
             ),
           ],
@@ -700,7 +708,7 @@ class _UserAvatar extends ConsumerWidget {
         key: const Key('nav-user'),
         tooltip: '账号',
         offset: const Offset(0, 30),
-        color: AppColors.surface,
+        color: context.tokens.surface,
         onSelected: (action) {
           if (action == 'logout') {
             ref.read(authProvider.notifier).logout();
@@ -713,7 +721,7 @@ class _UserAvatar extends ConsumerWidget {
           }
         },
         itemBuilder: (_) => [
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'credentials',
             height: 34,
             child: Row(
@@ -721,26 +729,26 @@ class _UserAvatar extends ConsumerWidget {
                 Icon(
                   Icons.key_outlined,
                   size: 15,
-                  color: AppColors.textSecondary,
+                  color: context.tokens.textSecondary,
                 ),
                 SizedBox(width: 8),
                 Text(
                   '平台凭证',
-                  style: TextStyle(fontSize: 12, color: AppColors.textPrimary),
+                  style: TextStyle(fontSize: 12, color: context.tokens.textPrimary),
                 ),
               ],
             ),
           ),
-          const PopupMenuItem(
+          PopupMenuItem(
             value: 'logout',
             height: 34,
             child: Row(
               children: [
-                Icon(Icons.logout_rounded, size: 15, color: AppColors.error),
+                Icon(Icons.logout_rounded, size: 15, color: context.tokens.error),
                 SizedBox(width: 8),
                 Text(
                   '退出登录',
-                  style: TextStyle(fontSize: 12, color: AppColors.textPrimary),
+                  style: TextStyle(fontSize: 12, color: context.tokens.textPrimary),
                 ),
               ],
             ),
@@ -756,7 +764,7 @@ class _UserAvatar extends ConsumerWidget {
         child: InkWell(
           key: const Key('nav-user'),
           borderRadius: AppRadius.allPill,
-          hoverColor: AppColors.surfaceSoft,
+          hoverColor: context.tokens.surfaceSoft,
           onTap: () => showDialog<void>(
             context: context,
             builder: (_) => const LoginDialog(),
@@ -812,14 +820,14 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
   Widget build(BuildContext context) {
     final lastError = ref.watch(authProvider).lastError;
     return AlertDialog(
-      backgroundColor: AppColors.surface,
+      backgroundColor: context.tokens.surface,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      title: const Text(
+      title: Text(
         '登录账号',
         style: TextStyle(
           fontSize: 14,
           fontWeight: FontWeight.w600,
-          color: AppColors.textPrimary,
+          color: context.tokens.textPrimary,
         ),
       ),
       contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 4),
@@ -832,16 +840,16 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
           children: [
             TextField(
               controller: _userController,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: AppColors.textPrimary,
+                color: context.tokens.textPrimary,
               ),
               decoration: InputDecoration(
                 isDense: true,
                 labelText: '用户名',
-                labelStyle: const TextStyle(
+                labelStyle: TextStyle(
                   fontSize: 12,
-                  color: AppColors.textSecondary,
+                  color: context.tokens.textSecondary,
                 ),
                 prefixIcon: const Icon(Icons.person_outline_rounded, size: 18),
                 border: OutlineInputBorder(
@@ -854,24 +862,24 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
               controller: _passController,
               obscureText: true,
               onSubmitted: (_) => _submit(),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 13,
-                color: AppColors.textPrimary,
+                color: context.tokens.textPrimary,
               ),
               decoration: InputDecoration(
                 isDense: true,
                 labelText: '密码',
-                labelStyle: const TextStyle(
+                labelStyle: TextStyle(
                   fontSize: 12,
-                  color: AppColors.textSecondary,
+                  color: context.tokens.textSecondary,
                 ),
-                prefixIcon: const Icon(Icons.lock_outline_rounded, size: 18),
+                prefixIcon: Icon(Icons.lock_outline_rounded, size: 18),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
             ),
-            const SizedBox(height: 6),
+            SizedBox(height: 6),
             SizedBox(
               height: 30,
               child: Row(
@@ -881,15 +889,15 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
                     child: Checkbox(
                       value: _remember,
                       visualDensity: VisualDensity.compact,
-                      activeColor: AppColors.brand,
+                      activeColor: context.tokens.brand,
                       onChanged: (v) => setState(() => _remember = v ?? true),
                     ),
                   ),
-                  const Text(
+                  Text(
                     '记住密码(下次打开自动登录)',
                     style: TextStyle(
                       fontSize: 12,
-                      color: AppColors.textSecondary,
+                      color: context.tokens.textSecondary,
                     ),
                   ),
                 ],
@@ -897,10 +905,10 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
             ),
             if (lastError != null)
               Padding(
-                padding: const EdgeInsets.only(top: 2, bottom: 4),
+                padding: EdgeInsets.only(top: 2, bottom: 4),
                 child: Text(
                   lastError,
-                  style: const TextStyle(fontSize: 12, color: AppColors.error),
+                  style: TextStyle(fontSize: 12, color: context.tokens.error),
                 ),
               ),
           ],
@@ -909,15 +917,15 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text(
+          child: Text(
             '取消',
-            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+            style: TextStyle(fontSize: 12, color: context.tokens.textSecondary),
           ),
         ),
         FilledButton(
           onPressed: _busy ? null : _submit,
           style: FilledButton.styleFrom(
-            backgroundColor: AppColors.brand,
+            backgroundColor: context.tokens.brand,
             foregroundColor: Colors.black87,
             textStyle: const TextStyle(fontSize: 12),
           ),
@@ -946,7 +954,7 @@ class _Logo extends StatelessWidget {
       child: InkWell(
         key: const Key('nav-brand'),
         borderRadius: AppRadius.allMd,
-        hoverColor: AppColors.surfaceSoft,
+        hoverColor: context.tokens.surfaceSoft,
         onTap: () => context.go('/all'),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -963,7 +971,7 @@ class _Logo extends StatelessWidget {
                   height: 30,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: AppColors.brand,
+                    color: context.tokens.brand,
                     borderRadius: AppRadius.allMd,
                   ),
                   child: const Text(
@@ -978,12 +986,12 @@ class _Logo extends StatelessWidget {
               ),
               if (showLabel) ...[
                 const SizedBox(width: AppSpacing.xs),
-                const Text(
+                Text(
                   '紫薯直播',
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                    color: context.tokens.textPrimary,
                   ),
                 ),
               ],
@@ -1027,7 +1035,7 @@ class _NavAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? AppColors.brand : AppColors.textSecondary;
+    final color = active ? context.tokens.brand : context.tokens.textSecondary;
     return Builder(
       builder: (hoverContext) {
         // 触发点中心 x:MouseRegion 与 InkWell 共用同一个 RenderBox 快照。
@@ -1050,7 +1058,7 @@ class _NavAction extends StatelessWidget {
               color: Colors.transparent,
               child: InkWell(
                 borderRadius: AppRadius.allMd,
-                hoverColor: AppColors.surfaceSoft,
+                hoverColor: context.tokens.surfaceSoft,
                 onTap: onTap != null
                     ? () => onTap!(centerX())
                     : (route == null ? null : () => context.go(route!)),
@@ -1128,7 +1136,7 @@ class _PlatformTabs extends StatelessWidget {
                       child: InkWell(
                         key: Key('platform-tab-${brand.id}'),
                         borderRadius: AppRadius.allSm,
-                        hoverColor: AppColors.surfaceSoft,
+                        hoverColor: context.tokens.surfaceSoft,
                         onTap: () => context.go(_platformRoute(brand.id)),
                         child: AnimatedContainer(
                           duration: AppMotion.fast,
@@ -1137,7 +1145,7 @@ class _PlatformTabs extends StatelessWidget {
                           alignment: Alignment.center,
                           decoration: BoxDecoration(
                             color: currentSite == brand.id
-                                ? AppColors.surfaceRaised
+                                ? context.tokens.surfaceRaised
                                 : Colors.transparent,
                             border: Border.all(
                               color: currentSite == brand.id
@@ -1198,9 +1206,9 @@ class _BottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       height: AppSpacing.bottomNavHeight,
-      decoration: const BoxDecoration(
-        color: AppColors.surfaceSoft,
-        border: Border(top: BorderSide(color: AppColors.border)),
+      decoration: BoxDecoration(
+        color: context.tokens.surfaceSoft,
+        border: Border(top: BorderSide(color: context.tokens.border)),
       ),
       child: Row(
         children: [
@@ -1216,8 +1224,8 @@ class _BottomNav extends StatelessWidget {
                   width: 26,
                   height: 26,
                   alignment: Alignment.center,
-                  decoration: const BoxDecoration(
-                    color: AppColors.brand,
+                  decoration: BoxDecoration(
+                    color: context.tokens.brand,
                     shape: BoxShape.circle,
                   ),
                   child: const Text(
@@ -1237,14 +1245,14 @@ class _BottomNav extends StatelessWidget {
           ),
           _BottomItem(
             key: const Key('nav-home'),
-            leading: _bottomIcon(Icons.home_rounded, currentSite == 'all'),
+            leading: _bottomIcon(Icons.home_rounded, currentSite == 'all', context.tokens),
             label: '首页',
             route: '/all',
             active: currentSite == 'all',
           ),
           _BottomItem(
             key: const Key('nav-category'),
-            leading: _bottomIcon(Icons.grid_view_rounded, false),
+            leading: _bottomIcon(Icons.grid_view_rounded, false, context.tokens),
             label: '分类',
             route: _categoryRoute(currentSite),
             active: false,
@@ -1254,6 +1262,7 @@ class _BottomNav extends StatelessWidget {
             leading: _bottomIcon(
               Icons.star_border_rounded,
               currentSite == 'follow',
+              context.tokens,
             ),
             label: '关注',
             route: '/follow',
@@ -1261,7 +1270,7 @@ class _BottomNav extends StatelessWidget {
           ),
           _BottomItem(
             key: const Key('nav-search'),
-            leading: _bottomIcon(Icons.search_rounded, false),
+            leading: _bottomIcon(Icons.search_rounded, false, context.tokens),
             label: '搜索',
             // 与顶栏同源:搜索是全局弹框,不切页面。
             onTap: () => openSearchDialog(context),
@@ -1269,7 +1278,7 @@ class _BottomNav extends StatelessWidget {
           ),
           _BottomItem(
             key: const Key('nav-time'),
-            leading: _bottomIcon(Icons.timeline_rounded, currentSite == 'time'),
+            leading: _bottomIcon(Icons.timeline_rounded, currentSite == 'time', context.tokens),
             label: '动态',
             route: '/time',
             active: currentSite == 'time',
@@ -1280,6 +1289,7 @@ class _BottomNav extends StatelessWidget {
             leading: _bottomIcon(
               Icons.person_outline_rounded,
               currentSite == 'settings',
+              context.tokens,
             ),
             label: '我的',
             route: '/settings',
@@ -1292,10 +1302,10 @@ class _BottomNav extends StatelessWidget {
 }
 
 /// 底部导航图标(按选中态着色)。
-Widget _bottomIcon(IconData icon, bool active) => Icon(
+Widget _bottomIcon(IconData icon, bool active, ZishuTokens tokens) => Icon(
   icon,
   size: 20,
-  color: active ? AppColors.brand : AppColors.textSecondary,
+  color: active ? tokens.brand : tokens.textSecondary,
 );
 
 /// 移动底栏「主题」项:与顶栏 `nav-theme` 同一份判定与切换逻辑。
@@ -1313,6 +1323,7 @@ class _BottomThemeItem extends ConsumerWidget {
       leading: _bottomIcon(
         isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
         false,
+        context.tokens,
       ),
       label: isDark ? '浅色' : '深色',
       onTap: () => _toggleTheme(context, ref),
@@ -1339,10 +1350,10 @@ class _BottomItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? AppColors.brand : AppColors.textSecondary;
+    final color = active ? context.tokens.brand : context.tokens.textSecondary;
     return Expanded(
       child: InkWell(
-        hoverColor: AppColors.surface,
+        hoverColor: context.tokens.surface,
         onTap: onTap ?? (route == null ? null : () => context.go(route!)),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1381,8 +1392,8 @@ class _FlyoutPanel extends StatelessWidget {
     return Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        color: AppColors.surface,
-        border: Border.all(color: AppColors.border),
+        color: context.tokens.surface,
+        border: Border.all(color: context.tokens.border),
         borderRadius: AppRadius.allMd,
         boxShadow: const [
           BoxShadow(
@@ -1421,7 +1432,7 @@ class _FlyoutHint extends StatelessWidget {
         textAlign: TextAlign.center,
         style: TextStyle(
           fontSize: 12.5,
-          color: danger ? AppColors.error : AppColors.textSecondary,
+          color: danger ? context.tokens.error : context.tokens.textSecondary,
         ),
       ),
     );
@@ -1504,8 +1515,8 @@ class _CategoryBoard extends StatelessWidget {
             Container(
               width: _kColumnWidth,
               padding: const EdgeInsets.only(left: 2.4),
-              decoration: const BoxDecoration(
-                border: Border(right: BorderSide(color: AppColors.border)),
+              decoration: BoxDecoration(
+                border: Border(right: BorderSide(color: context.tokens.border)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1514,19 +1525,19 @@ class _CategoryBoard extends StatelessWidget {
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.only(bottom: 3.8),
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       border: Border(
-                        bottom: BorderSide(color: AppColors.border),
+                        bottom: BorderSide(color: context.tokens.border),
                       ),
                     ),
                     child: Text(
                       group.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textSecondary,
+                        color: context.tokens.textSecondary,
                       ),
                     ),
                   ),
@@ -1573,14 +1584,14 @@ class _CategoryChipState extends State<_CategoryChip> {
         onTap: widget.onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 0.64, vertical: 1.28),
-          color: _hovering ? AppColors.brand.withValues(alpha: 0.12) : null,
+          color: _hovering ? context.tokens.brand.withValues(alpha: 0.12) : null,
           child: Text(
             widget.label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 11.84,
-              color: _hovering ? AppColors.brand : AppColors.textPrimary,
+              color: _hovering ? context.tokens.brand : context.tokens.textPrimary,
             ),
           ),
         ),
@@ -1622,22 +1633,26 @@ class _FollowFlyout extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final entries = ref.watch(followProvider);
+    // 只列**在播**:浮层是「现在能点进去看」的快捷入口。离线条目(包括离线
+    // 超关)只在「我的关注」页/播放页侧栏保留 —— 两个入口的可见性口径不同,
+    // 见 follow_sort.dart 的 isPlayFollowVisible 与 visibleFollowEntries。
+    // 对齐参考实现 `NavSidebar.vue`:`liveFollows` + 空态「暂无开播」
+    // (旧实现在没有在播时兜底展示全部条目,与参考实现相反)。
     final live = [
       for (final entry in entries)
         if (entry.isLive) entry,
     ];
-    final list = live.isNotEmpty ? live : entries;
     return MouseRegion(
       onEnter: (_) => onEnter(),
       onExit: (_) => onExit(),
       child: _FlyoutPanel(
         padding: const EdgeInsets.fromLTRB(3.52, 4.16, 3.52, 3.52),
         maxHeight: _kMaxHeight,
-        child: list.isEmpty
-            ? const _FlyoutHint('暂无关注')
+        child: live.isEmpty
+            ? const _FlyoutHint('暂无开播')
             : GridView.builder(
                 shrinkWrap: true,
-                itemCount: list.length,
+                itemCount: live.length,
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: _kColumns,
                   mainAxisExtent: 50,
@@ -1645,8 +1660,8 @@ class _FollowFlyout extends ConsumerWidget {
                   crossAxisSpacing: _kColumnGap,
                 ),
                 itemBuilder: (context, index) => _FollowAvatarTile(
-                  entry: list[index],
-                  onTap: () => onOpenRoom(list[index]),
+                  entry: live[index],
+                  onTap: () => onOpenRoom(live[index]),
                 ),
               ),
       ),
@@ -1668,7 +1683,7 @@ class _FollowAvatarTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final room = entry.room;
     final brand = PlatformBrandCatalog.byId(room.site);
-    final color = brand?.color ?? AppColors.textPrimary;
+    final color = brand?.color ?? context.tokens.textPrimary;
     return Tooltip(
       message: '${room.anchorName} · ${room.title}',
       child: Ink(
@@ -1677,15 +1692,15 @@ class _FollowAvatarTile extends StatelessWidget {
           hoverColor: color.withValues(alpha: 0.3),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.symmetric(
+            padding: EdgeInsets.symmetric(
               horizontal: 0.96,
               vertical: 2.56,
             ),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _avatar(room),
-                const SizedBox(height: 1.92),
+                _avatar(context, room),
+                SizedBox(height: 1.92),
                 Text(
                   room.anchorName,
                   maxLines: 1,
@@ -1705,13 +1720,13 @@ class _FollowAvatarTile extends StatelessWidget {
     );
   }
 
-  Widget _avatar(RoomSummary room) {
+  Widget _avatar(BuildContext context, RoomSummary room) {
     final fallback = CircleAvatar(
       radius: _FollowFlyout._kAvatarSize / 2,
-      backgroundColor: AppColors.surfaceRaised,
+      backgroundColor: context.tokens.surfaceRaised,
       child: Text(
         room.anchorName.isEmpty ? '?' : room.anchorName.substring(0, 1),
-        style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+        style: TextStyle(fontSize: 12, color: context.tokens.textSecondary),
       ),
     );
     if (room.cover.isEmpty) return fallback;
@@ -1781,7 +1796,7 @@ class _MyCategoryFlyout extends ConsumerWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 6),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    foregroundColor: AppColors.brand,
+                    foregroundColor: context.tokens.brand,
                     textStyle: const TextStyle(fontSize: 12),
                   ),
                   child: const Text('管理分类'),
@@ -1846,12 +1861,12 @@ class _MyCategoryChipState extends State<_MyCategoryChip> {
           padding: const EdgeInsets.symmetric(horizontal: 9.6, vertical: 4.8),
           decoration: BoxDecoration(
             color: gold
-                ? AppColors.brand.withValues(alpha: 0.1)
-                : AppColors.surfaceSoft,
+                ? context.tokens.brand.withValues(alpha: 0.1)
+                : context.tokens.surfaceSoft,
             border: Border.all(
               color: gold
-                  ? AppColors.brand.withValues(alpha: 0.55)
-                  : AppColors.border,
+                  ? context.tokens.brand.withValues(alpha: 0.55)
+                  : context.tokens.border,
             ),
             borderRadius: AppRadius.allPill,
           ),
@@ -1861,15 +1876,15 @@ class _MyCategoryChipState extends State<_MyCategoryChip> {
               Icon(
                 Icons.star_rounded,
                 size: 12,
-                color: gold ? AppColors.brand : AppColors.textSecondary,
+                color: gold ? context.tokens.brand : context.tokens.textSecondary,
               ),
-              const SizedBox(width: 4),
+              SizedBox(width: 4),
               Text(
                 widget.entry.name,
                 style: TextStyle(
                   fontSize: 14.4,
                   fontWeight: FontWeight.w500,
-                  color: gold ? AppColors.brand : AppColors.textPrimary,
+                  color: gold ? context.tokens.brand : context.tokens.textPrimary,
                 ),
               ),
             ],
@@ -1892,10 +1907,10 @@ class _MyCategoryManageDialog extends ConsumerWidget {
     final favorites = ref.watch(myCategoriesProvider);
     final async = ref.watch(browseCategoriesProvider(site));
     return AlertDialog(
-      backgroundColor: AppColors.surface,
+      backgroundColor: context.tokens.surface,
       title: Text(
         '我的分类(${favorites.length}/${MyCategoryController.maxCount})',
-        style: const TextStyle(fontSize: 15, color: AppColors.textPrimary),
+        style: TextStyle(fontSize: 15, color: context.tokens.textPrimary),
       ),
       content: SizedBox(
         width: 420,
@@ -1905,9 +1920,9 @@ class _MyCategoryManageDialog extends ConsumerWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (favorites.isNotEmpty) ...[
-              const Text(
+              Text(
                 '已收藏(点击 × 移除)',
-                style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                style: TextStyle(fontSize: 12, color: context.tokens.textSecondary),
               ),
               const SizedBox(height: 6),
               Wrap(
@@ -1924,9 +1939,9 @@ class _MyCategoryManageDialog extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
             ],
-            const Text(
+            Text(
               '分类目录(点击收藏/取消)',
-              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+              style: TextStyle(fontSize: 12, color: context.tokens.textSecondary),
             ),
             const SizedBox(height: 6),
             Expanded(child: _catalog(context, ref, async, favorites)),
@@ -1962,10 +1977,10 @@ class _MyCategoryManageDialog extends ConsumerWidget {
                         children: [
                           Text(
                             group.name,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
-                              color: AppColors.textSecondary,
+                              color: context.tokens.textSecondary,
                             ),
                           ),
                           const SizedBox(height: 6),
@@ -2012,7 +2027,7 @@ class _MyCategoryManageDialog extends ConsumerWidget {
                 ],
               ),
       AsyncError(:final error) => _FlyoutHint('分类加载失败:$error', danger: true),
-      _ => const _FlyoutHint('加载分类…'),
+      _ => _FlyoutHint('加载分类…'),
     };
   }
 }
@@ -2027,10 +2042,10 @@ class _RemovableChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.only(left: 9.6, right: 2),
+      padding: EdgeInsets.only(left: 9.6, right: 2),
       decoration: BoxDecoration(
-        color: AppColors.brand.withValues(alpha: 0.1),
-        border: Border.all(color: AppColors.brand.withValues(alpha: 0.55)),
+        color: context.tokens.brand.withValues(alpha: 0.1),
+        border: Border.all(color: context.tokens.brand.withValues(alpha: 0.55)),
         borderRadius: AppRadius.allPill,
       ),
       child: Row(
@@ -2038,17 +2053,17 @@ class _RemovableChip extends StatelessWidget {
         children: [
           Text(
             entry.name,
-            style: const TextStyle(fontSize: 13, color: AppColors.brand),
+            style: TextStyle(fontSize: 13, color: context.tokens.brand),
           ),
           InkWell(
             borderRadius: AppRadius.allPill,
             onTap: onRemove,
-            child: const Padding(
+            child: Padding(
               padding: EdgeInsets.all(3),
               child: Icon(
                 Icons.close_rounded,
                 size: 13,
-                color: AppColors.brand,
+                color: context.tokens.brand,
               ),
             ),
           ),
@@ -2079,12 +2094,12 @@ class _PickableChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 9.6, vertical: 5),
         decoration: BoxDecoration(
           color: selected
-              ? AppColors.brand.withValues(alpha: 0.12)
-              : AppColors.surfaceSoft,
+              ? context.tokens.brand.withValues(alpha: 0.12)
+              : context.tokens.surfaceSoft,
           border: Border.all(
             color: selected
-                ? AppColors.brand.withValues(alpha: 0.55)
-                : AppColors.border,
+                ? context.tokens.brand.withValues(alpha: 0.55)
+                : context.tokens.border,
           ),
           borderRadius: AppRadius.allPill,
         ),
@@ -2094,14 +2109,14 @@ class _PickableChip extends StatelessWidget {
             Icon(
               selected ? Icons.star_rounded : Icons.star_border_rounded,
               size: 13,
-              color: selected ? AppColors.brand : AppColors.textSecondary,
+              color: selected ? context.tokens.brand : context.tokens.textSecondary,
             ),
             const SizedBox(width: 4),
             Text(
               label,
               style: TextStyle(
                 fontSize: 13,
-                color: selected ? AppColors.brand : AppColors.textPrimary,
+                color: selected ? context.tokens.brand : context.tokens.textPrimary,
               ),
             ),
           ],

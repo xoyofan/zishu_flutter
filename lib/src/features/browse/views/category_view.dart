@@ -8,6 +8,7 @@ import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../application/browse_provider.dart';
+import '../application/my_category_provider.dart';
 import '../widgets/browse_sidebar.dart';
 import '../widgets/room_grid.dart';
 
@@ -312,6 +313,7 @@ class _CategoryPanel extends StatelessWidget {
                 for (final entry in group.items)
                   _CategoryTile(
                     item: entry,
+                    site: site,
                     selected: item?.cid == entry.cid,
                     brandColor: brandColor,
                     onTap: () => onItemTap(entry),
@@ -335,22 +337,33 @@ class _CategoryPanel extends StatelessWidget {
 }
 
 /// 子分类方块:图片缺失时用名称首字占位。
-class _CategoryTile extends StatelessWidget {
+///
+/// 右上角带「我的分类」收藏星(对齐参考实现 `CategoryGrid.vue` 的 `favoritable`:
+/// 星标常驻、收藏后分类名与描边高亮)。星标自己在最上层命中,不触发 tile 选中。
+class _CategoryTile extends ConsumerWidget {
   const _CategoryTile({
     required this.item,
+    required this.site,
     required this.selected,
     required this.brandColor,
     required this.onTap,
   });
 
   final CategoryItem item;
+
+  /// 收藏归属站点(`all` = 全平台聚合,与「我的分类」管理弹窗同口径)。
+  final String site;
   final bool selected;
   final Color brandColor;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tokens = context.tokens;
+    final favorited = item.cid.isNotEmpty &&
+        ref.watch(myCategoriesProvider).any(
+              (entry) => entry.site == site && entry.cid == item.cid,
+            );
     return SizedBox(
       width: 88,
       child: InkWell(
@@ -360,37 +373,80 @@ class _CategoryTile extends StatelessWidget {
         onTap: onTap,
         child: Column(
           children: [
-            Container(
-              width: 56,
-              height: 56,
-              decoration: BoxDecoration(
-                borderRadius: AppRadius.allMd,
-                color: tokens.surfaceRaised,
-                border: Border.all(
-                  color: selected ? brandColor : tokens.border,
-                  width: selected ? 2 : 1,
-                ),
-              ),
-              clipBehavior: Clip.antiAlias,
-              alignment: Alignment.center,
-              child: item.pic.isEmpty
-                  ? Text(
-                      item.name.isEmpty
-                          ? '?'
-                          : String.fromCharCode(item.name.runes.first),
-                      style: AppTypography.body.copyWith(
-                        color: tokens.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    )
-                  : CachedNetworkImage(
-                      imageUrl: item.pic,
-                      fit: BoxFit.cover,
-                      placeholder: (_, _) =>
-                          ColoredBox(color: tokens.surfaceRaised),
-                      errorWidget: (_, _, _) =>
-                          ColoredBox(color: tokens.surfaceRaised),
+            Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    borderRadius: AppRadius.allMd,
+                    color: tokens.surfaceRaised,
+                    border: Border.all(
+                      color: selected || favorited ? brandColor : tokens.border,
+                      width: selected ? 2 : 1,
                     ),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  alignment: Alignment.center,
+                  child: item.pic.isEmpty
+                      ? Text(
+                          item.name.isEmpty
+                              ? '?'
+                              : String.fromCharCode(item.name.runes.first),
+                          style: AppTypography.body.copyWith(
+                            color: tokens.textPrimary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        )
+                      : CachedNetworkImage(
+                          imageUrl: item.pic,
+                          fit: BoxFit.cover,
+                          placeholder: (_, _) =>
+                              ColoredBox(color: tokens.surfaceRaised),
+                          errorWidget: (_, _, _) =>
+                              ColoredBox(color: tokens.surfaceRaised),
+                        ),
+                ),
+                if (item.cid.isNotEmpty)
+                  Positioned(
+                    right: -2,
+                    top: -2,
+                    child: Tooltip(
+                      message: favorited ? '取消收藏' : '收藏到我的分类',
+                      child: InkWell(
+                        key: Key('category-favorite-${item.cid}'),
+                        borderRadius: AppRadius.allPill,
+                        onTap: () => ref
+                            .read(myCategoriesProvider.notifier)
+                            .toggle(
+                              MyCategoryEntry(
+                                site: site,
+                                cid: item.cid,
+                                name: item.name,
+                              ),
+                            ),
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: BoxDecoration(
+                            color: tokens.surface,
+                            shape: BoxShape.circle,
+                            border: Border.all(color: tokens.border),
+                          ),
+                          child: Icon(
+                            favorited
+                                ? Icons.star_rounded
+                                : Icons.star_border_rounded,
+                            size: 12,
+                            color: favorited
+                                ? tokens.brand
+                                : tokens.textSecondary,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(
@@ -398,7 +454,9 @@ class _CategoryTile extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppTypography.bodySecondary.copyWith(
-                color: selected ? tokens.textPrimary : tokens.textSecondary,
+                color: selected || favorited
+                    ? tokens.textPrimary
+                    : tokens.textSecondary,
               ),
             ),
           ],
