@@ -9,6 +9,7 @@ import '../features/anchor/views/anchor_view.dart';
 import '../features/anchor/views/timeline_view.dart';
 import '../features/browse/views/category_view.dart';
 import '../features/browse/views/home_view.dart';
+import '../features/dev/views/parse_benchmark_view.dart';
 import '../features/follow/views/follow_view.dart';
 import '../features/follow/views/settings_view.dart';
 import '../features/user/views/user_credentials_view.dart';
@@ -71,8 +72,21 @@ final routerProvider = Provider<GoRouter>((ref) {
         pageBuilder: (_, state) =>
             _shellPage(state, 'all', const FollowView(), title: '我的关注'),
       ),
+      // `/time` 语义对齐 web(`router.js` → `TimeView.vue`):解析耗时基准页
+      // (冷解析 vs 缓存命中的客户端墙钟对比),**不是**动态时间线。
       GoRoute(
         path: '/time',
+        pageBuilder: (_, state) => _shellPage(
+          state,
+          'all',
+          const ParseBenchmarkView(),
+          title: '解析耗时',
+        ),
+      ),
+      // 动态时间线是本仓私有页面(web 无对应路由),从 `/time` 让位到 `/timeline`,
+      // 顶/底栏「动态」入口同步指向它。
+      GoRoute(
+        path: '/timeline',
         pageBuilder: (_, state) =>
             _shellPage(state, 'all', const TimelineView(), title: '动态时间线'),
       ),

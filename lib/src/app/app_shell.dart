@@ -856,7 +856,7 @@ class _TopNavTools extends StatelessWidget {
           icon: Icons.timeline_rounded,
           label: '动态',
           tooltip: '动态时间线',
-          route: '/time',
+          route: '/timeline',
           showLabel: showLabels,
         ),
         _NavThemeAction(showLabel: showLabels),
@@ -1566,10 +1566,14 @@ class _BottomNav extends StatelessWidget {
           ),
           _BottomItem(
             key: const Key('nav-time'),
-            leading: _bottomIcon(Icons.timeline_rounded, currentSite == 'time', context.tokens),
+            leading: _bottomIcon(
+              Icons.timeline_rounded,
+              currentSite == 'timeline',
+              context.tokens,
+            ),
             label: '动态',
-            route: '/time',
-            active: currentSite == 'time',
+            route: '/timeline',
+            active: currentSite == 'timeline',
           ),
           const _BottomThemeItem(),
           _BottomItem(

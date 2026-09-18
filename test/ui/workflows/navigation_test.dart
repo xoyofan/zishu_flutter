@@ -173,11 +173,19 @@ void main() {
     expect(find.byKey(const Key('follow-entry-douyu-63136')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    // 3. /time 动态时间线:标题 + 平台筛选 chip。
-    await goAndStabilize(tester, router, '/time');
-    expectTopNavAnchors('/time');
+    // 3. /timeline 动态时间线:标题 + 平台筛选 chip。
+    await goAndStabilize(tester, router, '/timeline');
+    expectTopNavAnchors('/timeline');
     expect(find.text('动态时间线'), findsOneWidget);
     expect(find.byKey(const Key('timeline-filter-all')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    // 3b. /time 解析耗时基准(对齐 web `TimeView.vue`,不是时间线)。
+    await goAndStabilize(tester, router, '/time');
+    expectTopNavAnchors('/time');
+    expect(find.byKey(const Key('bench-site')), findsOneWidget);
+    expect(find.byKey(const Key('bench-run')), findsOneWidget);
+    expect(find.byKey(const Key('timeline-filter-all')), findsNothing);
     expect(tester.takeException(), isNull);
 
     // 4. /settings 设置页:标题 + 外观分组行。
@@ -185,6 +193,20 @@ void main() {
     expectTopNavAnchors('/settings');
     expect(find.text('设置'), findsOneWidget);
     expect(find.text('主题模式'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+
+    // 4b. 设置页「工具」组 → 解析耗时基准页(顶/底栏无入口,这是唯一可达路径)。
+    // 注:入口走 `context.push`(保留返回栈),go_router 的 push 不改
+    // `routeInformationProvider` 的 uri(只走 Navigator),所以这里断言**渲染结果**
+    // 而不是路径字符串。
+    final benchEntry = find.byKey(const Key('settings-parse-benchmark'));
+    await tester.ensureVisible(benchEntry);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(benchEntry);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byKey(const Key('bench-run')), findsOneWidget);
+    expect(find.byKey(const Key('settings-parse-benchmark')), findsNothing);
     expect(tester.takeException(), isNull);
 
     // 5. /search 深链兼容:搜索已改为全局弹框,该路径重定向回首页。

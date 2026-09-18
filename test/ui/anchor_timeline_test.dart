@@ -101,9 +101,9 @@ void main() {
   int tileCount(WidgetTester tester) =>
       tester.widgetList(find.byType(TimelineTile)).length;
 
-  testWidgets('/time:timeline-filter-* 锚点齐全且时间线节点 > 0',
+  testWidgets('/timeline:timeline-filter-* 锚点齐全且时间线节点 > 0',
       (tester) async {
-    await pumpApp(tester, location: '/time');
+    await pumpApp(tester, location: '/timeline');
 
     // 每个导航平台都有筛选 chip 锚点。
     for (final brand in PlatformBrandCatalog.navPlatforms) {
@@ -120,7 +120,7 @@ void main() {
 
   testWidgets('点击 timeline-filter-douyu:条目全为 douyu;切 huya 后筛空',
       (tester) async {
-    await pumpApp(tester, location: '/time');
+    await pumpApp(tester, location: '/timeline');
 
     // 选中 douyu:fixture 全部为 douyu,节点数 == douyu 样例数,chip 进入选中态。
     final douyuCount =

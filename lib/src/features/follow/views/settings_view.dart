@@ -7,6 +7,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../app/app_shell.dart';
 import '../../../shared/application/auth_provider.dart';
@@ -51,7 +52,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                 children: [
                   _SettingsRow(
                     label: '主题模式',
-                    hint: '当前阶段仅保存偏好,全局主题接线由后续任务完成',
+                    hint: '深色 / 浅色 / 跟随系统(顶栏主题按钮可快速切换深浅)',
                     trailing: _StyledDropdown<ThemeModeChoice>(
                       value: settings.themeMode,
                       items: [
@@ -149,6 +150,22 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                       onChanged: (value) => ref
                           .read(settingsProvider.notifier)
                           .setDanmakuEnabled(value),
+                    ),
+                  ),
+                ],
+              ),
+              _SettingsGroup(
+                title: '工具',
+                children: [
+                  // `/time` 对齐 web 语义是「解析耗时基准页」(冷解析 vs 缓存命中),
+                  // 顶/底栏无入口,统一从这里进(web 同样是直接输 URL 访问)。
+                  _SettingsRow(
+                    label: '解析耗时基准',
+                    hint: '冷解析与缓存命中墙钟对比(等价 web /time)',
+                    trailing: TextButton(
+                      key: const Key('settings-parse-benchmark'),
+                      onPressed: () => context.push('/time'),
+                      child: const Text('打开'),
                     ),
                   ),
                 ],
