@@ -202,3 +202,47 @@ class CoverPromoBadge extends StatelessWidget {
     );
   }
 }
+
+/// 离线遮罩:整封面压暗 + 居中文案。
+///
+/// 两处真源(参数化以共用,避免同语义两套实现):
+/// - 首页网格卡:web `RoomCard.vue` 的 `.room-card__offline`
+///   (`rgba(0,0,0,.72)` / 13px / `z-index: 2`)→ 默认参数;
+/// - 播放页侧栏预览卡:web `FollowRoomPreviewView.vue` 的
+///   `.follow-preview-offline`(10.5px)→ 传 [fontSize] 收小。
+///
+/// **层级约定**:web 里遮罩 `z-index: 2` 低于角标 `z-index: 3`(角标浮于
+/// 遮罩之上)。flutter 侧由调用方用 `Stack.children` 顺序复刻 —— 把本组件
+/// 放在角标**之前**。
+class CoverOfflineOverlay extends StatelessWidget {
+  const CoverOfflineOverlay({
+    super.key,
+    this.text = '未开播',
+    this.fontSize = 13,
+  });
+
+  /// 遮罩上的居中文案。
+  final String text;
+
+  /// 文案字号:网格卡 13(web `.room-card__offline`),侧栏卡 10.5。
+  final double fontSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    return ColoredBox(
+      // tokens.coverScrim = 0xB8000000 ≈ web rgba(0,0,0,.72)。
+      color: tokens.coverScrim,
+      child: Center(
+        child: Text(
+          text,
+          style: AppTypography.body.copyWith(
+            fontSize: fontSize,
+            color: tokens.coverScrimText,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+}

@@ -182,6 +182,16 @@ class _Cover extends StatelessWidget {
                     errorWidget: (_, _, _) => _CoverPlaceholder(room: room),
                   ),
           ),
+          // 离线:整封面遮罩 + 「未开播」(web `.room-card__offline`,z-index 2)。
+          // 放在角标之前复刻 web 的层级(遮罩 z2 低于角标 z3,角标浮于其上);
+          // 判据沿用本组件既有的 `live`(online 非空),不另造第二套离线判定。
+          // 注:web 的「上次开播 X」文案由 follow 域数据支撑,网格数据源
+          // (RoomSummary)无该字段,离线一律显示「未开播」。
+          if (!live)
+            const Positioned.fill(
+              key: Key('room-card-offline'),
+              child: CoverOfflineOverlay(),
+            ),
           // 左上:分类色块。
           Positioned(
             left: 0,

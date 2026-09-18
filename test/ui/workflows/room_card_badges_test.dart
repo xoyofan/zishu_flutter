@@ -15,11 +15,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:live_parser/live_parser.dart' show StreamLine;
+import 'package:live_parser/live_parser.dart' show RoomSummary, StreamLine;
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:zishu_flutter/src/app/app_router.dart';
+import 'package:zishu_flutter/src/app/app_theme.dart';
 import 'package:zishu_flutter/src/apps/windows/windows_app.dart';
+import 'package:zishu_flutter/src/features/browse/widgets/room_card.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 import 'package:zishu_flutter/src/shared/presentation/widgets/cover_badges.dart';
@@ -366,5 +368,83 @@ void main() {
       reason: '推荐卡不传 superKeys,不应出现 ★',
     );
     expect(tester.takeException(), isNull);
+  });
+
+  group('首页网格卡离线遮罩(对齐 web .room-card__offline)', () {
+    /// 组件级宿主:不走全 app(首页 fixture 全是在播房,塞离线房会改变
+    /// 网格内容波及大量布局/hover 用例)。深浅主题各验一遍遮罩可读性。
+    Widget host(RoomSummary room) => MaterialApp(
+      theme: ZishuTheme.dark(),
+      home: Scaffold(
+        body: SizedBox(width: 320, child: RoomCard(room: room)),
+      ),
+    );
+
+    testWidgets('离线房:整封面遮罩 + 「未开播」,不渲染热度角标', (tester) async {
+      await tester.pumpWidget(
+        host(
+          const RoomSummary(
+            site: 'douyu',
+            roomId: '9001',
+            title: '离线房',
+            anchorName: '测试主播',
+            cid: '1',
+            category: '英雄联盟',
+            online: '',
+            cover: '',
+          ),
+        ),
+      );
+      await _pumpFrames(tester, 2);
+
+      final overlay = find.byKey(const Key('room-card-offline'));
+      expect(overlay, findsOneWidget, reason: '离线房应渲染整封面遮罩');
+      expect(
+        find.descendant(of: overlay, matching: find.text('未开播')),
+        findsOneWidget,
+      );
+
+      // 遮罩盖满封面(16:9 容器),而非只有文字大小。
+      final coverRect = tester.getRect(
+        find.descendant(
+          of: find.byKey(const Key('room-card-douyu-9001')),
+          matching: find.byType(AspectRatio),
+        ),
+      );
+      final overlayRect = tester.getRect(overlay);
+      expect(overlayRect.left, closeTo(coverRect.left, 0.5));
+      expect(overlayRect.top, closeTo(coverRect.top, 0.5));
+      expect(overlayRect.right, closeTo(coverRect.right, 0.5));
+      expect(overlayRect.bottom, closeTo(coverRect.bottom, 0.5));
+
+      // 离线不渲染热度角标(与既有判据一致)。
+      expect(
+        find.byKey(const Key('cover-badge-online')),
+        findsNothing,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('在播房:不渲染离线遮罩,分类角标照常', (tester) async {
+      await tester.pumpWidget(
+        host(
+          const RoomSummary(
+            site: 'douyu',
+            roomId: '9002',
+            title: '在播房',
+            anchorName: '测试主播',
+            cid: '1',
+            category: '英雄联盟',
+            online: '1.2万',
+            cover: '',
+          ),
+        ),
+      );
+      await _pumpFrames(tester, 2);
+
+      expect(find.byKey(const Key('room-card-offline')), findsNothing);
+      expect(find.byKey(const Key('cover-badge-category')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
   });
 }
