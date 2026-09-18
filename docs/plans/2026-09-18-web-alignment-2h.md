@@ -11,15 +11,16 @@
 
 ---
 
-## 0. 前提纠错（本轮调研推翻的三条过期认知）
+## 0. 前提纠错（本轮调研推翻的四条过期认知）
 
-> 这三条如果不先纠正，会照着一份过期看板做出**主动回归**。务必先读。
+> 这四条如果不先纠正，会照着一份过期看板做出**主动回归**，或用一条不可靠的依据做不可逆删除。务必先读。
 
 | # | 过期认知 | 真相（已用真源核实） | 影响 |
 |---|---|---|---|
 | 1 | `tasks-ui-refine.md` T3：「房卡平台 badge 应放**右下**」 | **错**。web 真源 `components/browse/CoverBadges.vue:100-157` + `room/RoomCard.vue:24-61`：平台在 `left:0;bottom:0`（**左下**），热点在 `right:0;bottom:0`（右下），促销在右上，分类在左上。flutter `room_card.dart:185-221` **已对齐**。 | **T3 作废，不得执行** |
 | 2 | 上一轮 todo.md：「`/time` 是时间线」 | web `views/TimeView.vue` 是**解析耗时基准页**；web **不存在**「时间线」页。flutter `/time` 已对齐，`/timeline` 是 flutter **超集**（web 无）。 | 不列为差距 |
 | 3 | 上一轮 todo.md backlog：「补弹幕屏蔽词/屏蔽用户」 | **不是差距**。`apps/web/src` 全仓检索「屏蔽」为空 —— web 侧同样没有该功能。 | 从 backlog 移除 |
+| 4 | 本计划初稿：「13 个遗留 worktree 全部 `ahead=0` → 可安全清理」 | **错，且危险**。12 个 pi worktree 含 **staged 未提交**改动，`ahead=0` 只说明「没提交」，**不能证明「已吸收」**。逐文件比对确认无源文件缺失、功能均已落地、master 版本更新更大 → 判定陈旧草稿，但**本轮不清理**（见 Wave 0 Task 0.1）。 | 清理 descoped，改为单独立项 |
 
 另：`tasks-ui-refine.md` 的 T1（error 色 / 动效时长）与 T2（抽屉 rail 宽度）**我实测仍未落地**（`design_tokens.dart` 仍是 `F56C6C` / 120ms / 200ms / `railWidth = 52`），这两条有效，纳入本轮。
 
@@ -77,21 +78,44 @@ r = subprocess.run(['git','credential-manager','get'],
 
 ## Wave 0：预检（执行者本人，约 5 分钟）
 
-**Task 0.1 清理 13 个已吸收的遗留 worktree**
+**Task 0.1 遗留 worktree —— 本轮「不清理」（descoped，见 §0 纠错 4）**
 
-已核实：全部 `ahead=0`（内容已在 master）；`pi-subagents/shell-mobile-align-*` 的 3 个文件与 master `7c31ffc` **逐字节相同**（`git diff 7c31ffc 3f82198 -- lib/src/app/app_shell.dart test/ui/workflows/shell_mobile_align_test.dart test/ui/workflows/hover_flyout_layout_test.dart` 输出为空）。
+> ⚠️ **原计划写的「全部 `ahead=0` 即可安全清理」是错的，已作废。禁止用 `ahead=0` 作为清理依据。**
 
-- 操作：对 `F:/project/worktrees/zishu_flutter/*` 逐个 `git worktree remove --force`，再 `git worktree prune` + `git branch -D <已吸收分支>`。
-- **安全门**：执行前对每个分支再跑一次 `git rev-list --count master..<branch>`，非 0 即跳过并在报告里点名。
-- 验收：`git worktree list` 只剩主工作树；`git status --porcelain` 为空。
+审计实测（`git worktree list` 共 14 条 = 主工作树 + 13 个遗留）：
 
-**Task 0.2 记录基线**
+| 判定 | 项数 | 说明 |
+|---|---|---|
+| worktree 文件与 master 逐字节相同 | 49 | 确认已吸收 |
+| 内容不同 | 40 | **不等于未合并** —— master 已演进得更新更大（如 `app_shell.dart` local 69.8KB / master 89.4KB） |
+| master 上不存在 | 14 | 全是 pi 自己的草稿：`.handoff-*.md`、`.tmp_flyout.py`、`tmp_probe.txt`、`test/ui/failures/` —— **无一个源文件** |
+
+**关键**：12 个 pi worktree 里都有 **staged 但从未提交**的改动（`A`/`M` 状态）。`ahead=0` 只说明「没提交」，**不能证明「内容已吸收」** —— 这正是原计划的安全门会误判的原因。
+
+判定为陈旧草稿的依据（三条独立证据）：
+1. **没有任何源文件只存在于 worktree** —— 每个被改的源文件在 master 上都存在；
+2. 所有对应功能都已记录为「已落地」（nav-theme 死设置、房卡徽章、移动壳层、推荐面板、基准页、关注面板、`sync_cross_map`、`play_meta_bar`、路由契约、平台凭据、在播刷新、房间摘要刷新）；
+3. master 版本在每处都**更新更大**，例如 `tool/sync_cross_map.dart` 是 `local=5082B / master=9837B`（master 是后来扩展成 25-key 生成器的新版）。
+
+**结论与操作：本轮不做任何 `worktree remove` / `branch -D`。** 理由：清理对本次对齐目标**零收益**（worktree 不参与主工作树构建与测试），而误删是不可逆的；且 12 份 `.handoff-*.md` 里可能有 pi 的设计说明值得先读。清理应**单独立项**，流程为：先读 12 份 `.handoff-*.md` → 对每个 worktree 做 `git -C <wt> diff master -- <path>` 的 hunk 级审阅 → 才允许删。
+
+- 验收（本轮）：**不要求** `git worktree list` 变干净；只需在报告里点名这 13 个未清理项与原因。
+
+**Task 0.2 记录基线（✅ 已于 2026-09-18 13:50 实测完成）**
 
 ```bash
-$PY $WS/_gate.py $ROOT
+$PY $WS/_gate.py $ROOT --goldens
 ```
-- 期望基线：app test **472 passed / 0 failed**、app analyze **0 issue**、parser test **290 passed / 10 skipped**、parser analyze 0 issue。
-- 数字不符则**先报告再继续**，不要带着未知偏移开工。
+
+| 门 | 实测结果（13:50，耗时 1m50s） |
+|---|---|
+| golden | rc=0，8 个用例全过，8 张 PNG 同步 `tool/screenshots/zishu/`；重生成后 `git status` **无 diff**（逐字节相同） |
+| app test | rc=0，**472 passed / 0 failed** |
+| app analyze | rc=0，**No issues found** |
+| parser analyze | rc=0，**No issues found** |
+| parser test | rc=0，**290 passed / 10 skipped** |
+
+五项与预期**逐项吻合**，无未知偏移，可开工。收尾时若数字低于此表即为回归，需先查明。
 
 ---
 
@@ -316,6 +340,7 @@ $PY $WS/_frun.py $ROOT build windows --release --dart-define=ZISHU_REAL_PARSER=t
 ## 6. 本轮明确不做（YAGNI / 待裁决）
 
 - ❌ `tasks-ui-refine.md` **T3**（平台 badge 移到右下）—— 依据错误，做了就是回归。
+- ⏸ **13 个遗留 pi worktree 的清理** —— `ahead=0` 是**不可靠依据**（12 个含 staged 未提交改动），误删不可逆且对本轮目标零收益。改为单独立项：先读 12 份 `.handoff-*.md`，再做 hunk 级审阅后才允许删。详见 §0 纠错 4 与 Wave 0 Task 0.1。
 - ⏸ **移动端底栏项集**：web 底栏 = 首页/分类/我的分类/**平台**/关注/搜索/主题/用户；flutter 用**动态**顶替了「平台」位。这是**产品裁决**（「动态」是 flutter 超集功能），不自动执行。
 - ⏸ **沉浸态右缘侧抽屉**（web `PlayImmersiveSideSheet.vue`）—— 真实缺口，工作量中，建议单独立项（要动 `play_view.dart`，与多条轨争用）。
 - ⏸ **分类索引/分类房间拆成两个路由** —— 结构性重构，超出 2 小时窗口。
