@@ -656,3 +656,31 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 - [ ] 关注页批量导入、首页非浏览平台直达表单、移动端目录抽屉、开播提醒消费 remindOn、房间统计回填、画质 rank 归一、跨平台聚合纳入抖音;
 - [ ] `AppTypography.* → context.textX` 机械替换(127 处/36 文件);桌面 1920x1080 布局对齐(播放页底部工具栏);
 - [ ] kuaishou/soop/yy 轻量状态刷新;真机 release 重建 + 截图复验(沉浸抽屉真机手感)。
+
+## 2026-09-19 并行三轨:徽章顺序 + 虎牙徽章 + 全屏防闪窗(完成,2 子代理并行)
+
+**结论**:用户四条诉求一条工具诉求全落地 —— ①聊天行平台等级前置;②虎牙徽章/等级提取补齐(抖音/B站/斗鱼此前已有);③按 F 全屏闪动露底根因修复;④superpowers 技能集安装进 zcode。两个子代理(parser 轨 / playback 轨)与主代理(UI 轨 + 工具)并行,文件互斥零冲突;门禁 app **503/0** + parser **301/10skip** + analyze 双 0 + golden 零 diff。
+
+### ① 聊天行平台等级前置(f83420b)
+- web 真源 `SideChatTab.vue:38-44`:顺序为 ChatUserLevelBadge → ChatFanBadge;flutter `_ChatRow` 原为粉丝牌在前,已交换。同用例补 x 坐标顺序断言(同行断言用 8px 垂直容差——两枚徽章高度不同,严格 top 相等差 0.5px 属过度约束)。
+
+### ② 虎牙徽章提取(0abfad8,子代理轨)
+- 真源 `huyaJce.ts` parseMessageNotice(392-435):MessageNotice 顶层 tag **8/9/12/15** 按 `LIST<DecorationInfo>` 累积;appId **10400**→BadgeInfo{sBadgeName@3, iBadgeLevel@4} 写 badgeName/badgeLevel(level<=0 无牌);appId **11200**→iLevel@1 写 userLevel(web 虎牙等级即消费等级,无独立贵族字段);同 appId 后写覆盖。
+- 装饰解码 try/catch:只丢徽章不丢正文。**此前 UI 的 HUYA_BAR_GRADIENTS 7 档渐变条已落地但拿不到数据,本次补齐数据源后即生效**。
+- 测试 +4;遗留:虎牙字体色 tag 6 vs web tag 5 未经真实抓包验证(既有行为,徽章提取不受影响);`sMessageId@20` 待契约补 id。
+- 回答用户「抖音之类的呢」:抖音(红盘+粉丝牌)、B站(协议渐变+描边)、斗鱼(梯度胶囊)此前均已落地;本次补齐虎牙后四主力平台徽章/等级全通。
+
+### ③ 全屏防闪窗(34a4250,子代理轨)
+- 根因(window_manager 0.4.3 源码确认):SetFullScreen 多步非原子——进=带边框 SC_MAXIMIZE(触发 DWM 动画、任务栏露出)→去边框铺满,步间完整帧上屏;Dart 侧另有 setSize(+1px) hack;退=PostMessage(SC_RESTORE) 异步 + 满屏尺寸上闪标题栏帧。
+- 修复:`platforms/windows/window_flash_guard.dart` —— WM_SETREDRAW(FALSE) 锁重绘 + DWMWA_TRANSITIONS_FORCEDISABLED 禁动画,解锁 RedrawWindow(RDW_UPDATENOW);退出方向 120ms settle 等异步消息。不绕过插件(全屏态唯一真源不变);无 HWND/符号缺失时退化直调。
+- ffi 转直接依赖(^2.1.0)。
+
+### ④ superpowers 技能安装(工具)
+- obra/superpowers v6.3.0 全部 **14 个技能**已装入用户级 `C:\Users\Administrator\.zcode\skills\`(brainstorming/writing-plans/executing-plans/requesting-code-review/receiving-code-review/test-driven-development/systematic-debugging/verification-before-completion/dispatching-parallel-agents/subagent-driven-development/using-git-worktrees/finishing-a-development-branch/writing-skills/using-superpowers),每个 SKILL.md frontmatter 校验通过;**新会话起生效**(当前会话技能清单启动时已固定)。
+
+### 并行执行记录
+- 子代理 B(parser):47 次工具调用 / 15 分钟;子代理 C(playback):41 次 / 22 分钟;主代理同窗口完成轨 A + 白屏修复收尾(f21a18c)+ 技能安装。git 由主代理单写者收尾,子代理只改文件不提交。
+
+### 门禁与真机
+- app analyze 0 issue;全量 **503 passed / 0 failed**;parser 301 passed / 10 skipped;golden 重生成零 diff(聊天行无双徽章条目入 golden)。
+- 真机 release 重建(`ZISHU_REAL_PARSER=true`)并拉起:F 进/出全屏防闪窗、虎牙直播间聊天行徽章可现场复验。
