@@ -596,3 +596,10 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 - [ ] 侧栏预览卡迁移到共享 `CoverOfflineOverlay`(play_room_grid.dart,本轮避让红线未动);
 - [ ] 首页非浏览平台直达表单、关注批量导入、移动端目录抽屉、开播提醒消费 remindOn、房间统计回填、画质 rank 归一、跨平台聚合纳入抖音(详见 `docs/plans/2026-09-18-web-alignment-2h.md` §6)。
 - [ ] 真机 release 重建 + 截图复验(需跳出沙箱,待用户授权)。
+
+## 2026-09-18 Wave 4 真机 release 复验(完成,用户授权非沙箱)
+- release 重建(ZISHU_REAL_PARSER=true,`app.so` mtime 15:16 验证开关生效),schtasks 拉起(pid 13396)。
+- **首帧白屏现象**:schtasks 拉起后内容区白屏(UI 线程活跃、进程正常),**resize 一次即恢复** —— Flutter Windows 首帧 surface 未 present 的环境级现象(无人交互),非 app bug;后续真机验收记得先 resize。
+- 复验通过:①首页真实数据渲染(斗鱼/虎牙/B站网格+平台角标+热度,解析器真连);②T2 搜索双档(默认房间档金色下划线/占位「搜索房间名·房间号·直播间链接」/「进入直播间」仅房间档,切主播档按钮消失);③T1 离线遮罩+T3 上次开播(关注页离线卡封面压暗、在线/离线区分明确,「上次开播 01-22 00:54」等文案条正常);④T5 控制条弹幕设置入口(播放页真实拉流「原画2K120·线路7 FLV」,弹幕样式对话框从控制条拉起,与侧栏同源,飘屏实时滚动)。
+- T4(token)/T6(huya/bilibili 去重)由单测契约覆盖(292 passed),无独立视觉项;斗鱼弹幕链路运行正常佐证 T6 未误伤。
+- 截图存档 `build/shots/w4_*.png`(未入库);进程与 ZishuLaunch 计划任务已清理。
