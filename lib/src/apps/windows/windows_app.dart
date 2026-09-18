@@ -29,7 +29,9 @@ class _WindowsAppState extends ConsumerState<WindowsApp> with WindowListener {
     // 非桌面 / 未初始化 window_manager(VM 单测)时,下列调用在
     // WindowPresentation 内部静默降级,不抛异常。
     windowManager.addListener(this);
-    unawaited(WindowPresentation.instance.restoreMainWindowGeometry());
+    // 主窗口几何恢复已上移到 main() 的 runApp 之前(见 main.dart 注释):
+    // 恢复必须发生在「首帧就绪回调 Show 窗口」之前,否则隐藏期后的 resize
+    // 会造成打开白屏;此处只保留几何采集(落盘)的窗口事件转发。
   }
 
   @override
