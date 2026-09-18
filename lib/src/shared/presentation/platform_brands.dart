@@ -157,6 +157,33 @@ abstract final class PlatformBrandCatalog {
   static bool supportsSearch(String site) =>
       searchPlatforms.any((brand) => brand.id == site);
 
+  /// 平台是否支持**主播**搜索(昵称 / 抖音号),对齐 web
+  /// `SearchDialog.vue:207` 的 `supportsAnchorSearch(site)`。
+  ///
+  /// 用于搜索弹框的「主播 / 房间」双档显隐:只支持房间搜索的平台
+  /// (如 IPTV)不出现主播档。
+  static bool supportsAnchorSearch(String site) =>
+      _capabilitySearch(site, (c) => c.anchorSearch);
+
+  /// 平台是否支持**房间**搜索(房间名 / 标题 / 房间号),对齐 web
+  /// `SearchDialog.vue:208` 的 `supportsRoomSearch(site)`。
+  static bool supportsRoomSearch(String site) =>
+      _capabilitySearch(site, (c) => c.roomSearch);
+
+  /// 按能力位 + 是否注册了真实 search repository 判定。
+  ///
+  /// fixture 构建(离线 UI 测试)下与 [supportsSearch] 同口径放行:fixture
+  /// 目录没有真实注册表,若此处收紧会让双档在测试里整块消失,失去覆盖。
+  static bool _capabilitySearch(
+    String site,
+    bool Function(SiteCapabilities capabilities) test,
+  ) {
+    if (!realParserEnabled) return supportsSearch(site);
+    final registration = buildSiteRegistry()[site];
+    if (registration == null || registration.search == null) return false;
+    return test(registration.capabilities);
+  }
+
   /// CC 已停运,不加入导航;保留在 parser 层但不作为 UI 入口。
   static const List<PlatformBrand> navPlatforms = [
     all,

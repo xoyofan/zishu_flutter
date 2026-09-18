@@ -74,4 +74,60 @@ void main() {
     expect(find.byKey(const Key('search-result-0')), findsNothing);
     expect(find.text('进入房间 63136'), findsOneWidget);
   });
+
+  testWidgets('searchTabs:弹框含 主播/房间 双档,默认落在房间档(对齐 web syncDefaultTab)', (
+    tester,
+  ) async {
+    await openSearch(tester);
+
+    expect(find.byKey(const Key('search-tab-anchor')), findsOneWidget);
+    expect(find.byKey(const Key('search-tab-room')), findsOneWidget);
+    // web `syncDefaultTab()`:roomSearchEnabled 优先,默认选中「房间」。
+    // 「进入直播间」按钮只在房间档出现,用它作为当前档位的判据。
+    expect(
+      find.byKey(const Key('search-submit-room')),
+      findsOneWidget,
+      reason: '默认应为房间档(该档才渲染进入直播间按钮)',
+    );
+  });
+
+  testWidgets('searchTabs:切到主播档后直达项与「进入直播间」均不出现', (tester) async {
+    await openSearch(tester);
+
+    await tester.tap(find.byKey(const Key('search-tab-anchor')));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.byKey(const Key('search-submit-room')), findsNothing);
+    // 占位文案随档位切换(对齐 web `inputPlaceholder`)。
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('search-input')))
+          .decoration
+          ?.hintText,
+      contains('主播'),
+    );
+
+    await typeAndSettle(tester, '63136');
+    expect(
+      find.text('进入房间 63136'),
+      findsNothing,
+      reason: '主播档不展示房间号直达项',
+    );
+  });
+
+  testWidgets('searchTabs:房间档保留房间号直达与「进入直播间」', (tester) async {
+    await openSearch(tester);
+
+    await typeAndSettle(tester, '63136');
+
+    expect(find.byKey(const Key('search-submit-room')), findsOneWidget);
+    expect(find.text('进入房间 63136'), findsOneWidget);
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const Key('search-input')))
+          .decoration
+          ?.hintText,
+      contains('房间'),
+    );
+  });
 }

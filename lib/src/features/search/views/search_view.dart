@@ -5,11 +5,20 @@ import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 
 import '../../../shared/presentation/design_tokens.dart';
+import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../application/search_provider.dart';
 import '../widgets/search_direct_tile.dart';
 import '../widgets/search_platform_chips.dart';
 import '../widgets/search_result_tile.dart';
+
+/// 搜索档位:主播 / 房间。对齐 web `SearchDialog.vue` 的 `activeTab`。
+///
+/// **已知残留差异**:web 的两档走服务端 `type=anchors|rooms` 分流取数
+/// (`api/search.ts:10,19`),flutter 的解析契约 [SearchRequest] 尚无 `type`
+/// 字段,两档共用同一次混合查询。本档位因此只驱动**文案、主操作与直达项**
+/// 的呈现;等解析契约补上 `type` 后再把取数分流接进来。
+enum _SearchTab { anchor, room }
 
 /// 搜索主体:输入框(autofocus)+ 平台 chips + 快捷直达 + 命中列表。
 /// 键盘:Enter 执行(直达优先,否则进入首个结果),Esc 关闭。
@@ -35,6 +44,21 @@ class SearchView extends ConsumerStatefulWidget {
 class _SearchViewState extends ConsumerState<SearchView> {
   final TextEditingController _input = TextEditingController();
   final FocusNode _inputFocus = FocusNode();
+
+  /// 用户显式选过的档位;null 表示按平台能力取默认档。
+  ///
+  /// web 在切换平台时会重置为默认档(`SearchDialog.vue:289 syncDefaultTab`),
+  /// 这里同样在 [SearchState.site] 变化时清空。
+  _SearchTab? _tabOverride;
+
+  /// 当前生效档位:显式选择优先,否则「房间档优先」(对齐 web syncDefaultTab)。
+  _SearchTab _effectiveTab({required bool anchorOk, required bool roomOk}) {
+    final override = _tabOverride;
+    if (override == _SearchTab.room && roomOk) return _SearchTab.room;
+    if (override == _SearchTab.anchor && anchorOk) return _SearchTab.anchor;
+    if (roomOk) return _SearchTab.room;
+    return _SearchTab.anchor;
+  }
 
   @override
   void initState() {
@@ -113,6 +137,19 @@ class _SearchViewState extends ConsumerState<SearchView> {
   Widget build(BuildContext context) {
     final tokens = context.tokens;
     final search = ref.watch(searchProvider);
+
+    // 切平台后回到该平台的默认档(web `watch(selectedSite)` → syncDefaultTab)。
+    ref.listen(searchProvider.select((s) => s.site), (previous, next) {
+      if (previous != next && mounted) {
+        setState(() => _tabOverride = null);
+      }
+    });
+
+    final anchorOk = PlatformBrandCatalog.supportsAnchorSearch(search.site);
+    final roomOk = PlatformBrandCatalog.supportsRoomSearch(search.site);
+    final supported = anchorOk || roomOk;
+    final tab = _effectiveTab(anchorOk: anchorOk, roomOk: roomOk);
+
     return CallbackShortcuts(
       bindings: {
         // Esc 关闭搜索(对话框宿主接管时只关框,页面态退化为返回上一页)。
@@ -121,6 +158,36 @@ class _SearchViewState extends ConsumerState<SearchView> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          if (supported)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.sm,
+                AppSpacing.lg,
+                0,
+              ),
+              child: _SearchTabBar(
+                tab: tab,
+                anchorEnabled: anchorOk,
+                roomEnabled: roomOk,
+                onChanged: (next) => setState(() => _tabOverride = next),
+              ),
+            )
+          else
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.md,
+                AppSpacing.lg,
+                0,
+              ),
+              child: Text(
+                '该平台暂不支持主播/房间搜索',
+                style: AppTypography.bodySecondary.copyWith(
+                  color: tokens.textSecondary,
+                ),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(
               AppSpacing.lg,
@@ -128,17 +195,21 @@ class _SearchViewState extends ConsumerState<SearchView> {
               AppSpacing.lg,
               0,
             ),
-            child: _buildSearchField(tokens, search),
+            child: _buildSearchField(tokens, search, tab),
           ),
           const SearchPlatformChips(),
-          Expanded(child: _buildResults(tokens, search)),
+          Expanded(child: _buildResults(tokens, search, tab)),
         ],
       ),
     );
   }
 
-  Widget _buildSearchField(ZishuTokens tokens, SearchState search) {
-    return TextField(
+  Widget _buildSearchField(
+    ZishuTokens tokens,
+    SearchState search,
+    _SearchTab tab,
+  ) {
+    final field = TextField(
       // 测试锚点:定位/输入搜索关键词。
       key: const Key('search-input'),
       controller: _input,
@@ -149,7 +220,10 @@ class _SearchViewState extends ConsumerState<SearchView> {
       cursorColor: tokens.brand,
       style: AppTypography.body.copyWith(color: tokens.textPrimary),
       decoration: InputDecoration(
-        hintText: '搜索主播 / 房间号 / 直播间链接',
+        // 占位文案随档位切换,对齐 web `inputPlaceholder`(SearchDialog.vue:255)。
+        hintText: tab == _SearchTab.room
+            ? '搜索房间名 / 房间号 / 直播间链接'
+            : '搜索主播名',
         hintStyle: AppTypography.body.copyWith(color: tokens.textSecondary),
         prefixIcon: Icon(
           Icons.search_rounded,
@@ -191,9 +265,32 @@ class _SearchViewState extends ConsumerState<SearchView> {
         ),
       ),
     );
+
+    // 「进入直播间」主操作只在房间档出现,对齐 web `SearchDialog.vue:46-48`。
+    if (tab != _SearchTab.room) return field;
+    return Row(
+      children: [
+        Expanded(child: field),
+        const SizedBox(width: AppSpacing.sm),
+        FilledButton(
+          // 测试锚点:房间档的进入直播间主操作,同时充当档位判据。
+          key: const Key('search-submit-room'),
+          onPressed: _submit,
+          style: FilledButton.styleFrom(
+            backgroundColor: tokens.brand,
+            foregroundColor: AppColors.background,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg,
+              vertical: AppSpacing.md,
+            ),
+          ),
+          child: const Text('进入直播间'),
+        ),
+      ],
+    );
   }
 
-  Widget _buildResults(ZishuTokens tokens, SearchState search) {
+  Widget _buildResults(ZishuTokens tokens, SearchState search, _SearchTab tab) {
     // 未输入:引导空态。
     if (!search.hasQuery) {
       return _EmptyHint(
@@ -202,7 +299,9 @@ class _SearchViewState extends ConsumerState<SearchView> {
         subtitle: '支持纯数字房间号直达,或粘贴 douyu.com 直播间链接',
       );
     }
-    final direct = search.direct;
+    // 房间号/链接直达只属于房间档:主播档下输入房间号没有意义。
+    final direct = tab == _SearchTab.room ? search.direct : null;
+    final noun = tab == _SearchTab.room ? '房间' : '主播';
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -246,13 +345,78 @@ class _SearchViewState extends ConsumerState<SearchView> {
               if (!search.searching && direct == null && search.hits.isEmpty)
                 _EmptyHint(
                   icon: Icons.search_off_rounded,
-                  title: '未找到与「${search.query.trim()}」相关的主播或房间',
+                  // 空态名词随档位切换,对齐 web `searchNoun`。
+                  title: '未找到与「${search.query.trim()}」相关的$noun',
                   subtitle: '换个关键词,或试试房间号 / 直播间链接',
                 ),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 搜索档位切换条(主播 / 房间),对齐 web `SearchDialog.vue:14-18` 的 el-tabs。
+///
+/// 刻意不引 Material `TabBar`:那需要 `TabController` 并会把下划线铺满整行,
+/// 而 web 的 el-tabs 是「左对齐、短下划线、按能力位增减档」——本组件直接复刻。
+class _SearchTabBar extends StatelessWidget {
+  const _SearchTabBar({
+    required this.tab,
+    required this.anchorEnabled,
+    required this.roomEnabled,
+    required this.onChanged,
+  });
+
+  final _SearchTab tab;
+  final bool anchorEnabled;
+  final bool roomEnabled;
+  final ValueChanged<_SearchTab> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        if (anchorEnabled)
+          _tab(context, _SearchTab.anchor, '主播', const Key('search-tab-anchor')),
+        if (roomEnabled)
+          _tab(context, _SearchTab.room, '房间', const Key('search-tab-room')),
+      ],
+    );
+  }
+
+  Widget _tab(BuildContext context, _SearchTab value, String label, Key key) {
+    final tokens = context.tokens;
+    final active = value == tab;
+    return InkWell(
+      key: key,
+      onTap: () => onChanged(value),
+      child: Padding(
+        padding: const EdgeInsets.only(
+          right: AppSpacing.lg,
+          top: AppSpacing.xs,
+          bottom: AppSpacing.xs,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: AppTypography.body.copyWith(
+                color: active ? tokens.brand : tokens.textSecondary,
+                fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+            const SizedBox(height: AppSpacing.xs),
+            Container(
+              height: 2,
+              width: AppSpacing.xl,
+              color: active ? tokens.brand : const Color(0x00000000),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
