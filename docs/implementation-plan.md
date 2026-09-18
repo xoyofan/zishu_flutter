@@ -443,7 +443,10 @@ Flutter 路由语义与 SFVideoLive 对齐：
 /all                      全平台首页
 /all/category/:key        跨平台分类房间
 /follow                   我的关注
-/time                     时间线
+/time                     解析耗时基准（对齐 web `TimeView.vue`：冷解析 vs 缓存命中）
+/timeline                 动态时间线（本仓私有页面，web 无对应路由）
+/user                     平台凭证（cookie/token 管理，web 只在 `/user` 弹登录框）
+/search                   搜索已是全局对话框，该路径仅作深链兼容 → 重定向 `/all`
 /:site                    平台首页
 /:site/category           平台分类索引
 /:site/category/:cid      分类房间

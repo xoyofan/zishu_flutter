@@ -14,6 +14,7 @@ import '../features/follow/application/follow_sort.dart';
 import '../features/follow/application/follow_status_poller.dart';
 import '../features/follow/application/settings_provider.dart';
 import '../shared/application/auth_provider.dart';
+import '../shared/domain/category_display.dart';
 import '../shared/presentation/design_tokens.dart';
 import '../shared/presentation/platform_brands.dart';
 import '../shared/presentation/zishu_tokens.dart';
@@ -628,7 +629,7 @@ class _PlatformCategorySheet extends ConsumerWidget {
                       Padding(
                         padding: const EdgeInsets.only(bottom: 6),
                         child: Text(
-                          group.name,
+                          displayCategoryGroupName(site, group.name),
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
@@ -659,7 +660,7 @@ class _PlatformCategorySheet extends ConsumerWidget {
                                   border: Border.all(color: tokens.border),
                                 ),
                                 child: Text(
-                                  item.name,
+                                  displayCategoryName(site, item.name, item.cid),
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: tokens.textPrimary,
@@ -1922,7 +1923,7 @@ class _CategoryBoard extends StatelessWidget {
                 width: _kColumnWidth,
                 child: _CategoryChip(
                   key: ValueKey('flyout-category-${item.cid}'),
-                  label: item.name,
+                  label: displayCategoryName(site, item.name, item.cid),
                   onTap: () => _goCategory(context, item.cid),
                 ),
               ),
@@ -1955,7 +1956,7 @@ class _CategoryBoard extends StatelessWidget {
                       ),
                     ),
                     child: Text(
-                      group.name,
+                      displayCategoryGroupName(site, group.name),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
@@ -1968,7 +1969,7 @@ class _CategoryBoard extends StatelessWidget {
                   for (final item in group.items)
                     _CategoryChip(
                       key: ValueKey('flyout-category-${item.cid}'),
-                      label: item.name,
+                      label: displayCategoryName(site, item.name, item.cid),
                       onTap: () => _goCategory(context, item.cid),
                     ),
                 ],
@@ -2406,7 +2407,7 @@ class _MyCategoryManageDialog extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            group.name,
+                            displayCategoryGroupName(site, group.name),
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.w700,
@@ -2420,7 +2421,7 @@ class _MyCategoryManageDialog extends ConsumerWidget {
                             children: [
                               for (final item in group.items)
                                 _PickableChip(
-                                  label: item.name,
+                                  label: displayCategoryName(site, item.name, item.cid),
                                   selected: favorites.any(
                                     (entry) =>
                                         entry.site == site &&
@@ -2433,7 +2434,11 @@ class _MyCategoryManageDialog extends ConsumerWidget {
                                           MyCategoryEntry(
                                             site: site,
                                             cid: item.cid,
-                                            name: item.name,
+                                            name: displayCategoryName(
+                                              site,
+                                              item.name,
+                                              item.cid,
+                                            ),
                                           ),
                                         );
                                     if (!ok && context.mounted) {

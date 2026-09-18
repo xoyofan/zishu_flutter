@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../domain/category_display.dart';
+
 /// 分类配色查询的返回结果。
 class CategoryStyle {
   const CategoryStyle({required this.background, required this.foreground});
@@ -156,8 +158,14 @@ abstract final class CategoryColors {
 
   /// 取分类的**不透明**配色(卡片角标用)。
   ///
-  /// [category] 为分类显示名,[site]/[cid] 用于后续扩展跨平台归类,
-  /// [crossKey] 为跨平台分类 key(优先级最高)。
+  /// 解析顺序与参考实现 `categoryColor.ts#resolveCategoryThemeBase` 一一对应:
+  /// 1. [crossKey] 显式跨平台 key 命中 [_themeByKey];
+  /// 2. [crossKey] 经 alias 归一后的 key 命中 [_themeByKey];
+  /// 3. `findCrossCategory(site, category, cid)` 命中的条目 key 命中 [_themeByKey];
+  /// 4. 映射后的**显示名**(`displayCategoryName`)命中 [_themeByName];
+  /// 5. 显示名匹配 [_nameRules] 正则;
+  /// 6. 兜底:按**显示名**哈希取 [_fallbackHues] 一色。
+  /// [category] 为平台原名,[site]/[cid] 参与跨平台归类;
   /// 无法解析(分类名为空)时返回 null,调用方回退到中性色。
   static CategoryStyle? opaqueFor({
     required String? category,
@@ -166,6 +174,7 @@ abstract final class CategoryColors {
     String crossKey = '',
   }) {
     final base = _resolveBase(
+      site: site,
       category: category,
       cid: cid,
       crossKey: crossKey,
@@ -176,6 +185,7 @@ abstract final class CategoryColors {
 
   static int? _resolveBase({
     required String? category,
+    required String site,
     required String cid,
     required String crossKey,
   }) {
@@ -183,16 +193,28 @@ abstract final class CategoryColors {
     if (key.isNotEmpty) {
       final byKey = _themeByKey[key];
       if (byKey != null) return byKey;
+      final resolvedKey = resolveCrossCategoryKey(key);
+      final byResolved = _themeByKey[resolvedKey];
+      if (byResolved != null) return byResolved;
     }
     final name = (category ?? '').trim();
     if (name.isEmpty) return null;
-    final normalized = _normalize(name);
+    // 先按跨平台条目 key 取色(web step 3),再退回显示名匹配(web step 4-6)。
+    final entry = findCrossCategory(site, name, cid);
+    final entryKey = entry?.key ?? '';
+    if (entryKey.isNotEmpty) {
+      final byEntry = _themeByKey[entryKey];
+      if (byEntry != null) return byEntry;
+    }
+    final display = displayCategoryName(site, name, cid);
+    final displayName = display.isEmpty ? name : display;
+    final normalized = _normalize(displayName);
     final byName = _themeByName[normalized];
     if (byName != null) return byName;
     for (final (pattern, color) in _nameRules) {
-      if (pattern.hasMatch(name)) return color;
+      if (pattern.hasMatch(displayName)) return color;
     }
-    return _fallbackHues[_hash(name) % _fallbackHues.length];
+    return _fallbackHues[_hash(displayName) % _fallbackHues.length];
   }
 
   /// 归一化:trim + 小写 + 去空白 + 全角冒号转半角(对齐参考实现)。
