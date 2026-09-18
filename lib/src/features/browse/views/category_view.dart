@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 
+import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -104,6 +105,7 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
                 selectedGroupId: group.id,
                 isAll: widget.site == 'all',
                 width: _tabsWidth,
+                site: widget.site,
                 onGroupTap: (target) => setState(() {
                   _selectedGroupId = target.id;
                   _selectedCid = null;
@@ -183,6 +185,7 @@ class _GroupTabs extends StatelessWidget {
     required this.selectedGroupId,
     required this.isAll,
     required this.width,
+    required this.site,
     required this.onGroupTap,
   });
 
@@ -190,6 +193,7 @@ class _GroupTabs extends StatelessWidget {
   final String selectedGroupId;
   final bool isAll;
   final double width;
+  final String site;
   final ValueChanged<CategoryGroup> onGroupTap;
 
   @override
@@ -204,6 +208,7 @@ class _GroupTabs extends StatelessWidget {
           for (final group in groups)
             _GroupTab(
               group: group,
+              site: site,
               selected: group.id == selectedGroupId,
               // 全平台聚合时按组名稳定映射一个平台色点。
               dotColor: isAll ? _platformDotColor(group.name) : null,
@@ -224,12 +229,14 @@ class _GroupTabs extends StatelessWidget {
 class _GroupTab extends StatelessWidget {
   const _GroupTab({
     required this.group,
+    required this.site,
     required this.selected,
     required this.dotColor,
     required this.onTap,
   });
 
   final CategoryGroup group;
+  final String site;
   final bool selected;
   final Color? dotColor;
   final VoidCallback onTap;
@@ -263,7 +270,8 @@ class _GroupTab extends StatelessWidget {
               ],
               Expanded(
                 child: Text(
-                  group.name,
+                  // 抖音/斗鱼/虎牙/哔哩哔哩 分组名直接用平台原名(已是中文或平台原生)。
+                  displayCategoryGroupName(site, group.name),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: AppTypography.body.copyWith(
@@ -450,7 +458,8 @@ class _CategoryTile extends ConsumerWidget {
             ),
             const SizedBox(height: AppSpacing.xs),
             Text(
-              item.name,
+              // 跨平台统一中文分类名:命中映射用 canonical 名,否则回落平台原名。
+              displayCategoryName(site, item.name, item.cid),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: AppTypography.bodySecondary.copyWith(

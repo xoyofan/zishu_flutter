@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -56,14 +57,23 @@ class LiveStateChip extends StatelessWidget {
 
 /// 分类徽标:中性底色小 chip。
 class CategoryChip extends StatelessWidget {
-  const CategoryChip({super.key, required this.label});
+  const CategoryChip({
+    super.key,
+    required this.label,
+    this.site = '',
+    this.cid = '',
+  });
 
   final String label;
+  final String site;
+  final String cid;
 
   @override
   Widget build(BuildContext context) {
+    // 跨平台统一中文分类名:命中映射用 canonical 名,否则回落平台原名。
+    final display = displayCategoryName(site, label, cid);
     return _BadgeChip(
-      label: label,
+      label: display,
       background: context.tokens.surfaceRaised,
       foreground: context.tokens.textSecondary,
     );

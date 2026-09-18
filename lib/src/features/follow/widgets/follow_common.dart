@@ -5,6 +5,7 @@ library;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -110,12 +111,21 @@ class FollowStatusDot extends StatelessWidget {
 
 /// 分类小标签(raised 底 + caption 字号)。
 class FollowCategoryTag extends StatelessWidget {
-  const FollowCategoryTag({super.key, required this.label});
+  const FollowCategoryTag({
+    super.key,
+    required this.label,
+    this.site = '',
+    this.cid = '',
+  });
 
   final String label;
+  final String site;
+  final String cid;
 
   @override
   Widget build(BuildContext context) {
+    // 跨平台统一中文分类名:命中映射用 canonical 名,否则回落平台原名。
+    final display = displayCategoryName(site, label, cid);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
       decoration: BoxDecoration(
@@ -123,7 +133,7 @@ class FollowCategoryTag extends StatelessWidget {
         borderRadius: AppRadius.allSm,
       ),
       child: Text(
-        label,
+        display,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: AppTypography.caption,

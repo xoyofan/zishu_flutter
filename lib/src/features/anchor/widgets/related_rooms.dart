@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:live_parser/live_parser.dart';
 
+import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import 'badge_chips.dart';
@@ -68,7 +69,10 @@ class _RelatedCard extends StatelessWidget {
             children: [
               AspectRatio(
                 aspectRatio: 16 / 9,
-                child: NetworkCover(url: room.cover, fallbackLabel: room.category),
+                child: NetworkCover(
+                  url: room.cover,
+                  fallbackLabel: displayCategoryName(room.site, room.category, room.cid),
+                ),
               ),
               Padding(
                 padding: const EdgeInsets.all(AppSpacing.sm),
@@ -94,7 +98,7 @@ class _RelatedCard extends StatelessWidget {
                         ),
                         if (room.category.isNotEmpty) ...[
                           const SizedBox(width: AppSpacing.xs),
-                          CategoryChip(label: room.category),
+                          CategoryChip(label: room.category, site: room.site),
                         ],
                       ],
                     ),

@@ -20,6 +20,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:live_parser/live_parser.dart';
 
+import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/widgets/cover_badges.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -132,8 +133,9 @@ class PlayRoomCard extends StatelessWidget {
                 children: [
                   FollowCoverImage(
                     cover: room.cover,
-                    fallbackLabel:
-                        room.category.isEmpty ? room.site : room.category,
+                    fallbackLabel: room.category.isEmpty
+                        ? room.site
+                        : displayCategoryName(room.site, room.category, room.cid),
                     offline: !_live,
                   ),
                   // 左上:平台徽章(web `.platform-cover-badge` 贴左上)。
@@ -329,7 +331,9 @@ class PlayRoomRow extends StatelessWidget {
               ),
               const SizedBox(height: 2),
               Text(
-                room.title.isEmpty ? room.category : room.title,
+                room.title.isEmpty
+                    ? displayCategoryName(room.site, room.category, room.cid)
+                    : room.title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: AppTypography.bodySecondary.copyWith(

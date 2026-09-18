@@ -9,6 +9,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:live_parser/live_parser.dart';
 
+import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -195,7 +196,9 @@ class FollowEntryCard extends StatelessWidget {
         children: [
           FollowCoverImage(
             cover: room.cover,
-            fallbackLabel: room.category.isEmpty ? room.site : room.category,
+            fallbackLabel: room.category.isEmpty
+                ? room.site
+                : displayCategoryName(room.site, room.category, room.cid),
             offline: !live,
           ),
           // 左下:分类角标(品牌色底 + 深色字)。
@@ -206,7 +209,8 @@ class FollowEntryCard extends StatelessWidget {
               child: FollowCoverTag(
                 accent: brand?.color,
                 child: Text(
-                  room.category,
+                  // 跨平台统一中文分类名:命中映射用 canonical 名,否则回落平台原名。
+                  displayCategoryName(room.site, room.category, room.cid),
                   style: AppTypography.caption.copyWith(
                     fontSize: 10,
                     color: tokens.surfaceSoft,

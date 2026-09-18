@@ -2,6 +2,7 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../application/anchor_provider.dart';
@@ -54,7 +55,10 @@ class AnchorLiveCard extends StatelessWidget {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    NetworkCover(url: room.cover, fallbackLabel: room.category),
+                    NetworkCover(
+                      url: room.cover,
+                      fallbackLabel: displayCategoryName(room.site, room.category, room.cid),
+                    ),
                     Positioned(
                       left: AppSpacing.md,
                       top: AppSpacing.md,
@@ -87,7 +91,7 @@ class AnchorLiveCard extends StatelessWidget {
                     ),
                     if (room.category.isNotEmpty) ...[
                       const SizedBox(width: AppSpacing.sm),
-                      CategoryChip(label: room.category),
+                      CategoryChip(label: room.category, site: room.site),
                     ],
                   ],
                 ),
