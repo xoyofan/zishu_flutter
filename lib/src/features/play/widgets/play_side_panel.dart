@@ -1041,6 +1041,12 @@ class _ChatRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // 徽章顺序对齐 web SideChatTab.vue:38-44 —— 平台用户等级 pill 在前、
+        // 粉丝牌在后(用户口径 2026-09-19:「平台等级应该在粉丝等级前显示」)。
+        if (data.userLevel > 0) ...[
+          _UserLevelBadge(site: data.site, level: data.userLevel),
+          const SizedBox(width: 3),
+        ],
         if (fanBadge != null) ...[
           _FanBadge(
             site: data.site,
@@ -1050,10 +1056,6 @@ class _ChatRow extends StatelessWidget {
             colorEnd: data.badgeColorEnd,
             colorBorder: data.badgeColorBorder,
           ),
-          const SizedBox(width: 3),
-        ],
-        if (data.userLevel > 0) ...[
-          _UserLevelBadge(site: data.site, level: data.userLevel),
           const SizedBox(width: 3),
         ],
         Expanded(

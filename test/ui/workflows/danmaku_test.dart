@@ -420,6 +420,17 @@ void main() {
     expect(find.text('LV31'), findsOneWidget);
     expect(find.text('LV18'), findsOneWidget);
     expect(find.text('Lv 0'), findsNothing, reason: '无等级不渲染占位');
+
+    // 徽章顺序对齐 web SideChatTab.vue:38-44:平台等级 pill 在粉丝牌之前
+    // (同一行内按 x 坐标比较;「徽章哥」一条同时带 LV31 与粉丝牌)。
+    final levelRect = tester.getRect(find.text('LV31'));
+    final fanRect = tester.getRect(find.text('提督骑士团 12'));
+    expect(levelRect.left, lessThan(fanRect.left),
+        reason: '平台等级(用户口径:平台等级在粉丝等级前)应排在粉丝牌左边');
+    // 两枚徽章由同一 Row 水平排布;高度不同(胶囊 vs 渐变条)顶部可差零点几
+    // 像素,用容差断言"同一行"而非严格相等。
+    expect((levelRect.top - fanRect.top).abs(), lessThan(8.0),
+        reason: '两枚徽章应渲染在同一行');
   });
 
   testWidgets('danmakuVisualIntegrity:富文本结构完整,hash 着色+粉丝徽章', (
