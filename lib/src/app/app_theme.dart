@@ -1,10 +1,18 @@
 import 'package:flutter/material.dart';
 
+import '../features/follow/application/settings_provider.dart';
 import '../shared/presentation/design_tokens.dart';
 import '../shared/presentation/zishu_tokens.dart';
 
 /// 应用主题:SFVideoLive 深色基线(#181818 + #f3d04e),tokens 走 ThemeExtension。
 abstract final class ZishuTheme {
+  /// 设置里的主题模式选择 → Flutter [ThemeMode]。
+  static ThemeMode modeOf(ThemeModeChoice choice) => switch (choice) {
+    ThemeModeChoice.light => ThemeMode.light,
+    ThemeModeChoice.dark => ThemeMode.dark,
+    ThemeModeChoice.system => ThemeMode.system,
+  };
+
   static ThemeData dark() {
     final base = ThemeData(brightness: Brightness.dark, useMaterial3: true);
     return _decorate(base, ZishuTokens.dark);

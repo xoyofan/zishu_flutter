@@ -7,6 +7,7 @@ import 'package:window_manager/window_manager.dart';
 import '../../app/app_back_shortcuts.dart';
 import '../../app/app_router.dart';
 import '../../app/app_theme.dart';
+import '../../features/follow/application/settings_provider.dart';
 import '../../platforms/common/playback/window_presentation.dart';
 
 /// Windows 产品入口 app:ZishuTheme + go_router 路由 + 全局返回快捷键。
@@ -63,10 +64,14 @@ class _WindowsAppState extends ConsumerState<WindowsApp> with WindowListener {
   @override
   Widget build(BuildContext context) {
     final router = ref.watch(routerProvider);
+    // 主题模式来自设置(浅色/深色/跟随系统),切换即重建 MaterialApp 并生效。
+    final themeMode = ZishuTheme.modeOf(ref.watch(settingsProvider).themeMode);
     return MaterialApp.router(
       title: '紫薯直播',
       debugShowCheckedModeBanner: false,
-      theme: ZishuTheme.dark(),
+      theme: ZishuTheme.light(),
+      darkTheme: ZishuTheme.dark(),
+      themeMode: themeMode,
       routerConfig: router,
       // 全局返回(鼠标侧键 / Alt+←):包在路由内容外侧,全页面生效。
       builder: (context, child) =>

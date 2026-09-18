@@ -418,3 +418,33 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 - [ ] 真机复核斗鱼长播(≥10min)不再出现周期性闪断;必要时再对比 FLV 各 CDN 的稳定性。
 - [ ] Alt+→(前进)未实现:需要宿主自维护前进栈。
 - [ ] `latency_test` 墙钟 500ms 阈值在整机跑套件时过紧,建议改「单跑计分 + 套件内只告警」。
+
+## 2026-09-18 设置项 ↔ pure_live 全量对照:三条死设置接线(完成)
+
+**结论**:逐字段比 `lib/src/**` 与 pure_live 同名文件后确认 —— 设置**模型**完全一致(settings_provider/danmaku_settings 逐行相同),差的是**消费点**:本仓有三处设置只存偏好、播放/渲染侧不读,表现为"改了没反应"。
+
+### 死设置清单(改前)
+| 设置项 | 本仓(改前) | pure_live | 影响 |
+|---|---|---|---|
+| 线路格式 auto/HLS/FLV | 仅设置页 + 侧栏下拉;**play_provider 不读**(内联 `_pickQuality` + `quality.preferredLine`) | `play_selection.dart` 的 `pickStreamLine` | 切档后总走 HLS;斗鱼 HLS 预览线即黑屏闪断源 |
+| 平台默认画质 | 内联 `_pickQuality` **只做精确同名**,真实档名带后缀(斗鱼「原画2K60」)必失配 → 回落首档 | `pickPlayQuality` 精确 → 双向包含 → 首档 | 「按平台默认画质」形同虚设 |
+| 弹幕样式(透明度/字号/速度/显示区域) | provider/面板齐备,但 `_DanmakuLayer` **只传 messages/enabled**;侧栏是同名**死滑杆**(`onChanged: (_) {}`),`DanmakuSettingsPanel` 无挂载点 | overlay 注入四项 + 设置页/侧栏共用 `showDanmakuSettingsDialog` | 细粒度设置完全进不去 |
+| 主题模式 | 仅持久化,`WindowsApp` 恒 `ZishuTheme.dark()` | `ZishuTheme.modeOf` + theme/darkTheme/themeMode | 浅色不可用 |
+
+### 本轮落地
+- [x] 新增 `features/play/application/play_selection.dart`(`pickPlayQuality`/`pickStreamLine`,与 pure_live 同源)并接入 `play_provider`:**进房解析与恢复重解析两条路径都按线路格式偏好选线**。
+- [x] 新增 `danmaku_settings_dialog.dart`;`_DanmakuLayer` 注入 opacity/fontSize/speedFactor/displayAreaRatio(接线前是死控件);侧栏设置 tab 的死滑杆 → 「弹幕样式」按钮(`play-side-setting-danmaku-style`);设置页补回「弹幕样式」行(`settings-danmaku-style`)。
+- [x] 主题接线:`ZishuTheme.modeOf` + `WindowsApp` 浅/深/跟随系统;**默认改深色**(docs/implementation-plan「默认深色 #181818」「Windows 第一轮以深色高还原为验收基线」)—— 若随系统,浅色 Windows 上会整体翻白,偏离已验收基线。
+- [x] 测试:新增 `test/features/playback/play_selection_test.dart`(11 例,含「指定 flv 时优先 flv」);`side_panel_features_test` 加 A9b(入口开对话框 + provider→overlay 接线);`settings_test` 默认主题改深色断言。
+
+### 结论:其他平台播放**不需要**按斗鱼那样修
+- 斗鱼的问题是**接口选择**(选了 `preview=1` 的预览切片)+ 缺播放头;其余平台的播放地址来源与 pure_live 一致(huya/bilibili/douyin/youtube/yy/soop 的播放头已由 `9b8ec04` 补齐)。
+- 播放韧性内核(d09a701)、房间音量/睡眠定时(9fcc414)、窗口几何(d0a6106)均已由同仓另一轨补齐,与 pure_live 同源。
+
+### 遗留(未做,待裁决)
+- [ ] **弹幕屏蔽词/屏蔽用户**:pure_live 有 `danmaku_block_provider.dart` + `domain/danmaku_block.dart` + `domain/danmaku_message_gate.dart`(共 202 行)+ 面板「屏蔽」段 + session 两处调用;本仓三文件皆缺。
+- [ ] 顶栏 `nav-theme` 仍是死按钮(两个项目都一样):主题设置生效后建议接成 深色⇄浅色 切换,并按目标态改 label。
+- [ ] 设置页「streaming-server 地址」在 Windows 产品链路上无消费者(Web 端才用)。
+
+### 验证
+- `flutter analyze` 0 issue;App 全量 **341 passed / 0 failed**(此前抖动的 latency 本轮亦通过)。

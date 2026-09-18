@@ -17,6 +17,9 @@ import 'package:shared_preferences_platform_interface/in_memory_shared_preferenc
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:zishu_flutter/src/app/app_router.dart';
 import 'package:zishu_flutter/src/app/app_theme.dart';
+import 'package:zishu_flutter/src/features/danmaku/application/danmaku_settings_provider.dart';
+import 'package:zishu_flutter/src/features/danmaku/domain/danmaku_settings.dart';
+import 'package:zishu_flutter/src/features/danmaku/widgets/danmaku_overlay.dart';
 import 'package:zishu_flutter/src/features/follow/application/follow_provider.dart';
 import 'package:zishu_flutter/src/features/follow/application/settings_provider.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
@@ -318,6 +321,48 @@ void main() {
       final stored =
           await SharedPreferencesAsync().getString('zishu.settings.preferredLineFormat');
       expect(stored, 'hls');
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('A9b 弹幕样式接线', () {
+    testWidgets('侧栏「弹幕样式」打开对话框,细项改动直达 overlay', (tester) async {
+      final play = await _pumpPlay(tester);
+      final container = play.container;
+      await _awaitSettingsHydrated(tester, container);
+
+      // overlay 已挂载且默认不透明(出厂值)。
+      final overlay = find.byType(DanmakuOverlay);
+      expect(overlay, findsOneWidget);
+      expect(tester.widget<DanmakuOverlay>(overlay).opacity, closeTo(1.0, 1e-6));
+
+      // 侧栏设置 tab → 「弹幕样式」按钮(旧实现是两个写死的死滑杆)→ 对话框。
+      await tester.tap(find.byKey(const Key('play-side-tab-settings')));
+      await _pumpFrames(tester, 8);
+      await tester.ensureVisible(
+        find.byKey(const Key('play-side-setting-danmaku-style')),
+      );
+      await tester.tap(
+        find.byKey(const Key('play-side-setting-danmaku-style')),
+      );
+      await _pumpFrames(tester, 4);
+      expect(find.byKey(const Key('danmaku-settings-dialog')), findsOneWidget);
+
+      // provider 改值 → overlay 入参跟随(接线证明:此前只传 messages/enabled)。
+      await container.read(danmakuSettingsProvider.notifier).setOpacity(60);
+      await container.read(danmakuSettingsProvider.notifier).setFontSize(28);
+      await container.read(danmakuSettingsProvider.notifier).setSpeed(3);
+      await _pumpFrames(tester, 3);
+      final wired = tester.widget<DanmakuOverlay>(overlay);
+      expect(wired.opacity, closeTo(0.6, 1e-6));
+      expect(wired.fontSize, closeTo(28, 1e-6));
+      expect(wired.speedFactor, 3);
+
+      // 复位,避免污染同文件后续用例(单例 provider + 共享内存存储)。
+      await container
+          .read(danmakuSettingsProvider.notifier)
+          .setAll(const DanmakuSettings());
+      await _pumpFrames(tester, 2);
       expect(tester.takeException(), isNull);
     });
   });

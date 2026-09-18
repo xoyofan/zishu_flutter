@@ -16,6 +16,7 @@ import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 
 import '../../danmaku/application/danmaku_session_provider.dart';
+import '../../danmaku/widgets/danmaku_settings_dialog.dart';
 import '../../browse/application/browse_provider.dart';
 import '../../follow/application/follow_provider.dart';
 import '../../follow/application/follow_sort.dart';
@@ -1321,31 +1322,20 @@ class _SettingsPanel extends ConsumerWidget {
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
             ),
-            // 透明度/字号由 A3 另一轨负责,本轨不加控件。
+            // 细粒度弹幕设置(透明度/字号/速度/显示区域)统一走对话框:
+            // 此前这里是两个 `onChanged: (_) {}` 的死滑杆,现在与设置页共用
+            // 同一面板(见 danmaku_settings_dialog.dart)。
             _SettingRow(
-              label: '透明度',
-              trailing: SizedBox(
-                width: 98,
-                child: Slider(
-                  value: 0.82,
-                  onChanged: (_) {},
-                  min: 0.1,
-                  max: 1,
-                  activeColor: tokens.brand,
+              label: '弹幕样式',
+              trailing: TextButton(
+                key: const Key('play-side-setting-danmaku-style'),
+                onPressed: () => showDanmakuSettingsDialog(context),
+                style: TextButton.styleFrom(
+                  foregroundColor: tokens.brand,
+                  minimumSize: const Size(0, 28),
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
                 ),
-              ),
-            ),
-            _SettingRow(
-              label: '字号',
-              trailing: SizedBox(
-                width: 98,
-                child: Slider(
-                  value: 0.35,
-                  onChanged: (_) {},
-                  min: 0,
-                  max: 1,
-                  activeColor: tokens.brand,
-                ),
+                child: const Text('调整', style: TextStyle(fontSize: 11)),
               ),
             ),
           ],

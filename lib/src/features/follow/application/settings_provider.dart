@@ -21,17 +21,18 @@ enum ThemeModeChoice {
   /// 持久化用的稳定名字。
   String get storageName => name;
 
-  /// 从存储值恢复;未知值回退「跟随系统」。
+  /// 从存储值恢复;未知值回退「深色」(与 [SettingsState] 默认值同源)。
   static ThemeModeChoice fromName(String? name) => switch (name) {
     'light' => ThemeModeChoice.light,
-    'dark' => ThemeModeChoice.dark,
-    _ => ThemeModeChoice.system,
+    'system' => ThemeModeChoice.system,
+    _ => ThemeModeChoice.dark,
   };
 }
 
 /// 线路格式偏好。
 ///
-/// 播放侧生效由后续任务接入(见回报备注);本轨只负责设置状态 + 持久化 + 面板反映。
+/// 进房选线时生效(见 `features/play/application/play_selection.dart` 的
+/// [pickStreamLine]):auto 维持契约首选(HLS 优先),hls/flv 命中即以该格式为首选,未命中回退。
 enum PreferredLineFormat {
   auto('自动', 'auto'),
   hls('HLS', 'hls'),
@@ -208,7 +209,9 @@ class SettingsController extends Notifier<SettingsState> {
     // 启动时异步恢复;完成前 UI 先使用默认值(hydrated=false)。
     Future<void>.microtask(_restore);
     return const SettingsState(
-      themeMode: ThemeModeChoice.system,
+      // 桌面端产品基线为深色(见 docs/implementation-plan.md「默认深色背景 #181818」
+      // 「Windows 第一轮以深色高还原为验收基线」);浅色/跟随系统是显式选择项。
+      themeMode: ThemeModeChoice.dark,
       defaultQuality: '超清',
       danmakuEnabled: true,
       chatEnabled: true,

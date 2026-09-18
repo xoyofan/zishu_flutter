@@ -15,6 +15,7 @@ import '../../../shared/presentation/zishu_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../danmaku/application/danmaku_session_provider.dart'
     show DanmakuChatState, danmakuSessionProvider;
+import '../../danmaku/application/danmaku_settings_provider.dart';
 import '../../danmaku/application/danmaku_tail_forwarder.dart';
 import '../../danmaku/widgets/danmaku_overlay.dart';
 import '../application/play_provider.dart';
@@ -598,9 +599,17 @@ class _DanmakuLayerState extends ConsumerState<_DanmakuLayer> {
 
   @override
   Widget build(BuildContext context) {
+    // 细粒度设置(透明度/字号/速度/显示区域):在此注入 overlay。
+    // 总开关仍由 [widget.visible](danmakuEnabled)控制(enabled=visible)。
+    // 此前只传 messages/enabled,设置面板的滑杆全是死控件 —— 改这里即接通。
+    final settings = ref.watch(danmakuSettingsProvider);
     return DanmakuOverlay(
       messages: _controller.stream,
       enabled: widget.visible,
+      opacity: settings.opacity / 100,
+      fontSize: settings.fontSize.toDouble(),
+      speedFactor: settings.speed,
+      displayAreaRatio: settings.displayAreaRatio,
     );
   }
 }

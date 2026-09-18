@@ -14,6 +14,7 @@ import '../../../platforms/common/playback/playback_log.dart';
 import '../../../shared/application/browse_source.dart';
 import '../../../shared/application/providers.dart';
 import '../../follow/application/settings_provider.dart';
+import 'play_selection.dart';
 import 'room_volume_provider.dart';
 
 /// 播放器单例:app 生命周期内复用,不随页面销毁。
@@ -116,6 +117,12 @@ class PlayController extends AsyncNotifier<PlayState> {
         (settings) => settings.effectiveDefaultQuality(params.site),
       ),
     );
+    // 线路格式偏好(auto/hls/flv):设置页可改,进房/重解析时都按它选线。
+    final preferredFormat = ref.watch(
+      settingsProvider.select(
+        (settings) => settings.preferredLineFormat.value,
+      ),
+    );
     final preferredQuality = _qualityOverride ?? settingsQuality;
     final payload = await source.resolveRoom(
       site: params.site,
@@ -128,8 +135,8 @@ class PlayController extends AsyncNotifier<PlayState> {
       return state.value ?? PlayState(generation: generation);
     }
 
-    final quality = _pickQuality(payload, preferredQuality);
-    final line = quality?.preferredLine;
+    final quality = pickPlayQuality(payload, preferredQuality);
+    final line = pickStreamLine(quality, preferredFormat);
     final next = PlayState(
       payload: payload,
       quality: quality,
@@ -147,27 +154,15 @@ class PlayController extends AsyncNotifier<PlayState> {
     return next;
   }
 
-  /// 按默认画质挑档:命中同名 stream 则选中它,否则回退到首档。
-  ///
-  /// 判据用 `streams`(点得动的集合)而非 `availableQualities`,保证
-  /// 选中态必然能被 QualityLineBar 渲染成选中 chip;两集合不同源时
-  /// 也不会出现「选中了列表外的档」。找不到即回退 `streams.first`,
-  /// 不抛错、不提示。
-  static StreamQuality? _pickQuality(RoomPayload payload, String? name) {
-    if (payload.streams.isEmpty) return null;
-    if (name == null) return payload.streams.first;
-    for (final stream in payload.streams) {
-      if (stream.name == name) return stream;
-    }
-    return payload.streams.first;
-  }
-
   /// 切换画质:已预取线路则直接开流;懒取流的档位(空线路占位)以其为偏好
-  /// 重新解析,解析侧只取该档后自动开流。
+  /// 重新解析,解析侧只取该档后自动开流。线路选取遵循线路格式偏好。
   void switchQuality(StreamQuality quality) {
     final current = state.value;
     if (current == null || current.payload == null) return;
-    final line = quality.preferredLine;
+    final line = pickStreamLine(
+      quality,
+      ref.read(settingsProvider).preferredLineFormat.value,
+    );
     if (line == null) {
       _qualityOverride = quality.name;
       ref.invalidateSelf();
@@ -277,8 +272,11 @@ class PlayController extends AsyncNotifier<PlayState> {
         preferredQuality: quality?.name,
       );
       if (!ref.mounted) return const [];
-      final next = _pickQuality(payload, quality?.name);
-      final line = next?.preferredLine;
+      final next = pickPlayQuality(payload, quality?.name);
+      final line = pickStreamLine(
+        next,
+        ref.read(settingsProvider).preferredLineFormat.value,
+      );
       if (line == null) {
         PlaybackLog.write('resolve_fail', {
           'site': params.site,

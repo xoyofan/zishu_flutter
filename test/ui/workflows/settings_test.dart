@@ -218,14 +218,18 @@ void main() {
     // provider 状态:默认值且已完成恢复(空存储不覆盖默认)。
     final state = _readSettings(tester);
     expect(state.hydrated, isTrue);
-    expect(state.themeMode, ThemeModeChoice.system);
+    expect(
+      state.themeMode,
+      ThemeModeChoice.dark,
+      reason: '桌面端基线为深色(浅色/跟随系统为显式选择项)',
+    );
     expect(state.defaultQuality, '超清');
     expect(state.danmakuEnabled, isTrue);
     expect(state.serverUrl, SettingsState.defaultServerUrl);
 
     // 界面控件反映同一组默认值。
     expect(find.text('设置'), findsOneWidget);
-    expect(find.text('跟随系统'), findsOneWidget); // 主题下拉当前值。
+    expect(find.text('深色'), findsWidgets); // 主题下拉当前值(至少下拉内一处)。
     expect(find.text('超清'), findsOneWidget); // 画质下拉当前值。
     expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
     expect(
