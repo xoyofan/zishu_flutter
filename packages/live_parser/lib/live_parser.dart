@@ -5,6 +5,7 @@
 library;
 
 export 'src/catalog/cross_catalog.dart';
+export 'src/catalog/cross_hot_categories_generated.dart';
 export 'src/contracts/contracts.dart';
 export 'src/cross/cross_browse.dart';
 export 'src/http/danmaku_transport.dart';

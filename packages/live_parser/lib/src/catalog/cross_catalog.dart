@@ -8,6 +8,7 @@
 library;
 
 import '../models/models.dart';
+import 'cross_hot_categories_generated.dart';
 
 /// 全平台聚合站点的 site id。
 const String kCrossSiteId = 'all';
@@ -72,119 +73,101 @@ class CrossCategory {
   }
 }
 
-/// 默认跨平台分类表:与 SFVideoLive 全平台热门分类对齐,顺序即展示顺序。
-const List<CrossCategory> kDefaultCrossCategories = [
-  CrossCategory(
-    key: 'lol',
-    name: '英雄联盟',
-    aliases: ['英雄联盟', 'lol', 'leagueoflegends', '英雄联盟手游'],
-    siteCids: {'douyu': ['1'], 'huya': ['1']},
-    excludes: ['云顶', '下棋', '自走棋'],
-  ),
-  CrossCategory(
-    key: 'wangzhe',
-    name: '王者荣耀',
-    aliases: ['王者荣耀', '王者'],
-    contains: ['王者荣耀'],
-    siteCids: {'huya': ['2336']},
-  ),
-  CrossCategory(
-    key: 'heping',
-    name: '和平精英',
-    aliases: ['和平精英', '刺激战场', 'pubgmobile'],
-    contains: ['和平精英'],
-    siteCids: {'huya': ['3203']},
-  ),
-  CrossCategory(
-    key: 'csgo',
-    name: 'CS2',
-    aliases: ['cs2', 'csgo', '反恐精英', 'counterstrike'],
-    contains: ['反恐精英'],
-    siteCids: {'huya': ['862']},
-  ),
-  CrossCategory(
-    key: 'dota2',
-    name: 'DOTA2',
-    aliases: ['dota2', '刀塔2', '刀塔'],
-    contains: ['dota'],
-  ),
-  CrossCategory(
-    key: 'valorant',
-    name: '无畏契约',
-    aliases: ['无畏契约', 'valorant', '瓦罗兰特'],
-    contains: ['无畏契约'],
-    siteCids: {'huya': ['5937']},
-  ),
-  CrossCategory(
-    key: 'genshin',
-    name: '原神',
-    aliases: ['原神', 'genshinimpact', 'genshin'],
-    contains: ['原神'],
-  ),
-  CrossCategory(
-    key: 'minecraft',
-    name: '我的世界',
-    aliases: ['我的世界', 'minecraft'],
-    contains: ['我的世界'],
-  ),
-  CrossCategory(
-    key: 'crossfire',
-    name: '穿越火线',
-    aliases: ['穿越火线', 'crossfire'],
-    contains: ['穿越火线'],
-    siteCids: {'douyu': ['4'], 'huya': ['4']},
-  ),
-  CrossCategory(
-    key: 'chess',
-    name: '棋牌桌游',
-    aliases: ['云顶之弈', 'lol云顶之弈', '云顶', '自走棋', '棋牌', '炉石传说'],
-    contains: ['云顶', '自走棋', '棋牌', '炉石', '三国杀', '斗地主'],
-    siteCids: {'huya': ['5485', '393']},
-  ),
-  CrossCategory(
-    key: 'sports',
-    name: '体育',
-    aliases: ['体育', '足球', '篮球', 'nba'],
-    contains: ['体育', '足球', '篮球', 'nba', '斯诺克', '台球'],
-  ),
-  CrossCategory(
-    key: 'outdoor',
-    name: '户外',
-    aliases: ['户外', '户外直播'],
-    contains: ['户外'],
-  ),
-  CrossCategory(
-    key: 'food',
-    name: '美食',
-    aliases: ['美食', '吃播'],
-    contains: ['美食', '吃播'],
-  ),
-  CrossCategory(
-    key: 'chat',
-    name: '星秀娱乐',
-    aliases: ['星秀', '娱乐', '颜值', '聊天', '交友', '音乐', '唱跳'],
-    contains: ['星秀', '颜值', '聊天', '交友', '电台', '陪玩'],
-    siteCids: {'huya': ['1663']},
-  ),
-  CrossCategory(
-    key: 'acg',
-    name: '二次元',
-    aliases: ['二次元', 'acg', '动漫', '虚拟主播', '虚拟偶像'],
-    contains: ['二次元', '虚拟主播', '虚拟偶像', '动漫'],
-  ),
-];
+/// 默认跨平台分类表:键集 / 顺序 / 展示名均与 SFVideoLive 全平台热门分类对齐。
+///
+/// 数据真源是 `assets/config/cross-categories.json`(再上游对齐 web 的
+/// `HOT_CROSS_CATEGORY_KEYS`);匹配规则由生成脚本 `tool/sync_cross_map.dart`
+/// 产出到 `cross_hot_categories_generated.dart`(25 个 HOT key 的
+/// `{key, name, aliases, siteCids}`),本文件只在其上叠加**手工调优**的精细规则
+/// ([_kCrossHotOverlay]),避免把第二份手写表带进来。
+///
+/// 旧 cross key(如 `wangzhe`/`heping`/`csgo`)不再进索引,但经 [_kCrossKeyAliases]
+/// 归一后仍可被 [CrossCatalog.byKey] 命中,保证旧 deeplink / 本地缓存不静默失效。
+/// web 无对应物的 `minecraft/sports/food/chess/acg` 已移出索引(见报告说明)。
+///
+/// 注意此处是 `final` 而非 `const`:Dart 的常量表达式不支持 `for` 元素、
+/// 也不支持对 const Map 做下标取值,因此「生成数据 + overlay 合成」只能在
+/// 运行期做一次。为保住 `const CrossCatalog()` 这种零成本默认构造,
+/// [CrossCatalog] 用可空字段 + getter 承接本表(见其 `categories` getter)。
+final List<CrossCategory> kDefaultCrossCategories = List<CrossCategory>.unmodifiable([
+  for (final seed in kGeneratedHotCrossCategories)
+    CrossCategory(
+      key: seed.key,
+      name: seed.name,
+      aliases: seed.aliases,
+      siteCids: seed.siteCids,
+      contains: _kCrossHotOverlay[seed.key]?.contains ?? const [],
+      excludes: _kCrossHotOverlay[seed.key]?.excludes ?? const [],
+    ),
+]);
+
+/// 旧 cross key → 当前 key(兼容旧 deeplink / 本地缓存)。
+/// web 无对应物的 `minecraft/sports/food/chess/acg` 已不再进入全平台索引,
+/// 此处仅保留「旧名 → 新名」的归一能力(wangzhe→wzry 等),[CrossCatalog.byKey]
+/// 归一后仍可命中新 key。
+const Map<String, String> _kCrossKeyAliases = {
+  'wangzhe': 'wzry',
+  'heping': 'hpjy',
+  'csgo': 'cs2',
+  'genshin': 'ys',
+  'crossfire': 'cf',
+  'outdoor': 'huwai',
+  'chat': 'xingxiu',
+};
+
+String _resolveCrossKey(String key) => _kCrossKeyAliases[key] ?? key;
+
+/// 手工 overlay:在生成数据之上补充 / 覆盖精细匹配规则。
+///
+/// 原因:生成数据只含 JSON 直出的 `aliases` / `siteCids`,部分分类需要
+///  - [HotOverlay.excludes]:把同根但不同类的板块剔除(如 `lol` 的云顶之弈 / 自走棋);
+///  - [HotOverlay.contains]:补充名称子串匹配,覆盖「王者荣耀手游」这类带前后缀的名称。
+/// 这些是手工调优过、无法从 JSON 自动派生、且易误伤的规则,集中放此处便于审查与回滚。
+class HotOverlay {
+  const HotOverlay({this.contains = const [], this.excludes = const []});
+
+  final List<String> contains;
+  final List<String> excludes;
+}
+
+const Map<String, HotOverlay> _kCrossHotOverlay = {
+  // 云顶之弈 / 自走棋 与 LOL 同根,必须剔除,否则 lol 会把云顶的房间一并吞下。
+  'lol': HotOverlay(excludes: ['云顶', '下棋', '自走棋']),
+  // 以下 contains 还原旧手写表对「带前后缀名称」的子串匹配召回。
+  'wzry': HotOverlay(contains: ['王者荣耀']),
+  'hpjy': HotOverlay(contains: ['和平精英']),
+  'cs2': HotOverlay(contains: ['反恐精英']),
+  'ys': HotOverlay(contains: ['原神']),
+  'cf': HotOverlay(contains: ['穿越火线']),
+  'valorant': HotOverlay(contains: ['无畏契约']),
+  'huwai': HotOverlay(contains: ['户外']),
+  'xingxiu': HotOverlay(contains: ['星秀', '颜值', '聊天', '交友', '电台', '陪玩']),
+  'wudao': HotOverlay(contains: ['舞蹈']),
+};
 
 /// 跨平台分类目录:匹配与分类索引的单一入口。
 class CrossCatalog {
-  const CrossCatalog({this.categories = kDefaultCrossCategories});
+  const CrossCatalog({List<CrossCategory>? categories}) : _injected = categories;
 
-  final List<CrossCategory> categories;
+  /// 显式注入的分类表(测试/自定义场景);为 null 表示用默认表。
+  /// 字段名刻意与构造参数不同名,避免 `prefer_initializing_formals`
+  /// 建议一个 Dart 不允许的「私有命名初始化形参」。
+  final List<CrossCategory>? _injected;
+
+  /// 实际使用的分类表:未显式注入时用 [kDefaultCrossCategories]。
+  ///
+  /// 用 getter 而非构造参数默认值,是为了让 [kDefaultCrossCategories] 可以是
+  /// 运行期合成的 `final` 表(常量表达式无法表达合成逻辑),同时保住
+  /// `const CrossCatalog()` 这种零成本默认构造。
+  List<CrossCategory> get categories => _injected ?? kDefaultCrossCategories;
 
   /// 按 key 查找;未命中返回 null(宿主可回退到平台原生分类)。
+  /// 先经 [_kCrossKeyAliases] 归一旧 key(如 `wangzhe`→`wzry`),兼容旧 deeplink。
   CrossCategory? byKey(String? key) {
     if (key == null || key.isEmpty) return null;
+    final resolved = _resolveCrossKey(key);
     for (final category in categories) {
-      if (category.key == key) return category;
+      if (category.key == resolved) return category;
     }
     return null;
   }

@@ -165,7 +165,8 @@ void main() {
       expect(result.rooms.map((r) => r.roomId).toList(), ['d1', 'h1', 'b1']);
       expect(douyu.lastRequest?.cid, '1', reason: '斗鱼用 cid2=1 直接拉分类房间');
       expect(huya.lastRequest?.cid, '1');
-      expect(bilibili.lastRequest?.cid, isNull, reason: 'B站未登记 cid,走名称过滤');
+      expect(bilibili.lastRequest?.cid, '86',
+          reason: 'B站 cid 现由映射表派生(lol → bilibili 86),与斗鱼/虎牙同样精确拉取');
       expect(douyu.lastRequest?.limit, 60, reason: '分类模式放大单平台取量');
     });
 

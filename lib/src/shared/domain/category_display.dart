@@ -38,6 +38,15 @@ const Map<String, String> _kCrossKeyAliases = {
   'g201_2168_145': 'yanzhi',
   'ZJGAME': 'host',
   'zjgame': 'host',
+  // 旧 cross key → 当前 web key(parser 索引已对齐 web HOT 列表,旧名不再进站,
+  // 但旧 deeplink / 本地缓存仍按这些旧名访问,统一归一到新 key)。
+  'wangzhe': 'wzry',
+  'heping': 'hpjy',
+  'csgo': 'cs2',
+  'genshin': 'ys',
+  'crossfire': 'cf',
+  'outdoor': 'huwai',
+  'chat': 'xingxiu',
 };
 
 /// 各平台 cid 不同,跨平台 key 对应斗鱼 cid 需手工校正。
