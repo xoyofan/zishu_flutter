@@ -167,7 +167,22 @@ class DouyinBrowseRepository implements BrowseRepository {
       partition: cid,
       page: request.page,
       limit: request.limit,
+      partitionName: _cachedCategoryName(cid),
     );
+  }
+
+  /// 分类页房间 chip:从已缓存的分类树反查分区名。
+  ///
+  /// 只读缓存不触发网络 —— UI 流程必然先加载分类页;未命中时 chip 留空,
+  /// 与 web `roomCategoryLabel` 对未知 cid 的空值口径一致。列表接口
+  /// (`partition/detail/room/v2`)响应不带分区数据,只能靠请求侧补名。
+  String _cachedCategoryName(String cid) {
+    for (final group in _categoryCache ?? const <CategoryGroup>[]) {
+      for (final item in group.items) {
+        if (item.cid == cid) return item.name;
+      }
+    }
+    return '';
   }
 
   List<CategoryItem> _parseEntertainmentTabs(String html) {

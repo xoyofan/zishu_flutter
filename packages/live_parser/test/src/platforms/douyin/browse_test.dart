@@ -76,5 +76,29 @@ void main() {
       expect(request.url.queryParameters['partition_type'], '4');
       expect(request.url.queryParameters['offset'], '15');
     });
+
+    test('分类房间:chip 从分类缓存反查分区名(而非留空)', () async {
+      // 先加载分类树(缓存 cid→name),再拉分类页房间。
+      await browse.fetchCategories('douyin');
+      final result = await browse.fetchRooms(
+        const RoomListRequest(site: 'douyin', cid: '1010032', page: 1, limit: 15),
+      );
+
+      expect(result.rooms.first.category, '和平精英',
+          reason: '分类页房间 chip 应为当前分区名,不能空');
+    });
+
+    test('分类房间:未命中分类缓存时 chip 留空(不额外发请求)', () async {
+      final result = await browse.fetchRooms(
+        const RoomListRequest(site: 'douyin', cid: '999999', page: 1, limit: 15),
+      );
+
+      expect(result.rooms.first.category, isEmpty);
+      expect(
+        fake.requests.any((r) => r.url.path.contains('category')),
+        isFalse,
+        reason: '反查只读缓存,不得触发分类索引请求',
+      );
+    });
   });
 }
