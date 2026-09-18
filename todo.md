@@ -628,5 +628,31 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 - [x] golden:play_style_follow/recommend 重生成(+177B/+169B,仅徽章着色区域),同步截图目录;`test/ui/failures/` 失败产物已清理(门禁通过后不复存在)。
 
 ### 待办(本轮继续)
-- [ ] 沉浸态右缘侧抽屉(web `PlayImmersiveSideSheet` + 22% 热区唤起)。
+- [x] 沉浸态右缘侧抽屉(web `PlayImmersiveSideSheet`):已落地(7314805)。
 - [ ] backlog 其余项见上节「剩余 backlog」。
+
+## 2026-09-18 沉浸态右缘侧抽屉(对齐 web PlayImmersiveSideSheet,完成,7314805)
+
+**结论**:全屏/网页全屏下舞台右缘热区唤出侧栏,不离开沉浸态即可看聊天/关注/推荐。web 真源逐条对齐,9 例新测试 + 门禁全绿(503 passed / 0 failed),golden 零偏移。
+
+### web 真源规格(逐条落地)
+- [x] 热区分流:`PLAY_IMMERSIVE_TAP_ZONE = 2/3`(**此前 backlog 记「22% 热区」是笔误,真源是右缘 1/3**);沉浸态点击舞台不切播放/暂停(onPlayFrameClick 沉浸分支直接 return)。
+- [x] 抽屉形态:透明遮罩(点背景关)+ toggle 把手(0.82rem×40px 左圆角 chevron-right)+ 全高面板(左边框 + 投影 -6px 0 28px rgba(0,0,0,.55));动效 250ms fluent curve,translateX(100%)+opacity;关闭后不拦命中(v-show display:none → IgnorePointer)。
+- [x] 行为参数:进入沉浸 720ms 防抖锁;打开 3s 无交互自动收;面板内指针/滚动交互重置计时;任何途径关闭都唤醒控制条;退出沉浸随容器卸载。
+- [x] 内容复用 `PlaySidePanel`(同组件同弹幕会话),宽度沿用 `playSidePanelWidthFor` 分档(手机 min(268,88vw) ≈ web min(320px,88vw));payload 未就绪不挂载(sideReady)。
+
+### 实现要点(坑)
+- **`_VideoStage` 点击从 `onTap` 改 `onTapUp`**:沉浸分流需要舞台内相对坐标;常规态回调为空退化为切播放,既有测试不受影响。
+- **防抖锁用 bool+Timer 而非 DateTime 截止值**:widget 测试 pump 推进的是 FakeAsync 时钟,真实 `DateTime.now()` 不走,锁会永远解不开。
+- **测试断言口径**:sheet 沉浸期间**常驻挂载**(web v-show 同构),开/关必须断言 `AnimatedOpacity` 目标值,「findsNothing」只适用于退出沉浸卸载后的场景——首轮 6 例失败均源于把挂载当开合。
+
+### 验证
+- `flutter analyze` 0 issue;全量 **503 passed / 0 failed**(494+9);parser 297 passed / 10 skipped;golden 重生成零 diff(抽屉仅沉浸态,常规态渲染不变)。
+
+### backlog 剩余(未纳入本轮)
+- [ ] 搜索取数按 `type=anchors|rooms` 分流(SearchRequest 契约加参,parser 轨);
+- [ ] `DanmakuMessage` 契约补 id 字段(huya sMessageId/bilibili id_str),消除去重兜底 key 误杀;
+- [ ] 侧栏预览卡迁移共享 `CoverOfflineOverlay` + 四象限 chip(R3);
+- [ ] 关注页批量导入、首页非浏览平台直达表单、移动端目录抽屉、开播提醒消费 remindOn、房间统计回填、画质 rank 归一、跨平台聚合纳入抖音;
+- [ ] `AppTypography.* → context.textX` 机械替换(127 处/36 文件);桌面 1920x1080 布局对齐(播放页底部工具栏);
+- [ ] kuaishou/soop/yy 轻量状态刷新;真机 release 重建 + 截图复验(沉浸抽屉真机手感)。
