@@ -603,3 +603,12 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 - 复验通过:①首页真实数据渲染(斗鱼/虎牙/B站网格+平台角标+热度,解析器真连);②T2 搜索双档(默认房间档金色下划线/占位「搜索房间名·房间号·直播间链接」/「进入直播间」仅房间档,切主播档按钮消失);③T1 离线遮罩+T3 上次开播(关注页离线卡封面压暗、在线/离线区分明确,「上次开播 01-22 00:54」等文案条正常);④T5 控制条弹幕设置入口(播放页真实拉流「原画2K120·线路7 FLV」,弹幕样式对话框从控制条拉起,与侧栏同源,飘屏实时滚动)。
 - T4(token)/T6(huya/bilibili 去重)由单测契约覆盖(292 passed),无独立视觉项;斗鱼弹幕链路运行正常佐证 T6 未误伤。
 - 截图存档 `build/shots/w4_*.png`(未入库);进程与 ZishuLaunch 计划任务已清理。
+
+## 2026-09-18 抖音 chip 核查 + 弹幕徽章对齐(2 项落地)
+- **抖音「游戏分类」核查定案**(ecca125):实连抖音真数据探针 —— 分类树 7 组解析正确(无 web 端「游戏」错值);游戏房间详情 game_tag_name=具体名(绝地求生/三角洲行动);聊天房间全字段空。真 bug 是**分类页房间 chip 为空**(fetchRooms 不传 partitionName)→ 已修:从分类缓存反查 cid→name(只读不发网络,未命中留空对齐 web 空值口径)。
+- **弹幕徽章对齐**(3cb09b3):抖音/B站补齐契约三字段提取 + 聊天行徽章对齐 web 语义。
+  - 抖音字段号为**实连 WS dump User protobuf 实测**:userLevel=payGrade(#23).#6;粉丝团等级=#61/#21 badge 项 #8.#3(fansclub URL 判定);无团名 → badgeName 留空(web douyinTextFallback 同款)。
+  - bilibili 对齐 web 真源:粉丝牌新协议 info[0][15].user.medal 优先 → info[3] 老结构([0]=level/[1]=name);UL=info[4][0]。
+  - UI:粉丝牌「团名 级」/无团名圆盘 + 新增「Lv N」用户等级 pill。
+  - backlog:huya TARS 徽章需抓帧分析字段;徽章/等级图片分支待契约补 icon URL 字段。
+- 门禁:parser analyze 0、test **297/10skip**(292→297);app analyze 0、test **492/0**(491→492)。
