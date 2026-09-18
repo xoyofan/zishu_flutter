@@ -231,6 +231,30 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('平台分类浮层:单组 40 条(twitch fixture)封顶 5 列,不再摊成 13 列', (tester) async {
+    await _pump(tester, const Size(1440, 900));
+    await _hover(tester, const Key('platform-tab-twitch'));
+
+    final panel = find.byKey(const Key('platform-flyout-panel'));
+    expect(panel, findsOneWidget, reason: '应渲染 twitch 分类浮层');
+    final rect = tester.getRect(panel);
+
+    // 封顶 5 列:chrome + 5×67.2 ≈ 355.2(旧行为 40 条 → 13 列 ≈ 894.8)。
+    final expectedWidth = _kPlatformChrome + 5 * _kPlatformColumnWidth;
+    expect(rect.width, closeTo(expectedWidth, 2.0),
+        reason: '单组封顶 5 列,宽度 ≈ $expectedWidth');
+    expect(rect.width, lessThan(500),
+        reason: '用户口径:「twitch 的 hover 不要这么多列」');
+
+    // 实际列数 ≤ 5(Wrap 按宽度折行)。
+    final chips = find.byWidgetPredicate(
+      (w) => w.key is ValueKey<String> &&
+          (w.key as ValueKey<String>).value.startsWith('flyout-category-'),
+    );
+    expect(_columnLefts(tester, chips).length, lessThanOrEqualTo(5));
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('关注浮层不越出视口:窄视口下被夹在视口内', (tester) async {
     // 800px 宽(>=768 才有顶栏 hover 浮层):5 列理论宽 ≈243.3 本就在视口内,
     // 断言的是「两侧不出界」这条不变量(夹取逻辑在 _HoverOverlay)。

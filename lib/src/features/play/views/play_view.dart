@@ -515,8 +515,10 @@ class _RoomHeader extends StatelessWidget {
               color: brandColor.withValues(alpha: 0.92),
               borderRadius: AppRadius.allSm,
             ),
+            // 徽标显示当前房间分类(用户口径 2026-09-18:「左上角不是文字:直播
+            // 而是当前的分类」);无分类上下文时回退「直播」。
             child: Text(
-              '直播',
+              category.trim().isNotEmpty ? category : '直播',
               style: AppTypography.caption.copyWith(
                 color: onBrand,
                 fontWeight: FontWeight.w700,

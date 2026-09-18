@@ -661,14 +661,22 @@ class _ChatRowData {
   const _ChatRowData(
     this.user,
     this.message, {
+    required this.site,
     this.fanName,
     this.fanLevel,
+    this.badgeColorStart = 0,
+    this.badgeColorEnd = 0,
+    this.badgeColorBorder = 0,
     this.userLevel = 0,
     this.color = 0,
   });
 
   final String user;
   final String message;
+
+  /// 平台 id:徽章/等级 pill 的样式分档依据(对齐 web ChatFanBadge/
+  /// ChatUserLevelBadge 的 per-site 分支)。
+  final String site;
 
   /// 粉丝团名(抖音协议无团名 → null,徽章退化为纯等级圆盘,
   /// 对齐 web ChatFanBadge 的 douyinTextFallback 分支)。
@@ -677,18 +685,27 @@ class _ChatRowData {
   /// 粉丝团等级(null = 无粉丝牌)。
   final int? fanLevel;
 
+  /// 粉丝牌渐变起止色(B 站协议色;0 = 未提供)。
+  final int badgeColorStart;
+  final int badgeColorEnd;
+  final int badgeColorBorder;
+
   /// 用户等级(0 = 不渲染等级 pill)。
   final int userLevel;
 
   /// 正文颜色(0 = 默认)。当前侧栏按平台主题统一着色,保留字段以备后续。
   final int color;
 
-  factory _ChatRowData.fromMessage(DanmakuMessage message) {
+  factory _ChatRowData.fromMessage(DanmakuMessage message, String site) {
     return _ChatRowData(
       message.userName,
       message.text,
+      site: site,
       fanName: message.badgeLevel > 0 ? message.badgeName : null,
       fanLevel: message.badgeLevel > 0 ? message.badgeLevel : null,
+      badgeColorStart: message.badgeColorStart,
+      badgeColorEnd: message.badgeColorEnd,
+      badgeColorBorder: message.badgeColorBorder,
       userLevel: message.userLevel,
       color: message.color,
     );
@@ -840,7 +857,7 @@ class _ChatTabState extends ConsumerState<_ChatTab>
       );
     }
     final rows = [
-      for (final message in chat.messages) _ChatRowData.fromMessage(message),
+      for (final message in chat.messages) _ChatRowData.fromMessage(message, widget.site),
     ];
 
     _syncAutoScroll(rows.length);
@@ -1025,11 +1042,18 @@ class _ChatRow extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (fanBadge != null) ...[
-          _FanBadge(name: data.fanName, level: fanBadge),
+          _FanBadge(
+            site: data.site,
+            name: data.fanName,
+            level: fanBadge,
+            colorStart: data.badgeColorStart,
+            colorEnd: data.badgeColorEnd,
+            colorBorder: data.badgeColorBorder,
+          ),
           const SizedBox(width: 3),
         ],
         if (data.userLevel > 0) ...[
-          _UserLevelBadge(level: data.userLevel),
+          _UserLevelBadge(site: data.site, level: data.userLevel),
           const SizedBox(width: 3),
         ],
         Expanded(
@@ -1061,30 +1085,189 @@ class _ChatRow extends StatelessWidget {
   }
 }
 
-/// 粉丝牌(对齐 web ChatFanBadge 的语义结构):
-/// - 有团名(斗鱼/B 站/虎牙)→ 名牌 pill「团名 级」;
-/// - 无团名(抖音协议只有等级)→ 紧凑圆盘只显示等级数字。
-class _FanBadge extends StatelessWidget {
-  const _FanBadge({required this.level, this.name});
+/// 等级梯度色表(对齐 web badgeHelpers.ts LEVEL_TIER_GRADIENTS,90deg)。
+const _kTierGradients = <List<Color>>[
+  [Color(0xffdc2626), Color(0xfff97316)], // ≥最高档
+  [Color(0xffea580c), Color(0xfffbbf24)],
+  [Color(0xff7c3aed), Color(0xffa855f7)],
+  [Color(0xff2563eb), Color(0xff3b82f6)],
+  [Color(0xff059669), Color(0xff10b981)],
+];
+const _kTierFallback = <Color>[Color(0xff6b7280), Color(0xff9ca3af)];
 
+/// level → 梯度档(thresholds 从高到低,如斗鱼 [50,40,30,20,10])。
+List<Color> _levelTier(int level, List<int> thresholds) {
+  for (var i = 0; i < thresholds.length; i += 1) {
+    if (level >= thresholds[i]) return _kTierGradients[i];
+  }
+  return _kTierFallback;
+}
+
+/// 虎牙粉丝条 7 档渐变(对齐 web HUYA_BAR_GRADIENTS)。
+List<Color> _huyaBarGradient(int level) {
+  final identity = level <= 4
+      ? 1
+      : level <= 7
+      ? 2
+      : level <= 10
+      ? 3
+      : level <= 13
+      ? 4
+      : level <= 16
+      ? 11
+      : level <= 19
+      ? 12
+      : 13;
+  return switch (identity) {
+    1 => [Color(0xff1a7f37), Color(0xff3fb950)],
+    2 => [Color(0xff238636), Color(0xff56b362)],
+    3 => [Color(0xff0969da), Color(0xff58a6ff)],
+    4 => [Color(0xff218bff), Color(0xff79c0ff)],
+    11 => [Color(0xff8957e5), Color(0xffbc8cff)],
+    12 => [Color(0xffbf3989), Color(0xfff778ba)],
+    _ => [Color(0xff93385f), Color(0xffdb6da9)],
+  };
+}
+
+/// 粉丝牌(对齐 web ChatFanBadge 文字态各平台分支;图片分支待契约补 URL):
+/// - 斗鱼:胶囊「团名 级」,等级梯度底(web 斗鱼为官方图片牌,文字态用
+///   同族 LEVEL_TIER_GRADIENTS 档位配色兜底);
+/// - B 站:胶囊「团名 级」,协议渐变(to left, start→end)+ 描边,
+///   无协议色时同样梯度兜底;
+/// - 抖音:红色渐变圆盘只显示等级数字(douyinTextFallback 明确样式);
+/// - 虎牙:渐变条 = 等级圆盘(黑 22% 叠层) + 团名(HUYA_BAR_GRADIENTS 7 档);
+/// - 其他:品牌色 pill。
+class _FanBadge extends StatelessWidget {
+  const _FanBadge({
+    required this.site,
+    required this.level,
+    this.name,
+    this.colorStart = 0,
+    this.colorEnd = 0,
+    this.colorBorder = 0,
+  });
+
+  final String site;
   final int level;
   final String? name;
+  final int colorStart;
+  final int colorEnd;
+  final int colorBorder;
 
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
     final hasName = name != null && name!.trim().isNotEmpty;
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: hasName ? 4 : 0, vertical: 1),
-      constraints: hasName ? null : const BoxConstraints(minWidth: 16, minHeight: 14),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: tokens.brand.withValues(alpha: 0.18),
-        borderRadius: hasName ? AppRadius.allSm : BorderRadius.circular(7),
-        border: Border.all(color: tokens.brand.withValues(alpha: 0.6)),
-      ),
+    final label = hasName ? '${name!.trim()} $level' : '$level';
+
+    // 抖音:红色渐变圆盘(无团名,只显示等级数字)。
+    if (site == 'douyin') {
+      return _BadgeBox(
+        height: 14,
+        minWidth: 14,
+        radius: 999,
+        gradient: const [Color(0xfffe2c55), Color(0xffff6b35)],
+        child: Text(
+          '$level',
+          style: const TextStyle(
+            fontSize: 9,
+            height: 1.1,
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      );
+    }
+    // 虎牙:渐变条 = 圆盘等级 + 团名。
+    if (site == 'huya') {
+      return _BadgeBox(
+        height: 14,
+        radius: 2,
+        gradient: _huyaBarGradient(level),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              constraints: const BoxConstraints(minWidth: 12, minHeight: 12),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.22),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Text(
+                '$level',
+                style: const TextStyle(
+                  fontSize: 8.5,
+                  height: 1.1,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+            if (hasName) ...[
+              const SizedBox(width: 2),
+              Text(
+                name!.trim(),
+                style: const TextStyle(
+                  fontSize: 9,
+                  height: 1.1,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+    // B 站:协议渐变(to left, start→end)+ 描边;无协议色回落等级梯度。
+    if (site == 'bilibili') {
+      final hasProtocolColor = colorStart != 0 || colorEnd != 0;
+      return _BadgeBox(
+        height: 15,
+        radius: 999,
+        gradient: hasProtocolColor
+            ? [Color(colorStart), Color(colorEnd)]
+            : _levelTier(level, const [50, 40, 30, 20, 10]),
+        // web `linear-gradient(to left, start, end)`:start 在右、end 在左。
+        reverseGradient: hasProtocolColor,
+        border: colorBorder != 0 ? Color(colorBorder) : null,
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 9,
+            height: 1.1,
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      );
+    }
+    // 斗鱼:胶囊「团名 级」,等级梯度(文字态兜底)。
+    if (site == 'douyu') {
+      return _BadgeBox(
+        height: 15,
+        radius: 999,
+        gradient: _levelTier(level, const [50, 40, 30, 20, 10]),
+        child: Text(
+          label,
+          style: const TextStyle(
+            fontSize: 9,
+            height: 1.1,
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      );
+    }
+    // 其他平台:品牌色 pill(维持可见性,样式待该平台徽章对齐)。
+    return _BadgeBox(
+      height: 15,
+      radius: 999,
+      color: tokens.brand.withValues(alpha: 0.18),
+      border: tokens.brand.withValues(alpha: 0.6),
       child: Text(
-        hasName ? '$name $level' : '$level',
+        label,
         style: TextStyle(
           fontSize: 9,
           height: 1.1,
@@ -1096,24 +1279,43 @@ class _FanBadge extends StatelessWidget {
   }
 }
 
-/// 用户等级 pill(对齐 web ChatUserLevelBadge 的文字兜底分支:
-/// 「Lv N」;图片分支待契约补 icon URL 字段,见 backlog)。
+/// 用户等级 pill(对齐 web ChatUserLevelBadge 文字兜底):
+/// - 斗鱼/B 站:「LV N」+ 等级梯度([50,40,30,20,10]),方角;
+/// - 抖音:纯数字 + 固定紫粉渐变(#a855f7→#ec4899);
+/// - 虎牙:纯数字 + 梯度([80,60,40,20,10]);
+/// - 其他:「Lv N」+ 灰底(web default #6b7280)。
 class _UserLevelBadge extends StatelessWidget {
-  const _UserLevelBadge({required this.level});
+  const _UserLevelBadge({required this.site, required this.level});
 
+  final String site;
   final int level;
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.tokens;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-      decoration: BoxDecoration(
-        color: tokens.brand,
-        borderRadius: AppRadius.allSm,
-      ),
+    List<Color> colors;
+    var label = '';
+    if (site == 'douyu' || site == 'bilibili') {
+      label = 'LV$level';
+      colors = _levelTier(level, const [50, 40, 30, 20, 10]);
+    } else if (site == 'douyin') {
+      label = '$level';
+      colors = const [Color(0xffa855f7), Color(0xffec4899)];
+    } else if (site == 'huya') {
+      label = '$level';
+      colors = _levelTier(level, const [80, 60, 40, 20, 10]);
+    } else {
+      // 其他平台:web default 灰底「Lv N」。
+      label = 'Lv $level';
+      colors = const [Color(0xff6b7280)];
+    }
+    return _BadgeBox(
+      height: 16,
+      minWidth: 16,
+      radius: 2,
+      gradient: colors.length > 1 ? colors : null,
+      color: colors.length == 1 ? colors.first : null,
       child: Text(
-        'Lv $level',
+        label,
         style: const TextStyle(
           fontSize: 9,
           height: 1.1,
@@ -1121,6 +1323,53 @@ class _UserLevelBadge extends StatelessWidget {
           fontWeight: FontWeight.w700,
         ),
       ),
+    );
+  }
+}
+
+/// 徽章底座:固定行高 + 渐变/纯色/描边 + 居中内容。
+class _BadgeBox extends StatelessWidget {
+  const _BadgeBox({
+    required this.height,
+    required this.child,
+    this.minWidth = 0,
+    this.radius = 999,
+    this.gradient,
+    this.color,
+    this.border,
+    this.reverseGradient = false,
+  });
+
+  final double height;
+  final double minWidth;
+  final double radius;
+  final List<Color>? gradient;
+  final Color? color;
+  final Color? border;
+  final bool reverseGradient;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final decoration = BoxDecoration(
+      gradient: gradient == null
+          ? null
+          : LinearGradient(
+              begin: reverseGradient ? Alignment.centerLeft : Alignment.centerRight,
+              end: reverseGradient ? Alignment.centerRight : Alignment.centerLeft,
+              colors: gradient!,
+            ),
+      color: color,
+      borderRadius: BorderRadius.circular(radius),
+      border: border == null ? null : Border.all(color: border!, width: 1),
+    );
+    return Container(
+      height: height,
+      constraints: minWidth > 0 ? BoxConstraints(minWidth: minWidth) : null,
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      alignment: Alignment.center,
+      decoration: decoration,
+      child: child,
     );
   }
 }

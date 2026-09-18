@@ -415,9 +415,10 @@ void main() {
 
     expect(find.text('提督骑士团 12'), findsOneWidget,
         reason: '有团名时粉丝牌显示「团名 级」');
-    expect(find.text('10'), findsOneWidget, reason: '无团名(抖音)时仅显示等级圆盘');
-    expect(find.text('Lv 31'), findsOneWidget);
-    expect(find.text('Lv 18'), findsOneWidget);
+    expect(find.text('10'), findsOneWidget, reason: '无团名时仅显示等级(斗鱼胶囊兜底)');
+    // 斗鱼 UL 文字兜底对齐 web buildDouyuUserLevelStyle:「LV N」。
+    expect(find.text('LV31'), findsOneWidget);
+    expect(find.text('LV18'), findsOneWidget);
     expect(find.text('Lv 0'), findsNothing, reason: '无等级不渲染占位');
   });
 

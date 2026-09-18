@@ -267,7 +267,9 @@ const double _kFollowFlyoutChrome = 3.52 * 2 + 2;
 /// 关注浮层列数上限:对齐原实现的固定 7 列(web `.follow-hover-avatar-grid`)。
 const int _kFollowFlyoutMaxColumns = 7;
 
-/// 平台分类浮层布局:**列数 = 实际列数**(多分组时一组一列;单组时按条目数折行),
+/// 平台分类浮层布局:**列数 = 实际列数**(多分组时一组一列;单组时按条目数折行,
+/// 但**封顶 5 列** —— 用户口径 2026-09-18:「twitch 的 hover 不要这么多列」,
+/// 对齐 web 面板定高 22rem + auto-fill 的紧凑观感,溢出条目竖向滚动),
 /// 宽度 = 列宽×列数 + 内边距,再夹到 `[12rem, 56rem]`。
 ///
 /// 之前固定 560px 宽 + 看板内部再按内容排,条目少时右侧就留出整片空列 ——
@@ -283,8 +285,8 @@ const int _kFollowFlyoutMaxColumns = 7;
   final rawColumns = groups.length > 1
       // 多分组:横向分栏,一组一列(超出 maxColumns 时由看板横向滚动)。
       ? groups.length
-      // 单组:平铺网格,列数 = 实际条目数(按宽度上限折行)。
-      : (groups.isEmpty ? 1 : groups.first.items.length);
+      // 单组:平铺网格,列数 = 条目数封顶 5(twitch 40 条不再摊成 13 列)。
+      : (groups.isEmpty ? 1 : groups.first.items.length.clamp(1, 5));
   final columns = rawColumns.clamp(1, maxColumns);
   final width = (_kPlatformFlyoutChrome + columns * _kPlatformFlyoutColumnWidth)
       .clamp(_kFlyoutMinWidth, _kFlyoutMaxWidth);

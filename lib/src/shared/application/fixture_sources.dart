@@ -157,6 +157,24 @@ class FixtureBrowseSource implements BrowseSource {
 
   @override
   Future<CategoryResult> fetchCategories(String site) async {
+    // twitch:真实上游是单一大组(BrowsePage_AllDirectories,40 条 games),
+    // fixture 保持同构以驱动「单组列数封顶」的浮层布局路径(用户口径:
+    // twitch hover 不要这么多列);其余平台保持多组结构。
+    if (site == 'twitch') {
+      return CategoryResult(
+        site: site,
+        groups: [
+          CategoryGroup(
+            id: 'games',
+            name: '分类',
+            items: [
+              for (var i = 0; i < 40; i++)
+                CategoryItem(cid: 'g$i', name: 'Game $i', pic: ''),
+            ],
+          ),
+        ],
+      );
+    }
     const groups = [
       ('1', '网游竞技', [('1', '英雄联盟', 'LOL'), ('8', '无畏契约', 'VAL'), ('3203', '云顶之弈', 'TFT')]),
       ('2', '娱乐天地', [('2', '唱见', 'SING'), ('16', '颜值', 'FACE')]),
