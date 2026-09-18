@@ -563,3 +563,36 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 
 ### 其余 backlog
 - [ ] `kuaishou/soop/yy` 轻量状态刷新;`RoomSummary.lastLiveAt/fans/audience` + `FollowEntry` 离线卡「上次开播时间」;侧栏预览卡四象限 chip(R3);移动壳层 `nav-theme` 空 onTap;`AppTypography.* → context.textX` 机械替换(127 处/36 文件);桌面 1920x1080 布局对齐(播放页底部工具栏/全屏抽屉)。
+
+## 2026-09-18 对齐 SFVideoLive web:2 小时长任务(6 项全部落地)
+
+执行计划:`docs/plans/2026-09-18-web-alignment-2h.md`。子代理因上游 429 全部秒挂,按预定兜底转为主代理串行执行(非沙箱直调 flutter/git);每个任务独立 TDD(先红后绿)。
+
+### 落地项与 commit
+- [x] **T4 token 对齐真源**(ebd9b88):`AppColors.error` F56C6C→**E55050**(web theme.css `--danger`);动效 120/200→**150/250ms**、curve→`Cubic(0.16,1,0.3,1)`(web main.css:74,84,85);新增 token 契约测试(railWidth=52 防回归断言钉死,作废内部分档 28px 的错误说法)。
+- [x] **T5 控制条「飘屏弹幕设置」入口**(859e1a7):弹幕开关旁新增 `play-danmaku-settings`,复用侧栏同一份 `showDanmakuSettingsDialog`;**compact 归档**——实测 360/375/393dp 追加 48px 按钮会溢出(pagesOverflowMatrix 抓到 3 条 FAIL),窄屏仍可从侧栏进。
+- [x] **T2 搜索 主播/房间 双档**(821dd59):默认落「房间」档(对齐 web `syncDefaultTab`);占位文案/空态名词随档切换;「进入直播间」(`search-submit-room`)与房间号直达仅在房间档;`PlatformBrandCatalog` 新增 `supportsAnchorSearch/supportsRoomSearch`。**已知残留**:web 双档走服务端 `type=anchors|rooms` 分流,flutter `SearchRequest` 无 type 字段,两档共用混合查询,待契约补参。
+- [x] **T1 网格卡离线遮罩**(17bc4cf):共享 `CoverOfflineOverlay`(tokens.coverScrim=0xB8000000 ≈ web rgba(0,0,0,.72));置于角标之前复刻 web z2<z3 层级。**范围收窄**:原计划 LIVE/录播角标经真源核实不适用——web `hideLiveFrame` 默认 true 且 HomeView/CategoryRoomsView 均未开启(LIVE 只在 follow 域),且 flutter `RoomSummary` 无 liveState 字段。
+- [x] **T3 离线关注卡「上次开播」链路**(f90ee86):`FollowEntry` 新增 lastLiveAt/liveStartAt(云端契约已在 RemoteFollow 上,此前被丢弃);双向透传 + pullRemote 与本地取 max(防旧值抹新记录)+ 刷新「在播→离线」跃迁记录当下 + 本地落盘不丢;纯函数 `offlineLastLiveLabel` 接入卡片两处文案。7 例测试覆盖五段链路。
+- [x] **T6 huya/bilibili 弹幕重推去重**(081be1c):共享 `ChatDedup`(FIFO+cap,huya 800/bilibili 1200 对齐 web);契约暂无 id 字段先用 web 的 fallback 兜底 key(用户+正文),**已知残留**:同用户连发同文案会误滤,待契约补 id。
+- [x] **守则修复**(be77358):light_theme_test 静态守则抓到 `AppColors.background` 直引,改 `tokens.background`。
+- [x] **golden 重生成**(e161ee7):仅 2 张变,像素级定性 2567px(0.20%)全部集中在控制条窄条 y858-873 = T5 新增按钮,无结构性变化;其余 6 张逐字节不变。
+
+### 门禁实测(15:50)
+- App 全量 **491 passed / 0 failed**(基线 472 + 新增 19);`flutter analyze` **0 issue**。
+- parser `dart test` **292 passed / 10 skipped**(290→292);parser `dart analyze` **0 issue**。
+
+### 前提纠错(本轮调研价值,防将来照旧账返工)
+1. `tasks-ui-refine.md` T3「平台 badge 移右下」依据错误(web 真源左下),已作废;
+2. web `/time` 是解析耗时基准页,「时间线」在 web 不存在,`/timeline` 是 flutter 超集;
+3. 弹幕屏蔽词/屏蔽用户 web 侧也没有,移出 backlog;
+4. `ahead=0` 不能证明 worktree 内容已吸收(12 个遗留 worktree 有 staged 未提交改动),清理需先读 handoff + 逐 hunk 审阅,本轮未动;
+5. LIVE 角标在 web 浏览网格默认关闭(hideLiveFrame=true),勿再当成网格卡缺口。
+
+### 剩余 backlog(未纳入本轮 2h 窗口)
+- [ ] 沉浸态右缘侧抽屉(web `PlayImmersiveSideSheet` + 22% 热区唤起,中);
+- [ ] 搜索取数按 `type=anchors|rooms` 分流(需 SearchRequest 契约加参,parser 轨);
+- [ ] `DanmakuMessage` 契约补 id 字段(huya sMessageId/bilibili id_str),消除去重兜底 key 误杀;
+- [ ] 侧栏预览卡迁移到共享 `CoverOfflineOverlay`(play_room_grid.dart,本轮避让红线未动);
+- [ ] 首页非浏览平台直达表单、关注批量导入、移动端目录抽屉、开播提醒消费 remindOn、房间统计回填、画质 rank 归一、跨平台聚合纳入抖音(详见 `docs/plans/2026-09-18-web-alignment-2h.md` §6)。
+- [ ] 真机 release 重建 + 截图复验(需跳出沙箱,待用户授权)。
