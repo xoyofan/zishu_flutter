@@ -10,6 +10,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -104,7 +105,13 @@ class FollowEntryTile extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         if (room.category.isNotEmpty)
-                          _TileCategoryTag(label: room.category),
+                          _TileCategoryTag(
+                            label: displayCategoryName(
+                              room.site,
+                              room.category,
+                              room.cid,
+                            ),
+                          ),
                         const SizedBox(height: 3),
                         SizedBox(
                           width: _thumbWidth,
@@ -118,7 +125,11 @@ class FollowEntryTile extends StatelessWidget {
                                   cover: room.cover,
                                   fallbackLabel: room.category.isEmpty
                                       ? room.site
-                                      : room.category,
+                                      : displayCategoryName(
+                                          room.site,
+                                          room.category,
+                                          room.cid,
+                                        ),
                                   offline: !live,
                                   width: _thumbWidth,
                                   height: _thumbHeight,

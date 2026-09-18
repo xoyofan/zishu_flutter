@@ -20,6 +20,7 @@ import '../category_colors.dart';
 import '../design_tokens.dart';
 import '../platform_brands.dart';
 import '../zishu_tokens.dart';
+import '../../domain/category_display.dart';
 
 /// 角标所处角位。
 enum CoverCorner { topLeft, topRight, bottomLeft, bottomRight }
@@ -109,6 +110,8 @@ class CoverCategoryBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (category.trim().isEmpty) return const SizedBox.shrink();
+    // 跨平台统一中文分类名:命中映射用 canonical 名,否则回落平台原名。
+    final display = displayCategoryName(site, category, cid);
     final style = CategoryColors.opaqueFor(
       category: category,
       site: site,
@@ -119,7 +122,7 @@ class CoverCategoryBadge extends StatelessWidget {
       corner: corner,
       background: style.background,
       foreground: style.foreground,
-      child: Text(category, maxLines: 1, overflow: TextOverflow.ellipsis),
+      child: Text(display, maxLines: 1, overflow: TextOverflow.ellipsis),
     );
   }
 }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 
+import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/widgets/platform_icon.dart';
@@ -444,7 +445,8 @@ class _CategoryLeaf extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 1.92),
             child: Text(
-              name,
+              // 跨平台统一中文分类名:命中映射用 canonical 名,否则回落平台原名。
+              displayCategoryName(site, name, cid),
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:live_parser/live_parser.dart';
 
+import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -112,7 +113,10 @@ class _EntryCard extends StatelessWidget {
             SizedBox(
               width: TimelineTile._coverWidth,
               height: TimelineTile._coverHeight,
-              child: NetworkCover(url: room.cover, fallbackLabel: room.category),
+              child: NetworkCover(
+                url: room.cover,
+                fallbackLabel: displayCategoryName(room.site, room.category, room.cid),
+              ),
             ),
             Expanded(
               child: Padding(
@@ -143,7 +147,7 @@ class _EntryCard extends StatelessWidget {
                         ),
                         if (room.category.isNotEmpty) ...[
                           const SizedBox(width: AppSpacing.sm),
-                          CategoryChip(label: room.category),
+                          CategoryChip(label: room.category, site: room.site),
                         ],
                         const Spacer(),
                         Icon(Icons.visibility_rounded, size: 10, color: tokens.textSecondary),

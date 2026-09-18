@@ -20,6 +20,7 @@ import '../../danmaku/widgets/danmaku_settings_dialog.dart';
 import '../../follow/application/follow_provider.dart';
 import '../../follow/application/follow_sort.dart';
 import '../../follow/application/settings_provider.dart';
+import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -338,7 +339,9 @@ class _SideHeader extends StatelessWidget {
                       const SizedBox(width: AppSpacing.sm),
                       Flexible(
                         child: Text(
-                          category,
+                          // 播放页头部:中文优先;跨平台 key(如 huwai)→ 中文名;
+                          // 有原生中文则保留。
+                          formatCategoryHeaderLabel(payload?.site, category, payload?.cid),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
