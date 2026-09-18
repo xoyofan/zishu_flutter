@@ -2,20 +2,21 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:live_parser/live_parser.dart';
 
-import '../../../shared/presentation/category_colors.dart';
 import '../../../shared/presentation/design_tokens.dart';
-import '../../../shared/presentation/platform_brands.dart';
+import '../../../shared/presentation/widgets/cover_badges.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../../follow/widgets/follow_common.dart';
 
 /// SFVideoLive 风格房间卡片:16:9 封面 + 四象限徽章 + 标题/主播。
 ///
-/// 封面徽章采用参考实现的「四象限」模板,四枚角标**一律紧贴所在角、直角无圆角**
-/// (与关注/播放页共用 [FollowCoverTag]):
-/// - 左上:分类色块(配色见 [CategoryColors]);
-/// - 左下:平台 pill;
-/// - 右上:促销/画质标签;
-/// - 右下:热度。
+/// 四象限角位与配色**逐条对齐参考实现**(`RoomCard.vue` + `CoverBadges.vue`):
+/// - 左上:分类色块(`.room-card__badge--category`,内角 8px 圆角);
+/// - 右上:促销/画质标签(`.room-card__badge--promo`,琥珀底);
+/// - 右下:热度(`.cover-online-badge`,暗底白字);
+/// - 左下:平台 pill(`.room-card__foot-left`,仅跨站聚合显示)。
+///
+/// 四枚角标统一由 [CoverBadge] 家族渲染(圆角/内边距/字号一处定义),
+/// 与播放页侧栏预览卡共用,避免两处角位漂移。
 class RoomCard extends StatelessWidget {
   const RoomCard({
     super.key,
@@ -33,7 +34,6 @@ class RoomCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    final brand = PlatformBrandCatalog.byId(room.site);
     return Material(
       // 测试锚点:定位/点击具体房间卡片。
       key: Key('room-card-${room.site}-${room.roomId}'),
@@ -45,11 +45,7 @@ class RoomCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Cover(
-              room: room,
-              brandColor: brand?.color,
-              showPlatformBadge: showPlatformBadge,
-            ),
+            _Cover(room: room, showPlatformBadge: showPlatformBadge),
             Padding(
               padding: const EdgeInsets.all(AppSpacing.md),
               child: Column(
@@ -81,18 +77,14 @@ class RoomCard extends StatelessWidget {
 }
 
 class _Cover extends StatelessWidget {
-  const _Cover({
-    required this.room,
-    required this.brandColor,
-    required this.showPlatformBadge,
-  });
+  const _Cover({required this.room, required this.showPlatformBadge});
 
   final RoomSummary room;
-  final Color? brandColor;
   final bool showPlatformBadge;
 
   @override
   Widget build(BuildContext context) {
+    final live = room.online.trim().isNotEmpty;
     return AspectRatio(
       aspectRatio: 16 / 9,
       child: Stack(
@@ -102,7 +94,6 @@ class _Cover extends StatelessWidget {
             color: context.tokens.surfaceSoft,
             child: room.cover.isEmpty
                 ? _CoverPlaceholder(room: room)
-                // 深色遮罩用 background token 压暗,保持无裸色值。
                 : CachedNetworkImage(
                     imageUrl: room.cover,
                     fit: BoxFit.cover,
@@ -111,31 +102,52 @@ class _Cover extends StatelessWidget {
                     errorWidget: (_, _, _) => _CoverPlaceholder(room: room),
                   ),
           ),
-          // 左上:分类色块(配色取自 CategoryColors)。
-          if (room.category.isNotEmpty)
-            Positioned(
-              left: 0,
-              top: 0,
-              child: _CategoryBadge(category: room.category, site: room.site),
+          // 左上:分类色块。
+          Positioned(
+            left: 0,
+            top: 0,
+            child: CoverCategoryBadge(
+              // 测试锚点:按角位断言用(卡片各自子树内唯一,不与同页其它卡冲突)。
+              key: const Key('cover-badge-category'),
+              corner: CoverCorner.topLeft,
+              category: room.category,
+              site: room.site,
+              cid: room.cid,
             ),
-          // 左下:平台角标(单平台网格可关闭)。
-          if (showPlatformBadge)
-            Positioned(
-              left: 0,
-              bottom: 0,
-              child: _PlatformBadge(site: room.site, color: brandColor),
-            ),
+          ),
+          // 右上:促销/画质标签。
           if (room.promoTag != null)
             Positioned(
               right: 0,
               top: 0,
-              child: _PromoTag(tag: room.promoTag!),
+              child: CoverPromoBadge(
+                key: const Key('cover-badge-promo'),
+                corner: CoverCorner.topRight,
+                text: room.promoTag!,
+              ),
             ),
-          Positioned(
-            right: 0,
-            bottom: 0,
-            child: _OnlineTag(online: room.online),
-          ),
+          // 右下:热度(未开播不显示)。
+          if (live)
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: CoverOnlineBadge(
+                key: const Key('cover-badge-online'),
+                corner: CoverCorner.bottomRight,
+                online: room.online,
+              ),
+            ),
+          // 左下:平台 pill(单平台网格可关闭)。
+          if (showPlatformBadge)
+            Positioned(
+              left: 0,
+              bottom: 0,
+              child: CoverPlatformBadge(
+                key: const Key('cover-badge-platform'),
+                corner: CoverCorner.bottomLeft,
+                site: room.site,
+              ),
+            ),
         ],
       ),
     );
@@ -155,93 +167,6 @@ class _CoverPlaceholder extends StatelessWidget {
         child: Text(
           room.category.isEmpty ? room.site : room.category,
           style: AppTypography.bodySecondary,
-        ),
-      ),
-    );
-  }
-}
-
-/// 左下平台角标:直角色块(与关注/播放页角标同款)。
-class _PlatformBadge extends StatelessWidget {
-  const _PlatformBadge({required this.site, required this.color});
-
-  final String site;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = context.tokens;
-    final brand = PlatformBrandCatalog.byId(site);
-    final label = brand?.name ?? site;
-    return FollowCoverTag(
-      accent: color ?? tokens.brand,
-      child: Text(
-        label,
-        // 平台色底上用深色 token 文字保证可读。
-        style: AppTypography.caption.copyWith(
-          color: tokens.surfaceSoft,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
-/// 左上分类角标:底色/文字色由 [CategoryColors] 计算,未命中时退化为空。
-class _CategoryBadge extends StatelessWidget {
-  const _CategoryBadge({required this.category, required this.site});
-
-  final String category;
-  final String site;
-
-  @override
-  Widget build(BuildContext context) {
-    final style = CategoryColors.opaqueFor(category: category, site: site);
-    if (style == null) return const SizedBox.shrink();
-    return FollowCoverTag(
-      accent: style.background,
-      child: Text(
-        category,
-        style: AppTypography.caption.copyWith(
-          color: style.foreground,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-}
-
-class _OnlineTag extends StatelessWidget {
-  const _OnlineTag({required this.online});
-
-  final String online;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = context.tokens;
-    return FollowCoverTag(
-      child: Text(
-        online,
-        style: AppTypography.caption.copyWith(color: tokens.textPrimary),
-      ),
-    );
-  }
-}
-
-class _PromoTag extends StatelessWidget {
-  const _PromoTag({required this.tag});
-
-  final String tag;
-
-  @override
-  Widget build(BuildContext context) {
-    return FollowCoverTag(
-      accent: context.tokens.liveBadge,
-      child: Text(
-        tag,
-        style: AppTypography.caption.copyWith(
-          color: context.tokens.surfaceSoft,
-          fontWeight: FontWeight.w600,
         ),
       ),
     );

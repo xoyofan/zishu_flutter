@@ -8,6 +8,7 @@ import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../application/browse_provider.dart';
+import '../widgets/browse_sidebar.dart';
 import '../widgets/room_grid.dart';
 
 /// 分类页:左侧大类分组 tabs + 右侧子分类网格与房间列表。
@@ -78,31 +79,47 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
   }
 
   /// 分组 tabs + 右侧(子分类网格 + 房间网格)的主内容。
+  ///
+  /// 桌面/平板(>=768)左侧同样常驻目录栏 [BrowseSidebar] —— 对齐参考实现:
+  /// `CategoryIndexView.vue` / `CategoryRoomsView.vue` 都包在 `AppLayout` 里,
+  /// 而 `AppLayout.usesDrawerLayout` 含 category-index / category-rooms,即
+  /// 分类页与首页共用同一条抽屉栏。此前本仓只在 HomeView 挂侧栏,分类页缺。
   Widget _content(BuildContext context, CategoryResult result) {
     final tokens = context.tokens;
     final group = _pickGroup(result.groups);
     final item = _pickItem(group);
+    final isPhone = MediaQuery.sizeOf(context).width < AppBreakpoints.phone;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _GroupTabs(
-          groups: result.groups,
-          selectedGroupId: group.id,
-          isAll: widget.site == 'all',
-          width: _tabsWidth,
-          onGroupTap: (target) => setState(() {
-            _selectedGroupId = target.id;
-            _selectedCid = null;
-          }),
-        ),
-        Container(width: 1, color: tokens.border),
+        if (!isPhone) BrowseSidebar(site: widget.site),
+        if (!isPhone) Container(width: 1, color: tokens.border),
         Expanded(
-          child: _CategoryPanel(
-            site: widget.site,
-            group: group,
-            selectedItem: item,
-            brandColor: _brandColor(context),
-            onItemTap: (target) => setState(() => _selectedCid = target.cid),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _GroupTabs(
+                groups: result.groups,
+                selectedGroupId: group.id,
+                isAll: widget.site == 'all',
+                width: _tabsWidth,
+                onGroupTap: (target) => setState(() {
+                  _selectedGroupId = target.id;
+                  _selectedCid = null;
+                }),
+              ),
+              Container(width: 1, color: tokens.border),
+              Expanded(
+                child: _CategoryPanel(
+                  site: widget.site,
+                  group: group,
+                  selectedItem: item,
+                  brandColor: _brandColor(context),
+                  onItemTap: (target) =>
+                      setState(() => _selectedCid = target.cid),
+                ),
+              ),
+            ],
           ),
         ),
       ],

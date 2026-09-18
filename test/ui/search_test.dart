@@ -1,5 +1,6 @@
-/// 搜索页(SearchView)widget test:输入防抖后的结果行与直达项验证。
-/// 无窗口后台验证:VM 中直接 pump WindowsApp,fixture 搜索源走默认 provider。
+/// 搜索弹框(SearchView 宿主于对话框)widget test:输入防抖后的结果行与直达项验证。
+/// 无窗口后台验证:VM 中直接 pump WindowsApp,点顶栏 nav-search 拉起弹框,
+/// fixture 搜索源走默认 provider(搜索已从独立页面改为全局弹框,对齐 web)。
 library;
 
 import 'package:flutter/material.dart';
@@ -20,12 +21,13 @@ void main() {
     return ProviderScope.containerOf(element).read(routerProvider);
   }
 
-  /// 进入搜索页并推进两帧。
+  /// 拉起搜索弹框并推进两帧(搜索的现行入口是顶栏 nav-search,不再是路由)。
   Future<GoRouter> openSearch(WidgetTester tester) async {
     final router = await pumpApp(tester);
-    router.go('/search');
+    await tester.tap(find.byKey(const Key('nav-search')));
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byKey(const Key('search-dialog')), findsOneWidget);
     return router;
   }
 

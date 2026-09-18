@@ -8,6 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:zishu_flutter/src/app/app_router.dart';
 import 'package:zishu_flutter/src/apps/windows/windows_app.dart';
+import 'package:zishu_flutter/src/features/browse/widgets/browse_sidebar.dart';
 
 void main() {
   /// pump WindowsApp 并返回 router,便于导航到目标路由。
@@ -31,6 +32,39 @@ void main() {
         )
         .length;
   }
+
+  testWidgets('分类页桌面常驻目录栏:>=768 出现 BrowseSidebar,手机(<768)不出现', (tester) async {
+    // 参考实现:CategoryIndexView/CategoryRoomsView 都包在 AppLayout 里,而
+    // AppLayout.usesDrawerLayout 含 category-index/category-rooms —— 分类页与
+    // 首页共用同一条左侧抽屉栏(drawerEligible 只在播放页关闭)。
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    tester.view.devicePixelRatio = 1.0;
+
+    tester.view.physicalSize = const Size(1280, 900);
+    var router = await pumpApp(tester);
+    router.go('/douyu/category');
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(
+      find.byType(BrowseSidebar),
+      findsOneWidget,
+      reason: '桌面分类页应挂左侧目录栏',
+    );
+    expect(tester.takeException(), isNull);
+
+    tester.view.physicalSize = const Size(390, 844);
+    router = await pumpApp(tester);
+    router.go('/douyu/category');
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(
+      find.byType(BrowseSidebar),
+      findsNothing,
+      reason: '手机端平台切换由平台条承担,不挂目录栏',
+    );
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('/douyu/category:分组 tab 锚点 >0,点击分组后子分类 tile 出现',
       (tester) async {

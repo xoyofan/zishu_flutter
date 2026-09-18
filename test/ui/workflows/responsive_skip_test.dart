@@ -197,7 +197,27 @@ void main() {
         expect(center.dy, lessThanOrEqualTo(size.height), reason: '$id 超出视口底部');
       }
 
-      for (final label in const ['首页', '关注', '我的', '分类', '搜索', '主题']) {
+      // 「主题」项文案随当前生效主题显示**目标态**(深色时显示「浅色」),
+      // 与顶栏 nav-theme 同源;文案是变的,故按 key 校验位置与文案集合。
+      final navTheme = find.byKey(const Key('nav-theme'));
+      expect(navTheme, findsOneWidget, reason: '底部导航缺少主题入口');
+      expect(
+        tester.getCenter(navTheme).dy,
+        greaterThan(bandTop),
+        reason: 'nav-theme 不在底部导航带内',
+      );
+      expect(
+        find.descendant(
+          of: navTheme,
+          matching: find.byWidgetPredicate(
+            (w) => w is Text && (w.data == '浅色' || w.data == '深色'),
+          ),
+        ),
+        findsOneWidget,
+        reason: '主题项文案应为「浅色」或「深色」(点击后切到的目标)',
+      );
+
+      for (final label in const ['首页', '关注', '我的', '分类', '搜索']) {
         final item = find.text(label);
         expect(item, findsOneWidget, reason: '底部导航缺少「$label」入口');
         final center = tester.getCenter(item);

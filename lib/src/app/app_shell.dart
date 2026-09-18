@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 
+import '../features/search/widgets/search_dialog.dart';
 import '../features/browse/application/browse_provider.dart';
 import '../features/browse/application/my_category_provider.dart';
 import '../features/follow/application/follow_provider.dart';
@@ -553,7 +554,8 @@ class _TopNavTools extends StatelessWidget {
           icon: Icons.search_rounded,
           label: '搜索',
           tooltip: '搜索进房',
-          route: '/search',
+          // 对齐 web:搜索是全局弹框(`SearchDialog.vue`),不再切页面。
+          onTap: (_) => openSearchDialog(context),
           showLabel: showLabels,
         ),
         _NavAction(
@@ -581,10 +583,10 @@ class _TopNavTools extends StatelessWidget {
 
 /// 顶栏主题切换:在深色 ⇄ 浅色之间切换(写 `settingsProvider.setThemeMode`)。
 ///
-/// 显式 dark/light 直接取设置值;system 时按 MediaQuery 平台亮度解析当前实际
-/// 生效的主题,点击后切到与当前相反的显式值(不再回到 system)。
-/// label 与 icon 表示「点击后切换到的目标」:当前生效为深色 → 显示「浅色」
-/// + [Icons.light_mode_outlined];当前生效为浅色 → 显示「深色」+ [Icons.dark_mode_outlined]。
+/// 按钮文案与图标表示「点击后要切到的目标」:当前生效为深色 → 显示「浅色」+
+/// [Icons.light_mode_outlined](与 web `NavSidebar.vue` 的 `themeMode === 'dark'
+/// ? '浅色' : '深色'` 一致)。判定/切换本身由 [_isDarkTheme] / [_toggleTheme]
+/// 单一实现提供,移动底栏的「主题」项复用同一份。
 class _NavThemeAction extends ConsumerWidget {
   const _NavThemeAction({required this.showLabel});
 
@@ -592,23 +594,38 @@ class _NavThemeAction extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = switch (ref.watch(settingsProvider).themeMode) {
-      ThemeModeChoice.dark => true,
-      ThemeModeChoice.light => false,
-      ThemeModeChoice.system =>
-        MediaQuery.platformBrightnessOf(context) == Brightness.dark,
-    };
+    final isDark = _isDarkTheme(context, ref);
     return _NavAction(
       key: const Key('nav-theme'),
       icon: isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
       label: isDark ? '浅色' : '深色',
       tooltip: '切换主题',
       showLabel: showLabel,
-      onTap: (_) => ref
-          .read(settingsProvider.notifier)
-          .setThemeMode(isDark ? ThemeModeChoice.light : ThemeModeChoice.dark),
+      onTap: (_) => _toggleTheme(context, ref),
     );
   }
+}
+
+/// 当前**生效**主题是否为深色。
+///
+/// 显式 dark/light 直接取设置值;system 按平台亮度解析 —— 与 MaterialApp 的
+/// `themeMode` 解析口径一致,保证按钮文案与真实观感不拧。
+bool _isDarkTheme(BuildContext context, WidgetRef ref) {
+  return switch (ref.watch(settingsProvider).themeMode) {
+    ThemeModeChoice.dark => true,
+    ThemeModeChoice.light => false,
+    ThemeModeChoice.system =>
+      MediaQuery.platformBrightnessOf(context) == Brightness.dark,
+  };
+}
+
+/// 深色 ⇄ 浅色 切换(顶栏与移动底栏共用,避免两处各写一份漂移)。
+void _toggleTheme(BuildContext context, WidgetRef ref) {
+  ref
+      .read(settingsProvider.notifier)
+      .setThemeMode(
+        _isDarkTheme(context, ref) ? ThemeModeChoice.light : ThemeModeChoice.dark,
+      );
 }
 
 /// 顶栏右侧账号区:对齐 SFVideoLive `NavSidebar.vue` 登录态的头像 + 用户名。
@@ -687,9 +704,33 @@ class _UserAvatar extends ConsumerWidget {
         onSelected: (action) {
           if (action == 'logout') {
             ref.read(authProvider.notifier).logout();
+            return;
+          }
+          if (action == 'credentials') {
+            // 用户/平台凭证页:保存 YouTube / 小红书 等平台的登录态。
+            // 用 push(不重置历史栈):凭证页返回后仍能回到原页面。
+            context.push('/user');
           }
         },
         itemBuilder: (_) => [
+          const PopupMenuItem(
+            value: 'credentials',
+            height: 34,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.key_outlined,
+                  size: 15,
+                  color: AppColors.textSecondary,
+                ),
+                SizedBox(width: 8),
+                Text(
+                  '平台凭证',
+                  style: TextStyle(fontSize: 12, color: AppColors.textPrimary),
+                ),
+              ],
+            ),
+          ),
           const PopupMenuItem(
             value: 'logout',
             height: 34,
@@ -1222,7 +1263,8 @@ class _BottomNav extends StatelessWidget {
             key: const Key('nav-search'),
             leading: _bottomIcon(Icons.search_rounded, false),
             label: '搜索',
-            route: '/search',
+            // 与顶栏同源:搜索是全局弹框,不切页面。
+            onTap: () => openSearchDialog(context),
             active: false,
           ),
           _BottomItem(
@@ -1232,13 +1274,7 @@ class _BottomNav extends StatelessWidget {
             route: '/time',
             active: currentSite == 'time',
           ),
-          _BottomItem(
-            key: const Key('nav-theme'),
-            leading: _bottomIcon(Icons.dark_mode_outlined, false),
-            label: '主题',
-            onTap: () {},
-            active: false,
-          ),
+          const _BottomThemeItem(),
           _BottomItem(
             key: const Key('nav-settings'),
             leading: _bottomIcon(
@@ -1261,6 +1297,29 @@ Widget _bottomIcon(IconData icon, bool active) => Icon(
   size: 20,
   color: active ? AppColors.brand : AppColors.textSecondary,
 );
+
+/// 移动底栏「主题」项:与顶栏 `nav-theme` 同一份判定与切换逻辑。
+///
+/// 文案同样表示「点击后要切到的目标」,与顶栏保持一致(旧实现是 `onTap: () {}`
+/// 的空按钮 —— 移动端主题切换一直没接上)。
+class _BottomThemeItem extends ConsumerWidget {
+  const _BottomThemeItem();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = _isDarkTheme(context, ref);
+    return _BottomItem(
+      key: const Key('nav-theme'),
+      leading: _bottomIcon(
+        isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+        false,
+      ),
+      label: isDark ? '浅色' : '深色',
+      onTap: () => _toggleTheme(context, ref),
+      active: false,
+    );
+  }
+}
 
 class _BottomItem extends StatelessWidget {
   const _BottomItem({

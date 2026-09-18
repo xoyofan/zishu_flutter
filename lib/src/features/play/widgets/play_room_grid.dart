@@ -4,8 +4,12 @@
 /// `FollowRoomPreviewView`(sidebar + compact)渲染封面网格,而不是横排缩略图行。
 /// 本文件把这两种呈现抽成共用组件,供 [_FollowPanel] 与 [_RecommendPanel] 切换。
 ///
-/// 卡片结构(对齐 `.follow-preview-item`):
-/// - 16:9 封面:右上平台角标、右下在线角标、左上特别关注 ★,离线压暗 + 底部「未开播」条;
+/// 卡片结构(对齐 `.follow-preview-item` + `FollowRoomPreviewView.vue`):
+/// - 16:9 封面四象限:左上**平台**徽章(`.platform-cover-badge`,贴左上、内角 8px)、
+///   右上**分类**徽章(`.follow-preview-cat`)、右下**热度**(`.cover-online-badge`)、
+///   左下**特别关注 ★**(本仓特有能力:参考实现的侧栏卡用整卡背景着色标超关,
+///   不占角标位,故本仓占用唯一空置的左下角);
+/// - 离线:整封面压暗 + 居中「未开播」(web `.follow-preview-offline`);
 /// - 封面下方:主播名(单行省略)→ 标题(单行省略,次级色)。
 ///
 /// 另有 [PlayRoomList] 紧凑列表视图(纯文字两行,无缩略图),供侧栏切换。
@@ -17,7 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:live_parser/live_parser.dart';
 
 import '../../../shared/presentation/design_tokens.dart';
-import '../../../shared/presentation/platform_brands.dart';
+import '../../../shared/presentation/widgets/cover_badges.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../../follow/widgets/follow_common.dart';
 
@@ -112,7 +116,6 @@ class PlayRoomCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    final brand = PlatformBrandCatalog.byId(room.site);
     return Material(
       color: tokens.surface,
       borderRadius: AppRadius.allSm,
@@ -133,12 +136,48 @@ class PlayRoomCard extends StatelessWidget {
                         room.category.isEmpty ? room.site : room.category,
                     offline: !_live,
                   ),
-                  // 左上:特别关注 ★(角标一律贴角、直角无圆角)。
+                  // 左上:平台徽章(web `.platform-cover-badge` 贴左上)。
+                  Positioned(
+                    left: 0,
+                    top: 0,
+                    child: CoverPlatformBadge(
+                      key: const Key('cover-badge-platform'),
+                      corner: CoverCorner.topLeft,
+                      site: room.site,
+                    ),
+                  ),
+                  // 右上:分类徽章(web `.follow-preview-cat` 贴右上)。
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    child: CoverCategoryBadge(
+                      key: const Key('cover-badge-category'),
+                      corner: CoverCorner.topRight,
+                      category: room.category,
+                      site: room.site,
+                      cid: room.cid,
+                    ),
+                  ),
+                  // 右下:热度。
+                  if (_live)
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: CoverOnlineBadge(
+                        key: const Key('cover-badge-online'),
+                        corner: CoverCorner.bottomRight,
+                        online: room.online,
+                      ),
+                    ),
+                  // 左下:特别关注 ★(本仓特有能力,占唯一空置的左下角)。
                   if (isSpecial)
                     Positioned(
                       left: 0,
-                      top: 0,
-                      child: FollowCoverTag(
+                      bottom: 0,
+                      child: CoverBadge(
+                        key: const Key('cover-badge-special'),
+                        corner: CoverCorner.bottomLeft,
+                        background: tokens.coverScrim,
                         child: Icon(
                           Icons.star_rounded,
                           size: 11,
@@ -146,61 +185,20 @@ class PlayRoomCard extends StatelessWidget {
                         ),
                       ),
                     ),
-                  // 右上:平台角标。
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: FollowCoverTag(
-                      accent: brand?.color,
-                      child: Text(
-                        brand?.name ?? room.site,
-                        style: AppTypography.caption.copyWith(
-                          fontSize: 9.5,
-                          color: tokens.surfaceSoft,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ),
-                  // 右下:在线人数。
-                  if (_live)
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: FollowCoverTag(
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.people_alt_rounded,
-                                size: 9, color: tokens.liveBadge),
-                            const SizedBox(width: 2),
-                            Text(
-                              room.online,
-                              style: AppTypography.caption.copyWith(
-                                fontSize: 9.5,
-                                color: tokens.textPrimary,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  // 离线:底部「未开播」暗条。
+                  // 离线:整封面压暗 + 居中「未开播」(web `.follow-preview-offline`)。
                   if (!_live)
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        color: tokens.textPrimary.withValues(alpha: 0.6),
-                        alignment: Alignment.center,
-                        child: Text(
-                          '未开播',
-                          style: AppTypography.caption.copyWith(
-                            fontSize: 9.5,
-                            color: tokens.surface,
-                            fontWeight: FontWeight.w600,
+                    Positioned.fill(
+                      key: const Key('cover-offline-overlay'),
+                      child: ColoredBox(
+                        color: tokens.coverScrim.withValues(alpha: 0.55),
+                        child: Center(
+                          child: Text(
+                            '未开播',
+                            style: AppTypography.caption.copyWith(
+                              fontSize: 10.5,
+                              color: tokens.coverScrimText,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ),

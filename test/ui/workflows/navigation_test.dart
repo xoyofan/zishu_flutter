@@ -19,6 +19,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -186,11 +187,36 @@ void main() {
     expect(find.text('主题模式'), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    // 5. /search 搜索页:搜索框锚点 + 空态引导文案。
+    // 5. /search 深链兼容:搜索已改为全局弹框,该路径重定向回首页。
     await goAndStabilize(tester, router, '/search');
-    expectTopNavAnchors('/search');
+    expect(
+      router.routeInformationProvider.value.uri.path,
+      '/all',
+      reason: '/search 应重定向回 /all(搜索改弹框后不再有搜索页)',
+    );
+    expectTopNavAnchors('/all');
+    expect(find.byKey(const Key('search-input')), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    // 5b. 搜索弹框:点顶栏 nav-search 拉起,关框后仍在原页。
+    await tester.tap(find.byKey(const Key('nav-search')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byKey(const Key('search-dialog')), findsOneWidget);
     expect(find.byKey(const Key('search-input')), findsOneWidget);
     expect(find.text('搜索主播 / 房间号 / 直播间链接'), findsWidgets);
+    expect(
+      router.routeInformationProvider.value.uri.path,
+      '/all',
+      reason: '搜索弹框不应改变路由位置',
+    );
+    await tester.tap(find.byKey(const Key('search-dialog-close')));
+    // 对话框退场动画约 150ms:按固定步长推够时间,不使用 pumpAndSettle。
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    expect(find.byKey(const Key('search-dialog')), findsNothing);
+    expect(find.byKey(const Key('room-card-douyu-63136')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     // 6. /douyu 平台首页:导航锚点 + 斗鱼 chip 选中 + 房间网格。
@@ -273,21 +299,26 @@ void main() {
     expect(find.text('主题模式'), findsNothing);
     expect(tester.takeException(), isNull);
 
-    // Step 4:搜索页。nav-search 已绑定 /search 路由,点击直接跳转。
+    // Step 4:搜索弹框。nav-search 不再跳路由,而是拉起全局搜索框。
     await tester.tap(find.byKey(const Key('nav-search')));
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
-    expect(router.routeInformationProvider.value.uri.path, '/search');
+    expect(find.byKey(const Key('search-dialog')), findsOneWidget);
     expect(find.byKey(const Key('search-input')), findsOneWidget);
+    expect(
+      router.routeInformationProvider.value.uri.path,
+      '/all',
+      reason: '搜索弹框不切路由',
+    );
     expect(tester.takeException(), isNull);
 
-    router.go('/search');
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
-    expect(router.routeInformationProvider.value.uri.path, '/search');
-    expect(find.byKey(const Key('search-input')), findsOneWidget);
-    expect(find.byKey(const Key('room-card-douyu-63136')), findsNothing);
+    // Esc 关框(搜索框自身的快捷键):回到原页,首页网格仍在。
+    await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+    for (var i = 0; i < 5; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    expect(find.byKey(const Key('search-dialog')), findsNothing);
+    expect(find.byKey(const Key('room-card-douyu-63136')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
     // Step 5:从搜索页点 nav-home 收尾回首页,导航锚点全程可用。

@@ -1,6 +1,7 @@
 /// shared 通用展示组件统一出口。
 library;
 export 'async_value_view.dart';
+export 'cover_badges.dart';
 export 'empty_view.dart';
 export 'error_view.dart';
 export 'platform_badge.dart';

@@ -7,12 +7,20 @@ class PlatformBrand {
     required this.id,
     required this.name,
     required this.color,
+    this.chipForeground = const Color(0xFFFFFFFF),
     this.browseSupported = true,
   });
 
   final String id;
   final String name;
   final Color color;
+
+  /// 平台色块(pill/chip)上的文字色。
+  ///
+  /// 不能按背景亮度自动算:参考实现的 chip 前景是**按平台硬编码**的
+  /// (`--platform-{id}-chip-fg`,如虎牙黄底用 `#1a1a1a`,斗鱼橙底用 `#fff`),
+  /// 自动估算会在橙色上给出深色字,与参考不一致。
+  final Color chipForeground;
 
   /// 该平台是否支持栏目浏览(不支持时展示房间号/URL 直达输入)。
   final bool browseSupported;
@@ -39,6 +47,8 @@ abstract final class PlatformBrandCatalog {
     id: 'huya',
     name: '虎牙',
     color: Color(0xFFFFB800),
+    // 对齐 `--platform-huya-chip-fg: #1a1a1a`(黄底用深色字)。
+    chipForeground: Color(0xFF1A1A1A),
   );
 
   static const PlatformBrand bilibili = PlatformBrand(

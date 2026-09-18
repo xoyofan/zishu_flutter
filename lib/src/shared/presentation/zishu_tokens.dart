@@ -15,6 +15,9 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     required this.liveBadge,
     required this.error,
     required this.success,
+    required this.coverScrim,
+    required this.coverScrimText,
+    required this.promoBadge,
   });
 
   final Color background;
@@ -29,6 +32,18 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
   final Color error;
   final Color success;
 
+  /// 封面角标暗底(热度/平台等压在封面图上的底色)——
+  /// 对齐 SFVideoLive `CoverBadges.vue` 的 `rgba(0,0,0,.72)`。
+  final Color coverScrim;
+
+  /// 压在上述暗底上的文字色:两种主题都必须是白,
+  /// 不能复用 textPrimary(浅色主题下它是深色,压在黑底上不可读)。
+  final Color coverScrimText;
+
+  /// 促销/画质角标底色——对齐 `.room-card__badge--promo`
+  /// 的 `rgba(180, 83, 9, .92)`(琥珀)。
+  final Color promoBadge;
+
   /// SFVideoLive 深色基线(Windows 验收标准)。
   static const dark = ZishuTokens(
     background: Color(0xFF181818),
@@ -42,6 +57,9 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     liveBadge: Color(0xFF32C874),
     error: Color(0xFFE55050),
     success: Color(0xFF67C23A),
+    coverScrim: Color(0xB8000000),
+    coverScrimText: Color(0xFFFFFFFF),
+    promoBadge: Color(0xEBB45309),
   );
 
   /// 浅色主题(视觉同步,非本轮验收重点)。
@@ -57,6 +75,10 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     liveBadge: Color(0xFF32C874),
     error: Color(0xFFE55050),
     success: Color(0xFF4CA83D),
+    // 角标压在封面图上,与主题无关,两套主题取同值。
+    coverScrim: Color(0xB8000000),
+    coverScrimText: Color(0xFFFFFFFF),
+    promoBadge: Color(0xEBB45309),
   );
 
   @override
@@ -72,6 +94,9 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     Color? liveBadge,
     Color? error,
     Color? success,
+    Color? coverScrim,
+    Color? coverScrimText,
+    Color? promoBadge,
   }) {
     return ZishuTokens(
       background: background ?? this.background,
@@ -85,6 +110,9 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
       liveBadge: liveBadge ?? this.liveBadge,
       error: error ?? this.error,
       success: success ?? this.success,
+      coverScrim: coverScrim ?? this.coverScrim,
+      coverScrimText: coverScrimText ?? this.coverScrimText,
+      promoBadge: promoBadge ?? this.promoBadge,
     );
   }
 
@@ -104,6 +132,9 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
       liveBadge: mix(liveBadge, other.liveBadge),
       error: mix(error, other.error),
       success: mix(success, other.success),
+      coverScrim: mix(coverScrim, other.coverScrim),
+      coverScrimText: mix(coverScrimText, other.coverScrimText),
+      promoBadge: mix(promoBadge, other.promoBadge),
     );
   }
 }

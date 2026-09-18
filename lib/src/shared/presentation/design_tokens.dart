@@ -106,6 +106,12 @@ abstract final class AppRadius {
   static final BorderRadius allPill = BorderRadius.circular(pill);
 }
 
+/// 字号/行高/字重基线。
+///
+/// **不含颜色**:文字颜色统一由主题 tokens 提供(`context.textTitle` /
+/// `context.textCaption` 等,见 zishu_tokens.dart)。写死颜色会让浅色主题下
+/// 出现白底白字 —— 深色基线色 `AppColors.textPrimary` 只是恰好与
+/// `ZishuTokens.dark` 同值。
 abstract final class AppTypography {
   /// 默认字体:微软雅黑(Windows 产品基线)。
   ///
@@ -127,26 +133,17 @@ abstract final class AppTypography {
     fontSize: 16,
     height: 1.35,
     fontWeight: FontWeight.w600,
-    color: AppColors.textPrimary,
   );
 
-  static const TextStyle body = TextStyle(
-    fontSize: 13,
-    height: 1.4,
-    color: AppColors.textPrimary,
-  );
+  static const TextStyle body = TextStyle(fontSize: 13, height: 1.4);
 
-  static const TextStyle bodySecondary = TextStyle(
-    fontSize: 12,
-    height: 1.4,
-    color: AppColors.textSecondary,
-  );
+  static const TextStyle bodySecondary = TextStyle(fontSize: 12, height: 1.4);
 
-  static const TextStyle caption = TextStyle(
-    fontSize: 11,
-    height: 1.3,
-    color: AppColors.textSecondary,
-  );
+  static const TextStyle caption = TextStyle(fontSize: 11, height: 1.3);
+
+  /// 未接入主题时的兜底色(仅在拿不到 BuildContext 的极少数场景使用)。
+  static const Color fallbackPrimary = AppColors.textPrimary;
+  static const Color fallbackSecondary = AppColors.textSecondary;
 }
 
 abstract final class AppMotion {
