@@ -1,6 +1,7 @@
 /// SOOP 分类索引、分类房间与首页推荐。
 library;
 
+import '../../catalog/category_name_remap.dart';
 import '../../contracts/contracts.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
@@ -43,7 +44,8 @@ class SoopBrowseRepository implements BrowseRepository {
         items.add(
           CategoryItem(
             cid: cid,
-            name: name,
+            // 韩文分类名经 web 真源归一组中文化(배틀그라운드→绝地求生 等)。
+            name: remapCategoryName('soop', name),
             pic: httpsSoopUrl(item['cate_img']),
           ),
         );
@@ -142,7 +144,7 @@ class SoopBrowseRepository implements BrowseRepository {
       final item = jsonMapOf(value);
       final roomId = jsonText(item['user_id']).trim();
       if (roomId.isEmpty) continue;
-      final category = jsonText(item['category_name']);
+      final category = remapCategoryName('soop', jsonText(item['category_name']));
       rooms.add(
         RoomSummary(
           site: kSoopSiteId,

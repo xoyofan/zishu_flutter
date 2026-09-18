@@ -1,6 +1,7 @@
 /// Twitch 浏览:games 分类索引 + streams 首页/分类房间列表。
 library;
 
+import '../../catalog/category_name_remap.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
 import '../../utils/format_online.dart';
@@ -45,7 +46,8 @@ query BrowsePage_AllDirectories($limit: Int) {
       for (final node in _nodesOf((data as Map?)?['games']))
         CategoryItem(
           cid: _text(node['id']),
-          name: _text(node['name']),
+          // 分类名经 web 真源归一组中文化(Just Chatting→聊天 等)。
+          name: remapCategoryName('twitch', _text(node['name'])),
           pic: fillTwitchImageTemplate(
             _text(node['boxArtURL']),
             width: 285,
@@ -127,7 +129,7 @@ query DirectoryPage_Game(\$id: ID!, \$limit: Int) {
         title: _text(node['title']),
         anchorName: _text(_mapOf(node['broadcaster'])?['displayName']),
         cid: _text(_mapOf(node['game'])?['id']),
-        category: _text(_mapOf(node['game'])?['name']),
+        category: remapCategoryName('twitch', _text(_mapOf(node['game'])?['name'])),
         online: formatOnlineCount(node['viewersCount']),
         cover: fillTwitchImageTemplate(_text(node['previewImageURL'])),
       ),

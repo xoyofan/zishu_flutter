@@ -5,6 +5,7 @@
 /// 换播放凭证,最终 `{cdn}?aid={aid}`。
 library;
 
+import '../../catalog/category_name_remap.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
 import '../../utils/header_sanitizer.dart';
@@ -159,7 +160,7 @@ SoopRoomDetail parseSoopRoomDetail(
     roomId: roomId.isEmpty ? fallbackRoomId : roomId,
     nick: jsonText(channel['BJNICK']),
     title: jsonText(channel['TITLE']),
-    category: tags.isEmpty ? '' : jsonText(tags.first),
+    category: tags.isEmpty ? '' : remapCategoryName('soop', jsonText(tags.first)),
     bno: jsonText(channel['BNO']),
     rmd: jsonText(channel['RMD']),
     cdn: jsonText(channel['CDN']),

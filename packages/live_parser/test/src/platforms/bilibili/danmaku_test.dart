@@ -185,6 +185,10 @@ void main() {
     expect(m.badgeName, '提督骑士团');
     expect(m.badgeLevel, 12);
     expect(m.userLevel, 31);
+    // 老结构十进制色:web 口径 [8]=start/[9]=end/[5]=border。
+    expect(m.badgeColorStart, 0xbb00bb);
+    expect(m.badgeColorEnd, 0xcc00cc);
+    expect(m.badgeColorBorder, 0x00ffff);
 
     await sub.cancel();
     await session.close();
@@ -206,7 +210,14 @@ void main() {
       userName: '李四',
       text: '新结构',
       metaUser: {
-        'medal': {'name': '新结构牌', 'level': 8, 'guard_level': 3},
+        'medal': {
+          'name': '新结构牌',
+          'level': 8,
+          'guard_level': 3,
+          'v2_medal_color_start': '#BB00BB',
+          'v2_medal_color_end': '#CC00CC',
+          'v2_medal_color_border': '#00FFFF',
+        },
       },
       medalInfo: [12, '老结构牌', 12],
       ulInfo: [20, 0, -1],
@@ -219,6 +230,10 @@ void main() {
     expect(received[0].badgeName, '新结构牌');
     expect(received[0].badgeLevel, 8);
     expect(received[0].userLevel, 20);
+    // 新协议 hex 色解析(对齐 web medalFieldsFromObj)。
+    expect(received[0].badgeColorStart, 0xbb00bb);
+    expect(received[0].badgeColorEnd, 0xcc00cc);
+    expect(received[0].badgeColorBorder, 0x00ffff);
     expect(received[1].badgeName, isEmpty);
     expect(received[1].badgeLevel, 0);
     expect(received[1].userLevel, 0);

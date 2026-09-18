@@ -275,20 +275,38 @@ class BilibiliDanmakuSession implements DanmakuSession {
     // 用户等级 UL = info[4][0](纯色 pill,无静态图)。
     var badgeName = '';
     var badgeLevel = 0;
+    var badgeColorStart = 0;
+    var badgeColorEnd = 0;
+    var badgeColorBorder = 0;
     final metaUser = meta.length > 15 ? jsonMapOf(meta[15]) : null;
     final newMedal = jsonMapOf(jsonMapOf(metaUser)['user'])['medal'];
     if (newMedal is Map) {
       final medal = jsonMapOf(newMedal);
       badgeName = jsonText(medal['name']);
       badgeLevel = jsonInt(medal['level']);
+      // 新协议带 v2_medal_color_*(hex 字符串);UI 端做 bilibiliComposed 渐变
+      // (对齐 web ChatFanBadge/buildBilibiliBadgeStyle:to left, start→end)。
+      badgeColorStart = _hexColorOf(jsonText(medal['v2_medal_color_start']).isNotEmpty
+          ? jsonText(medal['v2_medal_color_start'])
+          : jsonText(medal['color_start']));
+      badgeColorEnd = _hexColorOf(jsonText(medal['v2_medal_color_end']).isNotEmpty
+          ? jsonText(medal['v2_medal_color_end'])
+          : jsonText(medal['color_end']));
+      badgeColorBorder = _hexColorOf(jsonText(medal['v2_medal_color_border']).isNotEmpty
+          ? jsonText(medal['v2_medal_color_border'])
+          : jsonText(medal['color_border']));
     }
     if (badgeName.isEmpty && badgeLevel <= 0 && info.length > 3 && info[3] is List) {
       final medal = info[3] as List<Object?>;
       final level = medal.isNotEmpty ? _intOf(medal[0]) : 0;
       final name = medal.length > 1 ? medal[1]?.toString() ?? '' : '';
+      // 老结构色值为十进制 int:web 口径 [8]=start/[9]=end/[5]=border。
       if (level > 0 && name.isNotEmpty) {
         badgeLevel = level;
         badgeName = name;
+        badgeColorStart = medal.length > 8 ? _intOf(medal[8]) & 0xffffff : 0;
+        badgeColorEnd = medal.length > 9 ? _intOf(medal[9]) & 0xffffff : 0;
+        badgeColorBorder = medal.length > 5 ? _intOf(medal[5]) & 0xffffff : 0;
       }
     }
     var userLevel = 0;
@@ -312,6 +330,9 @@ class BilibiliDanmakuSession implements DanmakuSession {
         badgeName: badgeName,
         badgeLevel: badgeLevel,
         userLevel: userLevel,
+        badgeColorStart: badgeColorStart,
+        badgeColorEnd: badgeColorEnd,
+        badgeColorBorder: badgeColorBorder,
         rawType: cmd,
       ),
     );
@@ -319,6 +340,14 @@ class BilibiliDanmakuSession implements DanmakuSession {
 
   static int _intOf(Object? value) =>
       value is num ? value.toInt() : int.tryParse('${value ?? ''}') ?? 0;
+
+  /// "#RRGGBB" / "RRGGBB" → 0xRRGGBB;解析失败返回 0(= 协议未提供)。
+  static int _hexColorOf(String hex) {
+    final text = hex.trim().replaceFirst('#', '');
+    final value = int.tryParse(text, radix: 16);
+    if (value == null) return 0;
+    return text.length == 8 ? value & 0xffffff : value;
+  }
 
   void _emitDisconnected() {
     if (_closed) return;

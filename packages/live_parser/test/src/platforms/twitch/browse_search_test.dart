@@ -27,7 +27,7 @@ void main() {
       expect(result.groups, hasLength(1));
       final items = result.groups.single.items;
       expect(items.map((e) => e.cid).toList(), ['509658', '263490', '32399']);
-      expect(items.first.name, 'Just Chatting');
+      expect(items.first.name, '聊天', reason: '海外平台分类名经 remap 表中文化(Just Chatting→聊天)');
       expect(items.first.pic, isNot(contains('{width}')));
       expect(items.first.pic, contains('285x380'));
     });
@@ -65,7 +65,7 @@ void main() {
       );
       expect(result.rooms.map((r) => r.roomId).toList(), ['fps_shaka', 'sasatikk']);
       expect(result.rooms.first.cid, '263490');
-      expect(result.rooms.first.category, 'Rust');
+      expect(result.rooms.first.category, '失控进化-RUST', reason: '房间分类同样 remap(Rust→失控进化-RUST)');
       expect(result.hasMore, isTrue);
       expect(api.gqlOperations, contains('DirectoryPage_Game'));
     });

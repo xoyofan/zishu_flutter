@@ -3,6 +3,7 @@ library;
 
 import 'dart:convert';
 
+import '../../catalog/category_name_remap.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
 import '../../utils/format_online.dart';
@@ -100,7 +101,7 @@ TwitchStreamInfo? _streamInfo(Object? value) {
     title: _text(record['title']),
     viewers: (record['viewersCount'] as num?)?.toInt() ?? 0,
     gameId: _text(_mapOf(record['game'])?['id']),
-    gameName: _text(_mapOf(record['game'])?['name']),
+    gameName: remapCategoryName('twitch', _text(_mapOf(record['game'])?['name'])),
     preview: fillTwitchImageTemplate(_text(record['previewImageURL'])),
   );
 }

@@ -56,7 +56,7 @@ void main() {
       expect(payload.roomState, RoomState.live);
       expect(payload.anchorName, 'fps_shaka');
       expect(payload.title, 'SAVOGE RUST Day3');
-      expect(payload.category, 'Rust');
+      expect(payload.category, '失控进化-RUST', reason: '详情分类经 remap 表中文化');
       expect(payload.cid, '263490');
       expect(payload.source, 'live_parser/twitch');
 

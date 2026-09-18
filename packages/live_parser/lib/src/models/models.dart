@@ -389,6 +389,9 @@ class DanmakuMessage {
     this.badgeName = '',
     this.badgeLevel = 0,
     this.userLevel = 0,
+    this.badgeColorStart = 0,
+    this.badgeColorEnd = 0,
+    this.badgeColorBorder = 0,
     this.sentAt,
     this.rawType = '',
   });
@@ -404,6 +407,14 @@ class DanmakuMessage {
   final String badgeName;
   final int badgeLevel;
   final int userLevel;
+
+  /// 粉丝牌渐变起止色(0xRRGGBB;0 = 协议未提供,B 站专属语义)。
+  /// UI 端对齐 web ChatFanBadge 的 bilibiliComposed 渐变(to left, start→end)。
+  final int badgeColorStart;
+  final int badgeColorEnd;
+
+  /// 粉丝牌描边色(0xRRGGBB;0 = 协议未提供)。
+  final int badgeColorBorder;
   final DateTime? sentAt;
 
   /// 上游原始 type(如 `chatmsg`),便于 UI/日志区分细分来源。
