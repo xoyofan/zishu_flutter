@@ -78,10 +78,15 @@ class _RoomGridState extends State<RoomGrid> {
         // 左栏挤到 640 档退成 3 列,与参考断点不符。
         final viewportWidth = MediaQuery.sizeOf(context).width;
         final columns = AppRoomGrid.columnsFor(viewportWidth);
-        // 卡片实际宽 = 内容区宽(containerWidth)均分(扣列间距),卡高比例必须按
-        // 实际宽算;用视口宽会导致左栏存在时卡片溢出。
+        // 卡片实际宽 = **扣掉 GridView 自身 padding 后**的内容区宽均分(再扣列间距);
+        // 卡高比例必须按这个真实格宽算:
+        //   · 用视口宽 → 左侧目录栏存在时卡片溢出;
+        //   · 忘扣 padding → 预算宽比真实格宽大几个百分点,而元信息行高是固定值,
+        //     于是格高按比例缩水后装不下固定行高,出现「overflowed by 0.6xx pixels」
+        //     (category 页 91.5px 窄格实测)。
+        final available = width - widget.padding.horizontal;
         final cardWidth =
-            (width - AppSpacing.gridCrossAxisSpacing * (columns - 1)) / columns;
+            (available - AppSpacing.gridCrossAxisSpacing * (columns - 1)) / columns;
         return GridView.builder(
           controller: _controller,
           padding: widget.padding,
@@ -89,11 +94,13 @@ class _RoomGridState extends State<RoomGrid> {
             crossAxisCount: columns,
             mainAxisSpacing: AppSpacing.gridMainAxisSpacing,
             crossAxisSpacing: AppSpacing.gridCrossAxisSpacing,
-            // 80 = 文本区预算(标题 18.9 + 间距 8 + 主播行 16.8 + padding 24 = 67.7)
-            // + 12px 余量,覆盖测试字体(Ahem)与真实字体的行高差,防止 2~6px 级溢出;
+            // 文本区预算 = 两行元信息(与 RoomCard._RoomCardMeta 严格同源):
+            //   padding 6+8 = 14,标题行 14×1.35 ≈ 18.9,间距 4,特色 chip 行 17
+            //   → 53.9;取 58 留 ~4px 覆盖测试字体(Ahem)与真实字体的行高差。
+            // 旧值 80 会在卡片底部留 ~26px 空白(用户报「不要多余 padding」);
             // 大字体下再按 metaHeightFor 同步放大,避免纵向溢出(W11)。
             childAspectRatio:
-                cardWidth / (cardWidth * 9 / 16 + metaHeightFor(80, context)),
+                cardWidth / (cardWidth * 9 / 16 + metaHeightFor(58, context)),
           ),
           itemCount: rooms.length + footerCount,
           itemBuilder: (context, index) {

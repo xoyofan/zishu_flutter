@@ -4,6 +4,7 @@ import 'package:live_parser/live_parser.dart';
 
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/widgets/cover_badges.dart';
+import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../../follow/widgets/follow_common.dart';
 
@@ -46,31 +47,110 @@ class RoomCard extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _Cover(room: room, showPlatformBadge: showPlatformBadge),
-            Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    room.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppTypography.title.copyWith(fontSize: 14),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  // 分类已由封面左上角色块承载,文本区只保留主播名。
-                  FollowAnchorName(
-                    site: room.site,
-                    name: room.anchorName,
-                    live: room.online.trim().isNotEmpty,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ],
-              ),
+            _RoomCardMeta(
+              room: room,
+              showPlatformBadge: showPlatformBadge,
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 封面下元信息:恒定**两行**。
+///
+/// 对齐参考实现 `RoomCard.vue` 的 `.room-card__body`(padding 6/8/8)与
+/// `.room-card__meta`(margin-top 4 / gap 6):
+/// - 第 1 行:房间标题(缺标题回退主播名,仍缺则占位不塌陷);
+/// - 第 2 行:主播名 + 特色 chip(促销/画质标签;单平台网格下平台名也作 chip)。
+///
+/// **两行高度必须恒定**:有的主播没有名字、多数房间没有 chip,若不占位,同一
+/// 网格里卡片高度参差(用户报「都保持2行的行高,不要多余 padding」)。
+class _RoomCardMeta extends StatelessWidget {
+  const _RoomCardMeta({required this.room, required this.showPlatformBadge});
+
+  final RoomSummary room;
+  final bool showPlatformBadge;
+
+  /// 元信息行高:12px 字号 × 1.35 行高(与参考实现 `min-height: 1.35em` 同口径)。
+  static const double _metaLineHeight = 17;
+
+  @override
+  Widget build(BuildContext context) {
+    final title = room.title.trim().isNotEmpty
+        ? room.title
+        : (room.anchorName.trim().isNotEmpty ? room.anchorName : ' ');
+    final anchor = room.anchorName.trim();
+    final chips = <String>[
+      if (room.promoTag != null && room.promoTag!.trim().isNotEmpty)
+        room.promoTag!.trim(),
+      // 平台名在封面左下角标隐藏(单平台网格)时改由 chip 承载,避免信息丢失。
+      if (!showPlatformBadge) ?PlatformBrandCatalog.byId(room.site)?.name,
+    ];
+    return Padding(
+      // 参考实现 .room-card__body:padding 6px 8px 8px。
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: AppTypography.title.copyWith(fontSize: 14),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          // 固定行高:内容缺失也占满一行,保证同网格卡片等高。
+          SizedBox(
+            height: _metaLineHeight,
+            child: Row(
+              children: [
+                if (anchor.isNotEmpty)
+                  Flexible(
+                    child: FollowAnchorName(
+                      site: room.site,
+                      name: anchor,
+                      live: room.online.trim().isNotEmpty,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                if (anchor.isNotEmpty && chips.isNotEmpty)
+                  const SizedBox(width: 6),
+                for (final chip in chips) ...[
+                  _MetaChip(key: Key('room-meta-chip-$chip'), text: chip),
+                  if (chip != chips.last) const SizedBox(width: 6),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 元信息行里的特色 chip:对齐 `.room-card__tag`(小圆角浅底、次级文字)。
+class _MetaChip extends StatelessWidget {
+  const _MetaChip({super.key, required this.text});
+
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+      decoration: BoxDecoration(
+        color: tokens.surfaceRaised,
+        borderRadius: AppRadius.allSm,
+      ),
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: AppTypography.caption.copyWith(fontSize: 10.5),
       ),
     );
   }
@@ -115,17 +195,8 @@ class _Cover extends StatelessWidget {
               cid: room.cid,
             ),
           ),
-          // 右上:促销/画质标签。
-          if (room.promoTag != null)
-            Positioned(
-              right: 0,
-              top: 0,
-              child: CoverPromoBadge(
-                key: const Key('cover-badge-promo'),
-                corner: CoverCorner.topRight,
-                text: room.promoTag!,
-              ),
-            ),
+          // 右上:促销/画质标签已移到封面下方的特色 chip 行(用户口径:
+          // 「预览图下面第二行是各种特色 chip」),同一信息不在封面与行内各显示一次。
           // 右下:热度(未开播不显示)。
           if (live)
             Positioned(

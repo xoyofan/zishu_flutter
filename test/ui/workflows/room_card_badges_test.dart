@@ -198,14 +198,23 @@ void main() {
       ),
       CoverCorner.topLeft,
     );
-    _expectCorner(
-      tester,
-      card,
+    // 促销/画质标签不再压在封面右上角,而是封面下方元信息行的「特色 chip」
+    // (用户口径:预览图下面第二行是各种特色 chip;同一信息不在两处重复)。
+    expect(
+      find.descendant(
+        of: card,
+        matching: find.byKey(const Key('room-meta-chip-官方')),
+      ),
+      findsOneWidget,
+      reason: '促销标签应作为元信息行 chip 出现',
+    );
+    expect(
       find.descendant(
         of: card,
         matching: find.byKey(const Key('cover-badge-promo')),
       ),
-      CoverCorner.topRight,
+      findsNothing,
+      reason: '封面右上不再重复渲染促销角标',
     );
     _expectCorner(
       tester,
