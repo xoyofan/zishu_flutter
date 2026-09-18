@@ -658,11 +658,27 @@ class _StatValue extends StatelessWidget {
 /// 由真实 [DanmakuMessage] 映射而来(见 [_ChatRowData.fromMessage])。
 /// 保留该轻量视图模型:列表只关心展示字段,不把解析包的整个模型透进 Widget 层。
 class _ChatRowData {
-  const _ChatRowData(this.user, this.message, {this.fanLevel, this.color = 0});
+  const _ChatRowData(
+    this.user,
+    this.message, {
+    this.fanName,
+    this.fanLevel,
+    this.userLevel = 0,
+    this.color = 0,
+  });
 
   final String user;
   final String message;
+
+  /// 粉丝团名(抖音协议无团名 → null,徽章退化为纯等级圆盘,
+  /// 对齐 web ChatFanBadge 的 douyinTextFallback 分支)。
+  final String? fanName;
+
+  /// 粉丝团等级(null = 无粉丝牌)。
   final int? fanLevel;
+
+  /// 用户等级(0 = 不渲染等级 pill)。
+  final int userLevel;
 
   /// 正文颜色(0 = 默认)。当前侧栏按平台主题统一着色,保留字段以备后续。
   final int color;
@@ -671,7 +687,9 @@ class _ChatRowData {
     return _ChatRowData(
       message.userName,
       message.text,
+      fanName: message.badgeLevel > 0 ? message.badgeName : null,
       fanLevel: message.badgeLevel > 0 ? message.badgeLevel : null,
+      userLevel: message.userLevel,
       color: message.color,
     );
   }
@@ -1002,11 +1020,16 @@ class _ChatRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
+    final fanBadge = data.fanLevel;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (data.fanLevel != null) ...[
-          _FanBadge(level: data.fanLevel!),
+        if (fanBadge != null) ...[
+          _FanBadge(name: data.fanName, level: fanBadge),
+          const SizedBox(width: 3),
+        ],
+        if (data.userLevel > 0) ...[
+          _UserLevelBadge(level: data.userLevel),
           const SizedBox(width: 3),
         ],
         Expanded(
@@ -1038,26 +1061,63 @@ class _ChatRow extends StatelessWidget {
   }
 }
 
+/// 粉丝牌(对齐 web ChatFanBadge 的语义结构):
+/// - 有团名(斗鱼/B 站/虎牙)→ 名牌 pill「团名 级」;
+/// - 无团名(抖音协议只有等级)→ 紧凑圆盘只显示等级数字。
 class _FanBadge extends StatelessWidget {
-  const _FanBadge({required this.level});
+  const _FanBadge({required this.level, this.name});
+
+  final int level;
+  final String? name;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    final hasName = name != null && name!.trim().isNotEmpty;
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: hasName ? 4 : 0, vertical: 1),
+      constraints: hasName ? null : const BoxConstraints(minWidth: 16, minHeight: 14),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: tokens.brand.withValues(alpha: 0.18),
+        borderRadius: hasName ? AppRadius.allSm : BorderRadius.circular(7),
+        border: Border.all(color: tokens.brand.withValues(alpha: 0.6)),
+      ),
+      child: Text(
+        hasName ? '$name $level' : '$level',
+        style: TextStyle(
+          fontSize: 9,
+          height: 1.1,
+          color: tokens.brand,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+/// 用户等级 pill(对齐 web ChatUserLevelBadge 的文字兜底分支:
+/// 「Lv N」;图片分支待契约补 icon URL 字段,见 backlog)。
+class _UserLevelBadge extends StatelessWidget {
+  const _UserLevelBadge({required this.level});
 
   final int level;
 
   @override
   Widget build(BuildContext context) {
+    final tokens = context.tokens;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       decoration: BoxDecoration(
-        color: context.tokens.brand.withValues(alpha: 0.18),
+        color: tokens.brand,
         borderRadius: AppRadius.allSm,
-        border: Border.all(color: context.tokens.brand.withValues(alpha: 0.6)),
       ),
       child: Text(
-        '粉丝 $level',
-        style: TextStyle(
+        'Lv $level',
+        style: const TextStyle(
           fontSize: 9,
           height: 1.1,
-          color: context.tokens.brand,
+          color: Colors.white,
           fontWeight: FontWeight.w700,
         ),
       ),

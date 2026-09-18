@@ -237,6 +237,8 @@ class DouyinDanmakuSession implements DanmakuSession {
           userName: chat.user,
           userId: chat.userId,
           text: chat.text,
+          badgeLevel: chat.badgeLevel,
+          userLevel: chat.userLevel,
           sentAt: chat.sentAtMs > 0
               ? DateTime.fromMillisecondsSinceEpoch(chat.sentAtMs)
               : null,

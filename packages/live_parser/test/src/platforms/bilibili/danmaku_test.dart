@@ -13,13 +13,29 @@ import '../../../support/fake_bilibili_api.dart';
 
 String _fixture(String name) => File('test/fixtures/bilibili/$name').readAsStringSync();
 
-Uint8List _danmuFrame({required String cmd, required String userName, required String text}) {
+Uint8List _danmuFrame({
+  required String cmd,
+  required String userName,
+  required String text,
+  List<Object?>? medalInfo,
+  List<Object?>? ulInfo,
+  Map<String, Object?>? metaUser, // 新协议 info[0][15].user
+}) {
+  final meta = <Object?>[0, 16, 999, 0xff7f00, 1700000000];
+  if (metaUser != null) {
+    while (meta.length < 15) {
+      meta.add(null);
+    }
+    meta.add({'user': metaUser});
+  }
   final message = jsonEncode({
     'cmd': cmd,
     'info': [
-      [0, 16, 999, 0xff7f00, 1700000000],
+      meta,
       text,
       [6900, userName],
+      ?medalInfo,
+      ?ulInfo,
     ],
   });
   // 真实协议:op=5 body 解压后仍是完整包流(内层 protover=0 op=5 body=JSON)
@@ -141,6 +157,71 @@ void main() {
       hasLength(1),
       reason: '人气消息不参与 chat 去重',
     );
+
+    await sub.cancel();
+    await session.close();
+  });
+
+  test('DANMU_MSG 徽章提取:粉丝牌(info[3])+ 用户等级 UL(info[4])', () async {
+    final session = await connector.connect(
+      const DanmakuSessionRequest(site: 'bilibili', roomId: '9527'),
+    );
+    final socket = transport.sockets.single;
+    final received = <DanmakuMessage>[];
+    final sub = session.messages.listen(received.add);
+    socket.pushBytes(encodeBiliPacket(BiliPacketOp.authAck, utf8.encode('{"code":0}')));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    socket.pushBytes(_danmuFrame(
+      cmd: 'DANMU_MSG:4:0:2:2:2:0',
+      userName: '张三',
+      text: '带徽章',
+      medalInfo: [12, '提督骑士团', 12, 0xffffff, 0xaa00aa, 0x00ffff, 0, 0, 0xbb00bb, 0xcc00cc],
+      ulInfo: [31, 0, -1],
+    ));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    final m = received.single;
+    expect(m.badgeName, '提督骑士团');
+    expect(m.badgeLevel, 12);
+    expect(m.userLevel, 31);
+
+    await sub.cancel();
+    await session.close();
+  });
+
+  test('DANMU_MSG 徽章提取:新协议 info[0][15].user.medal 优先;无徽章时字段为空', () async {
+    final session = await connector.connect(
+      const DanmakuSessionRequest(site: 'bilibili', roomId: '9527'),
+    );
+    final socket = transport.sockets.single;
+    final received = <DanmakuMessage>[];
+    final sub = session.messages.listen(received.add);
+    socket.pushBytes(encodeBiliPacket(BiliPacketOp.authAck, utf8.encode('{"code":0}')));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    // 新协议:meta[15].user.medal 与老 info[3] 同时存在 → 新结构优先。
+    socket.pushBytes(_danmuFrame(
+      cmd: 'DANMU_MSG:4:0:2:2:2:0',
+      userName: '李四',
+      text: '新结构',
+      metaUser: {
+        'medal': {'name': '新结构牌', 'level': 8, 'guard_level': 3},
+      },
+      medalInfo: [12, '老结构牌', 12],
+      ulInfo: [20, 0, -1],
+    ));
+    // 无任何徽章字段:三字段应为空/0。
+    socket.pushBytes(_danmuFrame(cmd: 'DANMU_MSG:4:0:2:2:2:0', userName: '王五', text: '无徽章'));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(received, hasLength(2));
+    expect(received[0].badgeName, '新结构牌');
+    expect(received[0].badgeLevel, 8);
+    expect(received[0].userLevel, 20);
+    expect(received[1].badgeName, isEmpty);
+    expect(received[1].badgeLevel, 0);
+    expect(received[1].userLevel, 0);
 
     await sub.cancel();
     await session.close();

@@ -111,6 +111,69 @@ void main() {
       await subscription.cancel();
       await session.close();
     });
+
+    test('徽章提取:payGrade(#23.#6)→userLevel;fansclub(#61)→badgeLevel', () async {
+      final fake = FakeDouyinApi()
+        ..enterResponse = douyinFixture('enter_live.json');
+      final transport = _FakeTransport();
+      final connector = DouyinDanmakuConnector(
+        DouyinClient(httpClient: fake),
+        transport: transport,
+        heartbeatInterval: const Duration(seconds: 30),
+      );
+      final session = await connector.connect(
+        const DanmakuSessionRequest(site: 'douyin', roomId: '123456'),
+      );
+      final socket = transport.sockets.single;
+      final received = <DanmakuMessage>[];
+      final subscription = session.messages.listen(received.add);
+
+      socket.push(
+        _pushFrame(
+          _response(
+            message: _message(
+              'WebcastChatMessage',
+              _chatPayload(
+                text: '带徽章',
+                nick: '徽章哥',
+                userId: 42,
+                payGradeLevel: 18,
+                fansBadgeLevel: 10,
+              ),
+            ),
+          ),
+          logId: 2,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(received, hasLength(1));
+      expect(received.single.userLevel, 18, reason: 'User.payGrade 的 field 6');
+      expect(received.single.badgeLevel, 10, reason: 'fansclub badge 项的等级');
+      // 抖音协议无可靠粉丝团名(通用勋章描述),badgeName 留空 —— 对齐 web
+      // douyinTextFallback(只显示等级圆盘)。
+      expect(received.single.badgeName, isEmpty);
+
+      // 无徽章用户:字段默认空/0。
+      socket.push(
+        _pushFrame(
+          _response(
+            message: _message(
+              'WebcastChatMessage',
+              _chatPayload(text: '无徽章', nick: '素人', userId: 43),
+            ),
+          ),
+          logId: 3,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(received, hasLength(2));
+      expect(received.last.userLevel, 0);
+      expect(received.last.badgeLevel, 0);
+
+      await subscription.cancel();
+      await session.close();
+    });
   });
 }
 
@@ -141,10 +204,37 @@ List<int> _chatPayload({
   required String text,
   required String nick,
   required int userId,
+  int payGradeLevel = 0,
+  int fansBadgeLevel = 0,
 }) {
   final user = [
     ..._pbUint(1, userId),
     ..._pbString(3, nick),
+    // payGrade(#23): level 在其 field 6(web 真源注释 + 实测一致)。
+    if (payGradeLevel > 0)
+      ..._pbBytes(
+        23,
+        [..._pbUint(6, payGradeLevel)],
+      ),
+    // 粉丝团 badge 项(#61 repeated):#1 = 官方 CDN 图(含等级),
+    // #8 = 描述子消息(#3 = 等级,#4 = 名称)。
+    if (fansBadgeLevel > 0)
+      ..._pbBytes(
+        61,
+        [
+          ..._pbString(
+            1,
+            'https://p11-webcast.douyinpic.com/img/webcast/'
+            'ranklist_fansclub_pop_advanced_badge_$fansBadgeLevel.png~tplv-obj.image',
+          ),
+          ..._pbBytes(
+            8,
+            [
+              ..._pbUint(3, fansBadgeLevel),
+              ..._pbString(4, '粉丝团等级$fansBadgeLevel级勋章'),            ],
+          ),
+        ],
+      ),
   ];
   final common = [..._pbUint(4, 1700000000000)];
   return [

@@ -167,12 +167,21 @@ class DouyinChatItem {
     required this.userId,
     required this.text,
     required this.sentAtMs,
+    this.badgeLevel = 0,
+    this.userLevel = 0,
   });
 
   final String user;
   final String userId;
   final String text;
   final int sentAtMs;
+
+  /// 粉丝团等级(协议无可靠团名,badgeName 留空 —— 对齐 web
+  /// douyinTextFallback 只显示等级圆盘)。
+  final int badgeLevel;
+
+  /// 荣誉/消费等级(User.payGrade 的 field 6)。
+  final int userLevel;
 }
 
 String _parseUserName(Uint8List? userBuf) {
@@ -183,6 +192,31 @@ String _parseUserName(Uint8List? userBuf) {
   final alt = pbFieldString(fields, 38);
   if (alt.isNotEmpty) return alt;
   return pbFieldString(fields, 1028);
+}
+
+/// User badge 项(#21/#61 repeated)里的粉丝团等级:
+/// 项结构 #1 = 官方 CDN 图(如 `ranklist_fansclub_pop_advanced_badge_10`),
+/// #8 = 描述子消息(#3 = 等级,#4 = 名称)。荣誉等级图(`new_user_grade_level`)
+/// 不是粉丝团,跳过;无子消息时回落 URL 正则(2026-09 实测字段)。
+int _parseFansBadgeLevel(Uint8List badgeBuf) {
+  final fields = decodePbFields(badgeBuf);
+  final url = pbFieldString(fields, 1);
+  if (url.isEmpty || !url.toLowerCase().contains('fansclub')) return 0;
+  final desc = pbFieldBytes(fields, 8);
+  if (desc != null) {
+    final level = pbFieldUint(decodePbFields(desc), 3);
+    if (level > 0) return level;
+  }
+  final match = RegExp(r'badge_(\d+)').firstMatch(url);
+  return match != null ? int.tryParse(match.group(1)!) ?? 0 : 0;
+}
+
+/// User 荣誉/消费等级:payGrade(#23) 的 field 6(field 1 是钻石总数,勿混用)。
+int _parseUserPayGradeLevel(Uint8List? userBuf) {
+  if (userBuf == null) return 0;
+  final payGrade = pbFieldBytes(decodePbFields(userBuf), 23);
+  if (payGrade == null) return 0;
+  return pbFieldUint(decodePbFields(payGrade), 6);
 }
 
 String _textPieceImageName(Uint8List imageBuf) {
@@ -245,11 +279,25 @@ DouyinChatItem? parseDouyinChatPayload(Uint8List payload) {
       : (pbFieldUint(decodePbFields(userBuf), 1) != 0
             ? '${pbFieldUint(decodePbFields(userBuf), 1)}'
             : '');
+
+  // 徽章:粉丝团等级(#21/#61 repeated,任一命中即用)+ 荣誉等级(payGrade)。
+  var badgeLevel = 0;
+  var userLevel = 0;
+  if (userBuf != null) {
+    final userFields = decodePbFields(userBuf);
+    for (final buf in [...pbRepeatedBytes(userFields, 61), ...pbRepeatedBytes(userFields, 21)]) {
+      badgeLevel = _parseFansBadgeLevel(buf);
+      if (badgeLevel > 0) break;
+    }
+    userLevel = _parseUserPayGradeLevel(userBuf);
+  }
   return DouyinChatItem(
     user: user.isEmpty ? '观众' : user,
     userId: userId,
     text: text,
     sentAtMs: parsePbCommonCreateTime(payload),
+    badgeLevel: badgeLevel,
+    userLevel: userLevel,
   );
 }
 

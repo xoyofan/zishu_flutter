@@ -269,6 +269,34 @@ class BilibiliDanmakuSession implements DanmakuSession {
     final userId = user.isNotEmpty ? user[0]?.toString() ?? '' : '';
     final color = meta.length > 3 ? _intOf(meta[3]) : 0;
 
+    // 徽章提取(对齐 web fanBadges/userLevels/bilibili.ts):
+    // 粉丝牌优先新协议 info[0][15].user.medal{name,level},回落老结构
+    // info[3][0]=level、info[3][1]=name(web 口径,level>0 才有效);
+    // 用户等级 UL = info[4][0](纯色 pill,无静态图)。
+    var badgeName = '';
+    var badgeLevel = 0;
+    final metaUser = meta.length > 15 ? jsonMapOf(meta[15]) : null;
+    final newMedal = jsonMapOf(jsonMapOf(metaUser)['user'])['medal'];
+    if (newMedal is Map) {
+      final medal = jsonMapOf(newMedal);
+      badgeName = jsonText(medal['name']);
+      badgeLevel = jsonInt(medal['level']);
+    }
+    if (badgeName.isEmpty && badgeLevel <= 0 && info.length > 3 && info[3] is List) {
+      final medal = info[3] as List<Object?>;
+      final level = medal.isNotEmpty ? _intOf(medal[0]) : 0;
+      final name = medal.length > 1 ? medal[1]?.toString() ?? '' : '';
+      if (level > 0 && name.isNotEmpty) {
+        badgeLevel = level;
+        badgeName = name;
+      }
+    }
+    var userLevel = 0;
+    if (info.length > 4 && info[4] is List) {
+      final ul = info[4] as List<Object?>;
+      userLevel = ul.isNotEmpty ? _intOf(ul[0]) : 0;
+    }
+
     // 协议重推去重(对齐 web bilibiliDanmakuDedup,cap 1200):契约暂无
     // id 字段,先用「用户+正文」兜底 key(web id 无效时的 fallback 同款)。
     if (!_chatDedup.allow('$userName\u0000$text0')) return;
@@ -281,6 +309,9 @@ class BilibiliDanmakuSession implements DanmakuSession {
         userName: userName,
         userId: userId,
         text: text0,
+        badgeName: badgeName,
+        badgeLevel: badgeLevel,
+        userLevel: userLevel,
         rawType: cmd,
       ),
     );

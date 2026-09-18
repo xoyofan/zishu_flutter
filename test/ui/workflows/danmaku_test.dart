@@ -107,6 +107,7 @@ DanmakuMessage _chat(
   String text, {
   int badgeLevel = 0,
   String badgeName = '',
+  int userLevel = 0,
   int color = 0,
 }) {
   return DanmakuMessage(
@@ -117,6 +118,7 @@ DanmakuMessage _chat(
     text: text,
     badgeLevel: badgeLevel,
     badgeName: badgeName,
+    userLevel: userLevel,
     color: color,
     rawType: 'chatmsg',
   );
@@ -393,6 +395,32 @@ void main() {
     );
   });
 
+  testWidgets('danmakuBadges:粉丝牌(名+级)/等级圆盘/用户等级 pill 对齐 web 语义', (
+    tester,
+  ) async {
+    final connector = _FakeDanmakuConnector();
+    await _pumpHost(tester, connector);
+    _goPlay(tester);
+    await _pumpStable(tester);
+
+    final session = connector.session!;
+    session.emitConnected();
+    // 斗鱼/B 站/虎牙式:有团名 → 名牌「团名 级」。
+    session.push(_chat('徽章哥', '都有', badgeLevel: 12, badgeName: '提督骑士团', userLevel: 31));
+    // 抖音式:无团名 → 仅等级圆盘(对齐 web douyinTextFallback)。
+    session.push(_chat('抖音哥', '仅圆盘', badgeLevel: 10, userLevel: 18));
+    // 素人:无徽章 → 不渲染任何徽章,也不渲染 Lv 0。
+    session.push(_chat('素人', '无徽章'));
+    await _pumpStable(tester);
+
+    expect(find.text('提督骑士团 12'), findsOneWidget,
+        reason: '有团名时粉丝牌显示「团名 级」');
+    expect(find.text('10'), findsOneWidget, reason: '无团名(抖音)时仅显示等级圆盘');
+    expect(find.text('Lv 31'), findsOneWidget);
+    expect(find.text('Lv 18'), findsOneWidget);
+    expect(find.text('Lv 0'), findsNothing, reason: '无等级不渲染占位');
+  });
+
   testWidgets('danmakuVisualIntegrity:富文本结构完整,hash 着色+粉丝徽章', (
     tester,
   ) async {
@@ -463,21 +491,22 @@ void main() {
       reason: '用户名颜色应按 hash(用户名) 稳定色相计算',
     );
 
-    // 粉丝团徽章:「badgeLevel > 0」的消息渲染「粉丝 N」色块。
+    // 粉丝团徽章:「badgeLevel > 0」且无团名(构造未传 badgeName)→
+    // 渲染纯等级圆盘「N」(对齐 web douyinTextFallback 分支)。
     expect(
       find.descendant(
         of: find.byType(PlaySidePanel),
-        matching: find.text('粉丝 12'),
+        matching: find.text('12'),
       ),
       findsOneWidget,
     );
     expect(
       find.descendant(
         of: find.byType(PlaySidePanel),
-        matching: find.textContaining('粉丝 '),
+        matching: find.text('7'),
       ),
-      findsWidgets,
-      reason: '注入的两条消息均带徽章,应存在粉丝团徽章',
+      findsOneWidget,
+      reason: '两条注入消息均带徽章(等级 12/7),应各渲染一个等级圆盘',
     );
   });
 
