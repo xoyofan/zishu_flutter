@@ -32,6 +32,15 @@ const int _cmdC2SRegisterGroup = 16;
 const int _uriChatMessage = 1400;
 const int _uriOnlineCount = 8006;
 
+/// 装饰 appId(web 真源 HUYA_DECO_APP,apps/web/src/utils/danmaku/huyaJce.ts
+/// 306-309 行):10400 粉丝牌、11200 消费等级牌。
+const int _decoAppIdFans = 10400;
+const int _decoAppIdConsumeLevel = 11200;
+
+/// MessageNotice 中装饰列表可能出现的 tag(web 真源 420 行:8/9/12/15 均按
+/// `LIST<DecorationInfo>` 累积读取)。
+const List<int> _decorationTags = [8, 9, 12, 15];
+
 const Duration kHuyaDanmakuHeartbeat = Duration(seconds: 60);
 
 const String kHuyaDanmakuUrl = 'wss://cdnws.api.huya.com:443';
@@ -216,6 +225,52 @@ class HuyaDanmakuSession implements DanmakuSession {
       fontColor = format.readInt(0);
     });
 
+    // 徽章/等级(对齐 web 真源 parseMessageNotice,apps/web/src/utils/danmaku/
+    // huyaJce.ts:392-435):装饰列表 DecorationInfo{appId@0, data@2} 可能出现在
+    // tag 8/9/12/15,全部累积、同 appId 后写覆盖先写(applyDecorations,374-390 行)。
+    // - appId=10400 粉丝牌 BadgeInfo{sBadgeName@3, iBadgeLevel@4}(350-361 行);
+    //   level<=0 视为无牌,不覆盖此前有效值(normalizeHuyaBadge,
+    //   apps/web/src/utils/badges/fanBadges/huya.ts:107-125)。
+    // - appId=11200 消费等级 ConsumeLevelBadgeInfo{iLevel@1}(362-373 行);
+    //   level<=0 视为无等级(normalizeHuyaUserLevel,
+    //   apps/web/src/utils/badges/userLevels/huya.ts:9-28)。契约 userLevel
+    //   即消费等级,UI 端与粉丝牌并列渲染、无回退关系(SideChatTab.vue:38-46,
+    //   lib/src/features/play/widgets/play_side_panel.dart:1044-1060)。
+    var badgeName = '';
+    var badgeLevel = 0;
+    var userLevel = 0;
+    try {
+      for (final tag in _decorationTags) {
+        final decorations = reader.readStructList(
+          tag,
+          (r) => (appId: r.readInt(0), data: r.readBytes(2)),
+        );
+        for (final deco in decorations) {
+          // 空 data 跳过,与 web `if (!deco?.data?.byteLength) continue` 一致。
+          if (deco.data.isEmpty) continue;
+          switch (deco.appId) {
+            case _decoAppIdFans:
+              final badge = TarsReader(deco.data);
+              // Tars 字段按 tag 升序排布,必须先读 tag 3 再读 tag 4(与
+              // web parseOfficialBadgeInfo 的读取顺序一致)。
+              final name = badge.readString(3);
+              final level = badge.readInt(4);
+              if (level > 0) {
+                badgeLevel = level;
+                badgeName = name;
+              }
+            case _decoAppIdConsumeLevel:
+              final level = TarsReader(deco.data).readInt(1);
+              if (level > 0) {
+                userLevel = level;
+              }
+          }
+        }
+      }
+    } on TarsDecodeException {
+      // 装饰数据残缺只丢徽章不丢正文(web 整帧 catch 会丢整条,这里更保守)。
+    }
+
     return DanmakuMessage(
       type: DanmakuMessageType.chat,
       roomId: roomId,
@@ -223,6 +278,9 @@ class HuyaDanmakuSession implements DanmakuSession {
       userName: nickName,
       userId: '',
       text: content,
+      badgeName: badgeName,
+      badgeLevel: badgeLevel,
+      userLevel: userLevel,
       rawType: 'huya:1400',
     );
   }

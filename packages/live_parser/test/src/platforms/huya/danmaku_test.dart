@@ -24,7 +24,12 @@ Uint8List _pushFrame(int uri, Uint8List msg) {
   return frame.takeBytes();
 }
 
-Uint8List _chatNotice({required String nick, required String content, int color = 0xff7f00}) {
+Uint8List _chatNotice({
+  required String nick,
+  required String content,
+  int color = 0xff7f00,
+  Map<int, List<Uint8List>>? decorations,
+}) {
   final notice = TarsWriter()
     ..writeStruct((userInfo) {
       userInfo.writeString(nick, 2);
@@ -33,7 +38,56 @@ Uint8List _chatNotice({required String nick, required String content, int color 
     ..writeStruct((format) {
       format.writeInt(color, 0);
     }, 6);
-  return notice.takeBytes();
+  if (decorations == null || decorations.isEmpty) {
+    return notice.takeBytes();
+  }
+  // 装饰 tag(8/9/12/15)大于已有字段,按 Tars tag 升序直接追加
+  // (向量字节自带 LIST 头,故用裸字节拼接而非 writeBytes 二次包装)。
+  final out = BytesBuilder()..add(notice.takeBytes());
+  for (final tag in decorations.keys.toList()..sort()) {
+    out.add(_decorationVector(tag, decorations[tag]!));
+  }
+  return out.takeBytes();
+}
+
+/// BadgeInfo{sBadgeName@3, iBadgeLevel@4} 结构体字节。
+/// 依据 web 真源 parseOfficialBadgeInfo(apps/web/src/utils/danmaku/huyaJce.ts:350-361)。
+Uint8List _fansBadgeInfo({required String name, required int level}) =>
+    (TarsWriter()..writeString(name, 3)..writeInt(level, 4)).takeBytes();
+
+/// ConsumeLevelBadgeInfo{iLevel@1, iBadgeStyle@2, iIsPolished@3} 结构体字节。
+/// 依据 web 真源 parseOfficialConsumeLevel(huyaJce.ts:362-373)。
+Uint8List _consumeLevelInfo({required int level, int style = 0, int polished = 0}) =>
+    (TarsWriter()
+          ..writeInt(level, 1)
+          ..writeInt(style, 2)
+          ..writeInt(polished, 3))
+        .takeBytes();
+
+/// DecorationInfo{appId@0, data@2} 结构体字节(huyaJce.ts:326-332)。
+Uint8List _decorationInfo(int appId, Uint8List data) =>
+    (TarsWriter()..writeInt(appId, 0)..writeBytes(data, 2)).takeBytes();
+
+/// `LIST<DecorationInfo>` 字段字节:LIST 头字节手写(TarsWriter 未暴露裸
+/// LIST 头),头编码与 TarsWriter._writeHead 同款——tag<15 单字节,tag>=15
+/// 走 `(15<<4)|9` + tag 字节双字节扩展;其后为元素个数与各元素(tag0 结构头
+/// + 原始字段 + 结构尾),与 TarsReader.readStructList 的读取方式对称。
+Uint8List _decorationVector(int tag, List<Uint8List> items) {
+  final sizes = TarsWriter()..writeInt(items.length, 0);
+  final out = BytesBuilder();
+  if (tag < 15) {
+    out.add([(tag << 4) | 9]);
+  } else {
+    out.add([(15 << 4) | 9, tag]);
+  }
+  out.add(sizes.takeBytes());
+  for (final item in items) {
+    out
+      ..add(const [0x0a]) // STRUCT_BEGIN(tag 0)
+      ..add(item)
+      ..add(const [0x0b]); // STRUCT_END(tag 0)
+  }
+  return out.takeBytes();
 }
 
 void main() {
@@ -102,6 +156,145 @@ void main() {
     expect(received[1].color, 0xff0000, reason: '正色保留');
     expect(received[2].type, DanmakuMessageType.other);
     expect(received[2].text, '123456');
+
+    await sub.cancel();
+    await session.close();
+  });
+
+  test('徽章/等级:DecorationInfo(10400 粉丝牌/11200 消费等级)提取', () async {
+    final session = await connector.connect(
+      const DanmakuSessionRequest(site: 'huya', roomId: '9527'),
+    );
+    final socket = transport.sockets.single;
+    final received = <DanmakuMessage>[];
+    final sub = session.messages.listen(received.add);
+
+    // 装饰结构依据 web 真源 huyaJce.ts:HUYA_DECO_APP{FANS:10400,
+    // CONSUME_LEVEL_BADGE:11200}(306-309 行),向量挂在 MessageNotice tag 8。
+    socket.pushBytes(
+      _pushFrame(
+        1400,
+        _chatNotice(
+          nick: '牌哥',
+          content: '带牌发言',
+          decorations: {
+            8: [
+              _decorationInfo(10400, _fansBadgeInfo(name: '铁粉', level: 13)),
+              _decorationInfo(11200, _consumeLevelInfo(level: 25, style: 1)),
+            ],
+          },
+        ),
+      ),
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(received, hasLength(1));
+    expect(received.single.userName, '牌哥');
+    expect(received.single.text, '带牌发言');
+    expect(received.single.badgeName, '铁粉');
+    expect(received.single.badgeLevel, 13);
+    expect(received.single.userLevel, 25);
+    // 虎牙粉丝牌渐变走 UI 端 HUYA_BAR_GRADIENTS 7 档分档,不填 B 站专属三色。
+    expect(received.single.badgeColorStart, 0);
+    expect(received.single.badgeColorEnd, 0);
+    expect(received.single.badgeColorBorder, 0);
+
+    await sub.cancel();
+    await session.close();
+  });
+
+  test('无装饰消息徽章/等级为默认值(UI 不渲染)', () async {
+    final session = await connector.connect(
+      const DanmakuSessionRequest(site: 'huya', roomId: '9527'),
+    );
+    final socket = transport.sockets.single;
+    final received = <DanmakuMessage>[];
+    final sub = session.messages.listen(received.add);
+
+    socket.pushBytes(_pushFrame(1400, _chatNotice(nick: '路人', content: '无牌发言')));
+
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(received, hasLength(1));
+    expect(received.single.badgeName, '');
+    expect(received.single.badgeLevel, 0);
+    expect(received.single.userLevel, 0);
+
+    await sub.cancel();
+    await session.close();
+  });
+
+  test('徽章:level<=0 无效不覆盖;多 tag 累积后写覆盖(对齐 applyDecorations)', () async {
+    final session = await connector.connect(
+      const DanmakuSessionRequest(site: 'huya', roomId: '9527'),
+    );
+    final socket = transport.sockets.single;
+    final received = <DanmakuMessage>[];
+    final sub = session.messages.listen(received.add);
+
+    // level<=0 视为无牌/无等级(normalizeHuyaBadge fanBadges/huya.ts:112、
+    // normalizeHuyaUserLevel userLevels/huya.ts:12);tag 8/12/15 累积读取,
+    // 同 appId 后写覆盖先写(huyaJce.ts:374-390)。
+    socket.pushBytes(
+      _pushFrame(
+        1400,
+        _chatNotice(
+          nick: '多牌',
+          content: '多 tag 装饰',
+          decorations: {
+            8: [_decorationInfo(10400, _fansBadgeInfo(name: '甲团', level: 5))],
+            12: [
+              _decorationInfo(10400, _fansBadgeInfo(name: '乙团', level: 0)),
+              _decorationInfo(10400, _fansBadgeInfo(name: '丙团', level: 9)),
+              _decorationInfo(11200, _consumeLevelInfo(level: 0)),
+            ],
+            15: [_decorationInfo(11200, _consumeLevelInfo(level: 7))],
+          },
+        ),
+      ),
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(received, hasLength(1));
+    expect(received.single.badgeName, '丙团', reason: 'level=0 的乙团不覆盖,丙团后写覆盖甲团');
+    expect(received.single.badgeLevel, 9);
+    expect(received.single.userLevel, 7, reason: 'level=0 的消费等级不生效,tag15 后写覆盖');
+
+    await sub.cancel();
+    await session.close();
+  });
+
+  test('装饰数据残缺只丢徽章不丢正文', () async {
+    final session = await connector.connect(
+      const DanmakuSessionRequest(site: 'huya', roomId: '9527'),
+    );
+    final socket = transport.sockets.single;
+    final received = <DanmakuMessage>[];
+    final sub = session.messages.listen(received.add);
+
+    // 非法 Tars 字节:string1 头(0x36)声明长度 200 但无负载,解析必抛。
+    socket.pushBytes(
+      _pushFrame(
+        1400,
+        _chatNotice(
+          nick: '坏牌',
+          content: '正文要保留',
+          decorations: {
+            8: [_decorationInfo(10400, Uint8List.fromList([0x36, 0xc8]))],
+          },
+        ),
+      ),
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(received, hasLength(1), reason: '装饰残缺不应吞掉整条弹幕');
+    expect(received.single.text, '正文要保留');
+    expect(received.single.badgeName, '');
+    expect(received.single.badgeLevel, 0);
+    expect(received.single.userLevel, 0);
 
     await sub.cancel();
     await session.close();
