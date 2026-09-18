@@ -278,7 +278,9 @@ class _SearchViewState extends ConsumerState<SearchView> {
           onPressed: _submit,
           style: FilledButton.styleFrom(
             backgroundColor: tokens.brand,
-            foregroundColor: AppColors.background,
+            // 主题背景色做反差字色(与 parse_benchmark_view 的 brand 按钮同法);
+            // 不引用 AppColors.* —— 静态守则要求主题色一律走 context.tokens。
+            foregroundColor: tokens.background,
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.lg,
               vertical: AppSpacing.md,
