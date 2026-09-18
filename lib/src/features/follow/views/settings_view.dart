@@ -1,5 +1,8 @@
-/// 设置页(U7):外观/播放/弹幕/服务器四组设置,surface 卡片分组。
-/// 主题/画质/弹幕变更即持久化;服务器地址点「保存」后 SnackBar 反馈。
+/// 设置页(U7):账号/外观/播放/弹幕四组设置,surface 卡片分组。
+/// 主题/画质/弹幕变更即持久化。
+///
+/// 注:`SettingsState.serverUrl`(streaming-server 地址)字段与持久化仍保留
+/// (Web 端后续接入),本轮只移除设置页上的录入 UI。
 library;
 
 import 'package:flutter/material.dart';
@@ -22,58 +25,15 @@ class SettingsView extends ConsumerStatefulWidget {
 }
 
 class _SettingsViewState extends ConsumerState<SettingsView> {
-  late final TextEditingController _serverController;
-  final FocusNode _serverFocus = FocusNode();
-
   /// 手机端没有顶栏头像,在设置页提供稳定的登录入口。
   /// 避免设置页被撑爆,也让既有用例的 `find.byType(DropdownButton<String>)`
   /// 仍只命中「全平台默认画质」一个控件。
   bool _platformQualityExpanded = false;
 
   @override
-  void initState() {
-    super.initState();
-    _serverController = TextEditingController(
-      text: ref.read(settingsProvider).serverUrl,
-    );
-  }
-
-  @override
-  void dispose() {
-    _serverController.dispose();
-    _serverFocus.dispose();
-    super.dispose();
-  }
-
-  Future<void> _saveServerUrl() async {
-    final url = _serverController.text.trim();
-    if (url.isEmpty) {
-      _toast('服务器地址不能为空');
-      return;
-    }
-    _serverFocus.unfocus();
-    await ref.read(settingsProvider.notifier).setServerUrl(url);
-    if (!mounted) return;
-    _toast('服务器地址已保存');
-  }
-
-  void _toast(String message) {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(message)));
-  }
-
-  @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
     final settings = ref.watch(settingsProvider);
-
-    // 持久化恢复完成(或他处修改)后回填输入框;正在编辑时不打断用户。
-    ref.listen(settingsProvider.select((s) => s.serverUrl), (_, next) {
-      if (!_serverFocus.hasFocus && _serverController.text != next) {
-        _serverController.text = next;
-      }
-    });
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(AppSpacing.xl),
@@ -189,85 +149,6 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                       onChanged: (value) => ref
                           .read(settingsProvider.notifier)
                           .setDanmakuEnabled(value),
-                    ),
-                  ),
-                ],
-              ),
-              _SettingsGroup(
-                title: '服务器',
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      vertical: AppSpacing.sm,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'streaming-server 地址',
-                          style: AppTypography.body.copyWith(
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.xs),
-                        Text(
-                          'Dart 解析服务的 HTTP/SSE 基础地址,Web 端经它访问解析 API',
-                          style: AppTypography.bodySecondary,
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: TextField(
-                                controller: _serverController,
-                                focusNode: _serverFocus,
-                                style: AppTypography.body,
-                                decoration: InputDecoration(
-                                  isDense: true,
-                                  hintText: 'http://127.0.0.1:8787',
-                                  hintStyle: AppTypography.bodySecondary,
-                                  contentPadding: const EdgeInsets.symmetric(
-                                    horizontal: AppSpacing.md,
-                                    vertical: AppSpacing.sm,
-                                  ),
-                                  filled: true,
-                                  fillColor: tokens.surfaceRaised,
-                                  border: OutlineInputBorder(
-                                    borderRadius: AppRadius.allSm,
-                                    borderSide: BorderSide(
-                                      color: tokens.border,
-                                    ),
-                                  ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: AppRadius.allSm,
-                                    borderSide: BorderSide(
-                                      color: tokens.border,
-                                    ),
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: AppRadius.allSm,
-                                    borderSide: BorderSide(color: tokens.brand),
-                                  ),
-                                ),
-                                onSubmitted: (_) => _saveServerUrl(),
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.sm),
-                            FilledButton.icon(
-                              onPressed: _saveServerUrl,
-                              style: FilledButton.styleFrom(
-                                backgroundColor: tokens.brand,
-                                foregroundColor: tokens.surfaceSoft,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: AppRadius.allSm,
-                                ),
-                              ),
-                              icon: const Icon(Icons.save_outlined, size: 16),
-                              label: const Text('保存'),
-                            ),
-                          ],
-                        ),
-                      ],
                     ),
                   ),
                 ],

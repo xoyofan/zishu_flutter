@@ -17,13 +17,13 @@ import 'package:live_parser/live_parser.dart';
 
 import '../../danmaku/application/danmaku_session_provider.dart';
 import '../../danmaku/widgets/danmaku_settings_dialog.dart';
-import '../../browse/application/browse_provider.dart';
 import '../../follow/application/follow_provider.dart';
 import '../../follow/application/follow_sort.dart';
 import '../../follow/application/settings_provider.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
+import 'play_recommend_panel.dart';
 import 'play_room_grid.dart';
 
 class PlaySidePanel extends ConsumerStatefulWidget {
@@ -186,7 +186,12 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
                     playbackStatus: widget.playbackStatus,
                   ),
                   const _FollowPanel(),
-                  _RecommendPanel(site: site, cid: payload?.cid ?? ''),
+                  _RecommendPanel(
+                    site: site,
+                    roomId: roomId,
+                    cid: payload?.cid ?? '',
+                    category: payload?.category ?? '',
+                  ),
                   const _SettingsPanel(),
                 ],
               ),
@@ -1049,19 +1054,50 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
   bool _grid = true;
   String _siteFilter = 'all';
 
-  /// 关注面板只列**在播**房间:正在看直播时,侧栏里列一串没开播的房间
-  /// 既占位置也点不进去。口径与「我的关注」页同源(follow_sort.dart),
-  /// 差异仅在 liveOnly。
+  /// 已展示条数(分页窗口)。对齐 web `PLAY_FOLLOW_PAGE_SIZE = 48`:
+  /// 首屏只放 48 条,滚到底再放一页,底部提示「向下滚动加载更多…」。
+  int _visibleCount = _kFollowPageSize;
+
+  /// 距底部多少像素内视为「滚到底」(触发下一页加载)。
+  static const double _kLoadMoreTriggerExtent = 96;
+
+  /// 单页条数(web `PLAY_FOLLOW_PAGE_SIZE`)。
+  static const int _kFollowPageSize = 48;
+
+  /// 本轮待渲染的可见条目总数(由 build 写入,供滚动回调判定还有没有下一页)。
+  int _visibleTotal = 0;
+
+  /// 侧栏可见性口径:在播 + 离线超关(与 web `isPlayFollowVisible` 一致),
+  /// 排序仍走 follow_sort 的统一档位(超关 → 开播 → 未开播)。
+  ///
+  /// 旧实现传 `liveOnly: true` 把离线一律丢掉 —— 关注的主播恰好都没开播时
+  /// 侧栏整片空白,即用户报的「关注没显示」。
   List<FollowEntry> _visible(List<FollowEntry> entries) =>
-      visibleFollowEntries(entries, site: _siteFilter, liveOnly: true);
+      playSidebarFollowEntries(entries, site: _siteFilter);
+
+  /// 滚动到底附近再放一页(web 的哨兵/scroll 触发)。
+  bool _onScroll(ScrollNotification notification) {
+    if (notification.metrics.axis != Axis.vertical ||
+        _visibleTotal <= _visibleCount) {
+      return false;
+    }
+    if (notification.metrics.maxScrollExtent - notification.metrics.pixels <=
+        _kLoadMoreTriggerExtent) {
+      setState(() => _visibleCount += _kFollowPageSize);
+    }
+    return false;
+  }
 
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
     final entries = _visible(ref.watch(followProvider));
-    final rooms = [for (final entry in entries) entry.room];
+    _visibleTotal = entries.length;
+    final hasMore = entries.length > _visibleCount;
+    final windowed = hasMore ? entries.sublist(0, _visibleCount) : entries;
+    final rooms = [for (final entry in windowed) entry.room];
     final superKeys = <String>{
-      for (final entry in entries)
+      for (final entry in windowed)
         if (entry.isSpecial) entry.key,
     };
     return Column(
@@ -1088,28 +1124,36 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
         ),
         _SidePlatformChips(
           value: _siteFilter,
-          onChanged: (site) => setState(() => _siteFilter = site),
+          onChanged: (site) => setState(() {
+            _siteFilter = site;
+            // 换平台等于换列表:分页窗口回到首屏(否则一换平台就直接铺满 48×n)。
+            _visibleCount = _kFollowPageSize;
+          }),
         ),
         Expanded(
           child: entries.isEmpty
               ? const _PanelHint(
                   icon: Icons.star_border_rounded,
                   title: '我的关注',
-                  text: '关注的直播间会显示在这里',
+                  text: '暂无在播关注；离线超关主播会保留在此列表',
                 )
-              : _grid
-              ? PlayRoomGrid(
-                  rooms: rooms,
-                  superKeys: superKeys,
-                  keyPrefix: 'play-follow-room-',
-                  onTap: _goRoom,
-                )
-              : PlayRoomList(
-                  rooms: rooms,
-                  superKeys: superKeys,
-                  onTap: _goRoom,
+              : NotificationListener<ScrollNotification>(
+                  onNotification: _onScroll,
+                  child: _grid
+                      ? PlayRoomGrid(
+                          rooms: rooms,
+                          superKeys: superKeys,
+                          keyPrefix: 'play-follow-room-',
+                          onTap: _goRoom,
+                        )
+                      : PlayRoomList(
+                          rooms: rooms,
+                          superKeys: superKeys,
+                          onTap: _goRoom,
+                        ),
                 ),
         ),
+        if (hasMore) const _FollowMoreHint(),
       ],
     );
   }
@@ -1123,6 +1167,26 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
   ///   下层浏览页保留为返回目标 —— 两者兼得。
   void _goRoom(RoomSummary room) =>
       context.pushReplacement('/${room.site}/play/${room.roomId}');
+}
+
+/// 侧栏关注列表底部提示:还有更多时引导滚动。
+///
+/// 对齐 web `.follow-recommend__more-hint`(「向下滚动加载更多…」) —— 列表
+/// 滚到底部会自动再放一页,这行提示是给用户的可见信号。
+class _FollowMoreHint extends StatelessWidget {
+  const _FollowMoreHint();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      child: Text(
+        '向下滚动加载更多…',
+        textAlign: TextAlign.center,
+        style: AppTypography.caption,
+      ),
+    );
+  }
 }
 
 /// 侧栏平台筛选 chips:横向滚动的小 chip(侧栏窄,Wrap 会折成多行)。
@@ -1147,6 +1211,7 @@ class _SidePlatformChips extends StatelessWidget {
           final selected = value == brand.id;
           final accent = brand.id == 'all' ? tokens.brand : brand.color;
           return InkWell(
+            key: Key('play-side-follow-site-${brand.id}'),
             borderRadius: AppRadius.allPill,
             onTap: () => onChanged(brand.id),
             child: Container(
@@ -1206,68 +1271,43 @@ class _PanelTitle extends StatelessWidget {
   }
 }
 
-/// 侧栏「推荐」tab:对齐 SFVideoLive —— 推荐同样用预览网格(2 列封面)
-/// 呈现,而非横排缩略图行;标题文案「相关推荐」保持不变(测试锚点)。
-class _RecommendPanel extends ConsumerWidget {
-  const _RecommendPanel({required this.site, required this.cid});
+/// 侧栏「推荐」tab:跨平台「相关推荐」。
+///
+/// 逻辑与呈现都在 [PlayRecommendPanel](参考实现 `usePlayRecommend.ts` 逐条复刻:
+/// 站点顺序 douyu/huya/bilibili/douyin、每站 3 条交错合并、分类映射与热门兜底、
+/// 滚动分页);本类只做「把播放页上下文与切房回调接上」的薄壳,避免侧栏文件里
+/// 再养一份编排。
+class _RecommendPanel extends StatelessWidget {
+  const _RecommendPanel({
+    required this.site,
+    required this.roomId,
+    required this.cid,
+    required this.category,
+  });
 
   final String site;
+
+  /// 当前房间号:推荐里要剔除它自己。
+  final String roomId;
   final String cid;
 
+  /// 当前房间分类名:其它平台的分类映射按它匹配。
+  final String category;
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = context.tokens;
-    final query = BrowseRoomQuery(site: site, cid: cid.isEmpty ? null : cid);
-    final asyncRooms = ref.watch(browseRoomsProvider(query));
-    return Column(
-      key: const Key('play-side-recommend-panel'),
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _PanelTitle(tokens, '相关推荐'),
-        Expanded(
-          child: asyncRooms.when(
-            loading: () => const Center(
-              child: Padding(
-                padding: EdgeInsets.all(AppSpacing.md),
-                child: Text(
-                  '推荐加载中…',
-                  textAlign: TextAlign.center,
-                  style: AppTypography.caption,
-                ),
-              ),
-            ),
-            error: (error, _) => const _PanelHint(
-              icon: Icons.auto_awesome_outlined,
-              title: '相关推荐',
-              text: '加载失败,请稍后重试',
-            ),
-            data: (result) {
-              final rooms = result.rooms;
-              if (rooms.isEmpty) {
-                return const _PanelHint(
-                  icon: Icons.auto_awesome_outlined,
-                  title: '相关推荐',
-                  text: '相同分类的直播间会显示在这里',
-                );
-              }
-              return PlayRoomGrid(
-                rooms: rooms,
-                // 锚点沿用既有测试契约 play-recommend-room-{site}-{roomId}。
-                keyPrefix: 'play-recommend-room-',
-                onTap: (room) => _goRoom(context, room),
-              );
-            },
-          ),
-        ),
-      ],
+  Widget build(BuildContext context) {
+    return PlayRecommendPanel(
+      site: site,
+      roomId: roomId,
+      cid: cid,
+      category: category,
+      // 切房语义与「关注」tab 完全一致:pushReplacement 只换栈顶播放页 ——
+      // 旧播放页被卸载(media-kit 会话随 autoDispose 收干净),下层浏览页
+      // 保留为返回目标(go 会重置整条栈,左上角「返回」将无栈可回)。
+      onTap: (room) =>
+          context.pushReplacement('/${room.site}/play/${room.roomId}'),
     );
   }
-
-  /// 切房语义与「关注」tab 一致:pushReplacement 只换栈顶播放页 ——
-  /// 旧播放页被卸载(media-kit 会话随 autoDispose 收干净),下层浏览页
-  /// 保留为返回目标(go 会重置整条栈,导致左上角「返回」无栈可回)。
-  void _goRoom(BuildContext context, RoomSummary room) =>
-      context.pushReplacement('/${room.site}/play/${room.roomId}');
 }
 
 class _SettingsPanel extends ConsumerWidget {

@@ -1,9 +1,12 @@
-/// 设置持久化 workflow 测试:默认值渲染、主题/画质/弹幕/服务器交互,
+/// 设置持久化 workflow 测试:默认值渲染、主题/画质/弹幕交互,
 /// 以及 SharedPreferencesAsync(zishu.settings.*)写盘回读与重建恢复一致性。
+///
+/// 服务器(streaming-server 地址)组已从设置页移除:state 字段与持久化仍保留
+/// (Web 端后续接入),用例只断言 UI 文案不再出现。
 ///
 /// 宿主约定与 test/ui/app_shell_test.dart 一致:ProviderScope + WindowsApp +
 /// routerProvider,注入 FakeLivePlayer(VM 下不触碰 media_kit 原生内核)。
-/// shared_preferences 异步恢复与 SnackBar 定时器都可能挂 Timer,全程固定次数
+/// shared_preferences 异步恢复挂在 microtask/await 之后,全程固定次数
 /// pump,不使用 pumpAndSettle;hydrated 采用固定间隔轮询。
 /// 存储后端注入 InMemorySharedPreferencesAsync(经 shared_preferences 传递依赖
 /// 引入的平台接口包),写入与回读共享同一内存存储。
@@ -146,28 +149,6 @@ Future<void> _selectDropdownOption(
   await tester.pump(const Duration(milliseconds: 50)); // 状态落地帧。
 }
 
-/// 输入服务器地址并点击「保存」,断言 SnackBar,并排空其自动消失 Timer。
-Future<void> _saveServerUrl(WidgetTester tester, String url) async {
-  await tester.ensureVisible(find.byType(TextField));
-  await tester.enterText(find.byType(TextField), url);
-  await tester.pump(const Duration(milliseconds: 50));
-
-  await tester.ensureVisible(find.text('保存'));
-  await tester.tap(find.text('保存'));
-  await tester.pump(const Duration(milliseconds: 100));
-  await tester.pump(const Duration(milliseconds: 100));
-
-  expect(find.byType(SnackBar), findsOneWidget);
-  expect(find.text('服务器地址已保存'), findsOneWidget);
-
-  // SnackBar 的自动消失 Timer 在进入动画完成后才启动:在 FakeAsync 内用足够
-  // 时长走完「进入完成 -> Timer 到期 -> 退出动画」,避免用例结束 pending timer。
-  await tester.pump(const Duration(seconds: 4));
-  await tester.pump(const Duration(seconds: 4));
-  await tester.pump(const Duration(seconds: 1));
-  expect(find.byType(SnackBar), findsNothing);
-}
-
 void main() {
   setUp(() {
     // 每个用例独立的内存后端:被测代码与测试中的 SharedPreferencesAsync
@@ -225,17 +206,16 @@ void main() {
     );
     expect(state.defaultQuality, '超清');
     expect(state.danmakuEnabled, isTrue);
-    expect(state.serverUrl, SettingsState.defaultServerUrl);
 
     // 界面控件反映同一组默认值。
     expect(find.text('设置'), findsOneWidget);
     expect(find.text('深色'), findsWidgets); // 主题下拉当前值(至少下拉内一处)。
     expect(find.text('超清'), findsOneWidget); // 画质下拉当前值。
     expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
-    expect(
-      tester.widget<TextField>(find.byType(TextField)).controller!.text,
-      'http://127.0.0.1:8787',
-    );
+
+    // 服务器组已移除:UI 不再出现地址录入(字段保留在 state 层)。
+    expect(find.text('streaming-server 地址'), findsNothing);
+    expect(find.byType(TextField), findsNothing);
   });
 
   testWidgets('主题模式切到深色:provider 状态更新且下拉控件反映', (tester) async {
@@ -266,7 +246,7 @@ void main() {
     expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
   });
 
-  testWidgets('改默认画质并保存服务器地址:状态更新 + SnackBar 反馈', (tester) async {
+  testWidgets('改默认画质:provider 状态更新且下拉控件反映', (tester) async {
     await _pumpSettings(tester);
 
     await _selectDropdownOption(
@@ -276,9 +256,6 @@ void main() {
     );
     expect(_readSettings(tester).defaultQuality, '蓝光8M');
     expect(find.text('蓝光8M'), findsOneWidget);
-
-    await _saveServerUrl(tester, 'http://192.168.1.50:9000');
-    expect(_readSettings(tester).serverUrl, 'http://192.168.1.50:9000');
   });
 
   testWidgets('持久化回读:zishu.settings.* 已写盘,重建 ProviderScope 后恢复一致', (
@@ -301,17 +278,12 @@ void main() {
     await tester.tap(find.byType(Switch));
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
-    await _saveServerUrl(tester, 'http://10.0.0.2:7777');
 
     // 直接从 SharedPreferencesAsync 内存后端读回,断言各键已写入。
     final prefs = SharedPreferencesAsync();
     expect(await prefs.getString('zishu.settings.themeMode'), 'dark');
     expect(await prefs.getString('zishu.settings.defaultQuality'), '蓝光8M');
     expect(await prefs.getBool('zishu.settings.danmakuEnabled'), isFalse);
-    expect(
-      await prefs.getString('zishu.settings.serverUrl'),
-      'http://10.0.0.2:7777',
-    );
 
     // 重建 ProviderScope(等价重启):同一内存后端,期望完整恢复。
     await _pumpSettings(tester);
@@ -321,16 +293,11 @@ void main() {
     expect(restored.themeMode, ThemeModeChoice.dark);
     expect(restored.defaultQuality, '蓝光8M');
     expect(restored.danmakuEnabled, isFalse);
-    expect(restored.serverUrl, 'http://10.0.0.2:7777');
 
     // 界面控件反映恢复后的值。
     expect(find.text('深色'), findsOneWidget);
     expect(find.text('蓝光8M'), findsOneWidget);
     expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
-    expect(
-      tester.widget<TextField>(find.byType(TextField)).controller!.text,
-      'http://10.0.0.2:7777',
-    );
   });
 
   testWidgets('按平台默认画质:平台覆盖优先于全平台默认,清除后回落', (tester) async {

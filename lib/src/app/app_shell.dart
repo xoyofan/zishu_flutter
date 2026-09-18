@@ -9,6 +9,7 @@ import 'package:live_parser/live_parser.dart';
 import '../features/browse/application/browse_provider.dart';
 import '../features/browse/application/my_category_provider.dart';
 import '../features/follow/application/follow_provider.dart';
+import '../features/follow/application/settings_provider.dart';
 import '../shared/application/auth_provider.dart';
 import '../shared/presentation/design_tokens.dart';
 import '../shared/presentation/platform_brands.dart';
@@ -563,13 +564,7 @@ class _TopNavTools extends StatelessWidget {
           route: '/time',
           showLabel: showLabels,
         ),
-        _NavAction(
-          key: const Key('nav-theme'),
-          icon: Icons.dark_mode_outlined,
-          label: '深色',
-          tooltip: '切换主题',
-          showLabel: showLabels,
-        ),
+        _NavThemeAction(showLabel: showLabels),
         _NavAction(
           key: const Key('nav-settings'),
           icon: Icons.settings_outlined,
@@ -580,6 +575,38 @@ class _TopNavTools extends StatelessWidget {
         ),
         _UserAvatar(showLabels: showLabels),
       ],
+    );
+  }
+}
+
+/// 顶栏主题切换:在深色 ⇄ 浅色之间切换(写 `settingsProvider.setThemeMode`)。
+///
+/// 显式 dark/light 直接取设置值;system 时按 MediaQuery 平台亮度解析当前实际
+/// 生效的主题,点击后切到与当前相反的显式值(不再回到 system)。
+/// label 与 icon 表示「点击后切换到的目标」:当前生效为深色 → 显示「浅色」
+/// + [Icons.light_mode_outlined];当前生效为浅色 → 显示「深色」+ [Icons.dark_mode_outlined]。
+class _NavThemeAction extends ConsumerWidget {
+  const _NavThemeAction({required this.showLabel});
+
+  final bool showLabel;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final isDark = switch (ref.watch(settingsProvider).themeMode) {
+      ThemeModeChoice.dark => true,
+      ThemeModeChoice.light => false,
+      ThemeModeChoice.system =>
+        MediaQuery.platformBrightnessOf(context) == Brightness.dark,
+    };
+    return _NavAction(
+      key: const Key('nav-theme'),
+      icon: isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
+      label: isDark ? '浅色' : '深色',
+      tooltip: '切换主题',
+      showLabel: showLabel,
+      onTap: (_) => ref
+          .read(settingsProvider.notifier)
+          .setThemeMode(isDark ? ThemeModeChoice.light : ThemeModeChoice.dark),
     );
   }
 }

@@ -448,3 +448,30 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 
 ### 验证
 - `flutter analyze` 0 issue;App 全量 **341 passed / 0 failed**(此前抖动的 latency 本轮亦通过)。
+
+## 2026-09-18 并行三轨:关注 tab 修复对齐 / 推荐跨平台重做 / nav-theme 与设置收敛(完成)
+
+**结论**:三轨 worktree 隔离并行,patches 全部干净落地;父代理完成推荐面板接线与一处**并行引入的回归**修复(`didUpdateWidget` 在构建期改 provider);App 全量 **357 passed / 0 failed**,analyze 0 issue。
+
+### 轨 1:播放页侧栏「关注」(用户报"关注没显示")
+- [x] 根因:`_FollowPanel` 用 `visibleFollowEntries(..., liveOnly: true)` 丢掉**所有离线房间**;web 的 `isPlayFollowVisible`(`followDisplay.ts:235`)是「在播/replay ∨ 离线超关」。
+- [x] `follow_sort.dart` 新增 `isPlayFollowVisible` + `playSidebarFollowEntries`(平台筛选 + web 可见性 + 超关→开播→未开播排序);旧 `visibleFollowEntries` 保留不动(他人测试依赖)。
+- [x] `_FollowPanel`:新谓词 + web 空态文案「暂无在播关注;离线超关主播会保留在此列表」+ **分页 48**(滚到距底 ≤96px 追加,底部「向下滚动加载更多…」)+ 新锚点 `play-side-follow-site-{id}`(原按文本定位与卡面角标撞车)。
+- [x] 新增 `play_follow_panel_test.dart` 6 例。
+
+### 轨 2:播放页侧栏「推荐」(用户报"推荐方法不对")
+- [x] 根因:旧实现 `browseRoomsProvider(site, cid)` = 同平台同分类一页;web `usePlayRecommend.ts` 是**跨平台相关推荐**。
+- [x] 新增 `play_recommend_provider.dart`(564 行)+ `play_recommend_panel.dart`(333 行)+ 测试 8 例:站点顺序 douyu/huya/bilibili/douyin、每站 3 条**交错合并**、分类映射(按分类名匹配目标平台分类索引)→ 否则/兜底该站热门、`site:roomId` 去重、剔除当前房间、只留在播、滚动分页、骨架占位、「当前分类暂无推荐,已为你展示热门直播」提示。
+- [x] 父代理接线:`_RecommendPanel` 退化成薄壳(传 site/roomId/cid/category + `pushReplacement`),锚点 `play-side-recommend-panel` 与 `play-recommend-room-{site}-{roomId}` 保持不变。
+- [x] **并行回归修复**:`PlayRecommendPanel.didUpdateWidget` 在父层构建期同步 `loadFirst()` → Riverpod 抛「Tried to modify a provider while the widget tree was building」(真实播放页 payload 后到,必走这条路径;A10 用例捕获)→ 改 microtask 延迟,与 `initState` 同口径。
+
+### 轨 3:nav-theme 切换 + 设置页收敛
+- [x] `_TopNav` 的 `nav-theme` 死按钮 → `_NavThemeAction`:深色⇄浅色切换写 `setThemeMode`,label/icon 反映**点击后目标**(深色时显示「浅色」,与 web `NavSidebar.vue` 一致);`system` 用 `platformBrightnessOf` 解析当前主题。
+- [x] 设置页删除「服务器 / streaming-server 地址」组及配套状态(`serverUrl` 字段与持久化保留给 Web 端)。
+- [x] 新增 `nav_theme_test.dart` 2 例;`settings_test` 改为断言该文案与 TextField 均不出现。
+- [x] golden:`play_style_recommend.png` 重生成(推荐面板渲染变化),同步 `tool/screenshots/zishu/`。
+
+### 已知未做(待裁决/后续轨)
+- [ ] **侧栏预览卡缺「左下分类 chip」**:web 四象限模板为 左上分类/左下平台/右上直播中/右下热度,本仓 `PlayRoomCard` 是 左上★/右上平台/右下在线 → 归类到下一波 R3(会动 golden)。
+- [ ] 关注状态刷新链路(web `useFollowStatus` 60s + focusCategory + 实时轮询)本仓缺,离线卡只能显示「未开播」而非「上次 MM:DD HH:mm」(`FollowEntry` 无 `lastLiveAt`,数据层缺口)。
+- [ ] 移动端底栏 `nav-theme`(label「主题」)仍是空 onTap —— 与顶栏同一个坑,归入下一波壳层轨(B2)。

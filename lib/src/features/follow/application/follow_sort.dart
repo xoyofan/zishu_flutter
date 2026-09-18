@@ -46,10 +46,38 @@ void sortFollowEntries(List<FollowEntry> items, FollowSort sort) {
   }
 }
 
+/// 播放页侧栏的可见性口径(与 SFVideoLive `isPlayFollowVisible` 同源):
+/// **在播显示;离线但超关也显示;其余离线隐藏**。
+///
+/// 与 [visibleFollowEntries] 的 `liveOnly` 的差别:那个把离线一律丢掉,
+/// 于是「关注的主播恰好都没开播」时侧栏整片空白(用户报的「关注没显示」)。
+/// 而超关是用户亲手标的「最在意的人」——web 的空态文案也写明了这一点:
+/// 离线超关主播会保留在列表里。
+bool isPlayFollowVisible(FollowEntry entry) => entry.isLive || entry.isSpecial;
+
+/// 播放页侧栏的关注列表:平台筛选 + 侧栏可见性 + 统一排序。
+///
+/// 与「我的关注」页([visibleFollowEntries] 不带 `liveOnly`)的差别只在可见性
+/// 谓词 —— 排序仍走 [sortFollowEntries] 同一档位(超关 → 开播 → 未开播),
+/// 保证两个入口顺序一致。
+List<FollowEntry> playSidebarFollowEntries(
+  Iterable<FollowEntry> entries, {
+  String site = 'all',
+}) {
+  final filtered = <FollowEntry>[
+    for (final entry in entries)
+      if ((site == 'all' || entry.room.site == site) &&
+          isPlayFollowVisible(entry))
+        entry,
+  ];
+  sortFollowEntries(filtered, FollowSort.liveFirst);
+  return filtered;
+}
+
 /// 平台筛选 + 排序(+ 可选只保留开播),返回新列表(不修改入参)。
 ///
-/// [liveOnly] 供播放页侧栏使用:正在看直播时,侧栏里列出一堆没开播的房间
-/// 既占位置又点不进去,直接不展示。
+/// [liveOnly] 保留给「确实只要在播」的调用点;播放页侧栏**不要**再用它
+/// (会把离线超关也丢掉),改用 [playSidebarFollowEntries]。
 List<FollowEntry> visibleFollowEntries(
   Iterable<FollowEntry> entries, {
   String site = 'all',
