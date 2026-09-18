@@ -10,6 +10,7 @@ import '../features/search/widgets/search_dialog.dart';
 import '../features/browse/application/browse_provider.dart';
 import '../features/browse/application/my_category_provider.dart';
 import '../features/follow/application/follow_provider.dart';
+import '../features/follow/application/follow_sort.dart';
 import '../features/follow/application/follow_status_poller.dart';
 import '../features/follow/application/settings_provider.dart';
 import '../shared/application/auth_provider.dart';
@@ -155,6 +156,8 @@ class _AppShellState extends ConsumerState<AppShell> {
     // 关注在播状态定时轮询常驻(播放页也常驻——顶栏在),无 refresher 时为 null。
     ref.watch(followStatusPollerProvider);
     final isPhone = MediaQuery.sizeOf(context).width < AppBreakpoints.phone;
+    // hover 中的平台:浮层宽度需要它的分类数据(见 _platformFlyoutLayoutFor)。
+    final hoveredPlatform = _hoveredPlatform ?? '';
     // 沉浸态(播放页网页全屏/全屏/画中画)不渲染 chrome:浮层也一并停用,
     // 避免鼠标划过不可见顶栏时飘出浮层盖住视频。
     final showChrome = !widget.chromeHidden;
@@ -195,9 +198,12 @@ class _AppShellState extends ConsumerState<AppShell> {
         if (showPlatformFlyout)
           _HoverOverlay(
             centerX: _hoveredPlatformX,
-            width: _kPlatformFlyoutWidth,
+            // 宽度随实际列数收缩(不是固定 560),夹取交给 _HoverOverlay。
+            width: _platformFlyoutLayoutFor(
+              ref.watch(browseCategoriesProvider(hoveredPlatform)).value,
+            ).width,
             child: _PlatformCategoryFlyout(
-              site: _hoveredPlatform!,
+              site: hoveredPlatform,
               onEnter: _cancelClose,
               onExit: _scheduleClose,
             ),
@@ -205,8 +211,18 @@ class _AppShellState extends ConsumerState<AppShell> {
         if (showFollowFlyout)
           _HoverOverlay(
             centerX: _followX,
-            width: _kFollowFlyoutWidth,
+            width: _followFlyoutLayoutFor(
+              visibleFollowEntries(ref.watch(followProvider), liveOnly: true)
+                  .length,
+            ).width,
             child: _FollowFlyout(
+              // 列数同样按实际在播数收敛(与宽度同源,避免「列少反而更宽」)。
+              columns: _followFlyoutLayoutFor(
+                visibleFollowEntries(
+                  ref.watch(followProvider),
+                  liveOnly: true,
+                ).length,
+              ).columns,
               onEnter: _cancelClose,
               onExit: _scheduleClose,
               onOpenRoom: _openRoom,
@@ -228,15 +244,68 @@ class _AppShellState extends ConsumerState<AppShell> {
   }
 }
 
-/// 平台分类浮层宽度:对齐 SFVideoLive `.nav-platform-menu`
-/// (min-width 12rem / max-width 56rem),这里取中间值 + 由 _HoverOverlay 夹到视口内。
-const double _kPlatformFlyoutWidth = 560;
+/// 浮层尺寸规格:对齐 SFVideoLive `.nav-platform-menu`
+/// `{ min-width: 12rem; max-width: min(92vw, 56rem) }` —— 宽度**由内容决定**,
+/// 不写死一个中间值(那样条目少时右侧会留一整片空列)。视口夹取仍由
+/// [_HoverOverlay] 负责。
+const double _kFlyoutMinWidth = 192; // 12rem
+const double _kFlyoutMaxWidth = 896; // 56rem
 
-/// 关注浮层宽度:对齐 `.nav-follow-flyout` 的 21rem(16px 基准 ≈ 336px)。
-const double _kFollowFlyoutWidth = 336;
+/// `_FlyoutPanel` 默认左右内边距(9.6×2)+ 左右各 1px 边框。
+const double _kPlatformFlyoutChrome = 9.6 * 2 + 2;
 
-/// 我的分类浮层宽度:chips 折行,取略窄于关注浮层的 20rem(16px 基准 ≈ 320px)。
-const double _kMyCategoryFlyoutWidth = 320;
+/// 平台分类列宽 4.2rem ≈ 67.2px(同 `.nav-platform-menu__column`)。
+const double _kPlatformFlyoutColumnWidth = 67.2;
+
+/// 关注浮层:头像格宽 45.9px(由原「固定 7 列 / 336px」反推),列间距 0.96px,
+/// 左右内边距 3.52×2 + 边框 2px。
+const double _kFollowFlyoutSlotWidth = 45.9;
+const double _kFollowFlyoutColumnGap = 0.96;
+const double _kFollowFlyoutChrome = 3.52 * 2 + 2;
+
+/// 关注浮层列数上限:对齐原实现的固定 7 列(web `.follow-hover-avatar-grid`)。
+const int _kFollowFlyoutMaxColumns = 7;
+
+/// 平台分类浮层布局:**列数 = 实际列数**(多分组时一组一列;单组时按条目数折行),
+/// 宽度 = 列宽×列数 + 内边距,再夹到 `[12rem, 56rem]`。
+///
+/// 之前固定 560px 宽 + 看板内部再按内容排,条目少时右侧就留出整片空列 ——
+/// 这里让「列数 → 宽度」同源推导,列少则面板窄。
+({int columns, double width}) _platformFlyoutLayoutFor(
+  CategoryResult? result,
+) {
+  final groups = result?.groups ?? const <CategoryGroup>[];
+  final maxColumns = ((_kFlyoutMaxWidth - _kPlatformFlyoutChrome) /
+          _kPlatformFlyoutColumnWidth)
+      .floor()
+      .clamp(1, 64);
+  final rawColumns = groups.length > 1
+      // 多分组:横向分栏,一组一列(超出 maxColumns 时由看板横向滚动)。
+      ? groups.length
+      // 单组:平铺网格,列数 = 实际条目数(按宽度上限折行)。
+      : (groups.isEmpty ? 1 : groups.first.items.length);
+  final columns = rawColumns.clamp(1, maxColumns);
+  final width = (_kPlatformFlyoutChrome + columns * _kPlatformFlyoutColumnWidth)
+      .clamp(_kFlyoutMinWidth, _kFlyoutMaxWidth);
+  return (columns: columns, width: width);
+}
+
+/// 关注浮层布局:**列数 = 实际在播数**(≤7),宽度随列数收缩并夹到
+/// `[12rem, 56rem]` —— 3 个在播就只占 3 列,不再留 4 列空白。
+({int columns, double width}) _followFlyoutLayoutFor(int liveCount) {
+  final columns = liveCount.clamp(1, _kFollowFlyoutMaxColumns);
+  final width =
+      (_kFollowFlyoutChrome +
+              columns * _kFollowFlyoutSlotWidth +
+              (columns - 1) * _kFollowFlyoutColumnGap)
+          .clamp(_kFlyoutMinWidth, _kFlyoutMaxWidth);
+  return (columns: columns, width: width);
+}
+
+/// 我的分类浮层宽度:对齐 web `.nav-my-cat-flyout { width: min(92vw, 18.5rem) }`
+/// —— 桌面为 18.5rem ≈ 296px,窄视口由 [_HoverOverlay] 夹取到视口内。
+/// chips 走 [Wrap] 折行,不存在「固定列数留空列」的问题。
+const double _kMyCategoryFlyoutWidth = 18.5 * 16;
 
 /// hover 浮层定位:水平以触发点为中心,并夹到视口内;
 /// 顶部留 [_kBridgeHeight] 透明桥接区(SFVideoLive `.nav-*-flyout::before`),
@@ -275,123 +344,336 @@ class _HoverOverlay extends StatelessWidget {
   }
 }
 
-/// 移动端平台条:竖屏(X < 768)两行网格,对齐 SFVideoLive
-/// `responsive-chrome.css:265-369`(`nav-platform-strip__item` flex 1 1 15% →
-/// 12 项平分两行、隐藏平台文字、图标 1.75rem、箭头列 1.8rem、不滚动)。
+/// 移动端平台条:对齐 SFVideoLive `NavPlatformStrip.vue` + `responsive-chrome.css`
+/// 的两条方向分支(源码真源,不按截图目测):
 ///
-/// 每格 = 品牌图标入口(锚点 `platform-tab-{site}`)+ 独立分类箭头(锚点
-/// `platform-category-{site}`),各自语义动作分离;平台清单来自
-/// `PlatformBrandCatalog.navigationPlatforms`(每行 6 项,共 2 行)。
+/// - **竖屏**:`nav-platform-strip__item` 为 `flex: 1 1 15%` 折行宫格 ——
+///   12 项平分两行、隐藏平台文字、图标 1.75rem、箭头列 1.8rem、不滚动;
+/// - **横屏**:高度稀缺,`flex-wrap: nowrap` 改**单行横向滚动**,图标 1.5rem、
+///   箭头列 1.7rem,条高 `--nav-platform-strip-height`(= safe-top + 3.25rem)。
+///
+/// 每格 = 品牌图标入口(锚点 `platform-tab-{site}`)+ 独立分类箭头,各自语义
+/// 动作分离;平台清单来自 `PlatformBrandCatalog.navigationPlatforms`。
+///
+/// 箭头锚点有两套:`platform-strip-cat-{site}` 是新契约(打开分类面板),
+/// 外层 `KeyedSubtree` 保留旧锚点 `platform-category-{site}` 供既有响应式
+/// 用例继续断言存在性 —— 一个控件两个名字是刻意的过渡期兼容,勿删。
 class _PlatformStrip extends StatelessWidget {
   const _PlatformStrip({required this.currentSite});
 
   final String currentSite;
 
-  /// 图标尺寸(对齐 CSS 1.75rem,16px 基准 ≈ 28px)。
+  /// 竖屏宫格图标:1.75rem ≈ 28px(web `[data-platform=phone][portrait]`)。
   static const double _kIconSize = 28;
 
-  /// 分类箭头列宽(对齐 CSS 1.8rem ≈ 28.8px)。
-  static const double _kArrowWidth = 28.8;
+  /// 横屏单行图标:1.5rem ≈ 24px。
+  static const double _kIconSizeLandscape = 24;
 
-  /// 单行高度:图标 + 上下内边距。
+  /// 分类箭头列宽:竖屏 1.8rem ≈ 28.8px,横屏 1.7rem ≈ 27.2px。
+  static const double _kArrowWidth = 28.8;
+  static const double _kArrowWidthLandscape = 27.2;
+
+  /// 宫格单行高度(图标 + 上下内边距)。
   static const double _kRowHeight = 44;
 
-  /// 两行内容高度(单行高 × 2 + 行距)。
-  static const double _kContentHeight = _kRowHeight * 2 + 8;
+  /// 竖屏宫格内容高度(单行高 × 2 + 行距)。
+  static const double _kGridHeight = _kRowHeight * 2 + 8;
 
-  /// 每行平台数:12 项 → 6 × 2。
+  /// 横屏单行条高:web `--nav-platform-strip-height: safe-top + 3.25rem`。
+  static const double _kStripHeight = 52;
+
+  /// 竖屏每行平台数:12 项 → 6 × 2(web `flex: 1 1 15%` 在 375px 下的实际落位)。
   static const int _kColumns = 6;
 
   @override
   Widget build(BuildContext context) {
     final safeTop = MediaQuery.paddingOf(context).top;
+    // 形态按方向切换,与 web 的 `[data-platform=phone][data-orientation]` 分支同源:
+    // 竖屏折行宫格(标签隐藏、宽度平分),横屏 `flex-wrap: nowrap` 单行横向滚动
+    // —— 横屏高度稀缺,单行才能把平台压进 52px。
+    final isLandscape =
+        MediaQuery.orientationOf(context) == Orientation.landscape;
     final platforms = PlatformBrandCatalog.navigationPlatforms;
-    final rows = <Widget>[
-      for (int r = 0; r < ((platforms.length / _kColumns).ceil()); r++)
-        Expanded(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            child: Row(
-              children: [
-                for (int c = 0; c < _kColumns; c++)
-                  if (r * _kColumns + c < platforms.length)
-                    _StripGridCell(
-                      brand: platforms[r * _kColumns + c],
-                      selected: platforms[r * _kColumns + c].id == currentSite,
-                    ),
-              ],
-            ),
-          ),
-        ),
-    ];
     return Container(
       padding: EdgeInsets.only(top: safeTop),
       decoration: BoxDecoration(
         color: context.tokens.surfaceSoft,
         border: Border(bottom: BorderSide(color: context.tokens.border)),
       ),
-      child: SizedBox(
-        height: _kContentHeight,
-        child: Column(children: rows),
-      ),
+      child: isLandscape
+          ? SizedBox(
+              height: _kStripHeight,
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 4.8),
+                child: Row(
+                  children: [
+                    for (final brand in platforms)
+                      _StripItem(
+                        brand: brand,
+                        selected: brand.id == currentSite,
+                        landscape: true,
+                      ),
+                  ],
+                ),
+              ),
+            )
+          : SizedBox(
+              height: _kGridHeight,
+              child: Column(
+                children: [
+                  for (int r = 0;
+                      r < (platforms.length / _kColumns).ceil();
+                      r++)
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          children: [
+                            for (int c = 0; c < _kColumns; c++)
+                              if (r * _kColumns + c < platforms.length)
+                                Expanded(
+                                  child: _StripItem(
+                                    brand: platforms[r * _kColumns + c],
+                                    selected:
+                                        platforms[r * _kColumns + c].id ==
+                                            currentSite,
+                                  ),
+                                ),
+                          ],
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
     );
   }
 }
 
-/// 平台条单格:图标入口(点击跳平台首页)+ 分类箭头(点击跳平台分类页)。
-class _StripGridCell extends StatelessWidget {
-  const _StripGridCell({required this.brand, required this.selected});
+/// 平台条单格(web `.nav-platform-strip__item`):左侧平台 tab + 右侧独立 ▼ 按钮。
+///
+/// ▼ 不是「跳分类页」的快捷方式,而是打开该平台的**分类底部面板**
+/// (web `.nav-cat-sheet` + `NavPlatformCategoryMenu`):手机没有 hover,
+/// 分类只能在面板里选。
+class _StripItem extends StatelessWidget {
+  const _StripItem({
+    required this.brand,
+    required this.selected,
+    this.landscape = false,
+  });
 
   final PlatformBrand brand;
   final bool selected;
+  final bool landscape;
 
   @override
   Widget build(BuildContext context) {
-    return Expanded(
-      child: Row(
-        children: [
-          Expanded(
-            child: Tooltip(
-              message: brand.name,
-              child: InkWell(
-                key: Key('platform-tab-${brand.id}'),
-                onTap: () => context.go(_platformRoute(brand.id)),
-                hoverColor: context.tokens.surfaceRaised,
-                child: Container(
-                  margin: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    color: selected
-                        ? brand.color.withValues(alpha: 0.16)
-                        : Colors.transparent,
-                    border: Border.all(
-                      color: selected ? brand.color : Colors.transparent,
+    final tokens = context.tokens;
+    final iconSize = landscape
+        ? _PlatformStrip._kIconSizeLandscape
+        : _PlatformStrip._kIconSize;
+    final arrowWidth = landscape
+        ? _PlatformStrip._kArrowWidthLandscape
+        : _PlatformStrip._kArrowWidth;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 1.6),
+      child: DecoratedBox(
+        // web:item 有 1px 边框 + 圆角,选中项边框转品牌色。
+        decoration: BoxDecoration(
+          border: Border.all(color: selected ? brand.color : tokens.border),
+          borderRadius: AppRadius.allSm,
+          color: selected
+              ? brand.color.withValues(alpha: 0.12)
+              : Colors.transparent,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Tooltip(
+                message: brand.name,
+                child: InkWell(
+                  // 测试锚点:平台入口(既有契约,勿改)。
+                  key: Key('platform-tab-${brand.id}'),
+                  onTap: () => context.go(_platformRoute(brand.id)),
+                  hoverColor: tokens.surfaceRaised,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4.8,
+                      vertical: 6,
                     ),
-                    borderRadius: AppRadius.allSm,
+                    child: PlatformIcon(id: brand.id, size: iconSize),
                   ),
-                  child: Center(
-                    child: PlatformIcon(
-                      id: brand.id,
-                      size: _PlatformStrip._kIconSize,
+                ),
+              ),
+            ),
+            Container(width: 1, height: iconSize, color: tokens.border),
+            // 旧锚点 `platform-category-{id}`:既有响应式用例仍按它断言入口
+            // 可达,故用 KeyedSubtree 继续提供(点击落到下面的 InkWell)。
+            KeyedSubtree(
+              key: Key('platform-category-${brand.id}'),
+              child: Tooltip(
+                message: '${brand.name}分类',
+                child: InkWell(
+                  // 测试锚点:▼ 打开该平台分类面板。
+                  key: Key('platform-strip-cat-${brand.id}'),
+                  onTap: () => _openCategorySheet(context, brand.id),
+                  hoverColor: tokens.surfaceRaised,
+                  child: SizedBox(
+                    width: arrowWidth,
+                    height: iconSize + 12,
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: landscape ? 17 : 20,
+                      color: tokens.textSecondary,
                     ),
                   ),
                 ),
               ),
             ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 打开平台分类底部面板(web `nav-cat-sheet`:Teleport 到 body 的底部抽屉)。
+Future<void> _openCategorySheet(BuildContext context, String site) {
+  return showModalBottomSheet<void>(
+    context: context,
+    backgroundColor: Colors.transparent,
+    isScrollControlled: true,
+    builder: (_) => _PlatformCategorySheet(site: site),
+  );
+}
+
+/// 平台分类底部面板:标题「{平台} · 分类」+ 关闭;分组标题 + 子分类 chips,
+/// 点选后跳该平台子分类页(与顶栏/侧栏分类入口同一套路由)。
+class _PlatformCategorySheet extends ConsumerWidget {
+  const _PlatformCategorySheet({required this.site});
+
+  final String site;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = context.tokens;
+    final brand = PlatformBrandCatalog.byId(site);
+    final async = ref.watch(browseCategoriesProvider(site));
+    return Container(
+      key: const Key('platform-cat-sheet'),
+      height: MediaQuery.sizeOf(context).height * 0.72,
+      decoration: BoxDecoration(
+        color: tokens.surface,
+        borderRadius: const BorderRadius.vertical(
+          top: Radius.circular(AppRadius.lg),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 10, 4, 6),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${brand?.name ?? site} · 分类',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: tokens.textPrimary,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  key: const Key('platform-cat-sheet-close'),
+                  tooltip: '关闭',
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: Icon(
+                    Icons.close_rounded,
+                    size: 18,
+                    color: tokens.textSecondary,
+                  ),
+                ),
+              ],
+            ),
           ),
-          Tooltip(
-            message: '${brand.name}分类',
-            child: InkWell(
-              key: Key('platform-category-${brand.id}'),
-              onTap: () => context.go(_categoryRoute(brand.id)),
-              hoverColor: context.tokens.surfaceRaised,
-              child: SizedBox(
-                width: _PlatformStrip._kArrowWidth,
-                child: Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  size: 20,
-                  color: context.tokens.textSecondary,
+          Container(height: 1, color: tokens.border),
+          Expanded(
+            child: async.when(
+              loading: () =>
+                  const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              error: (_, _) => Center(
+                child: Text(
+                  '分类加载失败',
+                  style: TextStyle(fontSize: 12, color: tokens.textSecondary),
                 ),
               ),
+              data: (result) {
+                final groups = result.groups;
+                if (groups.isEmpty) {
+                  return Center(
+                    child: Text(
+                      '暂无分类数据',
+                      style: TextStyle(fontSize: 12, color: tokens.textSecondary),
+                    ),
+                  );
+                }
+                return ListView(
+                  padding: const EdgeInsets.all(12),
+                  children: [
+                    for (final group in groups) ...[
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          group.name,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: tokens.textSecondary,
+                          ),
+                        ),
+                      ),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          for (final item in group.items)
+                            InkWell(
+                              key: Key('platform-cat-item-${item.cid}'),
+                              borderRadius: AppRadius.allMd,
+                              onTap: () {
+                                Navigator.of(context).pop();
+                                context.go(_categoryRoute(site, cid: item.cid));
+                              },
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 6,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: tokens.surfaceRaised,
+                                  borderRadius: AppRadius.allMd,
+                                  border: Border.all(color: tokens.border),
+                                ),
+                                child: Text(
+                                  item.name,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: tokens.textPrimary,
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                  ],
+                );
+              },
             ),
           ),
         ],
@@ -550,6 +832,9 @@ class _TopNavTools extends StatelessWidget {
         _NavAction(
           key: const Key('nav-follow'),
           icon: Icons.star_border_rounded,
+          // 有在播时显示最多 3 个头像堆叠(web `nav-follow-avatars`),
+          // 无在播回落星形图标。
+          leading: const _NavFollowAvatars(),
           label: '我的关注',
           tooltip: '我的关注',
           route: '/follow',
@@ -1014,6 +1299,7 @@ class _NavAction extends StatelessWidget {
     this.route,
     this.active = false,
     this.showLabel = false,
+    this.leading,
     this.onTap,
     this.onHoverStart,
     this.onHoverEnd,
@@ -1021,6 +1307,9 @@ class _NavAction extends StatelessWidget {
 
   final IconData icon;
   final String label;
+
+  /// 自定义左侧图形(如「我的关注」的在播头像堆叠);为空时渲染 [icon]。
+  final Widget? leading;
   final String tooltip;
   final String? route;
   final bool active;
@@ -1070,7 +1359,7 @@ class _NavAction extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(icon, size: 18, color: color),
+                      leading ?? Icon(icon, size: 18, color: color),
                       if (showLabel) ...[
                         const SizedBox(width: 5),
                         Text(
@@ -1205,6 +1494,8 @@ class _BottomNav extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
+      // 测试锚点:移动底栏容器(桌面顶栏形态下不存在)。
+      key: const Key('bottom-nav'),
       height: AppSpacing.bottomNavHeight,
       decoration: BoxDecoration(
         color: context.tokens.surfaceSoft,
@@ -1257,13 +1548,10 @@ class _BottomNav extends StatelessWidget {
             route: _categoryRoute(currentSite),
             active: false,
           ),
+          _BottomMyCategoryItem(currentSite: currentSite),
           _BottomItem(
             key: const Key('nav-follow'),
-            leading: _bottomIcon(
-              Icons.star_border_rounded,
-              currentSite == 'follow',
-              context.tokens,
-            ),
+            leading: const _NavFollowAvatars(size: _NavFollowAvatars.bottomSize),
             label: '关注',
             route: '/follow',
             active: currentSite == 'follow',
@@ -1361,10 +1649,140 @@ class _BottomItem extends StatelessWidget {
             leading,
             if (label.isNotEmpty) ...[
               const SizedBox(height: 2),
-              Text(label, style: TextStyle(fontSize: 11, color: color)),
+              // 9 项挤在 360px 宽下时,靠 scaleDown 收敛而不是溢出
+              // (「我的分类」4 字在 40px 槽位里必须缩)。
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(label, style: TextStyle(fontSize: 11, color: color)),
+              ),
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// 导航项里的在播关注头像堆叠(web `NavSidebar.vue` 的 `.nav-follow-avatars`)。
+///
+/// 规格取自 web CSS:`--nav-follow-avatar-size: 1.48rem`(≈23.68px)、
+/// `--nav-follow-avatar-overlap: 0.32`(相邻头像左移 32% 宽度实现堆叠),
+/// 上限 `NAV_FOLLOW_AVATAR_LIMIT = 3`;没有在播时**回落星形图标**
+/// (web `v-else` 分支的 `StarFilled`)。
+///
+/// 在播列表走 [visibleFollowEntries] 的 `liveOnly`(与 hover 浮层同一份口径),数据由关注状态
+/// 定时刷新链路(FollowStatusPoller,60s)驱动 —— 这里不另起定时器。
+class _NavFollowAvatars extends ConsumerWidget {
+  const _NavFollowAvatars({this.size = topSize});
+
+  /// 顶栏尺寸:1.48rem。
+  static const double topSize = 23.68;
+
+  /// 底栏尺寸:56px 高的底栏里再留出文案行,取 20px。
+  static const double bottomSize = 20;
+
+  /// 重叠比例(web `--nav-follow-avatar-overlap`):相邻头像左移 size×0.32。
+  static const double overlapRatio = 0.32;
+
+  /// 上限(web `NAV_FOLLOW_AVATAR_LIMIT`)。
+  static const int limit = 3;
+
+  final double size;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final live = visibleFollowEntries(ref.watch(followProvider), liveOnly: true);
+    if (live.isEmpty) {
+      return Icon(
+        Icons.star_border_rounded,
+        size: size * 0.76,
+        color: context.tokens.textSecondary,
+      );
+    }
+    final shown = live.take(limit).toList();
+    final step = size * (1 - overlapRatio);
+    final width = size + (shown.length - 1) * step;
+    return SizedBox(
+      width: width,
+      height: size,
+      child: Stack(
+        children: [
+          for (var i = 0; i < shown.length; i++)
+            Positioned(
+              // 左起第一个在最上层(web 用 `zIndex: length - index` 配 margin-left 负值)。
+              left: i * step,
+              child: _NavFollowAvatar(entry: shown[i], size: size),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 单个圆形头像:封面图 + 首字兜底(与浮层单格同一套兜底口径)。
+class _NavFollowAvatar extends StatelessWidget {
+  const _NavFollowAvatar({required this.entry, required this.size});
+
+  final FollowEntry entry;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final room = entry.room;
+    final fallback = Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: context.tokens.surfaceRaised,
+        shape: BoxShape.circle,
+      ),
+      child: Text(
+        room.anchorName.isEmpty ? '?' : room.anchorName.substring(0, 1),
+        style: TextStyle(
+          fontSize: size * 0.5,
+          color: context.tokens.textSecondary,
+        ),
+      ),
+    );
+    return Container(
+      key: Key('nav-follow-avatar-${room.site}-${room.roomId}'),
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: context.tokens.surfaceSoft),
+      ),
+      child: room.cover.isEmpty
+          ? fallback
+          : ClipOval(
+              child: CachedNetworkImage(
+                imageUrl: room.cover,
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                errorWidget: (_, _, _) => fallback,
+              ),
+            ),
+    );
+  }
+}
+
+/// 底栏「我的分类」项:桌面走 hover 浮层,触屏没有 hover —— 直接开管理弹窗
+/// (与顶栏 hover 浮层里的「管理分类」是同一个弹窗,不是另一套实现)。
+class _BottomMyCategoryItem extends StatelessWidget {
+  const _BottomMyCategoryItem({required this.currentSite});
+
+  final String currentSite;
+
+  @override
+  Widget build(BuildContext context) {
+    return _BottomItem(
+      key: const Key('nav-my-category'),
+      leading: _bottomIcon(Icons.category_outlined, false, context.tokens),
+      label: '我的分类',
+      active: false,
+      onTap: () => showDialog<void>(
+        context: context,
+        builder: (_) => _MyCategoryManageDialog(site: currentSite),
       ),
     );
   }
@@ -1375,6 +1793,7 @@ class _BottomItem extends StatelessWidget {
 /// [maxHeight] 约束后自行滚动。
 class _FlyoutPanel extends StatelessWidget {
   const _FlyoutPanel({
+    super.key,
     required this.child,
     this.padding = const EdgeInsets.fromLTRB(9.6, 8.8, 9.6, 9.6),
 
@@ -1460,6 +1879,7 @@ class _PlatformCategoryFlyout extends ConsumerWidget {
       onEnter: (_) => onEnter(),
       onExit: (_) => onExit(),
       child: _FlyoutPanel(
+        key: const Key('platform-flyout-panel'),
         child: switch (async) {
           AsyncData(:final value) =>
             value.groups.isEmpty
@@ -1605,10 +2025,14 @@ class _CategoryChipState extends State<_CategoryChip> {
 /// 开播中优先;无开播时退化为全部关注,避免空面板。
 class _FollowFlyout extends ConsumerWidget {
   const _FollowFlyout({
+    required this.columns,
     required this.onEnter,
     required this.onExit,
     required this.onOpenRoom,
   });
+
+  /// 实际列数(由壳层按在播数算好传入,与面板宽度同源)。
+  final int columns;
 
   /// 头像 1.85rem ≈ 29.6px。
   static const double _kAvatarSize = 29.6;
@@ -1619,7 +2043,6 @@ class _FollowFlyout extends ConsumerWidget {
   /// 行间距 .22rem ≈ 3.52px;列间距 .06rem ≈ 0.96px。
   static const double _kRowGap = 3.52;
   static const double _kColumnGap = 0.96;
-  static const int _kColumns = 7;
 
   /// 5 行可见高度 + padding(同 `.follow-hover-avatar-grid` 的 max-height)。
   static const double _kMaxHeight = 280;
@@ -1632,20 +2055,20 @@ class _FollowFlyout extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final entries = ref.watch(followProvider);
     // 只列**在播**:浮层是「现在能点进去看」的快捷入口。离线条目(包括离线
     // 超关)只在「我的关注」页/播放页侧栏保留 —— 两个入口的可见性口径不同,
     // 见 follow_sort.dart 的 isPlayFollowVisible 与 visibleFollowEntries。
     // 对齐参考实现 `NavSidebar.vue`:`liveFollows` + 空态「暂无开播」
     // (旧实现在没有在播时兜底展示全部条目,与参考实现相反)。
-    final live = [
-      for (final entry in entries)
-        if (entry.isLive) entry,
-    ];
+    //
+    // 与导航项的头像堆叠共用 [visibleFollowEntries] 同一份口径(同一排序、同一
+    // 在播判据),避免「浮层里有 A、导航头像里是 B」的两套世界。
+    final live = visibleFollowEntries(ref.watch(followProvider), liveOnly: true);
     return MouseRegion(
       onEnter: (_) => onEnter(),
       onExit: (_) => onExit(),
       child: _FlyoutPanel(
+        key: const Key('follow-flyout-panel'),
         padding: const EdgeInsets.fromLTRB(3.52, 4.16, 3.52, 3.52),
         maxHeight: _kMaxHeight,
         child: live.isEmpty
@@ -1653,8 +2076,10 @@ class _FollowFlyout extends ConsumerWidget {
             : GridView.builder(
                 shrinkWrap: true,
                 itemCount: live.length,
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: _kColumns,
+                // 列数按实际在播数收敛:条目少时不留空列(传进来的 columns
+                // 与面板宽度同源,格宽因此保持稳定)。
+                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: columns,
                   mainAxisExtent: 50,
                   mainAxisSpacing: _kRowGap,
                   crossAxisSpacing: _kColumnGap,
@@ -1775,6 +2200,7 @@ class _MyCategoryFlyout extends ConsumerWidget {
       onEnter: (_) => onEnter(),
       onExit: (_) => onExit(),
       child: _FlyoutPanel(
+        key: const Key('my-category-flyout-panel'),
         padding: const EdgeInsets.fromLTRB(6.4, 5.6, 6.4, 6.4),
         child: Column(
           mainAxisSize: MainAxisSize.min,
