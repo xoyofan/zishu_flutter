@@ -516,3 +516,38 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 ### 验证
 - `flutter analyze` 0 issue;`dart test`(parser)287 passed;App 全量 **409 passed / 1 failed**(`latency_test` douyu 墙钟基准,并行 lane 抢资源所致)。
 - `play_style_follow/recommend` golden 因新增头部收藏星重生成并同步截图目录。
+
+## 2026-09-18 移动壳层 + 路由语义 + 跨平台分类中文化 + 真机验收(完成)
+
+**结论**:接续中断的 pi 会话(mission bdda5e43 的两条并行轨 `shell-mobile-align` / `category-display-map`),本轮把两条中断轨收口合并,并在**真机 release 验收**中抓到一个单测与 golden 都覆盖不到的映射缺陷(已修完并复验)。
+
+### 轨 1:移动壳层对齐 web(commit 7c31ffc)
+- [x] 抢救 pi worktree `pi-worktree-2eb5a6d9` 的散落改动(`app_shell.dart` + 2 个测试),reset 后只取目标文件提交,再取回 master。
+- [x] 真机复验(窄窗 462x1078):底栏「首页 / 分类 / 我的分类 / 关注 / 搜索 / 动态 / 浅色 / 我的」与 web 移动端导航项集合一致。
+
+### 轨 2:路由语义对齐 web(commit 8d16e76)
+- [x] `/time` 让给 web 的「解析耗时」基准页;时间线改挂 `/timeline`(顶栏与底栏 `nav-time` 均指向 `/timeline`)。
+- [x] 设置页新增「工具 → 解析耗时基准」入口(`context.push('/time')`,hint 标注「对齐 web /time」);修正「主题模式」hint。
+- [x] 测试:断言改用**渲染结果**(`bench-run` 出现 / 设置页入口消失)而非路径字符串 —— `context.push` 不改 `routeInformationProvider.uri`。
+- [x] 真机复验:顶栏「设置」点击进设置页,「工具」组可见「解析耗时基准 / 打开」。
+
+### 轨 3:跨平台分类中文化(merge 90d8697,子代理轨 eb9dae7)
+- [x] 映射真源移植:`assets/config/cross-categories.json`(328 条)+ `tool/sync_cross_map.dart` 生成器 + `lib/src/shared/domain/category_display.dart`(352 行纯函数);全站卡片/角标/侧栏/关注卡/时间线/播放页接线。
+- [x] `CategoryColors.opaqueFor` 按 web `resolveCategoryThemeBase` 顺序解析(crossKey → alias → 条目 key → 显示名 → 正则 → 哈希兜底)。
+
+### 轨 4:latency 阈值分档(commit 4c7e254)
+- [x] 墙钟阈值分档(宽松 3000ms / 严格 500ms `ZISHU_LATENCY_STRICT`),≥500ms 只 `[latency-warn]` 告警;帧数断言不分档始终生效 → 消除整机套件的假失败。
+
+### 真机验收发现的缺陷(commit 4bc473d,已修)
+- [x] **现象**:全平台首页侧栏出现**两个「户外」**,且「体育」整项消失。
+- [x] **根因**:侧栏分类网格(`browse_sidebar._CategoryTree`)把索引 item 平铺渲染并调 `displayCategoryName(site='all', name, cid)`;但 `all` 索引的 name 已是跨平台 canonical 中文名,web 侧**从不**以 `all` 调用该函数。而「体育」在映射表里被登记为「户外」的别名(`huwai.aliases` 含 `体育/运动/生活/旅游/IRL`)→ 被抢走改名。
+- [x] **修复**:`displayCategoryName` 对 `site == 'all'` 恒等返回(回归 web 语义),附 2 条回归测试;真机复验侧栏 15 项唯一、体育/户外各出现一次。
+
+### 门禁与验收
+- App 全量 **470 passed / 0 failed**;`flutter analyze` 0 issue;parser `dart test` **287 passed / 10 skipped**;8 张 golden 重生成并同步截图目录。
+- 真机 release(`--dart-define=ZISHU_REAL_PARSER=true`)重建:41.6s / 39.6s 两次成功,`data/app.so` mtime 更新(开关生效),真实数据到 UI、分类中文、路由、移动壳层逐项截图复验。
+
+### 待办(下一轮 ready 项)
+- [ ] **全平台分类键集与 web 真源不一致(重要)**:web `apps/web/src/config/hotCrossCategories.js` 的 `HOT_CROSS_CATEGORY_KEYS` 是 **25 个 key**(`lol sjz jx3 wzry hpjy cs2 dota2 cf yjwj ys bhxy aqtw tft hs valorant dnf dzpd dwrg hmwk jcc jql wudao huwai xingxiu yanzhi`),而 `packages/live_parser/lib/src/catalog/cross_catalog.dart` 的 `kDefaultCrossCategories` 是 **15 个手写 key**,与 web 仅 **3 个交集**(lol/dota2/valorant)。已验证 25 个 web key 在本地映射表 **25/25** 都能取到名称。
+- [ ] **`/all/category/<key>` 的静默降级风险(必须与上条同批修)**:`cross_browse.dart` 用 `catalog.byKey(cid)` 精确匹配,key 不存在时 category=null → **过滤被整体跳过**,退化成全平台混排(比返回空列表更危险:看着有数据但语义错了)。因此「换索引 key」必须同时补齐匹配规则。
+- [ ] 其余 backlog:`kuaishou/soop/yy` 轻量状态刷新;`RoomSummary.lastLiveAt/fans/audience` + `FollowEntry` 离线卡「上次开播时间」;侧栏预览卡四象限 chip(R3);移动壳层 `nav-theme` 空 onTap;`AppTypography.* → context.textX` 机械替换(127 处/36 文件);桌面 1920x1080 布局对齐(播放页底部工具栏/全屏抽屉)。
