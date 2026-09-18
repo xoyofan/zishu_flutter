@@ -107,7 +107,21 @@ abstract final class AppRadius {
 }
 
 abstract final class AppTypography {
-  static const String family = 'system-ui';
+  /// 默认字体:微软雅黑(Windows 产品基线)。
+  ///
+  /// 参考实现是 Web,字体由浏览器/system-ui 决定;桌面端要中文排版稳定,
+  /// 显式指定「微软雅黑」而非 `system-ui`。非 Windows 平台由
+  /// [familyFallback] 依次回退(苹方 / Noto CJK / Segoe UI)。
+  static const String family = 'Microsoft YaHei';
+
+  /// 字体回退链:本机没有微软雅黑时按序回退,避免落到无中文的字体上。
+  static const List<String> familyFallback = [
+    'Microsoft YaHei UI',
+    'PingFang SC',
+    'Noto Sans CJK SC',
+    'Source Han Sans SC',
+    'Segoe UI',
+  ];
 
   static const TextStyle title = TextStyle(
     fontSize: 16,

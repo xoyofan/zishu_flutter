@@ -42,6 +42,9 @@ abstract final class ZishuTheme {
         bodyColor: tokens.textPrimary,
         displayColor: tokens.textPrimary,
         fontFamily: AppTypography.family,
+        // 微软雅黑缺失时按回退链走(苹方/Noto CJK/Segoe UI),
+        // 否则落到默认字体后中文可能变成方框。
+        fontFamilyFallback: AppTypography.familyFallback,
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: tokens.surfaceSoft,
