@@ -416,6 +416,9 @@ class _PlayViewState extends ConsumerState<PlayView> {
                             site: widget.site,
                             roomId: widget.roomId,
                             payload: play?.payload,
+                            // 窄屏堆叠:视频正下方紧跟移动信息条
+                            // (头像 + 昵称 + 4 项统计 + 关注/超关)。
+                            compactHeader: true,
                           ),
                         ),
                       ],

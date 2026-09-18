@@ -23,6 +23,7 @@ import '../../follow/application/settings_provider.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
+import 'play_meta_bar.dart';
 import 'play_recommend_panel.dart';
 import 'play_room_grid.dart';
 
@@ -35,6 +36,7 @@ class PlaySidePanel extends ConsumerStatefulWidget {
     this.onToggleFollow,
     this.onToggleSuperFollow,
     this.playbackStatus = const PlaybackStatus(),
+    this.compactHeader = false,
   });
 
   final String? site;
@@ -46,6 +48,10 @@ class PlaySidePanel extends ConsumerStatefulWidget {
   /// 聊天状态条左侧的播放状态指示(播放中/已暂停/静音)。
   /// 默认构造即可表达「播放中」,不引入 provider 依赖。
   final PlaybackStatus playbackStatus;
+
+  /// 窄屏(移动竖屏堆叠)用移动「直播信息条」[PlayMetaBar] 代替桌面信息头。
+  /// 两者同源数据与回调,仅排布不同;桌面(>=768)保持 false。
+  final bool compactHeader;
 
   @override
   ConsumerState<PlaySidePanel> createState() => _PlaySidePanelState();
@@ -130,15 +136,25 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _SideHeader(
-              site: site,
-              roomId: roomId,
-              payload: payload,
-              followed: followed,
-              superFollowed: superFollowed,
-              onToggleFollow: _toggleFollow,
-              onToggleSuperFollow: _toggleSuperFollow,
-            ),
+            // 窄屏用移动信息条(紧凑排布),桌面用完整信息头 —— 同源数据与回调。
+            if (widget.compactHeader)
+              PlayMetaBar(
+                payload: payload,
+                followed: followed,
+                superFollowed: superFollowed,
+                onToggleFollow: _toggleFollow,
+                onToggleSuperFollow: _toggleSuperFollow,
+              )
+            else
+              _SideHeader(
+                site: site,
+                roomId: roomId,
+                payload: payload,
+                followed: followed,
+                superFollowed: superFollowed,
+                onToggleFollow: _toggleFollow,
+                onToggleSuperFollow: _toggleSuperFollow,
+              ),
             TabBar(
               tabs: const [
                 KeyedSubtree(
