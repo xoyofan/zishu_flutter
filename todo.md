@@ -612,3 +612,8 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
   - UI:粉丝牌「团名 级」/无团名圆盘 + 新增「Lv N」用户等级 pill。
   - backlog:huya TARS 徽章需抓帧分析字段;徽章/等级图片分支待契约补 icon URL 字段。
 - 门禁:parser analyze 0、test **297/10skip**(292→297);app analyze 0、test **492/0**(491→492)。
+
+## 2026-09-18 UI 口径两项:chip 去平台名 + 播放页左右布局
+- **chip 去平台名**(033e93e):移除单平台网格下「平台名从封面角标挪进 chip」的兜底;平台信息由封面平台角标/单平台页签上下文承载,chip 只留促销/画质标签。测试口径同步更新(room_card_meta_height_test)。
+- **播放页左右布局**(9dc1e37):左列=44px 房间头(标题)+播放舞台,右列=侧栏全高(从 body 顶开始);窄屏(<768)堆叠与沉浸/全屏/PiP 态不变。新增 playLeftRightLayout 几何测试;播放页 2 张 golden 重生成(pillow 定性 4.57% 差异=面板上移 44px+舞台变宽,无意外变化)。
+- 门禁:app analyze 0、test **493/0**(492→493);parser 未动。latency 用例全量并发下曾抖(真机 exe 抢 CPU),单独复跑 218ms 通过。
