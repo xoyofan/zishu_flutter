@@ -550,4 +550,16 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 ### 待办(下一轮 ready 项)
 - [ ] **全平台分类键集与 web 真源不一致(重要)**:web `apps/web/src/config/hotCrossCategories.js` 的 `HOT_CROSS_CATEGORY_KEYS` 是 **25 个 key**(`lol sjz jx3 wzry hpjy cs2 dota2 cf yjwj ys bhxy aqtw tft hs valorant dnf dzpd dwrg hmwk jcc jql wudao huwai xingxiu yanzhi`),而 `packages/live_parser/lib/src/catalog/cross_catalog.dart` 的 `kDefaultCrossCategories` 是 **15 个手写 key**,与 web 仅 **3 个交集**(lol/dota2/valorant)。已验证 25 个 web key 在本地映射表 **25/25** 都能取到名称。
 - [ ] **`/all/category/<key>` 的静默降级风险(必须与上条同批修)**:`cross_browse.dart` 用 `catalog.byKey(cid)` 精确匹配,key 不存在时 category=null → **过滤被整体跳过**,退化成全平台混排(比返回空列表更危险:看着有数据但语义错了)。因此「换索引 key」必须同时补齐匹配规则。
-- [ ] 其余 backlog:`kuaishou/soop/yy` 轻量状态刷新;`RoomSummary.lastLiveAt/fans/audience` + `FollowEntry` 离线卡「上次开播时间」;侧栏预览卡四象限 chip(R3);移动壳层 `nav-theme` 空 onTap;`AppTypography.* → context.textX` 机械替换(127 处/36 文件);桌面 1920x1080 布局对齐(播放页底部工具栏/全屏抽屉)。
+
+### 上述两条已修(commit 3983270)——全平台分类索引键集对齐 web 25 key
+- [x] **单一数据源**:`tool/sync_cross_map.dart` 扩展为双产物 —— 除 app 侧 328 条全量表外,新增生成 `packages/live_parser/lib/src/catalog/cross_hot_categories_generated.dart`(25 个 HOT key 的 `{key, name, aliases, siteCids}`,顺序即 web 顺序)。生成脚本带 **fail-fast**:任一 HOT key 在源 JSON 缺失即报错退出(防将来漏 key 静默降级)。
+- [x] **匹配规则派生**:`siteCids` 由 JSON 的 `douyu`/`huya` 顶层字段 + `sites.{bilibili,twitch,soop}.cid` 派生;原先只登记 douyu/huya 两站,现在 B站/twitch/SOOP 也走 cid 精确拉取(B站 lol=86 因此从「名称过滤」升级为「cid 拉取」)。
+- [x] **精细规则不丢**:`cross_catalog.dart` 新增 `_kCrossHotOverlay` 手工 overlay,按 canonical key 覆盖 `contains`/`excludes`(如 `lol` 仍剔除 云顶/下棋/自走棋),把手写表压缩成一份「易误伤规则清单」便于审查回滚。
+- [x] **旧 key 兼容**:`wangzhe→wzry` / `heping→hpjy` / `csgo→cs2` / `genshin→ys` / `crossfire→cf` / `outdoor→huwai` / `chat→xingxiu` 归一,旧 deeplink 与本地缓存不失效;web 无对应物的 `minecraft/sports/food/chess/acg` 移出索引。
+- [x] **哨兵测试**:parser 新增「索引键集/顺序/展示名与 web HOT 25 key 完全一致」用例,并逐个断言 `byKey` 命中 + 名称一致(注释写明:漏 key 会让 `/all/category/<key>` 退化成不过滤混排);另加新旧 key 的 cid 命中用例。parser 测试 287 → **290 passed / 10 skipped**。
+- [x] **Dart 约束**:`const` 列表不支持 `for` 元素、也不支持 const Map 下标取值 → 默认表改为运行期合成的 `final`,并给 `CrossCatalog` 换成「可空字段 + getter」以保住 `const CrossCatalog()` 零成本默认构造。
+- [x] **真机验收**(release + `ZISHU_REAL_PARSER=true`):侧栏分类由 15 项变 **25 项且顺序与 web 完全一致**(英雄联盟/三角洲行动 → 剑网3/王者荣耀 → … → 户外/星秀 → 颜值);点新增 key「三角洲行动」进 `/all/category/sjz`,页头 25 项网格中该项高亮,且**所有房间卡分类角标均为「三角洲行动」**(平台角标横跨斗鱼/虎牙/抖音/快手)→ 过滤真实生效,未退化。
+- [ ] **遗留口径不一致(新发现)**:`FixtureBrowseSource.fetchCategories` 忽略 `site`、恒返回写死的 3 组假分类,导致 golden/widget 测试**完全覆盖不到**新索引(改索引后 golden 仍全绿)。真实解析路径走的是 `CrossCatalog`,故该差异不影响线上,但测试保真度有缺口 —— 可考虑让 fixture 对 `site == 'all'` 返回 `CrossCatalog().toCategoryResult()`(会改 golden 与若干断言)。
+
+### 其余 backlog
+- [ ] `kuaishou/soop/yy` 轻量状态刷新;`RoomSummary.lastLiveAt/fans/audience` + `FollowEntry` 离线卡「上次开播时间」;侧栏预览卡四象限 chip(R3);移动壳层 `nav-theme` 空 onTap;`AppTypography.* → context.textX` 机械替换(127 处/36 文件);桌面 1920x1080 布局对齐(播放页底部工具栏/全屏抽屉)。
