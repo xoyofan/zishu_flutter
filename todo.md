@@ -684,3 +684,23 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 ### 门禁与真机
 - app analyze 0 issue;全量 **503 passed / 0 failed**;parser 301 passed / 10 skipped;golden 重生成零 diff(聊天行无双徽章条目入 golden)。
 - 真机 release 重建(`ZISHU_REAL_PARSER=true`)并拉起:F 进/出全屏防闪窗、虎牙直播间聊天行徽章可现场复验。
+
+## 2026-09-19 启动白屏根治(第二层:几何恢复上移到 runApp 之前,df9a6c5)
+
+**结论**:用户实测上一轮修复(f21a18c,WM_SIZE→ForceRedraw)后**仍白屏** —— 那次验证是拉起 10 秒后才截图,后续网络数据帧已把画面救活,掩盖了修复未覆盖的窗口期。本轮找到真竞态并根治。
+
+### 根因链(完整版)
+1. runner 官方模板:窗口创建后隐藏,`SetNextFrameCallback` → 首帧就绪才 `Show()`。
+2. `restoreMainWindowGeometry()` 原挂在 `WindowsApp.initState`(**runApp 之后**),与首帧回调赛跑:setSize/setPosition 触发 WM_SIZE → surface 重建。
+3. `ForceRedraw` 在首帧未完成时是官方注释保证的 no-op —— 冷启动慢(计划任务拉起、磁盘/CPU 竞争)时 WM_SIZE 多落在首帧完成前,兜底失效 → 白屏直到下一帧数据到达。
+4. 上一轮 10s 截图验证的教训:**验证「启动瞬间」必须在窗口出现后立即抓帧**,不能等稳定后再看。
+
+### 修复(df9a6c5)
+- [x] `restoreMainWindowGeometry()` 上移到 `main()` 的 `runApp` **之前**:runner 窗口从创建到首帧期间始终隐藏,几何变更全部发生在隐藏期,Show 时一次性以最终尺寸呈现首帧 —— 「显示后再 resize」的白屏窗口期从结构上消除;WM_SIZE→ForceRedraw 保留兜底。
+- [x] `WindowsApp.initState` 只保留几何采集(落盘)事件转发。
+- [x] 门禁:analyze 0 issue;全量 503 passed / 0 failed。
+- [x] 真机:计划任务拉起,**PrintWindow 直抓窗口表面**(全屏截图受宿主窗口遮挡影响不可靠,且 TOPMOST 在该环境会被拒;PrintWindow 不受遮挡),窗口出现即完整渲染,几何恢复(1056×807)生效,无白屏。
+
+### 真机截图方法论(沉淀)
+- 全屏 GDI 拷贝截的是合成屏幕,宿主窗口遮挡 + SetWindowPos TOPMOST 被环境拒绝时截不到目标 → 用 `PrintWindow(hwnd, PW_RENDERFULLCONTENT)` 直抓目标窗口表面;
+- 手写 PNG:BGRA→RGB 用三次 stride 切片(`raw[2::4]` 等),**每行前必须插 filter byte 0** 再 zlib 压缩(漏掉会导致 PNG 无法解码)。
