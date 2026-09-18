@@ -25,6 +25,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/widgets.dart' show Offset, Rect, Size, WidgetsBinding;
 import 'package:window_manager/window_manager.dart';
 
+import '../../windows/window_flash_guard.dart';
 import '../../windows/window_geometry_store.dart';
 
 /// 进入 PiP 前的窗口快照,退出时据此还原。
@@ -156,7 +157,14 @@ class WindowPresentation {
     try {
       final current = await isSystemFullscreen();
       if (current == value) return;
-      await windowManager.setFullScreen(value);
+      // window_manager 的 setFullScreen 是多步非原子窗口变形(进:最大化动画帧
+      // → 去边框 → 铺满;退:PostMessage 异步恢复 → 重加边框闪一帧),中间帧会
+      // 露出桌面/背面窗口。包一层防闪窗窗口期压掉中间帧,机制与降级策略见
+      // window_flash_guard.dart 库注释;插件仍是全屏态的唯一真源(不绕过)。
+      await flashFreeWindowTransition(
+        () => windowManager.setFullScreen(value),
+        waitForNativeSettle: !value,
+      );
     } catch (_) {
       // 平台不支持 / 插件未就绪(VM、无窗口环境):静默降级。
     } finally {
@@ -196,8 +204,13 @@ class WindowPresentation {
         alwaysOnTop: await windowManager.isAlwaysOnTop(),
       );
       // 先退出系统全屏再缩窗:全屏态下改尺寸会被窗口管理器忽略。
+      // 退出方向的恢复是插件 PostMessage 的异步消息,同样走防闪窗包装,
+      // 并等异步恢复落定(settle)后再继续缩窗,避免恢复中间帧冒出来。
       if (await isSystemFullscreen()) {
-        await windowManager.setFullScreen(false);
+        await flashFreeWindowTransition(
+          () => windowManager.setFullScreen(false),
+          waitForNativeSettle: true,
+        );
       }
       final ratio =
           (aspectRatio != null && aspectRatio.isFinite && aspectRatio > 0)
