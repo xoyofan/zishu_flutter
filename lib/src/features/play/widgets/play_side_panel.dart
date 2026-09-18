@@ -261,7 +261,7 @@ class _SideHeader extends StatelessWidget {
         vertical: 5,
       ),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: context.tokens.surface,
         border: Border(bottom: BorderSide(color: tokens.border)),
       ),
       child: Row(
@@ -319,13 +319,13 @@ class _SideHeader extends StatelessWidget {
                     _StatValue(
                       icon: Icons.people_alt_outlined,
                       value: '—',
-                      color: AppColors.playStatAudienceText,
+                      color: context.tokens.statAudience,
                     ),
                     const SizedBox(width: AppSpacing.sm),
                     _StatValue(
                       icon: Icons.workspace_premium_outlined,
                       value: '—',
-                      color: AppColors.playStatVipText,
+                      color: context.tokens.statVip,
                     ),
                     if (category.isNotEmpty) ...[
                       const SizedBox(width: AppSpacing.sm),
@@ -473,7 +473,7 @@ class _HeaderIconButton extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: AppColors.surfaceRaised,
+        color: context.tokens.surfaceRaised,
         shape: const CircleBorder(),
         child: InkWell(
           customBorder: const CircleBorder(),
@@ -484,7 +484,7 @@ class _HeaderIconButton extends StatelessWidget {
             child: Icon(
               icon,
               size: 11,
-              color: accent ?? AppColors.textSecondary,
+              color: accent ?? context.tokens.textSecondary,
             ),
           ),
         ),
@@ -521,12 +521,12 @@ class _SideActions extends StatelessWidget {
                   : Icons.favorite_border_rounded,
               label: followed ? '已关注' : '关注',
               foreground: followed
-                  ? AppColors.playFollowTextActive
-                  : AppColors.playFollowText,
+                  ? context.tokens.playFollowTextActive
+                  : context.tokens.playFollowText,
               background: followed
-                  ? AppColors.playFollowBgActive
-                  : AppColors.playFollowBg,
-              border: AppColors.playFollowBorder,
+                  ? context.tokens.playFollowBgActive
+                  : context.tokens.playFollowBg,
+              border: context.tokens.playFollowBorder,
               onPressed: onToggleFollow,
             ),
           ),
@@ -539,12 +539,12 @@ class _SideActions extends StatelessWidget {
                   : Icons.star_border_rounded,
               label: superFollowed ? '已超关' : '超关',
               foreground: superFollowed
-                  ? AppColors.playSuperTextActive
-                  : AppColors.playSuperText,
+                  ? context.tokens.playSuperTextActive
+                  : context.tokens.playSuperText,
               background: superFollowed
-                  ? AppColors.playSuperBgActive
-                  : AppColors.playSuperBg,
-              border: AppColors.playSuperBorder,
+                  ? context.tokens.playSuperBgActive
+                  : context.tokens.playSuperBg,
+              border: context.tokens.playSuperBorder,
               onPressed: onToggleSuperFollow,
             ),
           ),
@@ -827,7 +827,7 @@ class _ChatTabState extends ConsumerState<_ChatTab>
           height: MediaQuery.textScalerOf(context).scale(31),
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
           decoration: BoxDecoration(
-            color: AppColors.surfaceSoft,
+            color: context.tokens.surfaceSoft,
             border: Border(bottom: BorderSide(color: tokens.border)),
           ),
           child: Row(
@@ -953,7 +953,7 @@ class _NewMessagesButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: AppColors.brand,
+      color: context.tokens.brand,
       borderRadius: AppRadius.allMd,
       child: InkWell(
         key: const Key('play-side-chat-jump-bottom'),
@@ -1038,16 +1038,16 @@ class _FanBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       decoration: BoxDecoration(
-        color: AppColors.brand.withValues(alpha: 0.18),
+        color: context.tokens.brand.withValues(alpha: 0.18),
         borderRadius: AppRadius.allSm,
-        border: Border.all(color: AppColors.brand.withValues(alpha: 0.6)),
+        border: Border.all(color: context.tokens.brand.withValues(alpha: 0.6)),
       ),
       child: Text(
         '粉丝 $level',
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 9,
           height: 1.1,
-          color: AppColors.brand,
+          color: context.tokens.brand,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -1415,7 +1415,7 @@ class _SettingsGroup extends StatelessWidget {
         vertical: 5,
       ),
       decoration: BoxDecoration(
-        color: AppColors.surfaceSoft,
+        color: context.tokens.surfaceSoft,
         borderRadius: AppRadius.allSm,
       ),
       child: Column(
@@ -1423,10 +1423,10 @@ class _SettingsGroup extends StatelessWidget {
         children: [
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               height: 1.2,
-              color: AppColors.brand,
+              color: context.tokens.brand,
               fontWeight: FontWeight.w600,
             ),
           ),

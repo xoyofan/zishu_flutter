@@ -475,3 +475,18 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 - [ ] **侧栏预览卡缺「左下分类 chip」**:web 四象限模板为 左上分类/左下平台/右上直播中/右下热度,本仓 `PlayRoomCard` 是 左上★/右上平台/右下在线 → 归类到下一波 R3(会动 golden)。
 - [ ] 关注状态刷新链路(web `useFollowStatus` 60s + focusCategory + 实时轮询)本仓缺,离线卡只能显示「未开播」而非「上次 MM:DD HH:mm」(`FollowEntry` 无 `lastLiveAt`,数据层缺口)。
 - [ ] 移动端底栏 `nav-theme`(label「主题」)仍是空 onTap —— 与顶栏同一个坑,归入下一波壳层轨(B2)。
+
+## 2026-09-18 日夜主题:背景/前景真正随主题切换(部分完成,壳层待并行轨)
+
+**结论**:旧实现切主题只切了 `MaterialApp.themeMode`,页面背景/侧栏 chip/文字色大量写死深色常量。本轮把 `AppTypography` 去色、补齐主题化语义 tokens、并把播放页整块主题化;新增 `light_theme_test`(含静态守则)钉住「切了确实生效」与「不准再写死」。
+
+### 完成
+- [x] `AppTypography` 去色(原 TextStyle 写死 `AppColors.textPrimary/secondary` → 浅色下白底白字),新增 `context.textTitle/textBody/textSecondary/textCaption` 与 `fallbackPrimary/Secondary`(方案与 pure_live 同源)。
+- [x] `ZishuTokens` 合并 pure_live superset:`statAudience/statVip/statSvip` + `playFollow*`/`playSuper*`(深浅两套) + 角标轨新增的 `coverScrim/coverScrimText/promoBadge`;补齐 copyWith/lerp。
+- [x] 播放页主题化:`play_view.dart`、`play_side_panel.dart`、`play_meta_bar.dart` 共 28 处 `AppColors.*` → `context.tokens.*`(深色取值与旧常量逐位同值,深色渲染不变)。
+- [x] 新增 `test/ui/light_theme_test.dart` 4 例:默认深色;切浅色后 tokens/scaffold 背景色切换;播放页「关注」chip 底色随主题换(深红→浅色),浅色下不残留深色;静态守则:除 tokens 定义文件外**不得**再出现 `AppColors.*`(当前 allowlist 仅 `app_shell.dart`,附 TODO)。
+- [x] golden 未变(深色逐位同值),`follow_style_*`/`hover_*`/`play_style_*` 全绿;全量 395 passed(仅 3 条 latency 网络基准因两个并行 lane 抢 CPU/网络超阈值失败)。
+
+### 待办
+- [ ] `app_shell.dart` 74 处写死色(顶栏/底栏/浮层)等 `app-follow-status-refresh` 轨落地后统一替换,并移除静态守则里的 allowlist。
+- [ ] `AppTypography.*` → `context.textX` 的机械替换(127 处/36 文件):去色后颜色已随主题,替换属一致性收口。

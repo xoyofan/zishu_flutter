@@ -102,7 +102,7 @@ class PlayMetaBar extends StatelessWidget {
                     _MetaStat(
                       key: const Key('play-meta-stat-followers'),
                       icon: Icons.favorite_border_rounded,
-                      iconColor: AppColors.playFollowText,
+                      iconColor: context.tokens.playFollowText,
                       label: '关注',
                       // 解析层暂无 followers 字段(见文件头「数据诚实性」)。
                       value: '—',
@@ -123,7 +123,7 @@ class PlayMetaBar extends StatelessWidget {
                     _MetaStat(
                       key: const Key('play-meta-stat-audience'),
                       icon: Icons.people_alt_outlined,
-                      iconColor: AppColors.playStatAudienceText,
+                      iconColor: context.tokens.statAudience,
                       label: '人气',
                       // 解析层暂无 audience 字段。
                       value: '—',
@@ -299,12 +299,12 @@ class _MetaActions extends StatelessWidget {
                 : Icons.favorite_border_rounded,
             label: followed ? '已关注' : '关注',
             foreground: followed
-                ? AppColors.playFollowTextActive
-                : AppColors.playFollowText,
+                ? context.tokens.playFollowTextActive
+                : context.tokens.playFollowText,
             background: followed
-                ? AppColors.playFollowBgActive
-                : AppColors.playFollowBg,
-            border: AppColors.playFollowBorder,
+                ? context.tokens.playFollowBgActive
+                : context.tokens.playFollowBg,
+            border: context.tokens.playFollowBorder,
             onPressed: onToggleFollow,
           ),
         ),
@@ -315,12 +315,12 @@ class _MetaActions extends StatelessWidget {
             icon: superFollowed ? Icons.star_rounded : Icons.star_border_rounded,
             label: superFollowed ? '已超关' : '超关',
             foreground: superFollowed
-                ? AppColors.playSuperTextActive
-                : AppColors.playSuperText,
+                ? context.tokens.playSuperTextActive
+                : context.tokens.playSuperText,
             background: superFollowed
-                ? AppColors.playSuperBgActive
-                : AppColors.playSuperBg,
-            border: AppColors.playSuperBorder,
+                ? context.tokens.playSuperBgActive
+                : context.tokens.playSuperBg,
+            border: context.tokens.playSuperBorder,
             onPressed: onToggleSuperFollow,
           ),
         ),

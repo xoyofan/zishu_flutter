@@ -199,9 +199,9 @@ class _PlayViewState extends ConsumerState<PlayView> {
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => Container(
         height: MediaQuery.sizeOf(sheetContext).height * 0.72,
-        decoration: const BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.vertical(
+        decoration: BoxDecoration(
+          color: context.tokens.surface,
+          borderRadius: const BorderRadius.vertical(
             top: Radius.circular(AppRadius.lg),
           ),
         ),
@@ -338,8 +338,8 @@ class _PlayViewState extends ConsumerState<PlayView> {
                             begin: Alignment.topCenter,
                             end: Alignment.bottomCenter,
                             colors: [
-                              AppColors.background.withValues(alpha: 0.0),
-                              AppColors.background.withValues(alpha: 0.72),
+                              context.tokens.background.withValues(alpha: 0.0),
+                              context.tokens.background.withValues(alpha: 0.72),
                             ],
                           ),
                         ),
