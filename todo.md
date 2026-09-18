@@ -617,3 +617,16 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 - **chip 去平台名**(033e93e):移除单平台网格下「平台名从封面角标挪进 chip」的兜底;平台信息由封面平台角标/单平台页签上下文承载,chip 只留促销/画质标签。测试口径同步更新(room_card_meta_height_test)。
 - **播放页左右布局**(9dc1e37):左列=44px 房间头(标题)+播放舞台,右列=侧栏全高(从 body 顶开始);窄屏(<768)堆叠与沉浸/全屏/PiP 态不变。新增 playLeftRightLayout 几何测试;播放页 2 张 golden 重生成(pillow 定性 4.57% 差异=面板上移 44px+舞台变宽,无意外变化)。
 - 门禁:app analyze 0、test **493/0**(492→493);parser 未动。latency 用例全量并发下曾抖(真机 exe 抢 CPU),单独复跑 218ms 通过。
+
+## 2026-09-18 收尾上一会话遗留未提交批次 + 继续 backlog(进行中)
+
+**结论**:工作区遗留一批完成态但未提交的改动(注释均标「用户口径 2026-09-18」),门禁验证全绿后按轨分两笔提交;随后继续剩余 backlog。
+
+### 收尾提交(0baa791 解析轨 + ad1e202 UI 轨)
+- [x] **解析轨 0baa791**:新增 `catalog/category_name_remap.dart`(web 真源 `category-name-remap.ts` 生成,188 组归一映射);twitch/soop 分类树/分类房间/房间详情分类经表中文化(Just Chatting→聊天 / Rust→失控进化-RUST 等);`DanmakuMessage` 契约补 `badgeColorStart/End/Border`;bilibili 新协议 `v2_medal_color_*`(hex)与老结构十进制色([8]/[9]/[5])双路提取。parser 297 passed / 10 skipped。
+- [x] **UI 轨 ad1e202**:聊天行 `_FanBadge`/`_UserLevelBadge` 平台分档着色(斗鱼梯度胶囊/B站协议渐变+描边/抖音红盘/虎牙 7 档条,斗鱼 UL「LV N」兜底,对齐 web ChatFanBadge/ChatUserLevelBadge);平台分类浮层单组封顶 5 列(用户口径:twitch hover 不要这么多列);房间头徽标显示当前分类(用户口径:左上角不是「直播」而是分类);twitch fixture 单组 40 条同构。app 494 passed / 0 failed。
+- [x] golden:play_style_follow/recommend 重生成(+177B/+169B,仅徽章着色区域),同步截图目录;`test/ui/failures/` 失败产物已清理(门禁通过后不复存在)。
+
+### 待办(本轮继续)
+- [ ] 沉浸态右缘侧抽屉(web `PlayImmersiveSideSheet` + 22% 热区唤起)。
+- [ ] backlog 其余项见上节「剩余 backlog」。
