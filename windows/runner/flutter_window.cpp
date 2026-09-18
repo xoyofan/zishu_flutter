@@ -51,6 +51,19 @@ LRESULT
 FlutterWindow::MessageHandler(HWND hwnd, UINT const message,
                               WPARAM const wparam,
                               LPARAM const lparam) noexcept {
+  // Drive a redraw + present after any resize. Without this, launching in a
+  // no-interaction environment (scheduled task, no mouse/keyboard event stream)
+  // can end up with a blank client area: restoring the saved window geometry
+  // triggers WM_SIZE, the surface is recreated at the new size and the frame
+  // already presented is discarded, but the message loop never delivers a
+  // WM_PAINT afterwards, so the first frame at the new size never hits the
+  // screen until the user resizes the window manually. ForceRedraw is a no-op
+  // until the first frame completes (see the comment in OnCreate), so this is
+  // free on the regular startup path; minimized windows need no painting.
+  if (message == WM_SIZE && wparam != SIZE_MINIMIZED && flutter_controller_) {
+    flutter_controller_->ForceRedraw();
+  }
+
   // Give Flutter, including plugins, an opportunity to handle window messages.
   if (flutter_controller_) {
     std::optional<LRESULT> result =
