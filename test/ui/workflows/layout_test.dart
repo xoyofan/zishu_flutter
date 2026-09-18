@@ -307,4 +307,34 @@ void main() {
     );
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets(
+    'playLeftRightLayout:左列=房间头+播放舞台,右列=侧栏全高(用户口径 2026-09-18)',
+    (tester) async {
+      final router = await pumpApp(tester);
+      await pumpPlayRoute(tester, router);
+
+      final headerRect = tester.getRect(find.byKey(const Key('play-back')));
+      final panelRect = tester.getRect(find.byType(PlaySidePanel));
+      final stageRect = tester.getRect(
+        find.byKey(const Key('play-stage-focus')),
+      );
+
+      // 房间头只在左列:右缘不得越过侧栏左缘(旧布局房间头全宽横跨侧栏上方)。
+      expect(
+        headerRect.right,
+        lessThanOrEqualTo(panelRect.left),
+        reason: '房间头(标题行)应与播放器同在左列',
+      );
+      // 侧栏从 body 顶部开始(右侧全高),不在房间头之下。
+      expect(
+        panelRect.top,
+        lessThanOrEqualTo(headerRect.top + 1),
+        reason: '侧栏应占满播放页 body 全高',
+      );
+      // 舞台同在左列:右缘不越过侧栏左缘。
+      expect(stageRect.right, lessThanOrEqualTo(panelRect.left + 1));
+      expect(tester.takeException(), isNull);
+    },
+  );
 }

@@ -27,8 +27,9 @@ import '../widgets/pip_surface.dart';
 import '../widgets/play_side_panel.dart';
 import '../widgets/player_controls.dart';
 
-/// 播放页(U5 布局基线):44px 房间头 + 视频舞台/控制条/画质线路条 +
-/// 右侧 328px 信息栏。编排全部收敛在 playControllerProvider/LivePlayer,
+/// 播放页(U5 布局基线,2026-09-18 改左右布局):左列 = 44px 房间头(标题) +
+/// 视频舞台/控制条/画质线路条;右列 = 侧栏全高(268/328/392/425 按视口分档)。
+/// 编排全部收敛在 playControllerProvider/LivePlayer,
 /// Widget 只消费状态与接口,不直接触碰 media_kit。
 ///
 /// 呈现态(normal / widescreen / fullscreen / PiP)由 [playScreenProvider] 单一
@@ -390,7 +391,10 @@ class _PlayViewState extends ConsumerState<PlayView> {
         child: stage,
       );
     } else {
-      body = Column(
+      // 左右布局(用户口径 2026-09-18):左列 = 房间头(标题行) + 播放舞台,
+      // 右列 = 侧栏全高(从 body 顶到 body 底)。旧布局房间头全宽横跨侧栏
+      // 上方,侧栏从 44px 头下才开始;现头部只属于左列,侧栏独占右列全高。
+      final leftColumn = Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _RoomHeader(
@@ -427,24 +431,25 @@ class _PlayViewState extends ConsumerState<PlayView> {
                       ],
                     ],
                   )
-                : Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(child: stage),
-                      if (showPanel) ...[
-                        const SizedBox(width: AppSpacing.md),
-                        SizedBox(
-                          width: sidePanelWidth,
-                          child: PlaySidePanel(
-                            site: widget.site,
-                            roomId: widget.roomId,
-                            payload: play?.payload,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
+                : stage,
           ),
+        ],
+      );
+      body = Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: leftColumn),
+          if (!stackSidePanel && showPanel) ...[
+            const SizedBox(width: AppSpacing.md),
+            SizedBox(
+              width: sidePanelWidth,
+              child: PlaySidePanel(
+                site: widget.site,
+                roomId: widget.roomId,
+                payload: play?.payload,
+              ),
+            ),
+          ],
         ],
       );
     }
