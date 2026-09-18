@@ -46,7 +46,12 @@ abstract final class AppColors {
   static const Color playStatVipText = Color(0xFFFFD4A0);
   static const Color playStatSvipText = Color(0xFFF0B8FF);
 
-  static const Color error = Color(0xFFF56C6C);
+  /// 错误态红,对齐 SFVideoLive web `styles/theme.css:9`(`--danger: #e55050`)。
+  ///
+  /// 与主题 token(`zishu_tokens.dart` 的 `error`,同为 #E55050)保持同值 ——
+  /// 历史上这里是 Element Plus 默认的 `#F56C6C`,已按真源修正。
+  static const Color error = Color(0xFFE55050);
+
   static const Color success = Color(0xFF67C23A);
 }
 
@@ -146,11 +151,24 @@ abstract final class AppTypography {
   static const Color fallbackSecondary = AppColors.textSecondary;
 }
 
+/// 动效基线,对齐 SFVideoLive web `styles/main.css:74,84,85` 的
+/// `--fluent-duration-*` / `--fluent-easing`。
+///
+/// 改动前请确认 web 真源仍为 150ms / 250ms /
+/// `cubic-bezier(0.16, 1, 0.3, 1)`;`test/shared/design_tokens_test.dart`
+/// 有对应契约断言。
 abstract final class AppMotion {
-  static const Duration fast = Duration(milliseconds: 120);
-  static const Duration normal = Duration(milliseconds: 200);
+  /// `--fluent-duration-fast`(150ms):hover、颜色/边框过渡等微交互。
+  static const Duration fast = Duration(milliseconds: 150);
 
-  static const Curve curve = Curves.easeOutCubic;
+  /// `--fluent-duration-normal`(250ms):展开/收起、淡入等结构性动效。
+  static const Duration normal = Duration(milliseconds: 250);
+
+  /// `--fluent-easing: cubic-bezier(0.16, 1, 0.3, 1)`。
+  ///
+  /// 注意**不是** `Curves.easeOutCubic`(那是 `Cubic(0.215, 0.61, 0.355, 1)`),
+  /// 两者手感不同;这里显式复刻 web 的四个控制点。
+  static const Curve curve = Cubic(0.16, 1, 0.3, 1);
 }
 
 /// 响应式断点,与 SFVideoLive 布局断点对齐。
