@@ -8,6 +8,7 @@ import '../../http/parser_http.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
 import '../../registry/cached_room_resolver.dart';
+import '../../utils/format_online.dart';
 import 'browse.dart';
 import 'danmaku.dart';
 import '../douyu/json_utils.dart';
@@ -36,10 +37,66 @@ class HuyaClient {
 /// **全新**的 anti_code 与流名。本实现不保存任何地址状态 —— `resolveRoom`
 /// 每次都重新走 `resolveHuyaNumericRoomId` → `fetchHuyaWebStreamData` →
 /// `buildHuyaAntiCode` 重新签名,故恢复语义与普通解析同源,单点维护避免漂移。
-class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver {
+class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver, RoomSummaryRefresher {
   HuyaRoomResolver(this._client);
 
   final HuyaClient _client;
+
+  /// 轻量刷新:只读 mp.huya.com profileRoom(必要时补一次房间页 TT_ROOM_DATA
+  /// 判定录播/下播边界),**不做 anti-code 签名、不构造任何播放地址**。
+  ///
+  /// 口径对齐 web `follow/status.ts` 的 huya 快照:
+  /// `huyaRoomState` 判在播,`formatOnline(totalCount|userCount)` 作热度;
+  /// `replay` 在本仓契约里归 offline([RoomState] 无 replay),故 online 留空。
+  @override
+  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+    final http = _client.parserHttp;
+    final url = normalizeHuyaUrl(request.roomIdOrUrl);
+    final rid = await resolveHuyaNumericRoomId(http, url);
+    final profile = await fetchHuyaProfileRoomData(http, rid);
+    if (profile == null) {
+      throw ParserHttpException('虎牙房间不存在: $rid');
+    }
+    // 仅在「无 FLV 流且疑似录播」时才补页面探测(与完整解析同一条边界)。
+    final pageFlags = profileNeedsPageCheck(profile)
+        ? await fetchHuyaPageRoomFlags(http, rid)
+        : null;
+    final state = huyaRoomState(profile, pageFlags);
+    final liveData = jsonMapOf(profile['liveData']);
+    final profileInfo = jsonMapOf(profile['profileInfo']);
+
+    final anchorName = _profileAnchorName(profile);
+    final title = _firstText(
+      [liveData['introduction'], liveData['roomName']],
+      anchorName,
+    );
+    final category = _firstText(
+      [liveData['sGameFullName'], liveData['gameHostName'], profileInfo['gameHostName']],
+      '',
+    );
+    final cid = _firstText(
+      [
+        liveData['gameId'],
+        liveData['iGid'],
+        liveData['gid'],
+        profileInfo['gameId'],
+      ],
+      '',
+    );
+    return RoomSummary(
+      site: kHuyaSiteId,
+      roomId: rid,
+      title: title,
+      anchorName: anchorName,
+      cid: cid,
+      category: category,
+      // 只有明确在播才给热度;录播/下播一律空串(契约:空串即未开播)。
+      online: state == HuyaRoomState.live
+          ? formatOnlineCount(liveData['totalCount'] ?? liveData['userCount'])
+          : '',
+      cover: httpsHuyaUrl(jsonText(liveData['cover'] ?? liveData['screenshot'])),
+    );
+  }
 
   @override
   Future<RoomPayload> recoverRoom(RoomRequest request) => resolveRoom(request);

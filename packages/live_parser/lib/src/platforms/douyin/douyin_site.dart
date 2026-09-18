@@ -9,6 +9,7 @@ import '../../contracts/contracts.dart';
 import '../../http/danmaku_transport.dart';
 import '../../models/models.dart';
 import '../../registry/cached_room_resolver.dart';
+import '../../utils/format_online.dart';
 import '../douyu/json_utils.dart';
 import 'browse.dart';
 import 'danmaku.dart';
@@ -16,10 +17,37 @@ import 'normalize.dart';
 import 'room_api.dart';
 import 'search.dart';
 
-class DouyinRoomResolver implements RoomResolver {
+class DouyinRoomResolver implements RoomResolver, RoomSummaryRefresher {
   DouyinRoomResolver(this._client);
 
   final DouyinClient _client;
+
+  /// 轻量刷新:只读一次房间进入数据(`webcast/room/web/enter`,失败时回退
+  /// 房间页 HTML),**不构造任何播放档位/地址**。
+  ///
+  /// 口径对齐 web `follow/status.ts` 的 douyin 快照:`status == 4` 为未开播,
+  /// 其余视为在播;热度取 `douyinOnlineRaw`(user_count_str/stats 口径)。
+  /// 注:`status != 4` 但无流的情况只有拿档位后才知,轻量刷新不为此多打请求,
+  /// 由播放侧开流时自会纠偏。
+  @override
+  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+    final webRid = normalizeDouyinRoomId(request.roomIdOrUrl);
+    final room = await fetchDouyinWebStreamData(_client, webRid);
+    final anchor = jsonText(room['anchor_name']);
+    final title = jsonText(room['title']);
+    final live = jsonInt(room['status']) != 4;
+    return RoomSummary(
+      site: kDouyinSiteId,
+      roomId: webRid,
+      title: title.isNotEmpty ? title : anchor,
+      anchorName: anchor,
+      // 与 resolveRoom 同口径:抖音无二级分类 id,cid 即房间号。
+      cid: webRid,
+      category: douyinCategoryOf(room),
+      online: live ? formatOnlineCount(douyinOnlineRaw(room)) : '',
+      cover: douyinCoverOf(room),
+    );
+  }
 
   @override
   Future<RoomPayload> resolveRoom(RoomRequest request) async {

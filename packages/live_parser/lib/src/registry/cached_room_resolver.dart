@@ -14,7 +14,8 @@ import '../models/models.dart';
 /// 同时实现 [RoomRecoveryResolver]:恢复路径**必须绕开本缓存**——缓存里的
 /// 地址可能已过期,复用即等于反复重开失效源。故 `recoverRoom` 先失效键,
 /// 再委托内层重新解析。
-class CachedRoomResolver implements RoomResolver, RoomRecoveryResolver {
+class CachedRoomResolver
+    implements RoomResolver, RoomRecoveryResolver, RoomSummaryRefresher {
   CachedRoomResolver(
     this._inner, {
     this.ttl = const Duration(seconds: 60),
@@ -44,6 +45,21 @@ class CachedRoomResolver implements RoomResolver, RoomRecoveryResolver {
     final inner = _inner;
     if (inner is RoomRecoveryResolver) return inner.recoverRoom(request);
     return inner.resolveRoom(request);
+  }
+
+  /// 轻量刷新:直接委托内层,**不经过短缓存也不写缓存**。
+  ///
+  /// 刷新本身就是为了拿最新在播状态,缓存会把刷新变成“回读旧快照”;
+  /// 内层未实现该能力(如部分站点)时抛错,由调用方按条目隔离。
+  /// 异步抛出(而非同步 throw):保证调用方统一用 Future 的错误处理捕获
+  /// ——与 `UnsupportedRoomResolver` 同一约定。
+  @override
+  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+    final inner = _inner;
+    if (inner is RoomSummaryRefresher) {
+      return inner.refreshRoomSummary(request);
+    }
+    throw UnsupportedError('站点 ${request.site} 未实现房间状态刷新');
   }
 
   @override

@@ -12,6 +12,7 @@ import 'browse.dart';
 import 'danmaku.dart';
 import 'encryption.dart';
 import 'hls_preview.dart';
+import 'json_utils.dart';
 import 'lines.dart';
 import 'multirates.dart';
 import 'normalize.dart';
@@ -47,10 +48,44 @@ class DouyuClient {
   void close() => _http.close();
 }
 
-class DouyuRoomResolver implements RoomResolver {
+class DouyuRoomResolver implements RoomResolver, RoomSummaryRefresher {
   DouyuRoomResolver(this._client);
 
   final DouyuClient _client;
+
+  /// 轻量刷新:betard(状态/标题/封面/分类)+ m.douyu 房间信息(热度 `hn`)。
+  ///
+  /// 只打两个房间信息端点 —— **不取白名单密钥、不请求 getH5PlayV1、
+  /// 不做签名**,因此不能在关注列表定时刷新时顺带拉取流地址。口径对齐 web
+  /// `services/streaming-server/src/follow/status.ts` 的 douyu 快照:
+  /// `show_status == 1` 且在播时取 `hn` 作热度文案,离线一律空串。
+  @override
+  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+    final parserHttp = _client.parserHttp;
+    final url = normalizeDouyuUrl(request.roomIdOrUrl);
+    final rid = await resolveRoomId(parserHttp, url);
+    // 房间不存在时 fetchBetard 抛 RoomNotFoundException(调用方按条目隔离)。
+    final room = await fetchBetard(parserHttp, rid);
+    final mobile = await fetchDouyuMobileRoomInfo(parserHttp, rid);
+
+    final live = room.showStatus == 1;
+    final hn = jsonText(mobile['hn']);
+    final mobileTitle = jsonText(mobile['roomName']);
+    final mobileAnchor = jsonText(mobile['nickname']);
+    return RoomSummary(
+      site: kDouyuSiteId,
+      roomId: rid,
+      title: mobileTitle.isNotEmpty
+          ? mobileTitle
+          : (room.roomName.isNotEmpty ? room.roomName : room.nickname),
+      anchorName: mobileAnchor.isNotEmpty ? mobileAnchor : room.nickname,
+      cid: room.cateId,
+      category: room.cateName,
+      // 热度只在在播时有意义;`hn` 缺失/为 0 时留空。
+      online: live && hn.isNotEmpty && hn != '0' ? hn : '',
+      cover: room.cover,
+    );
+  }
 
   /// getH5PlayV1 响应短缓存(60s):同房同档同 CDN 的探测/取流复用同一响应,
   /// 切档/短时间重试不再重复打播放接口;仅缓存成功响应。

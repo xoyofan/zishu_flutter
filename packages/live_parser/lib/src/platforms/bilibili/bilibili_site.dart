@@ -8,6 +8,7 @@ import '../../http/parser_http.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
 import '../../registry/cached_room_resolver.dart';
+import '../../utils/format_online.dart';
 import '../../utils/header_sanitizer.dart';
 import 'browse.dart';
 import 'danmaku.dart';
@@ -49,10 +50,61 @@ class BilibiliClient {
   void close() => parserHttp.close();
 }
 
-class BilibiliRoomResolver implements RoomResolver {
+class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
   BilibiliRoomResolver(this._client);
 
   final BilibiliClient _client;
+
+  /// 轻量刷新:只读 `room/get_info`(+ 主播名缺失时的 anchor 兜底),
+  /// **不请求 `room/play_info`、不做任何取流与签名**。
+  ///
+  /// 口径对齐 web `follow/status.ts` 的 bilibili 快照:`live_status == 1`
+  /// 为在播,`online` 作热度;轮播(2)/未开播均归 offline,online 留空。
+  @override
+  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+    final http = _client.parserHttp;
+    final credentials = _client.credentials;
+    final url = normalizeBilibiliUrl(request.roomIdOrUrl);
+    final rid = bilibiliRoomIdFromUrl(url);
+
+    final Map<String, dynamic> info;
+    try {
+      info = await fetchBilibiliRoomInfo(http, credentials, rid);
+    } on BilibiliApiException catch (error) {
+      if (error.code == 1) {
+        throw ParserHttpException('B 站房间不存在: $rid');
+      }
+      rethrow;
+    }
+
+    var anchorName = jsonText(
+      info['uname'] ??
+          jsonMapOf(jsonMapOf(info['anchor_info'])['base_info'])['uname'],
+    );
+    if (anchorName.isEmpty) {
+      // 仅主播名缺失时才补一次 anchor 接口(与完整解析同一兜底)。
+      try {
+        final anchor = await fetchBilibiliAnchorInRoom(http, credentials, rid);
+        anchorName = anchor.uname;
+      } on Object {
+        // 兜底失败不影响状态刷新结果。
+      }
+    }
+
+    final live = jsonInt(info['live_status']) == 1;
+    return RoomSummary(
+      site: kBilibiliSiteId,
+      roomId: rid,
+      title: jsonText(info['title']).isEmpty
+          ? anchorName
+          : jsonText(info['title']),
+      anchorName: anchorName,
+      cid: jsonText(info['area_id']),
+      category: jsonText(info['parent_area_name'] ?? info['area_name']),
+      online: live ? formatOnlineCount(info['online']) : '',
+      cover: bilibiliCoverFromRoom(info),
+    );
+  }
 
   @override
   Future<RoomPayload> resolveRoom(RoomRequest request) async {

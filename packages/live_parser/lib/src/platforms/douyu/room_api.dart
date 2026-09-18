@@ -154,6 +154,22 @@ Future<BetardRoom> fetchBetard(ParserHttp parserHttp, String rid) async {
 
 /// betard 头像缺失时回退 m.douyu.com 房间信息接口。
 Future<String> fetchRoomAvatarFallback(ParserHttp http, String rid) async {
+  final roomInfo = await fetchDouyuMobileRoomInfo(http, rid);
+  return httpsUrl(jsonText(roomInfo['avatar']));
+}
+
+/// m.douyu.com 房间信息(只取 roomInfo 块)。
+///
+/// 与 [fetchRoomAvatarFallback] 打同一个端点,区别是**保留整块元信息**:
+/// 轻量刷新需要 `hn`(已人类可读的热度文案,web 侧 `follow/status.ts` 的
+/// douyu 快照也用它)、`roomName`/`nickname` 与 `showTime`。
+///
+/// 失败一律返回空 map(而非抛错):热度只是展示增强,不能让本身已拿到
+/// betard 状态的刷新整体失败。
+Future<Map<String, dynamic>> fetchDouyuMobileRoomInfo(
+  ParserHttp http,
+  String rid,
+) async {
   try {
     final response = await http.get(
       Uri.parse('https://m.douyu.com/api/room/info?rid=$rid'),
@@ -164,11 +180,10 @@ Future<String> fetchRoomAvatarFallback(ParserHttp http, String rid) async {
       },
     );
     final payload = jsonMapOf(jsonDecode(utf8.decode(response.bodyBytes)));
-    if (jsonInt(payload['code']) != 0) return '';
+    if (jsonInt(payload['code']) != 0) return const {};
     final data = jsonMapOf(payload['data']);
-    final roomInfo = jsonMapOf(data['roomInfo']);
-    return httpsUrl(jsonText(roomInfo['avatar']));
+    return jsonMapOf(data['roomInfo']);
   } on ParserHttpException {
-    return '';
+    return const {};
   }
 }

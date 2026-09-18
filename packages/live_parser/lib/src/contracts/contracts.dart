@@ -61,6 +61,26 @@ abstract interface class RoomRecoveryResolver implements RoomResolver {
   Future<RoomPayload> recoverRoom(RoomRequest request);
 }
 
+/// 轻量状态刷新:只取房间元信息(在播状态/热度/标题/封面/分类/主播名),
+/// **不解析播放地址、不做签名、不写缓存**。
+///
+/// 与 [RoomResolver] 分离的原因:关注列表与房间卡片刷新只需要元数据,走完整
+/// 解析会顺带做取密钥/签名/取流等昂贵步骤;刷新失败(网络抖动)也不应把已有
+/// 列表刷成空 —— 由调用方按条目隔离,失败保留旧数据。
+///
+/// 实现约定(不可协商):
+/// * 只打各站最轻的房间信息接口,请求里不得出现取流 / 签名相关调用;
+/// * 离线(含平台「未开播」)时 [RoomSummary.online] 必须为空串 —— 宿主以
+///   「online 非空」当作在播判据,填占位文案会把离线房间刷成在播;
+/// * 房间不存在或上游报错直接抛异常(不得返回伪造的 RoomSummary);
+/// * 不做结果缓存:刷新本身就是为了拿最新状态。
+///
+/// 继承 [RoomResolver]:能力探测 `is` 的类型提升要求子类型关系(与
+/// [RoomRecoveryResolver] 同一约定);实现方通常也具备完整解析能力。
+abstract interface class RoomSummaryRefresher implements RoomResolver {
+  Future<RoomSummary> refreshRoomSummary(RoomRequest request);
+}
+
 /// 栏目浏览:分类索引 + 分类/首页房间列表。
 abstract interface class BrowseRepository {
   Future<CategoryResult> fetchCategories(String site);
