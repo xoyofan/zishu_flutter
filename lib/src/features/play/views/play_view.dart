@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -24,6 +25,7 @@ import '../application/play_screen_provider.dart';
 import '../application/sleep_timer_provider.dart';
 import '../../follow/application/settings_provider.dart';
 import '../widgets/pip_surface.dart';
+import '../widgets/play_immersive_side_sheet.dart';
 import '../widgets/play_side_panel.dart';
 import '../widgets/player_controls.dart';
 
@@ -69,6 +71,21 @@ class _PlayViewState extends ConsumerState<PlayView> {
   /// `_isMouseOverController`),避免鼠标还在按钮上时控制条自己消失。
   bool _hoveringControls = false;
 
+  /// 沉浸态右缘侧抽屉是否展开(web `immersiveSideOpen`)。
+  bool _immersiveSideOpen = false;
+
+  /// 沉浸态右缘热区防抖锁(web `lockImmersiveSide`,IMMERSIVE_SIDE_LOCK_MS
+  /// = 720):进入沉浸态瞬间锁死,防止紧接的点击误开抽屉。
+  ///
+  /// 用「bool + Timer」而非 DateTime 截止值:widget 测试的 pump 推进的是
+  /// FakeAsync 时钟,真实 `DateTime.now()` 不会走,锁会永远解不开。
+  bool _immersiveSideLocked = false;
+  Timer? _immersiveSideLockTimer;
+
+  /// 抽屉自动收起计时(web `scheduleHideImmersiveSide`,
+  /// IMMERSIVE_SIDE_IDLE_MS = 3000)。
+  Timer? _immersiveSideHideTimer;
+
   @override
   void initState() {
     super.initState();
@@ -82,6 +99,8 @@ class _PlayViewState extends ConsumerState<PlayView> {
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onGlobalKey);
     _hideTimer?.cancel();
+    _immersiveSideLockTimer?.cancel();
+    _immersiveSideHideTimer?.cancel();
     // 窗口呈现(全屏/PiP)的复位由 playScreenProvider 的 onDispose 负责
     // (autoDispose:离开播放页即触发),此处不再手动调用,避免与 provider
     // 销毁时序打架——旧做法在 dispose 期走 ref,会撞上"provider 已销毁"。
@@ -193,6 +212,72 @@ class _PlayViewState extends ConsumerState<PlayView> {
     });
   }
 
+  /// 沉浸态切换的抽屉联动(web enterImmersiveLayout/onFullscreenChange):
+  /// 进入或退出沉浸态都强制关抽屉;进入时加 720ms 防抖锁。
+  void _onChromeVisibilityChanged(bool hidesChrome) {
+    _immersiveSideHideTimer?.cancel();
+    if (_immersiveSideOpen) setState(() => _immersiveSideOpen = false);
+    if (hidesChrome) {
+      _immersiveSideLocked = true;
+      _immersiveSideLockTimer?.cancel();
+      _immersiveSideLockTimer = Timer(const Duration(milliseconds: 720), () {
+        if (mounted) _immersiveSideLocked = false;
+      });
+    } else {
+      _immersiveSideLocked = false;
+      _immersiveSideLockTimer?.cancel();
+    }
+  }
+
+  /// 打开沉浸抽屉(web `openImmersiveSidePanel`):锁内拒绝;打开即藏控制条
+  /// (`showControls = false` + 清控制条计时),并启动 3s 自动收起。
+  void _openImmersiveSide() {
+    if (_immersiveSideLocked) return;
+    _immersiveSideHideTimer?.cancel();
+    if (!_immersiveSideOpen) setState(() => _immersiveSideOpen = true);
+    _hideTimer?.cancel();
+    if (_controlsVisible) setState(() => _controlsVisible = false);
+    _scheduleImmersiveSideHide();
+  }
+
+  /// 关闭沉浸抽屉(web watch(immersiveSideOpen) 的 else 分支):任何途径的
+  /// 关闭(背景/toggle/超时)在沉浸态下都同时唤醒控制条(revealControls)。
+  void _closeImmersiveSide() {
+    _immersiveSideHideTimer?.cancel();
+    if (!_immersiveSideOpen) return;
+    setState(() => _immersiveSideOpen = false);
+    _wakeControls();
+  }
+
+  /// 排程 3s 无交互自动收起抽屉(web `scheduleHideImmersiveSide`)。
+  void _scheduleImmersiveSideHide() {
+    _immersiveSideHideTimer?.cancel();
+    _immersiveSideHideTimer = Timer(const Duration(seconds: 3), () {
+      if (mounted) _closeImmersiveSide();
+    });
+  }
+
+  /// 沉浸态舞台点击分流(web `onPlayFrameClick` 的沉浸分支):
+  /// - 抽屉开着 → 点背景关闭 + 唤醒控制条;
+  /// - 点击落在右缘热区(x/width ≥ 2/3,`PLAY_IMMERSIVE_TAP_ZONE`)→ 开抽屉;
+  /// - 其余 → 仅唤醒控制条。
+  ///
+  /// 沉浸态下点击**不切换播放/暂停**(web 同一分支直接 return)。
+  void _onImmersiveFrameTapUp(Offset localPosition) {
+    if (_immersiveSideOpen) {
+      _closeImmersiveSide();
+      return;
+    }
+    final box = _stageKey.currentContext?.findRenderObject() as RenderBox?;
+    final width = box?.size.width ?? 0;
+    final zone = localPosition.dx / (width <= 0 ? 1 : width);
+    if (zone >= 2 / 3) {
+      _openImmersiveSide();
+    } else {
+      _wakeControls();
+    }
+  }
+
   /// 横屏手机:侧栏以底部 sheet 滑出(sheet 宽近全屏,满足 W12 sheet 形态)。
   Future<void> _showSidePanelSheet(RoomPayload? payload) {
     return showModalBottomSheet<void>(
@@ -257,6 +342,8 @@ class _PlayViewState extends ConsumerState<PlayView> {
       }
       _hoveringControls = false;
       _hideTimer?.cancel();
+      // 沉浸态切换时联动右缘抽屉(强制关 + 进入时 720ms 防抖锁)。
+      _onChromeVisibilityChanged(next.hidesChrome);
       if (!_controlsVisible) setState(() => _controlsVisible = true);
       _scheduleHideControls();
     });
@@ -299,6 +386,9 @@ class _PlayViewState extends ConsumerState<PlayView> {
               showDanmaku: showDanmaku,
               onRetry: () =>
                   ref.read(playControllerProvider(_params).notifier).retry(),
+              // 沉浸态下舞台点击走「控制条/抽屉」分流,不切播放
+              // (web onPlayFrameClick 沉浸分支);常规态保持切播放。
+              onFrameTapUp: screen.hidesChrome ? _onImmersiveFrameTapUp : null,
             ),
             // 弹幕叠加层:位于视频之上、控制条之下(参考 play 布局层级)。
             // 与右侧侧栏聊天共用 danmakuSessionProvider 的同一会话,不重复建连。
@@ -385,10 +475,34 @@ class _PlayViewState extends ConsumerState<PlayView> {
       body = PipResizeSurface(child: stage);
     } else if (screen.hidesChrome) {
       // 网页全屏 / 全屏:视频占满窗口,隐藏房间头与侧栏;控制条自动隐藏可唤醒。
+      // 右缘侧抽屉(对齐 web PlayImmersiveSideSheet):仅在沉浸态挂载,
+      // 与舞台同一 Stack;payload 未就绪时无内容可展示,不挂载(web sideReady)。
+      final immersivePanelWidth = size.width < AppBreakpoints.phone
+          // 手机:面板宽不超过视口 88%(web `min(320px, 88vw)`)。
+          ? math.min(AppSpacing.playSidePanelWidthFor(size.width),
+              size.width * 0.88)
+          : AppSpacing.playSidePanelWidthFor(size.width);
       body = SizedBox.expand(
         // 测试锚点:全屏 / 网页全屏的沉浸容器。
         key: const Key('play-immersive-stage'),
-        child: stage,
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            stage,
+            if (play?.payload != null)
+              PlayImmersiveSideSheet(
+                open: _immersiveSideOpen,
+                panelWidth: immersivePanelWidth,
+                onClose: _closeImmersiveSide,
+                onInteract: _scheduleImmersiveSideHide,
+                child: PlaySidePanel(
+                  site: widget.site,
+                  roomId: widget.roomId,
+                  payload: play?.payload,
+                ),
+              ),
+          ],
+        ),
       );
     } else {
       // 左右布局(用户口径 2026-09-18):左列 = 房间头(标题行) + 播放舞台,
@@ -684,6 +798,7 @@ class _VideoStage extends ConsumerStatefulWidget {
     required this.async,
     required this.showDanmaku,
     required this.onRetry,
+    this.onFrameTapUp,
   });
 
   final AsyncValue<PlayState> async;
@@ -692,6 +807,10 @@ class _VideoStage extends ConsumerStatefulWidget {
   final bool showDanmaku;
 
   final VoidCallback onRetry;
+
+  /// 沉浸态舞台点击分流回调(传 `localPosition`,见播放页
+  /// `_onImmersiveFrameTapUp`);为空时保持「点击切播放/暂停」。
+  final void Function(Offset localPosition)? onFrameTapUp;
 
   @override
   ConsumerState<_VideoStage> createState() => _VideoStageState();
@@ -797,9 +916,16 @@ class _VideoStageState extends ConsumerState<_VideoStage> {
       autofocus: true,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: () {
-          // 焦点交给舞台节点(自持 FocusNode),再切播放状态。
+        // onTapUp 而非 onTap:沉浸态分流需要点击在舞台内的相对位置
+        // (右缘 2/3 热区判定);常规态回调为空,退化为切播放/暂停。
+        onTapUp: (details) {
+          // 焦点交给舞台节点(自持 FocusNode),再处理点击语义。
           _focusNode.requestFocus();
+          final handler = widget.onFrameTapUp;
+          if (handler != null) {
+            handler(details.localPosition);
+            return;
+          }
           _onStageTap();
         },
         child: Container(
