@@ -704,3 +704,23 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 ### 真机截图方法论(沉淀)
 - 全屏 GDI 拷贝截的是合成屏幕,宿主窗口遮挡 + SetWindowPos TOPMOST 被环境拒绝时截不到目标 → 用 `PrintWindow(hwnd, PW_RENDERFULLCONTENT)` 直抓目标窗口表面;
 - 手写 PNG:BGRA→RGB 用三次 stride 切片(`raw[2::4]` 等),**每行前必须插 filter byte 0** 再 zlib 压缩(漏掉会导致 PNG 无法解码)。
+
+## 2026-09-19 侧栏关注口径更新:只显在播 + 默认列表(1ff2df3)
+
+**结论**:播放页侧栏「关注」tab 按用户最新口径重做 —— ①不显示没开播的;②默认列表视图(每条一行);③超关在播置顶。TDD 全绿(505/0)。
+
+### 口径变更(两处有意偏离 web 真源,已在注释钉住)
+- **可见性**:`isPlayFollowVisible` 改为只显在播。web 真源 `followDisplay.ts:235` 是「在播 ∨ 离线超关」,该口径 2026-09-18 曾对齐落地(当时为修「关注没显示」),现被用户口径覆盖。空态文案同步改「暂无在播关注」。
+- **默认视图**:封面网格 → 紧凑列表(`PlayRoomList`,每条一行:主播名+★+标题,无缩略图)。web 真源默认 `previewCover=true`(封面预览),同样有意偏离。网格仍可手动切换。
+- **排序**:超关在播 → 普通在播(档内关注时间倒序不变,与「我的关注」页共用 follow_sort 单一来源)。用户「按超关 关注排序」自然满足。
+
+### 测试坑(记录)
+- 面板 finder 必须按**滚动方向过滤**:面板里平台筛选 chips 是水平 ListView,不过滤会误中关注列表(垂直);
+- 分页窗口计数读 `SliverChildBuilderDelegate.childCount` 而非 `estimatedChildCount` —— 后者按可视区**估算**(实测 60 条窗口只报 12),GridView 才是精确值;
+- `findsNothing` 断言不能用带 `.first` 的 finder(0 匹配时 `.first` 直接抛 StateError,而非断言失败);
+- room_card_badges 四象限用例适配:切网格后测在播卡;离线卡渲染(★ 左下/未开播遮罩)改**直 pump PlayRoomGrid** 钉住契约(侧栏不再触达离线条目,防口径回摆时丢行为)。
+
+### 门禁
+- analyze 0 issue;全量 **505 passed / 0 failed**(+2:超关置顶排序、离线卡直 pump);
+- golden `play_style_follow` 重生成 43317→36700B(关注 tab 网格→列表,渲染元素减少,定性无意外)。
+- 待办:重建 release exe 真机复验。
