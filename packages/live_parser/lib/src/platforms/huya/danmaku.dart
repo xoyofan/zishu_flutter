@@ -13,6 +13,7 @@ import '../../http/danmaku_transport.dart';
 import '../../http/parser_http.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
+import '../../utils/chat_dedup.dart';
 import '../douyu/json_utils.dart';
 import 'room_api.dart';
 import 'tars_codec.dart';
@@ -120,6 +121,9 @@ class HuyaDanmakuSession implements DanmakuSession {
   late final StreamSubscription<Object?> _subscription;
   late final Timer _heartbeatTimer;
 
+  /// chat 重推去重:cap 对齐 web huyaDanmakuDedup(800)。
+  final ChatDedup _chatDedup = ChatDedup(cap: 800);
+
   final _messagesController = StreamController<DanmakuMessage>.broadcast();
   final _statesController = StreamController<DanmakuSessionState>.broadcast();
 
@@ -177,6 +181,13 @@ class HuyaDanmakuSession implements DanmakuSession {
     switch (uri) {
       case _uriChatMessage:
         final message = _chatFromNotice(msg);
+        // WS 常对同一条推送多次(对齐 web huyaDanmakuDedup,cap 800):
+        // 契约暂无 sMessageId,先用「用户+正文」兜底 key(web id 无效时的
+        // fallback 同款)。
+        if (message != null &&
+            !_chatDedup.allow('${message.userName}\u0000${message.text}')) {
+          return;
+        }
         if (message != null) _messagesController.add(message);
       case _uriOnlineCount:
         final online = TarsReader(msg).readInt(0);

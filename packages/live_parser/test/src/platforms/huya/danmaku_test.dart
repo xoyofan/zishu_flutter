@@ -107,6 +107,39 @@ void main() {
     await session.close();
   });
 
+  test('chat 协议重推去重:user+text 兜底 key(对齐 web huyaDanmakuDedup)', () async {
+    final session = await connector.connect(
+      const DanmakuSessionRequest(site: 'huya', roomId: '9527'),
+    );
+    final socket = transport.sockets.single;
+    final received = <DanmakuMessage>[];
+    final sub = session.messages.listen(received.add);
+
+    socket.pushBytes(_pushFrame(1400, _chatNotice(nick: '张三', content: '你好虎牙')));
+    // WS 对同一条的重复推送(用户+正文完全相同)。
+    socket.pushBytes(_pushFrame(1400, _chatNotice(nick: '张三', content: '你好虎牙')));
+    // 不同用户同正文:保留。
+    socket.pushBytes(_pushFrame(1400, _chatNotice(nick: '李四', content: '你好虎牙')));
+    // 同用户不同正文:保留。
+    socket.pushBytes(_pushFrame(1400, _chatNotice(nick: '张三', content: '换一条')));
+    // 在线人数(8006)不属于 chat 域,不受去重影响。
+    final online = TarsWriter()..writeInt(123456, 0);
+    socket.pushBytes(_pushFrame(8006, online.takeBytes()));
+
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    final chats = received.where((m) => m.type == DanmakuMessageType.chat).toList();
+    expect(chats, hasLength(3), reason: '协议重推(用户+正文同)应被滤掉,其余保留');
+    expect(
+      received.where((m) => m.type == DanmakuMessageType.other),
+      hasLength(1),
+      reason: '在线人数不参与 chat 去重',
+    );
+
+    await sub.cancel();
+    await session.close();
+  });
+
   test('心跳周期发送(cmdType=5)与 close 释放', () async {
     final session = await connector.connect(
       const DanmakuSessionRequest(site: 'huya', roomId: '9527'),

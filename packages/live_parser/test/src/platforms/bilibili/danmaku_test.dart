@@ -111,6 +111,41 @@ void main() {
     await session.close();
   });
 
+  test('DANMU_MSG 协议重推去重:user+text 兜底 key(对齐 web bilibiliDanmakuDedup)', () async {
+    final session = await connector.connect(
+      const DanmakuSessionRequest(site: 'bilibili', roomId: '9527'),
+    );
+    final socket = transport.sockets.single;
+    final received = <DanmakuMessage>[];
+    final sub = session.messages.listen(received.add);
+    socket.pushBytes(encodeBiliPacket(BiliPacketOp.authAck, utf8.encode('{"code":0}')));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    socket.pushBytes(_danmuFrame(cmd: 'DANMU_MSG:4:0:2:2:2:0', userName: '张三', text: '你好B站'));
+    // SSE/代理链路对同一条的重复推送(用户+正文完全相同)。
+    socket.pushBytes(_danmuFrame(cmd: 'DANMU_MSG:4:0:2:2:2:0', userName: '张三', text: '你好B站'));
+    // 不同用户同正文:不是重推,应保留。
+    socket.pushBytes(_danmuFrame(cmd: 'DANMU_MSG:4:0:2:2:2:0', userName: '李四', text: '你好B站'));
+    // 同用户不同正文:应保留。
+    socket.pushBytes(_danmuFrame(cmd: 'DANMU_MSG:4:0:2:2:2:0', userName: '张三', text: '换一条'));
+    // 人气(op=3)不属于 chat 域,不受去重影响。
+    final popularity = ByteData(4)..setInt32(0, 654321, Endian.big);
+    socket.pushBytes(encodeBiliPacket(BiliPacketOp.heartbeatAck, popularity.buffer.asUint8List()));
+
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    final chats = received.where((m) => m.type == DanmakuMessageType.chat).toList();
+    expect(chats, hasLength(3), reason: '协议重推(用户+正文同)应被滤掉,其余保留');
+    expect(
+      received.where((m) => m.rawType == 'bilibili:popularity'),
+      hasLength(1),
+      reason: '人气消息不参与 chat 去重',
+    );
+
+    await sub.cancel();
+    await session.close();
+  });
+
   test('authAck code!=0 → disconnected', () async {
     final session = await connector.connect(
       const DanmakuSessionRequest(site: 'bilibili', roomId: '9527'),

@@ -9,6 +9,7 @@ import '../../http/danmaku_transport.dart';
 import '../../http/parser_http.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
+import '../../utils/chat_dedup.dart';
 import '../douyu/json_utils.dart';
 import 'packet.dart';
 import 'room_api.dart';
@@ -179,6 +180,9 @@ class BilibiliDanmakuSession implements DanmakuSession {
   bool _closed = false;
   bool _authOk = false;
 
+  /// chat 重推去重:cap 对齐 web bilibiliDanmakuDedup(1200)。
+  final ChatDedup _chatDedup = ChatDedup(cap: 1200);
+
   @override
   Stream<DanmakuMessage> get messages => _messages;
 
@@ -264,6 +268,10 @@ class BilibiliDanmakuSession implements DanmakuSession {
     final userName = user.length > 1 ? user[1]?.toString() ?? '' : '';
     final userId = user.isNotEmpty ? user[0]?.toString() ?? '' : '';
     final color = meta.length > 3 ? _intOf(meta[3]) : 0;
+
+    // 协议重推去重(对齐 web bilibiliDanmakuDedup,cap 1200):契约暂无
+    // id 字段,先用「用户+正文」兜底 key(web id 无效时的 fallback 同款)。
+    if (!_chatDedup.allow('$userName\u0000$text0')) return;
 
     _messagesController.add(
       DanmakuMessage(
