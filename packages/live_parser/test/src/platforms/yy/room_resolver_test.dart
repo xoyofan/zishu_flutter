@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:live_parser/live_parser.dart';
 import 'package:test/test.dart';
 
@@ -146,6 +148,34 @@ void main() {
       expect(payload.streams[0].preferredLine?.url, 'https://mobile.yy.com/test-1200.m3u8');
       expect(payload.streams[1].preferredLine?.url, 'https://mobile.yy.com/test-4000.m3u8');
       expect(payload.streams.every((stream) => stream.lines.single.format == 'hls'), isTrue);
+    });
+
+    test('串房回归:tier 缓存按 (roomId, gear) 键控,新房间不复用上一房间流', () async {
+      final fake = FakeYyApi()
+        ..detailResponse = yyFixture('detail_live.json')
+        ..streamResponse = yyFixture('stream_live.json');
+      final registration = buildYyRegistration(httpClient: fake);
+
+      final first = await registration.resolver.resolveRoom(
+        const RoomRequest(site: 'yy', roomIdOrUrl: '1414787909'),
+      );
+      expect(first.playUrl, 'https://stream.yy.com/blue.m3u8');
+
+      // 换一个房间,上游流地址随之变化;若 tier 缓存缺 roomId 键,
+      // 这里会命中上一房间的缓存,既不发 stream-manager 请求、URL 也是旧的。
+      fake.streamResponse = jsonDecode(
+        jsonEncode(yyFixture('stream_live.json')).replaceAll('blue', 'room2'),
+      );
+      final second = await registration.resolver.resolveRoom(
+        const RoomRequest(site: 'yy', roomIdOrUrl: '2222222222'),
+      );
+
+      expect(second.roomId, '2222222222');
+      expect(second.playUrl, 'https://stream.yy.com/room2.m3u8');
+      final streamCalls = fake.requests
+          .where((request) => request.url.host == 'stream-manager.yy.com')
+          .length;
+      expect(streamCalls, greaterThanOrEqualTo(2), reason: '新房间必须重新取流');
     });
 
     test('全部取流失败不伪报在播', () async {

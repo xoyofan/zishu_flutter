@@ -34,7 +34,11 @@ class YyRoomResolver implements RoomResolver, RoomSummaryRefresher {
 
   /// 档位流地址短缓存(60s,对齐 SF tier 缓存):切回同档/重复进房零请求。
   /// 只缓存成功结果,失败不缓存以便立即重试。
-  final Map<int, ({DateTime at, StreamQuality tier})> _tierCache = {};
+  ///
+  /// 键 = `roomId + gear`。**必须带 roomId**:resolver 实例与注册表同生命周期,
+  /// 此前只按 gear 键控,看过 A 房后再进 B 房会命中 A 房的流地址
+  /// (实测表现:「不同房间进去都是同一个房间」)。
+  final Map<String, ({DateTime at, StreamQuality tier})> _tierCache = {};
   static const Duration _tierTtl = Duration(seconds: 60);
 
   /// 轻量刷新:只打 `liveInfoDetail` 房间元信息 HTTP 接口(**官方游客 WS 已
@@ -180,7 +184,8 @@ class YyRoomResolver implements RoomResolver, RoomSummaryRefresher {
     YyQuality quality, {
     Object? prefetched,
   }) async {
-    final cached = _tierCache[quality.gear];
+    final key = '$roomId\u0000${quality.gear}';
+    final cached = _tierCache[key];
     if (cached != null && DateTime.now().difference(cached.at) < _tierTtl) {
       return cached.tier;
     }
@@ -191,7 +196,7 @@ class YyRoomResolver implements RoomResolver, RoomSummaryRefresher {
       prefetched: prefetched,
     );
     if (tier != null) {
-      _tierCache[quality.gear] = (at: DateTime.now(), tier: tier);
+      _tierCache[key] = (at: DateTime.now(), tier: tier);
     }
     return tier;
   }
