@@ -43,13 +43,15 @@ class SoopBrowseRepository implements BrowseRepository {
         final cid = jsonText(item['category_no']);
         final name = jsonText(item['category_name']);
         if (cid.isEmpty || name.isEmpty) continue;
-        // zh_CN 上游直出中文名:记录 cid→中文,供房间列表反查(web
-        // soopZhCategoryMap 同构);remap 仅作归一兜底。
-        rememberSoopZhCategory(cid, name);
+        // 反查表记 **remap 后的中文显示名**(web soopZhCategoryMap 记的
+        // 也是 remap 后的 c.name):上游个别分类 zh_CN 仍直出英文原名
+        // (如聊天分区 'Talk/Cam'),若记原名,房间分类反查会回填英文。
+        final displayName = remapCategoryName('soop', name);
+        rememberSoopZhCategory(cid, displayName);
         items.add(
           CategoryItem(
             cid: cid,
-            name: remapCategoryName('soop', name),
+            name: displayName,
             pic: httpsSoopUrl(item['cate_img']),
           ),
         );
