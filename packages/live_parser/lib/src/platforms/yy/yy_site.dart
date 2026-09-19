@@ -27,7 +27,7 @@ class YyClient {
   void close() => parserHttp.close();
 }
 
-class YyRoomResolver implements RoomResolver {
+class YyRoomResolver implements RoomResolver, RoomSummaryRefresher {
   YyRoomResolver(this._client);
 
   final YyClient _client;
@@ -36,6 +36,44 @@ class YyRoomResolver implements RoomResolver {
   /// 只缓存成功结果,失败不缓存以便立即重试。
   final Map<int, ({DateTime at, StreamQuality tier})> _tierCache = {};
   static const Duration _tierTtl = Duration(seconds: 60);
+
+  /// 轻量刷新:只打 `liveInfoDetail` 房间元信息 HTTP 接口(**官方游客 WS 已
+  /// 失效,但该接口仍可用**),不打 stream-manager、不取流、不写任何缓存。
+  ///
+  /// 口径对齐 web `follow/status.ts` 的 yy 快照:`totalViewer` 在边缘节点间
+  /// 闪变(在播房间约半数请求缺省,未开播恒为空),连取最多 3 次任一命中即
+  /// 判开播;`data=null`(合法离线响应)不重试直接按离线。房间不存在抛异常。
+  @override
+  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+    final roomId = normalizeYyRoomId(request.roomIdOrUrl);
+    var result = await fetchYyRoomDetail(_client.parserHttp, roomId);
+    if (result.notFound) {
+      throw ParserHttpException('YY 房间不存在: $roomId');
+    }
+    var detail = result.detail;
+    for (var attempt = 0; attempt < 2 && detail != null && detail.totalViewer.isEmpty; attempt++) {
+      result = await fetchYyRoomDetail(_client.parserHttp, roomId);
+      if (result.notFound) {
+        throw ParserHttpException('YY 房间不存在: $roomId');
+      }
+      detail = result.detail ?? detail;
+    }
+    final totalViewer = detail?.totalViewer ?? '';
+    return RoomSummary(
+      site: kYySiteId,
+      roomId: roomId,
+      title: detail == null
+          ? ''
+          : (detail.desc.isNotEmpty ? detail.desc : detail.name),
+      anchorName: detail?.name ?? '',
+      // 与 resolveRoom 同口径:cid 取 ssid。
+      cid: detail?.ssid ?? roomId,
+      category: detail?.biz ?? '',
+      // totalViewer 本就是格式化热度串("145.9万"),原样下发;离线空串。
+      online: totalViewer,
+      cover: detail?.thumb ?? '',
+    );
+  }
 
   @override
   Future<RoomPayload> resolveRoom(RoomRequest request) async {

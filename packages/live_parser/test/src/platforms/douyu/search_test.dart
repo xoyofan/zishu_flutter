@@ -89,6 +89,49 @@ void main() {
     expect(trimmed, hasLength(1));
   });
 
+  test('type=anchors|rooms 分流:只请求对应上游接口(对齐 web type 分流)', () async {
+    // 主播档:只打 searchUser,不碰 searchShow。
+    final anchors = await search.search(
+      const SearchRequest(site: 'douyu', query: '测试', limit: 20, type: SearchType.anchors),
+    );
+    expect(
+      fake.requests.where((r) => r.url.contains('searchUser')),
+      isNotEmpty,
+    );
+    expect(
+      fake.requests.where((r) => r.url.contains('searchShow')),
+      isEmpty,
+      reason: '主播档不得请求房间接口(searchShow)',
+    );
+    expect(
+      anchors.hits.map((h) => h.id),
+      ['9527', '3002', '3001'],
+      reason: '主播档只有 searchUser 条目,不含 searchShow 独有的 4444',
+    );
+
+    // 房间档:只打 searchShow。
+    fake.requests.clear();
+    final rooms = await search.search(
+      const SearchRequest(site: 'douyu', query: '测试', limit: 20, type: SearchType.rooms),
+    );
+    expect(
+      fake.requests.where((r) => r.url.contains('searchShow')),
+      isNotEmpty,
+    );
+    expect(
+      fake.requests.where((r) => r.url.contains('searchUser')),
+      isEmpty,
+      reason: '房间档不得请求主播接口(searchUser)',
+    );
+    expect(
+      rooms.hits.map((h) => h.id),
+      containsAll(['4444']),
+      reason: '房间档含 searchShow 独有的 4444',
+    );
+    expect(rooms.hits.map((h) => h.id), isNot(contains('3001')));
+    expect(rooms.hits.map((h) => h.id), isNot(contains('3002')));
+  });
+
   test('搜索请求必带 dy_did cookie(缺失时上游返回 error 9)', () async {
     await search.search(const SearchRequest(site: 'douyu', query: '测试', limit: 5));
 

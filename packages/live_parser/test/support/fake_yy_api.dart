@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
@@ -10,6 +11,10 @@ import 'package:http/http.dart' as http;
 class FakeYyApi extends http.BaseClient {
   Object? detailResponse;
   int detailStatus = 200;
+
+  /// 按次出队的 detail 响应(优先于 [detailResponse]);用于边缘节点闪变
+  /// 这类「同一接口连打多次、响应不同」的用例。耗尽后回落 detailResponse。
+  final ListQueue<Object?> detailResponseQueue = ListQueue<Object?>();
   Object? streamResponse;
   int streamStatus = 200;
   final Map<int, Object?> streamResponsesByGear = {};
@@ -36,7 +41,12 @@ class FakeYyApi extends http.BaseClient {
     final url = request.url;
     if (url.host == 'www.yy.com') {
       if (url.path.startsWith('/api/liveInfoDetail/')) {
-        return _json(detailResponse, status: detailStatus);
+        return _json(
+          detailResponseQueue.isNotEmpty
+              ? detailResponseQueue.removeFirst()
+              : detailResponse,
+          status: detailStatus,
+        );
       }
       if (url.path == '/yyweb/module/data/header') return _json(headerResponse);
       if (url.path == '/c/yycom/category/getCategory.action') {

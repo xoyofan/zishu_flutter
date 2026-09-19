@@ -104,5 +104,36 @@ void main() {
       final empty = await search.search(const SearchRequest(site: 'huya', query: ' '));
       expect(empty.hits, isEmpty);
     });
+
+    test('type=rooms 分流:v=4 仅取在播房间分区(3),标题走 game_roomName', () async {
+      final result = await search.search(
+        const SearchRequest(site: 'huya', query: '测试', limit: 20, type: SearchType.rooms),
+      );
+
+      // 只解析分区(3):4444 + 9527;主播分区(1)的 3002(offline)不出现。
+      expect(result.hits.map((h) => h.id), unorderedEquals(['4444', '9527']));
+      expect(result.hits.map((h) => h.state), everyElement(SearchHitState.live));
+      // 标题口径对齐 web searchHuyaRooms(game_roomName),而非主播档的 live_intro。
+      expect(
+        result.hits.map((h) => h.title),
+        unorderedEquals(['4444的房间名', '9527的房间名']),
+      );
+
+      final request = fake.requests.firstWhere((r) => r.url.contains('search.cdn.huya.com'));
+      expect(request.url, contains('v=4'), reason: '房间档走 v=4(对齐 web searchHuyaRooms)');
+      expect(request.url, isNot(contains('v=1')));
+
+      // 主播档与缺省(混合)仍走 v=1:主播分区 + 在播房间分区合并。
+      fake.requests.clear();
+      final anchors = await search.search(
+        const SearchRequest(site: 'huya', query: '测试', limit: 20, type: SearchType.anchors),
+      );
+      expect(
+        fake.requests.single.url.contains('v=1'),
+        isTrue,
+        reason: '主播档走 v=1(对齐 web searchHuyaAnchors)',
+      );
+      expect(anchors.hits.map((h) => h.id), contains('3002'));
+    });
   });
 }

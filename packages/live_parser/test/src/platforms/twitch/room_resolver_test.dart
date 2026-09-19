@@ -47,7 +47,7 @@ void main() {
   });
 
   group('在播房间', () {
-    test('多画质按分辨率降序,首档为原画', () async {
+    test('未指定清晰度:默认 480p 高清单档,其余档空线路占位', () async {
       final payload = await TwitchRoomResolver(clientFor()).resolveRoom(
         const RoomRequest(site: 'twitch', roomIdOrUrl: 'fps_shaka'),
       );
@@ -60,20 +60,84 @@ void main() {
       expect(payload.cid, '263490');
       expect(payload.source, 'live_parser/twitch');
 
-      expect(payload.streams.map((s) => s.name).toList(), [
+      // 单档收敛(对齐 web 6b4983e):进房只下发默认高清档的 media playlist。
+      expect(payload.streams, hasLength(5), reason: '其余档位空占位,chips 仍全档列出');
+      expect(payload.streams.first.name, '480p');
+      expect(payload.streams.first.lines.single.url,
+          'https://usher.example/v1/playlist/480p30.m3u8');
+      expect(
+        payload.streams.skip(1).every((stream) => stream.lines.isEmpty),
+        isTrue,
+        reason: '未选中的档位不预取线路',
+      );
+      expect(payload.availableQualities.map((q) => q.name).toList(), [
         '原画',
         '720p60',
         '480p',
         '360p',
         '160p',
       ]);
-      expect(payload.streams.map((s) => s.rate).toList(), [1080, 720, 480, 360, 160]);
+      expect(payload.playUrl, 'https://usher.example/v1/playlist/480p30.m3u8');
+      expect(payload.streams.first.lines.single.format, 'hls');
+      expect(
+        payload.streams.first.lines.single.headers['Referer'],
+        'https://www.twitch.tv/',
+      );
+    });
+
+    test('指定偏好档:只取该档,其余档空占位', () async {
+      final payload = await TwitchRoomResolver(clientFor()).resolveRoom(
+        const RoomRequest(site: 'twitch', roomIdOrUrl: 'fps_shaka', preferredQuality: '原画'),
+      );
+
+      expect(payload.streams.first.name, '原画');
+      expect(payload.streams.first.rate, 1080);
+      expect(
+        payload.streams.first.lines.single.url,
+        'https://usher.example/v1/playlist/chunked.m3u8',
+      );
+      expect(
+        payload.streams.skip(1).every((stream) => stream.lines.isEmpty),
+        isTrue,
+      );
       expect(payload.availableQualities.map((q) => q.name), contains('原画'));
-      expect(payload.playUrl, 'https://usher.example/v1/playlist/chunked.m3u8');
-      for (final stream in payload.streams) {
-        expect(stream.lines.single.format, 'hls');
-        expect(stream.lines.single.headers['Referer'], 'https://www.twitch.tv/');
-      }
+    });
+
+    test('偏好/默认档都不在主列表中:回退最高档', () async {
+      // 仅留 720p60 及以下:480p 名仍在;改成全部无 480p 的列表。
+      api.usherBody = '''
+#EXTM3U
+#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="chunked",NAME="1080p60 (source)",AUTOSELECT=YES,DEFAULT=YES
+#EXT-X-STREAM-INF:BANDWIDTH=6844122,RESOLUTION=1920x1080,VIDEO="chunked",FRAME-RATE=60.000
+https://usher.example/v1/playlist/chunked.m3u8
+#EXT-X-MEDIA:TYPE=VIDEO,GROUP-ID="720p60",NAME="720p60",AUTOSELECT=YES,DEFAULT=YES
+#EXT-X-STREAM-INF:BANDWIDTH=3422999,RESOLUTION=1280x720,VIDEO="720p60",FRAME-RATE=60.000
+https://usher.example/v1/playlist/720p60.m3u8
+''';
+      final payload = await TwitchRoomResolver(clientFor()).resolveRoom(
+        const RoomRequest(site: 'twitch', roomIdOrUrl: 'fps_shaka'),
+      );
+
+      expect(payload.streams.first.name, '原画', reason: '无 480p 时回退最高档');
+      expect(payload.streams.first.lines, isNotEmpty);
+    });
+
+    test('不同偏好档解析互不命中 20s 缓存(切档拿得到新档线路)', () async {
+      final resolver = TwitchRoomResolver(clientFor());
+      final first = await resolver.resolveRoom(
+        const RoomRequest(site: 'twitch', roomIdOrUrl: 'fps_shaka'),
+      );
+      final second = await resolver.resolveRoom(
+        const RoomRequest(site: 'twitch', roomIdOrUrl: 'fps_shaka', preferredQuality: '720p60'),
+      );
+
+      expect(first.streams.first.name, '480p');
+      expect(second.streams.first.name, '720p60');
+      expect(
+        second.streams.first.lines.single.url,
+        'https://usher.example/v1/playlist/720p60.m3u8',
+        reason: '内部缓存键须含偏好档,否则切档命中上一档 payload',
+      );
     });
 
     test('封面/头像模板已填充实际尺寸', () async {

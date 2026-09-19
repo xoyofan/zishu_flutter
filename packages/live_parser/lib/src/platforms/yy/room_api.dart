@@ -31,6 +31,7 @@ class YyRoomDetail {
     required this.users,
     required this.uid,
     required this.biz,
+    required this.totalViewer,
     required this.startTime,
   });
 
@@ -43,6 +44,13 @@ class YyRoomDetail {
   final String users;
   final String uid;
   final String biz;
+
+  /// 开播中为格式化热度串(如 "145.9万"),未开播恒为空。
+  ///
+  /// 注意:`users` 与 `totalViewer` 是两个字段 —— 在播判定以 [totalViewer]
+  /// 为准(口径对齐 web follow/status.ts;users 在部分场景恒有值,不能当
+  /// 在播判据)。
+  final String totalViewer;
   final int startTime;
 }
 
@@ -96,6 +104,7 @@ Future<YyRoomDetailResult> fetchYyRoomDetail(
         users: jsonText(item['users']),
         uid: jsonText(item['uid']),
         biz: jsonText(item['biz']),
+        totalViewer: jsonText(item['totalViewer']),
         startTime: jsonInt(item['startTime']),
       ),
     );

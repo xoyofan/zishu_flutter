@@ -8,6 +8,7 @@ import '../../http/danmaku_transport.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
 import '../../registry/cached_room_resolver.dart';
+import '../../utils/format_online.dart';
 import 'browse.dart';
 import 'danmaku.dart';
 import 'normalize.dart';
@@ -29,7 +30,7 @@ class SoopClient {
   void close() => parserHttp.close();
 }
 
-class SoopRoomResolver implements RoomResolver {
+class SoopRoomResolver implements RoomResolver, RoomSummaryRefresher {
   SoopRoomResolver(this._client);
 
   final SoopClient _client;
@@ -45,6 +46,37 @@ class SoopRoomResolver implements RoomResolver {
 
   /// 档位列表封顶(SF MAX_TIERS=4),避免长尾档位放大 UI/缓存。
   static const int _maxTiers = 4;
+
+  /// 轻量刷新:只打一次 `player_live_api(type=live)` 房间信息,**绕开
+  /// `_detailCache` 也不写任何缓存**(刷新就是为了拿最新状态),更不做
+  /// assign/aid 取流。
+  ///
+  /// 口径对齐 web `follow/status.ts` 的 soop 快照:`RESULT == 1` 为在播,
+  /// 热度取 `soopOnlineViewers`(total_view_cnt/pc+mobile 相加口径);
+  /// 封禁(-2)按「房间不存在」抛异常,其余非在播码一律空串。
+  @override
+  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+    final roomId = normalizeSoopRoomId(request.roomIdOrUrl);
+    final payload = await fetchSoopPlayerApi(_client.parserHttp, roomId);
+    final detail = parseSoopRoomDetail(payload, roomId);
+    if (detail.isBanned) {
+      throw ParserHttpException('房间已被封禁: $roomId');
+    }
+    return RoomSummary(
+      site: kSoopSiteId,
+      roomId: detail.roomId.isNotEmpty ? detail.roomId : roomId,
+      title: detail.title.isNotEmpty ? detail.title : detail.nick,
+      anchorName: detail.nick,
+      // 与 resolveRoom 同口径:SOOP 无二级分类 id,cid 即房间号。
+      cid: roomId,
+      category: detail.category,
+      // 离线/受限(-6)/观看数字段缺失一律空串;`player_live_api` 的
+      // CTUSER 是占位值,这里只认 soopOnlineViewers 的有效口径
+      // (数值字符串,经 formatOnlineCount 展示)。
+      online: detail.isLive ? formatOnlineCount(detail.viewers) : '',
+      cover: soopCoverUrl(detail.bno),
+    );
+  }
 
   @override
   Future<RoomPayload> resolveRoom(RoomRequest request) async {

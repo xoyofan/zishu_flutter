@@ -67,10 +67,39 @@ class KuaishouClient {
   void close() => parserHttp.close();
 }
 
-class KuaishouRoomResolver implements RoomResolver {
+class KuaishouRoomResolver implements RoomResolver, RoomSummaryRefresher {
   KuaishouRoomResolver(this._client);
 
   final KuaishouClient _client;
+
+  /// 轻量刷新:只拉一次房间页 SSR(`__INITIAL_STATE__`,与 web `load_meta`
+  /// 同源的最轻元信息接口,快手无免签名的 JSON 房间接口),**不解析
+  /// playUrls、不构造任何播放线路**。
+  ///
+  /// 口径对齐 web 关注快照的 kuaishou 语义:`isLiving` 判在播,热度取
+  /// `watchingCount`(detail 构建时已 formatOnlineCount);离线一律空串。
+  @override
+  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+    final roomId = normalizeKuaishouRoomId(request.roomIdOrUrl);
+    final KuaishouRoomDetail detail;
+    try {
+      detail = await _client.fetchRoom(roomId);
+    } on FormatException {
+      throw ParserHttpException('快手房间不存在: $roomId');
+    }
+    return RoomSummary(
+      site: kKuaishouSiteId,
+      roomId: detail.roomId.isNotEmpty ? detail.roomId : roomId,
+      title: detail.title.isNotEmpty ? detail.title : detail.anchorName,
+      anchorName: detail.anchorName,
+      // 与 resolveRoom 同口径:快手无二级分类 id,cid 即房间号。
+      cid: roomId,
+      category: detail.category,
+      // 离线(或观看数字段缺失)一律空串,契约以「online 非空」作在播判据。
+      online: detail.isLive ? detail.viewers : '',
+      cover: detail.cover,
+    );
+  }
 
   @override
   Future<RoomPayload> resolveRoom(RoomRequest request) async {

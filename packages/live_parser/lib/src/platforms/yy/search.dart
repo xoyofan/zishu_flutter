@@ -22,13 +22,22 @@ class YySearchRepository implements SearchRepository {
     final limit = request.limit.clamp(1, 50).toInt();
     if (query.isEmpty) return const SearchResult(site: kYySiteId, hits: []);
 
-    final results = await Future.wait([
-      _searchType('120', query, limit),
-      _searchType('1', query, limit),
-    ]);
+    // type 分流对齐 web(t=120=房间、t=1=主播,search/yy.ts searchYy*);
+    // 缺省 null = 两路合并(既有混合行为,向后兼容)。
+    final type = request.type;
+    final List<SearchHit> merged;
+    if (type == null) {
+      final results = await Future.wait([
+        _searchType('120', query, limit),
+        _searchType('1', query, limit),
+      ]);
+      merged = [...results[0], ...results[1]];
+    } else {
+      merged = await _searchType(type == SearchType.rooms ? '120' : '1', query, limit);
+    }
     return SearchResult(
       site: kYySiteId,
-      hits: sortSearchHits(query, trimSearchHits([...results[0], ...results[1]], limit)),
+      hits: sortSearchHits(query, trimSearchHits(merged, limit)),
     );
   }
 
