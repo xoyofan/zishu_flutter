@@ -12,11 +12,12 @@ import 'package:test/test.dart';
 
 import '../../../support/fake_douyu_api.dart';
 
-Map<String, Object?> _betard({required int showStatus}) => {
+Map<String, Object?> _betard({required int showStatus, int videoLoop = 0}) => {
   'room': {
     'room_id': 9527,
     'nickname': '测试主播',
     'show_status': showStatus,
+    'videoLoop': videoLoop,
     'room_name': '斗鱼测试房间',
     'room_pic': 'https://rpic.douyucdn.cn/live_cover/240x135.jpg',
     'cate_id': 1,
@@ -71,6 +72,7 @@ void main() {
     // 资料卡:粉丝/贵宾(web fetchDouyuAnchorCard 同源,fansNum/giftCard.total)。
     expect(summary.followers, '123456', reason: 'web formatCount 口径:完整数字');
     expect(summary.vip, '321', reason: '贵宾取卡片 giftCard.total(WS oni 不复刻)');
+    expect(summary.roomState, RoomState.live);
 
     final urls = fake.requests.map((request) => request.url).join('\n');
     expect(urls, isNot(contains('getEncryption')), reason: '刷新不得取白名单密钥');
@@ -159,6 +161,29 @@ void main() {
 
     expect(summary.title, '离线房间');
     expect(summary.online, '', reason: '契约:空串即未开播,宿主据此判在播');
+    expect(summary.roomState, RoomState.offline);
+  });
+
+  test('轮播(videoLoop=1):roomState=replay,online 契约同离线为空串', () async {
+    // web douyuState(SFVideoLive follow/status.ts:126):show_status==1
+    // 且 videoLoop==1 → replay,非实时直播。
+    fake
+      ..betardResponse = _betard(showStatus: 1, videoLoop: 1)
+      ..roomInfoResponse = {
+        'code': 0,
+        'data': {
+          'roomInfo': {'hn': '8888', 'roomName': '轮播房间', 'nickname': '轮播主播'},
+        },
+      };
+
+    final summary = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'douyu', roomIdOrUrl: '9529'),
+    );
+
+    expect(summary.title, '轮播房间');
+    expect(summary.roomState, RoomState.replay);
+    expect(summary.isLive, isFalse, reason: 'online 为空,不进侧栏在播判据');
+    expect(summary.online, '', reason: '轮播不是实时直播,热度归空串');
   });
 
   test('移动端房间信息缺失:title 回退 betard,online 允许为空', () async {

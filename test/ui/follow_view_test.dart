@@ -6,17 +6,23 @@
 /// 因此不做图片断言,固定次数 pump,不使用 pumpAndSettle。
 library;
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart' show StreamLine;
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:zishu_flutter/src/app/app_router.dart';
 import 'package:zishu_flutter/src/apps/windows/windows_app.dart';
 import 'package:zishu_flutter/src/features/follow/application/follow_provider.dart';
 import 'package:zishu_flutter/src/features/follow/views/follow_view.dart';
+import 'package:zishu_flutter/src/features/follow/widgets/follow_common.dart';
 import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_card.dart';
 import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_row.dart';
+import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_tile.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 import 'package:zishu_flutter/src/shared/application/fixture_sources.dart';
@@ -243,5 +249,100 @@ void main() {
     // 冲掉「已删除」SnackBar 的展示时长 Timer,避免测试结束遗留 pending timer。
     await tester.pump(const Duration(seconds: 3));
     await tester.pump(const Duration(milliseconds: 500));
+  });
+
+  group('轮播(replay)条目标识', () {
+    /// 注入种子(1 在播 + 1 轮播)并等待 followProvider 恢复。
+    Future<void> pumpWithReplaySeed(WidgetTester tester) async {
+      SharedPreferencesAsyncPlatform.instance =
+          InMemorySharedPreferencesAsync.withData(<String, Object>{
+            'zishu.follow.list': jsonEncode([
+              {
+                'site': 'douyu',
+                'roomId': '70001',
+                'title': '在播房间',
+                'uname': '在播主播',
+                'cid': '1',
+                'category': '英雄联盟',
+                'online': '1.2万',
+                'cover': '',
+                'isSpecial': false,
+                'remindOn': false,
+                'followedAt': '2026-09-01T00:00:00.000Z',
+              },
+              {
+                'site': 'douyu',
+                'roomId': '70002',
+                'title': '轮播房间',
+                'uname': '轮播主播',
+                'cid': '1',
+                'category': '英雄联盟',
+                'online': '',
+                'roomState': 'replay',
+                'cover': '',
+                'isSpecial': false,
+                'remindOn': false,
+                'followedAt': '2026-09-02T00:00:00.000Z',
+              },
+            ]),
+          });
+      await pumpFollowApp(tester);
+      for (var i = 0; i < 10; i++) {
+        if (containerOf(tester).read(followProvider).length == 2) break;
+        await tester.pump(const Duration(milliseconds: 50));
+      }
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+
+    testWidgets('卡片密度:元信息行 + 封面角标各显「轮播」,封面不置灰', (tester) async {
+      suppressRenderFlexOverflow();
+      await pumpWithReplaySeed(tester);
+
+      const replayKey = Key('follow-entry-douyu-70002');
+      expect(find.byKey(replayKey), findsOneWidget);
+      // 元信息行「轮播」文字 + 封面右下「轮播」角标。
+      expect(
+        find.descendant(of: find.byKey(replayKey), matching: find.text('轮播')),
+        findsNWidgets(2),
+      );
+      final cover = tester.widget<FollowCoverImage>(
+        find.descendant(
+          of: find.byKey(replayKey),
+          matching: find.byType(FollowCoverImage),
+        ),
+      );
+      expect(cover.offline, isFalse, reason: '轮播有内容在播,封面不按离线置灰');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('紧凑/单行密度:行内「轮播」小标签', (tester) async {
+      suppressRenderFlexOverflow();
+      await pumpWithReplaySeed(tester);
+
+      const replayKey = Key('follow-entry-douyu-70002');
+
+      // 紧凑(tile)。
+      await tester.tap(find.byKey(const Key('follow-density-tile')));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(find.byType(FollowEntryTile), findsNWidgets(2));
+      expect(
+        find.descendant(of: find.byKey(replayKey), matching: find.text('轮播')),
+        findsOneWidget,
+        reason: '紧凑行内显一枚「轮播」小标签',
+      );
+
+      // 单行(row)。
+      await tester.tap(find.byKey(const Key('follow-density-row')));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(find.byType(FollowEntryRow), findsNWidgets(2));
+      expect(
+        find.descendant(of: find.byKey(replayKey), matching: find.text('轮播')),
+        findsOneWidget,
+        reason: '单行行内显一枚「轮播」小标签',
+      );
+      expect(tester.takeException(), isNull);
+    });
   });
 }

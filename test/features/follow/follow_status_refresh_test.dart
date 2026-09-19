@@ -15,7 +15,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:live_parser/live_parser.dart'
-    show RoomPayload, RoomSummary;
+    show RoomPayload, RoomState, RoomSummary;
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:zishu_flutter/src/features/follow/application/follow_provider.dart';
@@ -100,6 +100,7 @@ RoomSummary _fresh({
   String category = '新分类',
   String followers = '',
   String vip = '',
+  RoomState roomState = RoomState.offline,
 }) => RoomSummary(
   site: site,
   roomId: roomId,
@@ -111,6 +112,7 @@ RoomSummary _fresh({
   cover: cover,
   followers: followers,
   vip: vip,
+  roomState: roomState,
 );
 
 Future<ProviderContainer> _container({
@@ -265,6 +267,46 @@ void main() {
       final failed = entries.firstWhere((e) => e.room.roomId == '1002');
       expect(failed.room.online, '3千', reason: '失败条目保留原值');
       expect(failed.isLive, isTrue, reason: '网络抖动不是「下播」');
+    });
+
+    test('roomState 跟随刷新:在播→轮播、轮播→开播互转', () async {
+      final fake = FakeRefresher(
+        results: {
+          // 停播改轮播:online 空 + replay。
+          '1001': _fresh(
+            roomId: '1001',
+            online: '',
+            roomState: RoomState.replay,
+          ),
+          // 轮播恢复开播:online 非空 + live。
+          '1002': _fresh(
+            roomId: '1002',
+            online: '2万',
+            roomState: RoomState.live,
+          ),
+        },
+      );
+      final container = await _container(
+        seed: [
+          _seedEntry(roomId: '1001', online: '5千'),
+          _seedEntry(roomId: '1002', online: ''),
+        ],
+        refresher: fake,
+        overrideRefresher: true,
+      );
+
+      await container.read(followProvider.notifier).refreshStatuses();
+
+      final entries = container.read(followProvider);
+      final toReplay = entries.firstWhere((e) => e.room.roomId == '1001');
+      expect(toReplay.room.roomState, RoomState.replay,
+          reason: '三态跟随上游:主播停播改轮播要感知到');
+      expect(toReplay.isLive, isFalse);
+      expect(toReplay.isReplay, isTrue);
+      final toLive = entries.firstWhere((e) => e.room.roomId == '1002');
+      expect(toLive.room.roomState, RoomState.live, reason: '轮播恢复开播跟随上游');
+      expect(toLive.isLive, isTrue);
+      expect(toLive.isReplay, isFalse);
     });
 
     test('刷新期间用户删条目:以最新 state 重建,不被过期快照覆盖', () async {

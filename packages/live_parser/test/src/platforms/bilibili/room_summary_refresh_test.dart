@@ -68,13 +68,14 @@ void main() {
     // 勋章/大航海在 web 是额外接口且 vip 列本就为空,这里恒空。
     expect(summary.followers, '654321');
     expect(summary.vip, '');
+    expect(summary.roomState, RoomState.live);
 
     final urls = fake.requests.map((request) => request.url).join('\n');
     expect(urls, contains('get_info'));
     expect(urls, isNot(contains('play_info')), reason: '刷新不得请求取流接口');
   });
 
-  test('离线(live_status=0):online 为空串', () async {
+  test('离线(live_status=0):online 为空串,roomState=offline', () async {
     fake.roomInfoResponse = _roomInfo(liveStatus: 0, online: 9999);
 
     final summary = await resolver.refreshRoomSummary(
@@ -82,15 +83,20 @@ void main() {
     );
 
     expect(summary.online, '');
+    expect(summary.roomState, RoomState.offline);
   });
 
-  test('轮播(live_status=2):归离线,online 为空串', () async {
+  test('轮播(live_status=2):roomState=replay,online 契约同离线为空串', () async {
     fake.roomInfoResponse = _roomInfo(liveStatus: 2, online: 9999);
 
     final summary = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'bilibili', roomIdOrUrl: '9529'),
     );
 
+    // 2026-09-19 口径:轮播不再折进 offline,由 roomState 单独承载
+    // 「我的关注」页的排序/标识;online 仍为空串(在播判据不变)。
+    expect(summary.roomState, RoomState.replay);
+    expect(summary.isLive, isFalse, reason: 'online 为空,不进侧栏在播判据');
     expect(summary.online, '');
   });
 

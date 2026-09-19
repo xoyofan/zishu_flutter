@@ -81,6 +81,7 @@ void main() {
       '',
       reason: 'wup 不可达(fake 未配置响应)时静默留空,不伪造',
     );
+    expect(summary.roomState, RoomState.live);
 
     // 只打 mp.huya.com 元信息与 wup 贵宾网关:没有播放页、没有签名。
     expect(
@@ -166,18 +167,32 @@ void main() {
     );
   });
 
-  test('录播(replay):本仓契约无 replay,online 一律为空串', () async {
+  test('录播(replay):roomState=replay,online 契约同离线为空串', () async {
     fake.profileRoomResponse = _profile(liveStatus: 'ON', replay: true);
 
     final summary = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'huya', roomIdOrUrl: '9527'),
     );
 
+    // 2026-09-19 口径:huyaRoomState 的 replay 不再折进 offline,由
+    // roomState 单独承载;online 仍为空串(在播判据不变)。
+    expect(summary.roomState, RoomState.replay);
+    expect(summary.isLive, isFalse);
     expect(
       summary.online,
       '',
-      reason: 'replay 归 offline(RoomState 无 replay),不得当作在播',
+      reason: '轮播不是实时直播,不得当作在播',
     );
+  });
+
+  test('离线补 roomState:OFF 且无流时 roomState=offline', () async {
+    fake.profileRoomResponse = _profile(liveStatus: 'OFF', withStream: false);
+
+    final summary = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'huya', roomIdOrUrl: '9528'),
+    );
+
+    expect(summary.roomState, RoomState.offline);
   });
 
   test('房间不存在(profileRoom 无 data):抛异常', () async {

@@ -125,6 +125,26 @@ void main() {
         reason: 'user_cover 缺失时用 keyframe');
   });
 
+  test('轮播(live_status=2):replay 无线路(轮播流暂不接入)', () async {
+    // 在播 fixture 上只改 live_status → 2:其余字段与真实响应同形。
+    final info = Map<String, Object?>.of(_json('room_info_live.json')! as Map<String, Object?>);
+    final data = Map<String, Object?>.of(info['data']! as Map<String, Object?>)
+      ..['live_status'] = 2;
+    info['data'] = data;
+
+    final harness = BiliHarness()..fake.roomInfoResponse = info;
+    final payload = await harness.resolver.resolveRoom(
+      const RoomRequest(site: 'bilibili', roomIdOrUrl: '9527'),
+    );
+    expect(payload.roomState, RoomState.replay);
+    expect(payload.isReplay, isTrue);
+    expect(payload.streams, isEmpty, reason: '语义先行:不请求 play_info、不取流');
+    expect(
+      harness.fake.requests.any((r) => r.url.contains('play_info')),
+      isFalse,
+    );
+  });
+
   test('房间不存在(code=1):notFound', () async {
     final harness = BiliHarness()
       ..fake.roomInfoResponse = _json('room_info_missing.json');

@@ -4,7 +4,8 @@
 /// 「关注没显示」后一度改为 web `isPlayFollowVisible` 口径(在播 + 离线超关);
 /// **2026-09-19 用户口径再次更新:不显示没开播的(离线超关也不再保留)**,
 /// 且默认视图为紧凑列表(每条一行)。web 真源 `isPlayFollowVisible` 的
-/// 「离线超关可见」分支为有意偏离(用户口径优先),排序保持 超关 → 在播。
+/// 「离线超关可见」分支为有意偏离(用户口径优先),排序保持 超关在播 → 在播;
+/// 轮播(replay)与离线一样只在「我的关注」页可见。
 ///
 /// 宿主写法与 side_panel_features_test.dart 一致:真实 router + 注入
 /// FakeLivePlayer(VM 下禁止初始化 media_kit)+ InMemorySharedPreferencesAsync,
@@ -117,6 +118,7 @@ Map<String, Object> _seedEntry({
   String anchor = '测试主播',
   String online = '1.2万',
   bool isSpecial = false,
+  String roomState = '',
 }) => {
   'site': site,
   'roomId': roomId,
@@ -126,6 +128,7 @@ Map<String, Object> _seedEntry({
   'category': '英雄联盟',
   'online': online,
   'cover': '',
+  if (roomState.isNotEmpty) 'roomState': roomState,
   'isSpecial': isSpecial,
   'remindOn': false,
   'followedAt': DateTime.now().toIso8601String(),
@@ -271,6 +274,35 @@ void main() {
       expect(find.text(_kEmptyHint), findsOneWidget);
       expect(_row('douyu', '3001'), findsNothing);
       expect(_row('douyu', '3002'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('轮播(replay)不进侧栏,归「我的关注」页(用户口径 2026-09-19)', (
+      tester,
+    ) async {
+      SharedPreferencesAsyncPlatform.instance =
+          InMemorySharedPreferencesAsync.withData(<String, Object>{
+            'zishu.follow.list': jsonEncode([
+              _seedEntry(roomId: '9001', title: '在播照常'),
+              _seedEntry(
+                roomId: '9002',
+                online: '',
+                roomState: 'replay',
+                title: '轮播房间',
+              ),
+            ]),
+          });
+
+      final play = await _pumpFollowTab(tester);
+      await _awaitFollowRestored(tester, play.container, 2);
+      await _pumpFrames(tester, 3);
+
+      expect(_row('douyu', '9001'), findsOneWidget, reason: '在播照常显示');
+      expect(
+        _row('douyu', '9002'),
+        findsNothing,
+        reason: '侧栏只显示直播的,轮播与离线一样只在「我的关注」页出现',
+      );
       expect(tester.takeException(), isNull);
     });
 
