@@ -62,13 +62,13 @@
 - `ScriptedLivePlayer` 在 `open` 完成后可注入底层音量重置，暴露 `Future<void> completeOpen()` 和 `void resetUnderlyingVolume(double volume)`。
 - `Future<void> waitForCall(String callType)` 用于避免测试依赖固定 sleep。
 
-- [ ] 先写替身契约测试：`open`、`setVolume`、`setMuted`、`stop` 的调用和 snapshot 都可观察。
-- [ ] 运行测试确认缺少替身文件时按预期失败。
-- [ ] 实现最小替身，默认 `open` 不阻塞；所有数值按 `0..100` 钳制。
-- [ ] 添加异步脚本能力，允许模拟“open 完成后底层音量回到 100”。
-- [ ] 运行 `flutter test test/support/recording_live_player_test.dart`。
-- [ ] 提交：`test(playback): add shared observable live player fakes`。
-- [ ] 推送：`git push origin master`。
+- [x] 先写替身契约测试：`open`、`setVolume`、`setMuted`、`stop` 的调用和 snapshot 都可观察。
+- [x] 运行测试确认缺少替身文件时按预期失败。
+- [x] 实现最小替身，默认 `open` 不阻塞；所有数值按 `0..100` 钳制。
+- [x] 添加异步脚本能力，允许模拟“open 完成后底层音量回到 100”。
+- [x] 运行 `flutter test test/support/recording_live_player_test.dart`。
+- [x] 提交：`test(playback): add shared observable live player fakes`。
+- [x] 推送：`git push origin master`。
 
 ## 阶段 2：音量状态完整回归
 

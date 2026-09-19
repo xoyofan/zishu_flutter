@@ -57,11 +57,12 @@
 
 ### 阶段 1：矩阵与测试基础设施
 
-- 状态：进行中
+- 状态：已完成
 - 已完成：矩阵文档、功能 ID、音量回归用例目录、状态枚举和证据约定
-- 自动化：NOT_RUN
+- 新增：`test/support/recording_live_player.dart`、`test/support/scripted_live_player.dart`
+- 自动化：`flutter analyze test/support --no-pub` 通过；统一替身契约测试 **4/4 通过**
 - Windows 真实：NOT_RUN
-- 当前风险：统一 `LivePlayer` 测试替身尚未建立，现有测试各自维护 Fake，无法稳定模拟异步 open/音量重置竞态
+- 当前风险：统一替身已能模拟异步 `open` 和底层音量重置，但生产编排竞态尚未进入阶段 2 验证
 
 ### 阶段 2：音量状态完整回归
 
