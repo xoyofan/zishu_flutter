@@ -5,18 +5,32 @@
 /// 与既有 play_controls_test.dart 宿主写法一致:固定次数 pump,不用 pumpAndSettle。
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:live_parser/live_parser.dart' show StreamLine;
+import 'package:live_parser/live_parser.dart'
+    show
+        DanmakuConnector,
+        DanmakuMessage,
+        DanmakuMessageType,
+        DanmakuSession,
+        DanmakuSessionRequest,
+        DanmakuSessionState,
+        SiteCapabilities,
+        SiteRegistration,
+        SiteRegistry,
+        StreamLine,
+        buildSiteRegistry;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:zishu_flutter/src/app/app_router.dart';
 import 'package:zishu_flutter/src/app/app_theme.dart';
+import 'package:zishu_flutter/src/features/danmaku/application/danmaku_session_provider.dart';
 import 'package:zishu_flutter/src/features/danmaku/application/danmaku_settings_provider.dart';
 import 'package:zishu_flutter/src/features/danmaku/domain/danmaku_settings.dart';
 import 'package:zishu_flutter/src/features/danmaku/widgets/danmaku_overlay.dart';
@@ -104,13 +118,85 @@ class _TestApp extends ConsumerWidget {
 /// 记录播放器替身,便于用例断言调用序列。
 late FakeLivePlayer _player;
 
+/// 构造一条 chat 弹幕(与 danmaku_test.dart 同构)。
+DanmakuMessage _chat(String userName, String text) {
+  return DanmakuMessage(
+    type: DanmakuMessageType.chat,
+    roomId: '63136',
+    userName: userName,
+    userId: 'uid-$userName',
+    text: text,
+    rawType: 'chatmsg',
+  );
+}
+
+/// 测试替身弹幕会话:由测试用 [StreamController] 完全驱动,不碰网络。
+class _FakeDanmakuSession implements DanmakuSession {
+  _FakeDanmakuSession();
+
+  final messagesController = StreamController<DanmakuMessage>.broadcast();
+  final statesController = StreamController<DanmakuSessionState>.broadcast();
+
+  @override
+  Stream<DanmakuMessage> get messages => messagesController.stream;
+
+  @override
+  Stream<DanmakuSessionState> get states => statesController.stream;
+
+  /// 模拟连接建立。
+  void emitConnected() => statesController.add(DanmakuSessionState.connected);
+
+  /// 推送一条弹幕。
+  void push(DanmakuMessage message) => messagesController.add(message);
+
+  @override
+  Future<void> close() async {
+    await messagesController.close();
+    await statesController.close();
+  }
+}
+
+/// 测试替身 connector:返回受控 [_FakeDanmakuSession]。
+class _FakeDanmakuConnector implements DanmakuConnector {
+  _FakeDanmakuSession? session;
+
+  @override
+  SiteCapabilities get capabilities => const SiteCapabilities(danmaku: true);
+
+  @override
+  Future<DanmakuSession> connect(DanmakuSessionRequest request) async =>
+      session ??= _FakeDanmakuSession();
+}
+
+/// 构造只替换斗鱼弹幕 connector 的注册表:其余(解析/浏览/搜索)沿用真实
+/// 实现,保证房间解析仍走 fixture 默认链路。
+SiteRegistry _buildDanmakuRegistry(DanmakuConnector connector) {
+  final registry = buildSiteRegistry();
+  final douyu = registry['douyu']!;
+  registry.register(
+    SiteRegistration(
+      id: douyu.id,
+      name: douyu.name,
+      capabilities: douyu.capabilities,
+      resolver: douyu.resolver,
+      browse: douyu.browse,
+      search: douyu.search,
+      danmaku: connector,
+    ),
+  );
+  return registry;
+}
+
 /// 启动宿主并深链到播放页,返回 router 与 container。
 ///
 /// 每次调用都会重建 ProviderScope(间接触发各 provider 的持久化恢复),
 /// A8 的「重建 ProviderScope 后仍在」即复用此语义。
+///
+/// [danmakuConnector] 可选:注入后弹幕会话由测试完全驱动(A9c 渲染设置用例)。
 Future<({GoRouter router, ProviderContainer container})> _pumpPlay(
   WidgetTester tester, {
   String location = _playLocation,
+  DanmakuConnector? danmakuConnector,
 }) async {
   tester.view.devicePixelRatio = 1.0;
   tester.view.physicalSize = const Size(1600, 1200);
@@ -120,7 +206,13 @@ Future<({GoRouter router, ProviderContainer container})> _pumpPlay(
   _player = FakeLivePlayer();
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [playerProvider.overrideWithValue(_player)],
+      overrides: [
+        playerProvider.overrideWithValue(_player),
+        if (danmakuConnector != null)
+          danmakuRegistryProvider.overrideWithValue(
+            _buildDanmakuRegistry(danmakuConnector),
+          ),
+      ],
       child: const _TestApp(),
     ),
   );
@@ -328,44 +420,170 @@ void main() {
     });
   });
 
-  group('A9b 弹幕样式接线', () {
-    testWidgets('侧栏「弹幕样式」打开对话框,细项改动直达 overlay', (tester) async {
+  group('A9b 弹幕样式入口移除(用户口径 2026-09-19:飘屏设置不放侧栏)', () {
+    testWidgets('侧栏设置无「弹幕样式」入口,飘屏 overlay 与侧栏聊天均不受影响',
+        (tester) async {
       final play = await _pumpPlay(tester);
       final container = play.container;
       await _awaitSettingsHydrated(tester, container);
 
-      // overlay 已挂载且默认不透明(出厂值)。
+      // 飘屏 overlay 仍挂载且默认不透明(入口移除不影响飘屏链路本身)。
       final overlay = find.byType(DanmakuOverlay);
       expect(overlay, findsOneWidget);
       expect(tester.widget<DanmakuOverlay>(overlay).opacity, closeTo(1.0, 1e-6));
 
-      // 侧栏设置 tab → 「弹幕样式」按钮(旧实现是两个写死的死滑杆)→ 对话框。
+      // 侧栏设置 tab:「弹幕样式 → 调整」入口不再存在;聊天组仍渲染开关,
+      // 并内联 4 行滑杆(透明度/字号/间距/速度,节流默认「全量」)。
       await tester.tap(find.byKey(const Key('play-side-tab-settings')));
       await _pumpFrames(tester, 8);
-      await tester.ensureVisible(
+      expect(find.text('弹幕样式'), findsNothing);
+      expect(
         find.byKey(const Key('play-side-setting-danmaku-style')),
+        findsNothing,
+        reason: '飘屏弹幕设置入口应已从侧栏设置移除',
       );
-      await tester.tap(
-        find.byKey(const Key('play-side-setting-danmaku-style')),
-      );
-      await _pumpFrames(tester, 4);
-      expect(find.byKey(const Key('danmaku-settings-dialog')), findsOneWidget);
+      expect(find.byKey(const Key('play-side-setting-chat')), findsOneWidget);
+      expect(find.text('透明度'), findsOneWidget);
+      expect(find.text('字号'), findsOneWidget);
+      expect(find.text('间距'), findsOneWidget);
+      expect(find.text('速度'), findsOneWidget);
+      expect(find.text('全量'), findsOneWidget, reason: '节流默认全量(web DEFAULT_CHAT.speedLimit = false)');
+      expect(find.text('100%'), findsOneWidget, reason: '透明度滑杆默认值文案');
 
-      // provider 改值 → overlay 入参跟随(接线证明:此前只传 messages/enabled)。
+      // 飘屏 provider 接线保持(overlay 入参仍跟随 danmakuSettingsProvider)。
       await container.read(danmakuSettingsProvider.notifier).setOpacity(60);
-      await container.read(danmakuSettingsProvider.notifier).setFontSize(28);
-      await container.read(danmakuSettingsProvider.notifier).setSpeed(3);
       await _pumpFrames(tester, 3);
-      final wired = tester.widget<DanmakuOverlay>(overlay);
-      expect(wired.opacity, closeTo(0.6, 1e-6));
-      expect(wired.fontSize, closeTo(28, 1e-6));
-      expect(wired.speedFactor, 3);
+      expect(tester.widget<DanmakuOverlay>(overlay).opacity, closeTo(0.6, 1e-6));
 
       // 复位,避免污染同文件后续用例(单例 provider + 共享内存存储)。
       await container
           .read(danmakuSettingsProvider.notifier)
           .setAll(const DanmakuSettings());
       await _pumpFrames(tester, 2);
+
+      // 切回聊天 tab:侧栏聊天仍正常(状态条 + 刷新按钮)。
+      await tester.tap(find.byKey(const Key('play-side-tab-chat')));
+      await _pumpFrames(tester, 3);
+      expect(find.byKey(const Key('play-side-chat-refresh')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('A9c 聊天侧栏渲染设置(对齐 web SideSettingsTab 41-105)', () {
+    testWidgets('聊天字号/透明度/行距设置生效:_ChatTab 消息渲染跟随',
+        (tester) async {
+      final connector = _FakeDanmakuConnector();
+      final play = await _pumpPlay(tester, danmakuConnector: connector);
+      final container = play.container;
+      await _awaitSettingsHydrated(tester, container);
+      for (var i = 0; i < 10 && connector.session == null; i++) {
+        await _pumpFrames(tester, 1);
+      }
+
+      connector.session!.emitConnected();
+      connector.session!.push(_chat('水友甲', '设置生效测试弹幕'));
+      await _pumpFrames(tester, 4);
+
+      Text message() => tester.widget<Text>(
+            find.byKey(const Key('play-side-chat-message')).first,
+          );
+      TextStyle userStyle() =>
+          ((message().textSpan! as TextSpan).children!.first as TextSpan)
+              .style!;
+      double opacity() => tester
+          .widget<Opacity>(
+            find.byKey(const Key('play-side-chat-opacity')),
+          )
+          .opacity;
+      EdgeInsets rowPadding() => tester
+          .widget<Padding>(
+            find.byKey(const Key('play-side-chat-row')).first,
+          )
+          .padding as EdgeInsets;
+
+      // 默认渲染:字号 14(web DEFAULT_CHAT.fontSize)、全不透明、行距 0。
+      expect(userStyle().fontSize, 14.0);
+      expect(opacity(), 1.0);
+      expect(rowPadding(), const EdgeInsets.only(bottom: 0));
+
+      // 改设置(持久化 setter)→ 消息渲染跟随。
+      await container.read(settingsProvider.notifier).setChatFontSize(20);
+      await container.read(settingsProvider.notifier).setChatOpacity(60);
+      await container.read(settingsProvider.notifier).setChatLineSpacing(8);
+      await _pumpFrames(tester, 4);
+
+      expect(userStyle().fontSize, 20.0, reason: '消息字号应跟随 chatFontSize');
+      expect(opacity(), closeTo(0.6, 1e-6), reason: '聊天区透明度应跟随 chatOpacity');
+      expect(
+        rowPadding(),
+        const EdgeInsets.only(bottom: 8),
+        reason: '消息行间距应跟随 chatLineSpacing',
+      );
+
+      // 写盘证明(与 chatEnabled 同模式的持久化)。
+      expect(
+        await SharedPreferencesAsync().getInt('zishu.settings.chatFontSize'),
+        20,
+      );
+      expect(
+        await SharedPreferencesAsync().getInt('zishu.settings.chatOpacity'),
+        60,
+      );
+      expect(
+        await SharedPreferencesAsync().getInt('zishu.settings.chatLineSpacing'),
+        8,
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('聊天节流:每N秒一条逐条放行,切回全量立即放完积压',
+        (tester) async {
+      final connector = _FakeDanmakuConnector();
+      final play = await _pumpPlay(tester, danmakuConnector: connector);
+      final container = play.container;
+      await _awaitSettingsHydrated(tester, container);
+      for (var i = 0; i < 10 && connector.session == null; i++) {
+        await _pumpFrames(tester, 1);
+      }
+
+      // 开启限速 + 1 秒一条(速度滑杆最小档,缩短测试等待)。
+      await container
+          .read(settingsProvider.notifier)
+          .setChatThrottleMode(ChatThrottleMode.perNSeconds);
+      await container.read(settingsProvider.notifier).setChatSpeed(1);
+      await _pumpFrames(tester, 2);
+
+      final session = connector.session!;
+      session.emitConnected();
+      session.push(_chat('节流水友甲', '节流消息一'));
+      session.push(_chat('节流水友乙', '节流消息二'));
+      session.push(_chat('节流水友丙', '节流消息三'));
+      await _pumpFrames(tester, 4);
+
+      int count() => tester
+          .widgetList<Text>(find.byKey(const Key('play-side-chat-message')))
+          .length;
+
+      // 首条立即显示(web pushChatPendingBatch 语义),其余进待放出队列。
+      expect(count(), 1, reason: '限速开启时应只放行首条');
+
+      // 每推进 1 秒放行 1 条(chatSpeed = 1)。
+      await tester.pump(const Duration(seconds: 1));
+      await _pumpFrames(tester, 1);
+      expect(count(), 2, reason: '推进 1 秒应再放行 1 条');
+      await tester.pump(const Duration(seconds: 1));
+      await _pumpFrames(tester, 1);
+      expect(count(), 3, reason: '再推进 1 秒应放完全部积压');
+
+      // 限速中新消息不立即出现;切回全量 → 积压立即放出(drain 语义)。
+      session.push(_chat('节流水友丁', '节流消息四'));
+      await _pumpFrames(tester, 2);
+      expect(count(), 3, reason: '限速下新消息不应立即出现');
+      await container
+          .read(settingsProvider.notifier)
+          .setChatThrottleMode(ChatThrottleMode.unlimited);
+      await _pumpFrames(tester, 2);
+      expect(count(), 4, reason: '切回全量应立即放出全部积压');
       expect(tester.takeException(), isNull);
     });
   });

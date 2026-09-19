@@ -10,13 +10,14 @@
 /// 分类和头像;不传时仍可作为通用空状态侧栏使用。
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 
 import '../../danmaku/application/danmaku_session_provider.dart';
-import '../../danmaku/widgets/danmaku_settings_dialog.dart';
 import '../../follow/application/follow_provider.dart';
 import '../../follow/application/follow_sort.dart';
 import '../../follow/application/settings_provider.dart';
@@ -26,6 +27,7 @@ import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/widgets/platform_icon.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
+import 'chat_badge_image.dart';
 import 'play_meta_bar.dart';
 import 'play_recommend_panel.dart';
 import 'play_room_grid.dart';
@@ -976,18 +978,21 @@ class _ChatTabState extends ConsumerState<_ChatTab>
   /// 已「消费」到列表末尾的消息条数(用于统计用户离开底部后到达的新消息)。
   int _seenCount = 0;
 
+  /// 节流模式下已放出到列表的消息条数(渲染 chat.messages 前 N 条)。
+  ///
+  /// 对齐 web useDanmaku:限速开启时新消息进 pending,每 N 秒放 1 条;
+  /// 首条立即显示;限速关闭时全量直通、切回时放出全部积压(drain)。
+  int _releasedCount = 0;
+
+  /// 当前节流定时器与其间隔(秒);间隔变化(速度滑杆)时重启定时器。
+  Timer? _throttleTimer;
+  int? _throttleIntervalSec;
+
   /// TabBarView 只挂载当前页,切换 tab 会 dispose 离屏子页。若聊天页被销毁,
   /// `danmakuSessionProvider`(autoDispose)也会一并销毁 → 会话被 close、消息丢失,
   /// 切回聊天时重新建连从头开始。故聊天页必须 keepAlive,让会话跨 tab 存活。
   @override
   bool get wantKeepAlive => true;
-
-  /// 用户当前是否停在底部(容差 24px,避免像素误差导致误判)。
-  bool get _isAtBottom {
-    if (!_scrollController.hasClients) return true;
-    final position = _scrollController.position;
-    return position.pixels >= position.maxScrollExtent - 24;
-  }
 
   @override
   void initState() {
@@ -997,10 +1002,73 @@ class _ChatTabState extends ConsumerState<_ChatTab>
   }
 
   @override
+  void didUpdateWidget(covariant _ChatTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 切房(pushReplacement 重建面板、State 复用):节流进度归零,
+    // 新会话的首条消息重新立即显示。
+    if (oldWidget.site != widget.site || oldWidget.roomId != widget.roomId) {
+      _throttleTimer?.cancel();
+      _throttleTimer = null;
+      _throttleIntervalSec = null;
+      _releasedCount = 0;
+    }
+  }
+
+  @override
   void dispose() {
+    _throttleTimer?.cancel();
     _scrollController.removeListener(_onScrollChanged);
     _scrollController.dispose();
     super.dispose();
+  }
+
+  /// 按节流设置截取待渲染行(全量直通 / 每 N 秒最多放行一条)。
+  ///
+  /// 只在 _ChatTab 层做展示节流,不动弹幕会话(与 web 把节流放在
+  /// useDanmaku 组合函数层一致)。
+  List<_ChatRowData> _applyThrottle(
+    List<_ChatRowData> all, {
+    required bool throttled,
+    required int intervalSec,
+  }) {
+    if (!throttled) {
+      // 全量直通;从限速切回时放出全部积压(web drainChatPendingToDisplay)。
+      _throttleTimer?.cancel();
+      _throttleTimer = null;
+      _throttleIntervalSec = null;
+      _releasedCount = all.length;
+      return all;
+    }
+    if (_releasedCount > all.length) {
+      _releasedCount = all.length; // 会话侧裁剪(上限)时钳制。
+    }
+    if (_releasedCount == 0 && all.isNotEmpty) {
+      _releasedCount = 1; // 首条立即显示(web pushChatPendingBatch 语义)。
+    }
+    if (_releasedCount >= all.length) {
+      _throttleTimer?.cancel();
+      _throttleTimer = null;
+      _throttleIntervalSec = null;
+      return all;
+    }
+    // 速度滑杆变化 → 重启定时器(web watch speed → clear + ensure)。
+    if (_throttleTimer != null && _throttleIntervalSec != intervalSec) {
+      _throttleTimer!.cancel();
+      _throttleTimer = null;
+    }
+    _throttleTimer ??= Timer.periodic(Duration(seconds: intervalSec), (_) {
+      if (!mounted) return;
+      setState(() => _releasedCount += 1);
+    });
+    _throttleIntervalSec = intervalSec;
+    return all.sublist(0, _releasedCount);
+  }
+
+  /// 用户当前是否停在底部(容差 24px,避免像素误差导致误判)。
+  bool get _isAtBottom {
+    if (!_scrollController.hasClients) return true;
+    final position = _scrollController.position;
+    return position.pixels >= position.maxScrollExtent - 24;
   }
 
   void _onScrollChanged() {
@@ -1062,10 +1130,10 @@ class _ChatTabState extends ConsumerState<_ChatTab>
     super.build(context); // AutomaticKeepAliveClientMixin 要求
     final tokens = context.tokens;
     final params = (site: widget.site, roomId: widget.roomId);
-    // 聊天总开关:关闭时仅隐藏内容区并显示占位,弹幕会话 provider 仍被 watch(不停)。
-    final chatEnabled = ref.watch(
-      settingsProvider.select((s) => s.chatEnabled),
-    );
+    // 聊天设置:总开关 + 消息渲染参数(字号/行距/透明度/节流,对齐 web
+    // chatSettings,见 SideSettingsTab.vue 41-105 / useDanmaku.ts DEFAULT_CHAT)。
+    final settings = ref.watch(settingsProvider);
+    final chatEnabled = settings.chatEnabled;
     final chat = ref.watch(danmakuSessionProvider(params));
     if (!chatEnabled) {
       return Center(
@@ -1079,14 +1147,21 @@ class _ChatTabState extends ConsumerState<_ChatTab>
         ),
       );
     }
-    final rows = [
+    final allRows = [
       for (final message in chat.messages) _ChatRowData.fromMessage(message, widget.site),
     ];
+    final rows = _applyThrottle(
+      allRows,
+      throttled: settings.chatThrottleMode == ChatThrottleMode.perNSeconds,
+      intervalSec: settings.chatSpeed,
+    );
 
     _syncAutoScroll(rows.length);
 
     final atBottom = _isAtBottom;
     final pending = atBottom ? 0 : (rows.length - _seenCount).clamp(0, 1 << 30);
+    final messageFontSize = settings.chatFontSize.toDouble();
+    final rowSpacing = settings.chatLineSpacing.toDouble();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1177,32 +1252,41 @@ class _ChatTabState extends ConsumerState<_ChatTab>
         Expanded(
           child: Stack(
             children: [
-              if (rows.isEmpty)
-                Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    child: Text(
-                      chat.isUnsupported ? '当前站点暂不支持弹幕' : '暂无弹幕，等待水友发言…',
-                      textAlign: TextAlign.center,
-                      style: context.textCaption,
-                    ),
-                  ),
-                )
-              else
-                ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.sm,
-                    AppSpacing.xs,
-                    AppSpacing.sm,
-                    AppSpacing.sm,
-                  ),
-                  itemCount: rows.length,
-                  itemBuilder: (context, index) => Padding(
-                    padding: const EdgeInsets.only(bottom: 4),
-                    child: _ChatRow(data: rows[index]),
-                  ),
-                ),
+              // 聊天区不透明度(web chatSettings.opacity,10-100 → 0.1-1.0)。
+              Opacity(
+                key: const Key('play-side-chat-opacity'),
+                opacity: settings.chatOpacity / 100,
+                child: rows.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          child: Text(
+                            chat.isUnsupported ? '当前站点暂不支持弹幕' : '暂无弹幕，等待水友发言…',
+                            textAlign: TextAlign.center,
+                            style: context.textCaption,
+                          ),
+                        ),
+                      )
+                    : ListView.builder(
+                        controller: _scrollController,
+                        padding: const EdgeInsets.fromLTRB(
+                          AppSpacing.sm,
+                          AppSpacing.xs,
+                          AppSpacing.sm,
+                          AppSpacing.sm,
+                        ),
+                        itemCount: rows.length,
+                        itemBuilder: (context, index) => Padding(
+                          key: const Key('play-side-chat-row'),
+                          // 行间距 = web chatSettings.gap(0-16px)。
+                          padding: EdgeInsets.only(bottom: rowSpacing),
+                          child: _ChatRow(
+                            data: rows[index],
+                            fontSize: messageFontSize,
+                          ),
+                        ),
+                      ),
+              ),
               if (pending > 0)
                 // 对齐 web .chat-new-bar:底部水平居中,距底 0.5rem=8。
                 Positioned(
@@ -1261,10 +1345,17 @@ class _NewMessagesButton extends StatelessWidget {
   }
 }
 
+/// 消息行高:对齐 web SideChatTab `CHAT_ITEM_LINE_HEIGHT = 1.48`(固定,
+/// 不随间距设置变化;间距由列表行 padding 表达)。
+const double _kChatLineHeight = 1.48;
+
 class _ChatRow extends StatelessWidget {
-  const _ChatRow({required this.data});
+  const _ChatRow({required this.data, required this.fontSize});
 
   final _ChatRowData data;
+
+  /// 消息字号(web chatSettings.fontSize,12-24;用户名与正文同字号)。
+  final double fontSize;
 
   Color _userColor() {
     var hash = 0;
@@ -1303,6 +1394,7 @@ class _ChatRow extends StatelessWidget {
         ],
         Expanded(
           child: Text.rich(
+            key: const Key('play-side-chat-message'),
             TextSpan(
               children: [
                 TextSpan(
@@ -1310,23 +1402,23 @@ class _ChatRow extends StatelessWidget {
                   style: context.textSecondary.copyWith(
                     color: _userColor(),
                     fontWeight: FontWeight.w600,
-                    fontSize: 14,
-                    height: 1.48,
+                    fontSize: fontSize,
+                    height: _kChatLineHeight,
                   ),
                 ),
                 TextSpan(
                   text: '：',
                   style: context.textSecondary.copyWith(
-                    fontSize: 14,
-                    height: 1.48,
+                    fontSize: fontSize,
+                    height: _kChatLineHeight,
                   ),
                 ),
                 TextSpan(
                   text: data.message,
                   style: context.textSecondary.copyWith(
                     color: tokens.textPrimary,
-                    fontSize: 14,
-                    height: 1.48,
+                    fontSize: fontSize,
+                    height: _kChatLineHeight,
                   ),
                 ),
               ],
@@ -1382,16 +1474,19 @@ List<Color> _huyaBarGradient(int level) {
   };
 }
 
-/// 粉丝牌(对齐 web ChatFanBadge 文字态各平台分支;图片分支待契约补 URL):
-/// - 斗鱼:胶囊只显示团名(web `CHAT_FAN_BADGE_HIDE_LEVEL_SITES` 含 douyu,
-///   等级已绘在官方 PNG 里;文字态无梯度 → 中性深底白字兜底;无团名不渲染);
-/// - B 站:胶囊「团名 级」,协议渐变(`to left`:start 在右→end 在左)+ 描边,
-///   start/end 互补缺省;无协议色时中性深底兜底(web 走官方边框图);
-///   消费协议文字色/等级数字色(0 = 回落白/文字色);
-/// - 抖音:红色渐变圆盘只显示等级数字(douyinTextFallback 明确样式);
-/// - 虎牙:渐变条 = 等级圆盘(黑 22% 叠层) + 团名(HUYA_BAR_GRADIENTS 7 档);
+/// 粉丝牌(对齐 web ChatFanBadge 各平台分支;本地图优先 → 文字态兜底):
+/// - 斗鱼:官方粉丝牌 PNG(`douyu/fans/{lv}.png`,等级已绘在图内 → 不叠数字)
+///   作底图、团名叠右侧(web douyuOfficial);加载失败/无图回落中性深底团名
+///   胶囊;无团名不渲染(web normalizeDouyuBadge 无名即 null);
+/// - 抖音:img-only 站(web CHAT_FAN_BADGE_IMG_ONLY_SITES),有等级即整图
+///   `douyin/fans/{lv}.png`;失败回落红色渐变圆盘文字态;
+/// - 虎牙:房间定制图不在弹幕数据模型内、官方 v2 emblem 不用于粉丝牌
+///   (web huyaFansBadgeStaticUrl 已废弃)→ 维持渐变条文字态;
+/// - B 站:有协议渐变色维持「团名 级」渐变胶囊;无协议色走官方边框图
+///   `medal-frame.png` + 文字叠层(web resolveBilibiliBadgeBgUrl),失败回落
+///   中性深底;消费协议文字色/等级数字色(0 = 回落白/文字色);
 /// - 其他:品牌色 pill。
-class _FanBadge extends StatelessWidget {
+class _FanBadge extends StatefulWidget {
   const _FanBadge({
     required this.site,
     required this.level,
@@ -1417,9 +1512,39 @@ class _FanBadge extends StatelessWidget {
   final int levelColor;
 
   @override
+  State<_FanBadge> createState() => _FanBadgeState();
+}
+
+class _FanBadgeState extends State<_FanBadge> {
+  /// 本地图加载失败/缺失:回落文字态(输入变化后重置重试)。
+  bool _imgFailed = false;
+
+  @override
+  void didUpdateWidget(covariant _FanBadge oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.site != widget.site ||
+        oldWidget.level != widget.level ||
+        oldWidget.name != widget.name) {
+      _imgFailed = false;
+    }
+  }
+
+  void _markImgFailed() {
+    if (mounted) setState(() => _imgFailed = true);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    final hasName = name != null && name!.trim().isNotEmpty;
+    final site = widget.site;
+    final level = widget.level;
+    final name = widget.name;
+    final colorStart = widget.colorStart;
+    final colorEnd = widget.colorEnd;
+    final colorBorder = widget.colorBorder;
+    final textColor = widget.textColor;
+    final levelColor = widget.levelColor;
+    final hasName = name != null && name.trim().isNotEmpty;
     // web 斗鱼/B站文字态无梯度兜底:中性深底白字(web 无协议图/色时走
     // 官方图片牌,flutter 无图 → 深底占位保持可读)。
     const neutralBg = Color(0xff3a3a3a);
@@ -1428,9 +1553,24 @@ class _FanBadge extends StatelessWidget {
         ? Color(levelColor)
         : resolvedTextColor;
 
-    // 抖音:红色渐变圆盘(无团名,只显示等级数字)。
-    // 尺寸对齐 web douyinTextFallback(14px 基):min 1.4em=19.6、字 0.78em≈11。
+    // 抖音:img-only 站,有等级即官方整图(fans/{lv}.png,等级绘在图内);
+    // 失败/无图回落红色渐变圆盘文字态。
+    // 圆盘尺寸对齐 web douyinTextFallback(14px 基):min 1.4em=19.6、字 0.78em≈11。
     if (site == 'douyin') {
+      if (!_imgFailed &&
+          badgeAssetPath(
+            site: site,
+            kind: ChatBadgeKind.fans,
+            level: level,
+          ).isNotEmpty) {
+        return ChatBadgeImage(
+          site: site,
+          kind: ChatBadgeKind.fans,
+          level: level,
+          height: 21, // web chat-fan-badge__platform-img 1.48em ≈ 20.7
+          onFail: _markImgFailed,
+        );
+      }
       return _BadgeBox(
         height: 19.6,
         minWidth: 19.6,
@@ -1447,7 +1587,7 @@ class _FanBadge extends StatelessWidget {
         ),
       );
     }
-    // 虎牙:渐变条 = 圆盘等级 + 团名。
+    // 虎牙:渐变条 = 圆盘等级 + 团名(无本地图分支,见类注释)。
     // 尺寸对齐 web huyaComposed(14px 基):条 1.15em≈16、圆盘 1.05em×0.67em≈10、
     // 圆盘字 0.67em≈9.4、团名 0.79em≈11。
     if (site == 'huya') {
@@ -1478,7 +1618,7 @@ class _FanBadge extends StatelessWidget {
             if (hasName) ...[
               const SizedBox(width: 2),
               Text(
-                name!.trim(),
+                name.trim(),
                 style: const TextStyle(
                   fontSize: 11,
                   height: 1.1,
@@ -1491,12 +1631,69 @@ class _FanBadge extends StatelessWidget {
         ),
       );
     }
-    // B 站:协议渐变(to left:start 在右)+ 描边;无协议色回落中性深底。
+    // B 站:有协议渐变色 → 「团名 级」渐变胶囊(to left:start 在右)+ 描边;
+    // 无协议色 → 官方边框图 + 文字叠层,失败回落中性深底。
     if (site == 'bilibili') {
       // 互补缺省(web buildBilibiliBadgeStyle:start=colorStart||colorEnd)。
       final start = colorStart != 0 ? colorStart : colorEnd;
       final end = colorEnd != 0 ? colorEnd : colorStart;
       final hasProtocolColor = start != 0 || end != 0;
+      final content = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (hasName)
+            Flexible(
+              child: Text(
+                name.trim(),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 12.6,
+                  height: 1.1,
+                  color: resolvedTextColor,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+          if (hasName) const SizedBox(width: 2),
+          Text(
+            '$level',
+            style: TextStyle(
+              fontSize: 12.6,
+              height: 1.1,
+              color: resolvedLevelColor,
+              fontWeight: FontWeight.w700,
+              fontFeatures: const [FontFeature.tabularFigures()],
+            ),
+          ),
+        ],
+      );
+      if (!hasProtocolColor && !_imgFailed) {
+        return Container(
+          height: 21, // web bilibiliComposed/官方边框牌 1.48em ≈ 20.7
+          constraints: const BoxConstraints(minWidth: 49), // 3.5em
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ChatBadgeImage(
+                    site: site,
+                    kind: ChatBadgeKind.fans,
+                    level: level,
+                    height: 21,
+                    onFail: _markImgFailed,
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                child: Center(child: content),
+              ),
+            ],
+          ),
+        );
+      }
       return _BadgeBox(
         height: 21,
         radius: 999,
@@ -1506,48 +1703,68 @@ class _FanBadge extends StatelessWidget {
         gradientBegin: Alignment.centerRight,
         gradientEnd: Alignment.centerLeft,
         border: colorBorder != 0 ? Color(colorBorder) : null,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (hasName)
-              Flexible(
-                child: Text(
-                  name!.trim(),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 12.6,
-                    height: 1.1,
-                    color: resolvedTextColor,
-                    fontWeight: FontWeight.w700,
+        child: content,
+      );
+    }
+    // 斗鱼:官方粉丝牌 PNG 整图为底(等级已绘在图内,不叠数字),团名叠右侧
+    // (web douyuOfficial:content padding-left 1.58em≈22);失败回落中性深底
+    // 团名胶囊;无团名则无可显示内容 → 不渲染。
+    if (site == 'douyu') {
+      if (!hasName) return const SizedBox.shrink();
+      if (!_imgFailed &&
+          badgeAssetPath(
+            site: site,
+            kind: ChatBadgeKind.fans,
+            level: level,
+          ).isNotEmpty) {
+        return Container(
+          height: 18, // web douyuOfficial 牌 1.28em ≈ 17.9
+          constraints: const BoxConstraints(minWidth: 57), // 4.1em
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: ChatBadgeImage(
+                    site: site,
+                    kind: ChatBadgeKind.fans,
+                    level: level,
+                    height: 18,
+                    onFail: _markImgFailed,
                   ),
                 ),
               ),
-            if (hasName) const SizedBox(width: 2),
-            Text(
-              '$level',
-              style: TextStyle(
-                fontSize: 12.6,
-                height: 1.1,
-                color: resolvedLevelColor,
-                fontWeight: FontWeight.w700,
-                fontFeatures: const [FontFeature.tabularFigures()],
+              Padding(
+                padding: const EdgeInsets.only(left: 22),
+                child: Center(
+                  child: Text(
+                    name.trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 10.9, // web 0.78em
+                      height: 1.1,
+                      color: resolvedTextColor,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.01,
+                      shadows: const [
+                        Shadow(blurRadius: 2, color: Color(0x73000000)),
+                        Shadow(offset: Offset(0, 1), blurRadius: 1, color: Color(0x59000000)),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ],
-        ),
-      );
-    }
-    // 斗鱼:胶囊只显示团名(等级已绘在官方 PNG,文字态不再重复;
-    // 无团名则无可显示内容 → 不渲染)。
-    if (site == 'douyu') {
-      if (!hasName) return const SizedBox.shrink();
+            ],
+          ),
+        );
+      }
       return _BadgeBox(
         height: 15,
         radius: 999,
         color: neutralBg,
         child: Text(
-          name!.trim(),
+          name.trim(),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
@@ -1566,7 +1783,7 @@ class _FanBadge extends StatelessWidget {
       color: tokens.brand.withValues(alpha: 0.18),
       border: tokens.brand.withValues(alpha: 0.6),
       child: Text(
-        label(hasName),
+        label(site, name, hasName, level),
         style: TextStyle(
           fontSize: 9,
           height: 1.1,
@@ -1578,22 +1795,113 @@ class _FanBadge extends StatelessWidget {
   }
 
   /// 默认平台分支的胶囊文案:「团名 级」或纯等级。
-  String label(bool hasName) => hasName ? '${name!.trim()} $level' : '$level';
+  String label(String site, String? name, bool hasName, int level) =>
+      hasName && name != null ? '${name.trim()} $level' : '$level';
 }
 
-/// 用户等级 pill(对齐 web ChatUserLevelBadge 文字兜底):
-/// - 斗鱼/B 站:「LV N」+ 等级梯度([50,40,30,20,10]),方角;
-/// - 抖音:纯数字 + 固定紫粉渐变(#a855f7→#ec4899);
-/// - 虎牙:纯数字 + 梯度([80,60,40,20,10]);
+/// 用户等级徽章(对齐 web ChatUserLevelBadge;本地图优先 → 文字兜底):
+/// - 虎牙:消费/VIP emblem 整图 `huya/vip/v2/{identity}.png`(7 档 identity,
+///   userLevels/huya.ts 档位表),图上叠白数字(web chatUserLevelOverlayText);
+///   失败回落梯度数字 pill;
+/// - 抖音:honor 荣誉图 `douyin/honor/{lv}.png`(≤75;图内含数字不叠文字);
+///   失败/超档回落紫粉渐变数字;
+/// - 斗鱼:保持文字「LV N」+ 梯度(CDN 全 404,web 强制文字);
+/// - B 站:保持文字(wealth 不在本轮);
 /// - 其他:「Lv N」+ 灰底(web default #6b7280)。
-class _UserLevelBadge extends StatelessWidget {
+class _UserLevelBadge extends StatefulWidget {
   const _UserLevelBadge({required this.site, required this.level});
 
   final String site;
   final int level;
 
   @override
+  State<_UserLevelBadge> createState() => _UserLevelBadgeState();
+}
+
+class _UserLevelBadgeState extends State<_UserLevelBadge> {
+  /// 本地图加载失败/缺失:回落文字态(输入变化后重置重试)。
+  bool _imgFailed = false;
+
+  @override
+  void didUpdateWidget(covariant _UserLevelBadge oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.site != widget.site || oldWidget.level != widget.level) {
+      _imgFailed = false;
+    }
+  }
+
+  void _markImgFailed() {
+    if (mounted) setState(() => _imgFailed = true);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final site = widget.site;
+    final level = widget.level;
+    // 虎牙:消费/VIP emblem 整图 + 右下白数字叠层
+    // (web chat-user-level--huya--icon:min-width 2.1em≈29、高 1.48em≈21、
+    // 叠字 right .12em/bottom .06em、0.58em≈8.1、w700 白字黑影)。
+    if (site == 'huya' &&
+        !_imgFailed &&
+        badgeAssetPath(
+          site: site,
+          kind: ChatBadgeKind.userLevel,
+          level: level,
+        ).isNotEmpty) {
+      return Container(
+        height: 21,
+        constraints: const BoxConstraints(minWidth: 29),
+        child: Stack(
+          children: [
+            // 非 positioned 子节点(图片)撑开 Stack 宽度,右下数字相对图定位;
+            // Row 内宽度无界,Stack 不能只含 positioned 子节点(需有界约束)。
+            Align(
+              alignment: Alignment.centerLeft,
+              child: ChatBadgeImage(
+                site: site,
+                kind: ChatBadgeKind.userLevel,
+                level: level,
+                height: 21,
+                onFail: _markImgFailed,
+              ),
+            ),
+            Positioned(
+              right: 1.7,
+              bottom: 0.8,
+              child: Text(
+                '$level',
+                style: const TextStyle(
+                  fontSize: 8.1,
+                  height: 1,
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  shadows: [
+                    Shadow(blurRadius: 2, color: Color(0x8c000000)),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    // 抖音:honor 整图(等级绘在图内);失败/超 75 档回落紫粉渐变数字。
+    if (site == 'douyin' &&
+        !_imgFailed &&
+        badgeAssetPath(
+          site: site,
+          kind: ChatBadgeKind.userLevel,
+          level: level,
+        ).isNotEmpty) {
+      return ChatBadgeImage(
+        site: site,
+        kind: ChatBadgeKind.userLevel,
+        level: level,
+        height: 21, // web chat-user-level__icon 1.48em ≈ 20.7
+        onFail: _markImgFailed,
+      );
+    }
+    // 斗鱼/B站/其他/图片兜底:既有文字态(web 文字样式)。
     List<Color> colors;
     var label = '';
     if (site == 'douyu' || site == 'bilibili') {
@@ -1957,6 +2265,8 @@ class _SettingsPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = context.tokens;
     final settings = ref.watch(settingsProvider);
+    final throttled =
+        settings.chatThrottleMode == ChatThrottleMode.perNSeconds;
     return ListView(
       key: const Key('play-side-settings-panel'),
       padding: const EdgeInsets.all(AppSpacing.sm),
@@ -2001,22 +2311,71 @@ class _SettingsPanel extends ConsumerWidget {
                     ref.read(settingsProvider.notifier).setChatEnabled(enabled),
               ),
             ),
-            // 细粒度弹幕设置(透明度/字号/速度/显示区域)统一走对话框:
-            // 此前这里是两个 `onChanged: (_) {}` 的死滑杆,现在与设置页共用
-            // 同一面板(见 danmaku_settings_dialog.dart)。
-            _SettingRow(
-              label: '弹幕样式',
-              trailing: TextButton(
-                key: const Key('play-side-setting-danmaku-style'),
-                onPressed: () => showDanmakuSettingsDialog(context),
-                style: TextButton.styleFrom(
-                  foregroundColor: tokens.brand,
-                  minimumSize: const Size(0, 28),
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                ),
-                child: const Text('调整', style: TextStyle(fontSize: 11)),
+            // 聊天开时内联渲染设置(对齐 web SideSettingsTab.vue 41-105:
+            // 透明度 10-100 / 字号 12-24 / 间距 0-16 / 速度 1-10 + 节流开关),
+            // 控制**侧栏聊天区**的消息渲染(字号/行距/透明度/放行速率)。
+            // 旧「弹幕样式 → 调整」入口(飘屏弹幕设置对话框)已按用户口径
+            // (2026-09-19)移除,飘屏细项不再从侧栏进入。
+            if (settings.chatEnabled) ...[
+              _SettingSliderRow(
+                key: const Key('play-side-setting-chat-opacity'),
+                label: '透明度',
+                value: settings.chatOpacity.toDouble(),
+                min: SettingsState.chatOpacityMin.toDouble(),
+                max: SettingsState.chatOpacityMax.toDouble(),
+                valueText: '${settings.chatOpacity}%',
+                onChanged: (value) => ref
+                    .read(settingsProvider.notifier)
+                    .setChatOpacity(value.round()),
               ),
-            ),
+              _SettingSliderRow(
+                key: const Key('play-side-setting-chat-font-size'),
+                label: '字号',
+                value: settings.chatFontSize.toDouble(),
+                min: SettingsState.chatFontSizeMin.toDouble(),
+                max: SettingsState.chatFontSizeMax.toDouble(),
+                valueText: '${settings.chatFontSize}',
+                onChanged: (value) => ref
+                    .read(settingsProvider.notifier)
+                    .setChatFontSize(value.round()),
+              ),
+              _SettingSliderRow(
+                key: const Key('play-side-setting-chat-gap'),
+                label: '间距',
+                value: settings.chatLineSpacing.toDouble(),
+                min: SettingsState.chatLineSpacingMin.toDouble(),
+                max: SettingsState.chatLineSpacingMax.toDouble(),
+                valueText: '${settings.chatLineSpacing}',
+                onChanged: (value) => ref
+                    .read(settingsProvider.notifier)
+                    .setChatLineSpacing(value.round()),
+              ),
+              _SettingSliderRow(
+                key: const Key('play-side-setting-chat-speed'),
+                label: '速度',
+                value: settings.chatSpeed.toDouble(),
+                min: SettingsState.chatSpeedMin.toDouble(),
+                max: SettingsState.chatSpeedMax.toDouble(),
+                enabled: throttled,
+                valueText: throttled
+                    ? '每${settings.chatSpeed}秒一条'
+                    : ChatThrottleMode.unlimited.label,
+                leading: _MiniSwitch(
+                  key: const Key('play-side-setting-chat-throttle'),
+                  value: throttled,
+                  onChanged: (on) => ref
+                      .read(settingsProvider.notifier)
+                      .setChatThrottleMode(
+                        on
+                            ? ChatThrottleMode.perNSeconds
+                            : ChatThrottleMode.unlimited,
+                      ),
+                ),
+                onChanged: (value) => ref
+                    .read(settingsProvider.notifier)
+                    .setChatSpeed(value.round()),
+              ),
+            ],
           ],
         ),
       ],
@@ -2075,6 +2434,81 @@ class _SettingRow extends StatelessWidget {
       children: [
         Expanded(child: Text(label, style: context.textCaption)),
         trailing,
+      ],
+    );
+  }
+}
+
+/// 设置滑杆行(对齐 web SideSettingsTab `.setting-row` 三列布局:
+/// label 列约 3.25rem、滑杆弹性、数值右对齐)。
+///
+/// [leading] 供速度行放节流开关(web el-checkbox,位于滑杆前);
+/// [enabled] = false 时滑杆禁用但数值文案保留(web 速度行在全量态的呈现)。
+class _SettingSliderRow extends StatelessWidget {
+  const _SettingSliderRow({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.min,
+    required this.max,
+    required this.valueText,
+    required this.onChanged,
+    this.enabled = true,
+    this.leading,
+  });
+
+  final String label;
+  final double value;
+  final double min;
+  final double max;
+  final String valueText;
+
+  /// null = 禁用(节流关闭时的速度滑杆)。
+  final ValueChanged<double>? onChanged;
+  final bool enabled;
+
+  /// 滑杆前的附加控件(节流开关)。
+  final Widget? leading;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    return Row(
+      children: [
+        // 对齐 web label 列 3.25rem ≈ 52。
+        SizedBox(width: 52, child: Text(label, style: context.textCaption)),
+        if (leading != null) ...[
+          leading!,
+          const SizedBox(width: 4),
+        ],
+        Expanded(
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 3,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 7),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 11),
+              showValueIndicator: ShowValueIndicator.never,
+            ),
+            child: Slider(
+              value: value.clamp(min, max).toDouble(),
+              min: min,
+              max: max,
+              divisions: (max - min).round(),
+              activeColor: tokens.brand,
+              inactiveColor: tokens.border,
+              onChanged: enabled ? onChanged : null,
+            ),
+          ),
+        ),
+        // 右对齐数值文案(对齐 web .setting-value),宽度容纳「每10秒一条」。
+        SizedBox(
+          width: 72,
+          child: Text(
+            valueText,
+            textAlign: TextAlign.right,
+            style: context.textCaption,
+          ),
+        ),
       ],
     );
   }

@@ -564,7 +564,8 @@ class _PlayViewState extends ConsumerState<PlayView> {
         children: [
           Expanded(child: leftColumn),
           if (!stackSidePanel && showPanel) ...[
-            const SizedBox(width: AppSpacing.md),
+            // 播放区与侧栏的间隔:用户口径 2026-09-19 改为 2px(原 md=16 过大)。
+            const SizedBox(width: 2),
             SizedBox(
               width: sidePanelWidth,
               child: PlaySidePanel(

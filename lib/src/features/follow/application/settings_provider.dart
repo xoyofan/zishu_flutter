@@ -54,6 +54,29 @@ enum PreferredLineFormat {
   };
 }
 
+/// 聊天侧栏节流模式(对齐 SFVideoLive `chatSettings.speedLimit`)。
+///
+/// web 真源(SideSettingsTab.vue 84-104 + useDanmaku.ts):开启限速后,新消息先进
+/// 待放出队列,每隔 N(1-10)秒放出 1 条;关闭则全量直通,切回时放出全部积压。
+enum ChatThrottleMode {
+  perNSeconds('每N秒一条', 'perNSeconds'),
+  unlimited('全量', 'unlimited');
+
+  const ChatThrottleMode(this.label, this.value);
+
+  /// UI 文案。
+  final String label;
+
+  /// 持久化用的稳定值。
+  final String value;
+
+  /// 从存储值恢复;未知值回退「全量」(与 [SettingsState] 默认值同源)。
+  static ChatThrottleMode fromValue(String? value) => switch (value) {
+    'perNSeconds' => ChatThrottleMode.perNSeconds,
+    _ => ChatThrottleMode.unlimited,
+  };
+}
+
 /// 设置状态;[hydrated] 表示是否已完成持久化恢复。
 class SettingsState {
   const SettingsState({
@@ -67,6 +90,11 @@ class SettingsState {
     this.roomVolumes = const {},
     this.globalMuted = false,
     this.defaultVolume = defaultVolumeLevel,
+    this.chatFontSize = defaultChatFontSize,
+    this.chatOpacity = defaultChatOpacity,
+    this.chatLineSpacing = defaultChatLineSpacing,
+    this.chatSpeed = defaultChatSpeed,
+    this.chatThrottleMode = ChatThrottleMode.unlimited,
     this.hydrated = false,
   });
 
@@ -99,6 +127,21 @@ class SettingsState {
 
   /// 聊天 tab 总开关:关闭时聊天 tab 内容区显示「聊天已关闭」占位(聊天 provider 不停,只藏 UI)。
   final bool chatEnabled;
+
+  /// 侧栏聊天消息字号(12-24,对齐 web chatSettings.fontSize)。
+  final int chatFontSize;
+
+  /// 侧栏聊天区不透明度百分比(10-100,对齐 web chatSettings.opacity)。
+  final int chatOpacity;
+
+  /// 侧栏聊天消息行间距 px(0-16,对齐 web chatSettings.gap 滑杆范围)。
+  final int chatLineSpacing;
+
+  /// 侧栏聊天节流放行间隔秒数(1-10,对齐 web chatSettings.speed)。
+  final int chatSpeed;
+
+  /// 侧栏聊天节流模式(全量直通 / 每N秒一条,对齐 web chatSettings.speedLimit)。
+  final ChatThrottleMode chatThrottleMode;
 
   /// 线路格式偏好(auto/hls/flv)。
   final PreferredLineFormat preferredLineFormat;
@@ -155,6 +198,34 @@ class SettingsState {
   /// 出厂默认音量(满音量)。
   static const double defaultVolumeLevel = volumeMax;
 
+  /// 侧栏聊天消息字号滑杆范围(对齐 web SideSettingsTab 字号滑杆 12-24)。
+  static const int chatFontSizeMin = 12;
+  static const int chatFontSizeMax = 24;
+
+  /// 侧栏聊天消息字号出厂默认(对齐 web DEFAULT_CHAT.fontSize = 14)。
+  static const int defaultChatFontSize = 14;
+
+  /// 侧栏聊天不透明度滑杆范围(对齐 web 透明度滑杆 10-100,单位 %)。
+  static const int chatOpacityMin = 10;
+  static const int chatOpacityMax = 100;
+
+  /// 侧栏聊天不透明度出厂默认(对齐 web DEFAULT_CHAT.opacity = 100)。
+  static const int defaultChatOpacity = 100;
+
+  /// 侧栏聊天消息行间距滑杆范围(对齐 web 间距滑杆 0-16,单位 px)。
+  static const int chatLineSpacingMin = 0;
+  static const int chatLineSpacingMax = 16;
+
+  /// 侧栏聊天消息行间距出厂默认。
+  static const int defaultChatLineSpacing = 0;
+
+  /// 侧栏聊天节流速度滑杆范围(对齐 web 速度滑杆 1-10,单位秒/条)。
+  static const int chatSpeedMin = 1;
+  static const int chatSpeedMax = 10;
+
+  /// 侧栏聊天节流速度出厂默认(秒/条)。
+  static const int defaultChatSpeed = 5;
+
   SettingsState copyWith({
     ThemeModeChoice? themeMode,
     String? defaultQuality,
@@ -166,6 +237,11 @@ class SettingsState {
     bool? chatEnabled,
     PreferredLineFormat? preferredLineFormat,
     String? serverUrl,
+    int? chatFontSize,
+    int? chatOpacity,
+    int? chatLineSpacing,
+    int? chatSpeed,
+    ChatThrottleMode? chatThrottleMode,
     bool? hydrated,
   }) {
     return SettingsState(
@@ -179,6 +255,11 @@ class SettingsState {
       chatEnabled: chatEnabled ?? this.chatEnabled,
       preferredLineFormat: preferredLineFormat ?? this.preferredLineFormat,
       serverUrl: serverUrl ?? this.serverUrl,
+      chatFontSize: chatFontSize ?? this.chatFontSize,
+      chatOpacity: chatOpacity ?? this.chatOpacity,
+      chatLineSpacing: chatLineSpacing ?? this.chatLineSpacing,
+      chatSpeed: chatSpeed ?? this.chatSpeed,
+      chatThrottleMode: chatThrottleMode ?? this.chatThrottleMode,
       hydrated: hydrated ?? this.hydrated,
     );
   }
@@ -195,6 +276,11 @@ class SettingsController extends Notifier<SettingsState> {
       'zishu.settings.defaultQualityBySite';
   static const String _kDanmakuEnabled = 'zishu.settings.danmakuEnabled';
   static const String _kChatEnabled = 'zishu.settings.chatEnabled';
+  static const String _kChatFontSize = 'zishu.settings.chatFontSize';
+  static const String _kChatOpacity = 'zishu.settings.chatOpacity';
+  static const String _kChatLineSpacing = 'zishu.settings.chatLineSpacing';
+  static const String _kChatSpeed = 'zishu.settings.chatSpeed';
+  static const String _kChatThrottleMode = 'zishu.settings.chatThrottleMode';
   static const String _kPreferredLineFormat =
       'zishu.settings.preferredLineFormat';
   static const String _kServerUrl = 'zishu.settings.serverUrl';
@@ -231,6 +317,11 @@ class SettingsController extends Notifier<SettingsState> {
       final bySiteRaw = await prefs.getString(_kDefaultQualityBySite);
       final danmaku = await prefs.getBool(_kDanmakuEnabled);
       final chat = await prefs.getBool(_kChatEnabled);
+      final chatFontSize = await prefs.getInt(_kChatFontSize);
+      final chatOpacity = await prefs.getInt(_kChatOpacity);
+      final chatLineSpacing = await prefs.getInt(_kChatLineSpacing);
+      final chatSpeed = await prefs.getInt(_kChatSpeed);
+      final chatThrottleModeRaw = await prefs.getString(_kChatThrottleMode);
       final format = await prefs.getString(_kPreferredLineFormat);
       final server = await prefs.getString(_kServerUrl);
       final roomVolumesRaw = await prefs.getString(_kRoomVolumes);
@@ -250,6 +341,24 @@ class SettingsController extends Notifier<SettingsState> {
             .toDouble(),
         danmakuEnabled: danmaku,
         chatEnabled: chat,
+        chatFontSize: chatFontSize
+            ?.clamp(SettingsState.chatFontSizeMin, SettingsState.chatFontSizeMax)
+            .toInt(),
+        chatOpacity: chatOpacity
+            ?.clamp(SettingsState.chatOpacityMin, SettingsState.chatOpacityMax)
+            .toInt(),
+        chatLineSpacing: chatLineSpacing
+            ?.clamp(
+              SettingsState.chatLineSpacingMin,
+              SettingsState.chatLineSpacingMax,
+            )
+            .toInt(),
+        chatSpeed: chatSpeed
+            ?.clamp(SettingsState.chatSpeedMin, SettingsState.chatSpeedMax)
+            .toInt(),
+        chatThrottleMode: chatThrottleModeRaw == null
+            ? null
+            : ChatThrottleMode.fromValue(chatThrottleModeRaw),
         preferredLineFormat: PreferredLineFormat.fromValue(format),
         serverUrl: server != null && server.isNotEmpty ? server : null,
         hydrated: true,
@@ -337,6 +446,58 @@ class SettingsController extends Notifier<SettingsState> {
     state = state.copyWith(chatEnabled: enabled);
     try {
       await SharedPreferencesAsync().setBool(_kChatEnabled, enabled);
+    } catch (_) {}
+  }
+
+  /// 设置侧栏聊天消息字号并持久化;越界值钳制到合法区间(12-24)。
+  Future<void> setChatFontSize(int size) async {
+    final clamped = size
+        .clamp(SettingsState.chatFontSizeMin, SettingsState.chatFontSizeMax)
+        .toInt();
+    state = state.copyWith(chatFontSize: clamped);
+    try {
+      await SharedPreferencesAsync().setInt(_kChatFontSize, clamped);
+    } catch (_) {}
+  }
+
+  /// 设置侧栏聊天不透明度(%)并持久化;越界值钳制到合法区间(10-100)。
+  Future<void> setChatOpacity(int opacity) async {
+    final clamped = opacity
+        .clamp(SettingsState.chatOpacityMin, SettingsState.chatOpacityMax)
+        .toInt();
+    state = state.copyWith(chatOpacity: clamped);
+    try {
+      await SharedPreferencesAsync().setInt(_kChatOpacity, clamped);
+    } catch (_) {}
+  }
+
+  /// 设置侧栏聊天消息行间距(px)并持久化;越界值钳制到合法区间(0-16)。
+  Future<void> setChatLineSpacing(int spacing) async {
+    final clamped = spacing
+        .clamp(SettingsState.chatLineSpacingMin, SettingsState.chatLineSpacingMax)
+        .toInt();
+    state = state.copyWith(chatLineSpacing: clamped);
+    try {
+      await SharedPreferencesAsync().setInt(_kChatLineSpacing, clamped);
+    } catch (_) {}
+  }
+
+  /// 设置侧栏聊天节流间隔(秒/条)并持久化;越界值钳制到合法区间(1-10)。
+  Future<void> setChatSpeed(int speed) async {
+    final clamped = speed
+        .clamp(SettingsState.chatSpeedMin, SettingsState.chatSpeedMax)
+        .toInt();
+    state = state.copyWith(chatSpeed: clamped);
+    try {
+      await SharedPreferencesAsync().setInt(_kChatSpeed, clamped);
+    } catch (_) {}
+  }
+
+  /// 设置侧栏聊天节流模式并持久化(全量直通 / 每N秒一条)。
+  Future<void> setChatThrottleMode(ChatThrottleMode mode) async {
+    state = state.copyWith(chatThrottleMode: mode);
+    try {
+      await SharedPreferencesAsync().setString(_kChatThrottleMode, mode.value);
     } catch (_) {}
   }
 

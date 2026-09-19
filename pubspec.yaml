@@ -40,3 +40,14 @@ flutter:
     - assets/config/
     - assets/ui/logo/
     - assets/ui/platform-icons/
+    # 聊天徽章本地资产(SFVideoLive 官方样式;目录声明不递归,子目录逐个列出):
+    - assets/badges/
+    - assets/badges/bilibili/
+    - assets/badges/douyin/
+    - assets/badges/douyin/fans/
+    - assets/badges/douyin/honor/
+    - assets/badges/douyu/fans/
+    - assets/badges/huya/fans/v2/
+    - assets/badges/huya/vip/v2/
+    - assets/badges/soop/
+    - assets/badges/twitch/
