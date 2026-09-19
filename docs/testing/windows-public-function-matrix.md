@@ -34,7 +34,7 @@
 | `DANMAKU` | 弹幕连接、切房、设置和去重 | PASS | NOT_RUN | provider 生命周期 5/5、弹幕目录 51/51、UI workflow 10/10；覆盖切房释放、重连代际、chat/overlay 共享和不支持能力 |
 | `FULLSCREEN` | 系统全屏/网页全屏 | PASS | NOT_RUN | `fullscreen_test.dart` 9/9；覆盖 F/Esc、网页全屏、淡出阻断和控制条同源 |
 | `PIP` | 画中画进入、退出和恢复 | PASS | NOT_RUN | `fullscreen_test.dart` + `public_playback_state_test.dart`；覆盖 PiP 退出优先级、恢复进入前模式和销毁清理 |
-| `FOLLOW` | 关注、超关、状态刷新和同步 | NOT_RUN | NOT_RUN | 房间身份和平台隔离 |
+| `FOLLOW` | 关注、超关、状态刷新和同步 | PASS | NOT_RUN | `follow_capability_matrix_test.dart` 3/3；覆盖持久化、特别关注、跨平台身份和刷新失败隔离 |
 | `THEME` | 深浅主题与设置恢复 | PASS | NOT_RUN | `nav_theme_test.dart`、`light_theme_test.dart`、`public_playback_state_test.dart`；覆盖 dark/light/system 映射与壳层背景 |
 | `RETURN` | 返回按钮、Alt+左、鼠标侧键 | PASS | NOT_RUN | `back_shortcuts_test.dart` 5/5；覆盖栈顶返回、栈底静默和切房后返回 |
 
@@ -48,10 +48,10 @@
 | `VOL-004` | `open` 完成后底层音量重置为 100 | 最终播放器实际音量仍为设置值 | PASS | NOT_RUN | `play_controller_volume_lifecycle_test.dart`；开流后最终 snapshot=35 |
 | `VOL-005` | 切换画质 | 音量和静音状态保持 | PASS | NOT_RUN | `playback_public_state_matrix_test.dart`；切档后音量仍为 37 |
 | `VOL-006` | 切换线路 | 音量和静音状态保持 | PASS | NOT_RUN | `playback_public_state_matrix_test.dart`；线路切换后音量仍为 37 |
-| `VOL-007` | 断流恢复/重新解析 | 音量和静音状态保持 | NOT_RUN | NOT_RUN | recovery test + playback log |
-| `VOL-008` | 全局静音后切房 | 所有房间实际音量为 0 | NOT_RUN | NOT_RUN | lifecycle test |
+| `VOL-007` | 断流恢复/重新解析 | 音量和静音状态保持 | PASS | NOT_RUN | `play_controller_volume_lifecycle_test.dart`；恢复重解析后 mute/volume 保持 |
+| `VOL-008` | 全局静音后切房 | 所有房间实际音量为 0 | PASS | NOT_RUN | `play_controller_volume_lifecycle_test.dart`；切房后仍保持 muted |
 | `VOL-009` | 房间音量设为 0 但未开启全局静音 | 该房间为 0，取消/切房不误恢复成 100 | PASS | NOT_RUN | `test/features/playback/room_volume_provider_test.dart` |
-| `VOL-010` | A→B→C 快速切房 | 只有 C 的最终状态生效 | NOT_RUN | NOT_RUN | lifecycle test |
+| `VOL-010` | A→B→C 快速切房 | 只有 C 的最终状态生效 | PASS | NOT_RUN | `play_controller_volume_lifecycle_test.dart`；全局 open token 阻止旧房间收尾覆盖 C |
 | `DAN-001` | 切房销毁旧 session | 旧 session close，迟到消息不进入新房间 | PASS | NOT_RUN | `danmaku_session_lifecycle_test.dart`；过期连接完成后立即 close 且无消息订阅 |
 | `DAN-002` | 重连去重与最新 generation | 只保留最新 session，旧连接不再广播 | PASS | NOT_RUN | `danmaku_session_lifecycle_test.dart`；连续重连只保留最新 session |
 | `DAN-003` | chat/overlay 共享会话 | 只建立一条连接，两个消费者收到同一状态 | PASS | NOT_RUN | `danmaku_session_lifecycle_test.dart`；两个 listener 只触发一次 `connect` |
@@ -82,10 +82,13 @@
 
 - 状态：已完成
 - 已完成：
+  - 音量专项补齐 VOL-007/VOL-008/VOL-010：新增恢复、全局静音切房和跨 family 快速切房回归；修复共享 `LivePlayer` 缺少全局 open token 导致旧房间收尾覆盖新房间的问题
+  - FOLLOW 公共能力矩阵 **3/3 通过**；覆盖关注持久化、特别关注、跨平台房间身份和刷新失败隔离
+- 已完成：
   - 阶段 3.1 画质/线路矩阵 **2/2 通过**；发现并修复 `switchLine()` 绕过统一 `_open()` 的状态污染缺口
   - 阶段 3.2 弹幕会话矩阵 **5/5 通过**；弹幕目录 **51/51 通过**；UI workflow **10/10 通过**
   - 阶段 3.3 全屏/PiP/返回/主题矩阵：新增 **5/5**，全屏/PiP **10/10**，返回/主题/浅色 **11/11**；修复 PiP 退出后残留 `modeBeforePip` 及销毁期间异步续段重开系统全屏
-- 剩余风险：恢复重解析专项仍为 `NOT_RUN`；Windows 真实验证仍为 `NOT_RUN`
+- 剩余风险：Windows 真实验证仍为 `NOT_RUN`
 
 ### 阶段 4：平台参数化与 Windows 真实验收
 
@@ -109,7 +112,7 @@
 - 已知现象：用户观察到音量条未变化或显示值与实际音量不一致，实际音量可能回到 100%
 - 根因：`PlayController._open()` 原先并行启动 `player.open()` 与 `_applyRoomVolume()`；`open` 重建底层音频管线后可能把音量恢复为 100%，没有完成后的最终补偿
 - 修复：`_openAndApplyVolume` 在当前 generation 下先应用一次，等待 `player.open()` 完成后再应用一次；旧 generation 不执行收尾补偿
-- 自动化回归：`test/features/playback/play_controller_volume_lifecycle_test.dart` **6/6 通过**
+- 自动化回归：`test/features/playback/play_controller_volume_lifecycle_test.dart` **10/10 通过**；覆盖恢复重解析、全局静音切房和跨 family 快速切房
 - 相关纯逻辑：`test/features/playback/room_volume_provider_test.dart` **10/10 通过**
 - 修复提交：待本阶段提交
 - Windows 证据：NOT_RUN

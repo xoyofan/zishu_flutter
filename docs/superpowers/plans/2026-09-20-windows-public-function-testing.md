@@ -98,13 +98,13 @@
 **Produces:** `PlayController` 在首次进房、切房、重开、切线路、切画质和恢复解析后，播放器最终 snapshot 与当前房间设置一致；旧房间异步操作不能覆盖新房间。
 
 - [x] 先写并运行失败测试：房间 A 音量 35，切换房间 B，模拟 B 的 `open` 完成后底层重置为 100，断言最终实际音量等于 B 的记忆值或默认值，而不是 100。
-- [x] 添加失败测试：A→B→A 恢复各自音量；同 roomId 跨 douyu/huya 隔离；切线路和切画质不改音量；全局静音和房间 0 值语义不混淆。
+- [x] 添加失败测试：A→B→A 恢复各自音量；同 roomId 跨 douyu/huya 隔离；切线路和切画质不改音量；全局静音和房间 0 值语义不混淆；断流恢复、全局静音切房和 A→B→C 快速切房。
 - [x] 确认失败原因是生产编排时序或代际覆盖，而不是测试替身错误。
-- [x] 以最小改动修复：确保 `open` 完成后对当前 generation 再次应用房间音量，并让旧 generation 的音量应用失效；禁止使用全局可变房间状态绕过 Riverpod。
-- [x] 运行 `test/features/playback/play_controller_volume_lifecycle_test.dart`，再运行全部 `test/features/playback/`。
+- [x] 以最小改动修复：确保 `open` 完成后对当前 generation 再次应用房间音量，并通过共享播放器 open token 让旧 family 的收尾应用失效；禁止使用全局可变房间状态绕过 Riverpod。
+- [x] 运行 `test/features/playback/play_controller_volume_lifecycle_test.dart`（10/10），再运行全部 `test/features/playback/`（125/125）。
 - [x] 更新矩阵中的 `VOL-001` 至 `VOL-010`，填写根因、修复 commit 和自动化证据。
-- [x] 提交：`fix(playback): preserve room volume across source lifecycle`。
-- [x] 推送：`git push origin master`。
+- [x] 提交：`test(playback): complete volume recovery matrix`（`2da32f5`，后续全局 token 修复待提交）。
+- [ ] 推送：待全局 token 修复与阶段文档合并后执行。
 
 ### Task 2.3：补齐播放控制 Widget workflow
 
