@@ -857,6 +857,12 @@ class _VideoStageState extends ConsumerState<_VideoStage> {
   /// 上取到的是外层 scope(焦点停在 ModalScope),requestFocus 等于空操作。
   final FocusNode _focusNode = FocusNode(debugLabel: 'play-stage');
 
+  /// 当前房间是否出过播放画面:暂停遮罩只在「播过后暂停」出现,
+  /// 区别于「尚未首帧」的加载态。切房后重置,避免新房间首帧前的
+  /// !playing 间隙闪现遮罩。
+  bool _everPlayed = false;
+  Object? _lastRoomId;
+
   @override
   void dispose() {
     _focusNode.dispose();
@@ -883,6 +889,14 @@ class _VideoStageState extends ConsumerState<_VideoStage> {
     final snapshot =
         ref.watch(playerSnapshotProvider).value ?? const PlayerSnapshot();
     final payload = play?.payload;
+
+    // 房间切换检测 + 播放闩锁:遮罩只对「本房间已出过画面后的暂停」生效。
+    final roomId = payload?.roomId;
+    if (roomId != _lastRoomId) {
+      _lastRoomId = roomId;
+      _everPlayed = false;
+    }
+    if (snapshot.playing) _everPlayed = true;
 
     final Widget content;
     if (payload == null) {
@@ -911,6 +925,14 @@ class _VideoStageState extends ConsumerState<_VideoStage> {
         fit: StackFit.expand,
         children: [
           ref.read(playerProvider).buildVideoView(),
+          // 暂停遮罩:流已出过画面后用户暂停 → 居中紫薯 logo。仅在
+          // 「曾经播过 + 现在没播 + 不在缓冲/报错」时出现,避免解析中/首帧前
+          // 闪现 logo。
+          if (_everPlayed &&
+              !snapshot.playing &&
+              !snapshot.buffering &&
+              snapshot.error == null)
+            const _PausedOverlay(),
           if (snapshot.buffering && snapshot.error == null)
             const Center(child: CircularProgressIndicator(strokeWidth: 2)),
           if (snapshot.error != null)
@@ -969,6 +991,29 @@ class _VideoStageState extends ConsumerState<_VideoStage> {
               ? const EdgeInsets.all(AppSpacing.xl)
               : EdgeInsets.zero,
           child: content,
+        ),
+      ),
+    );
+  }
+}
+
+/// 暂停态遮罩:半透明压暗 + 居中紫薯 logo(点击画面即恢复,由舞台
+/// GestureDetector 统一处理)。
+class _PausedOverlay extends StatelessWidget {
+  const _PausedOverlay();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.black.withValues(alpha: 0.35),
+      alignment: Alignment.center,
+      child: Opacity(
+        opacity: 0.92,
+        child: Image.asset(
+          'assets/ui/logo/logo-128.png',
+          width: 96,
+          height: 96,
+          filterQuality: FilterQuality.medium,
         ),
       ),
     );
