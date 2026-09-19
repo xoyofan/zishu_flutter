@@ -4,8 +4,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:live_parser/live_parser.dart';
-import 'package:live_parser/src/http/danmaku_transport.dart';
-import 'package:live_parser/src/platforms/soop/danmaku.dart';
 
 Future<void> main(List<String> args) async {
   final target = args.isNotEmpty ? args.first : '';

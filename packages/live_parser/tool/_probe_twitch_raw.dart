@@ -22,7 +22,6 @@ Future<void> main() async {
   // 收到 001 后再 JOIN(在 listen 回调里判断)太绕,这里直接定时 3s 后 JOIN
   // 观察 JOIN 是否被受理(应回显 JOIN 且开始来 PRIVMSG)。
   Timer(const Duration(seconds: 3), () {
-    sentJoin = true;
     stdout.writeln('>> JOIN #ibai');
     socket.add(utf8.encode('JOIN #ibai\r\n'));
   });

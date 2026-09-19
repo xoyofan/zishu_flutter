@@ -34,7 +34,7 @@ void main() {
       final socket = transport.sockets.single;
 
       expect(transport.lastUrl.toString(), 'wss://irc-ws.chat.twitch.tv');
-      final linesOf = () => socket.rawSent
+      List<String> linesOf() => socket.rawSent
           .map(utf8.decode)
           .map((l) => l.trimRight())
           .toList();

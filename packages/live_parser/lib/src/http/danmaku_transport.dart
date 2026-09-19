@@ -276,7 +276,8 @@ class _RawEventTap {
         }
       case RawSocketEvent.write:
         onWrite?.call();
-      case RawSocketEvent.readClosed || RawSocketEvent.closed:
+      case RawSocketEvent.readClosed:
+      case RawSocketEvent.closed:
         onClosed?.call();
     }
   }
@@ -398,7 +399,6 @@ class _RawUpgradedSocket implements Socket {
   @override
   void destroy() => _tap.dispose();
 
-  @override
   RawSocket? getRawSocket() => _tap.raw;
 
   @override
