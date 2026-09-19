@@ -5,11 +5,18 @@ import 'package:live_parser/live_parser.dart';
 import 'recording_live_player.dart';
 
 class ScriptedLivePlayer extends RecordingLivePlayer {
-  final Completer<void> _openStarted = Completer<void>();
+  final Completer<void> _firstOpenStarted = Completer<void>();
+  final List<Completer<void>> _openStartedSignals = <Completer<void>>[];
   Completer<void>? _openGate;
   bool openCompleted = false;
 
-  Future<void> get openStarted => _openStarted.future;
+  Future<void> get openStarted => _firstOpenStarted.future;
+
+  Future<void> waitForOpenCount(int count) async {
+    while (openCalls.length < count) {
+      await Future<void>.delayed(Duration.zero);
+    }
+  }
 
   @override
   Future<void> open(
@@ -24,7 +31,10 @@ class ScriptedLivePlayer extends RecordingLivePlayer {
         resetRetries: resetRetries,
       ),
     );
-    if (!_openStarted.isCompleted) _openStarted.complete();
+    if (!_firstOpenStarted.isCompleted) _firstOpenStarted.complete();
+    final signal = Completer<void>();
+    _openStartedSignals.add(signal);
+    signal.complete();
     final gate = _openGate;
     if (gate != null) await gate.future;
     openCompleted = true;

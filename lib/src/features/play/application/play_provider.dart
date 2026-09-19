@@ -119,9 +119,7 @@ class PlayController extends AsyncNotifier<PlayState> {
     );
     // 线路格式偏好(auto/hls/flv):设置页可改,进房/重解析时都按它选线。
     final preferredFormat = ref.watch(
-      settingsProvider.select(
-        (settings) => settings.preferredLineFormat.value,
-      ),
+      settingsProvider.select((settings) => settings.preferredLineFormat.value),
     );
     final preferredQuality = _qualityOverride ?? settingsQuality;
     final payload = await source.resolveRoom(
@@ -183,7 +181,11 @@ class PlayController extends AsyncNotifier<PlayState> {
     if (current == null || current.payload == null) return;
     final generation = ++_generation;
     state = AsyncData(current.copyWith(line: line, generation: generation));
-    unawaited(ref.read(playerProvider).open(line, _fallbackLines(current.quality, line)));
+    unawaited(
+      ref
+          .read(playerProvider)
+          .open(line, _fallbackLines(current.quality, line)),
+    );
   }
 
   /// 切换舞台弹幕叠加层显隐(纯展示开关,不重开流、不换代际)。
@@ -227,10 +229,26 @@ class PlayController extends AsyncNotifier<PlayState> {
     if (player case LineRecoveryAware aware) {
       aware.setLineRecovery(_recoverLines);
     }
-    unawaited(player.open(line, fallbacks));
-    // 开流后套用本房间的独立音量(全局静音 → 房间记忆值 → 默认音量,0-100)。
-    // 放在 open 之后:切源会重建媒体管线,音量要在新会话上重新生效。
-    unawaited(_applyRoomVolume(player));
+    final generation = _generation;
+    unawaited(_openAndApplyVolume(player, line, fallbacks, generation));
+  }
+
+  /// 等待媒体源真正落地后再补套一次房间音量。
+  ///
+  /// `open` 可能重建底层音频管线并把音量恢复为默认 100。开流前套用一次
+  /// 可以尽快反馈 UI，开流完成后再套用一次才是最终一致性保证。代际检查
+  /// 防止旧房间的异步收尾覆盖当前房间。
+  Future<void> _openAndApplyVolume(
+    LivePlayer player,
+    StreamLine line,
+    List<StreamLine> fallbacks,
+    int generation,
+  ) async {
+    // 先应用一次，让控制条和播放器尽快进入当前房间状态。
+    await _applyRoomVolume(player);
+    await player.open(line, fallbacks);
+    if (!ref.mounted || generation != _generation) return;
+    await _applyRoomVolume(player);
   }
 
   /// 把本房间的有效音量套到播放器。
@@ -258,12 +276,15 @@ class PlayController extends AsyncNotifier<PlayState> {
     final current = state.value;
     final source = ref.read(roomSourceProvider);
     final quality = current?.quality;
-    if (current == null || current.payload == null || source is! RoomRecoverer) {
+    if (current == null ||
+        current.payload == null ||
+        source is! RoomRecoverer) {
       PlaybackLog.write('resolve_skip', {
         'site': params.site,
         'room': params.roomId,
-        'reason':
-            current == null || current.payload == null ? 'no_state' : 'source_unaware',
+        'reason': current == null || current.payload == null
+            ? 'no_state'
+            : 'source_unaware',
       });
       return const [];
     }
@@ -320,14 +341,20 @@ class PlayController extends AsyncNotifier<PlayState> {
   /// (参考 pure_live 的线路自动切换)。无画质或线路时返回空列表。
   List<StreamLine> _fallbackLines(StreamQuality? quality, StreamLine? line) {
     if (quality == null || line == null) return const [];
-    return [for (final candidate in quality.lines) if (candidate.url != line.url) candidate];
+    return [
+      for (final candidate in quality.lines)
+        if (candidate.url != line.url) candidate,
+    ];
   }
 
   /// 按偏好挑**可起播**的档位:在 [pickPlayQuality] 结果落在空线路占位档
   /// (懒取流:解析侧只给实给档真实线路,其余档位占位;或服务器把高请求
   /// 档降级到低档)时,回退首个有线路的档 —— 选中占位档会让 line=null,
   /// 进房黑屏且不触发懒取流。pure_live「没有才退」同口径。
-  StreamQuality? _pickPlayableQuality(RoomPayload payload, String? preferredName) {
+  StreamQuality? _pickPlayableQuality(
+    RoomPayload payload,
+    String? preferredName,
+  ) {
     final selected = pickPlayQuality(payload, preferredName);
     if (selected == null || selected.lines.isNotEmpty) return selected;
     return payload.streams.firstWhere(
