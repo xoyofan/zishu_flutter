@@ -183,12 +183,12 @@
 - Modify: `docs/testing/windows-public-function-matrix.md`
 - Modify: `todo.md`
 
-- [ ] 编写只负责启动、记录 build 版本、测试 ID 和日志路径的 smoke 脚本，不把凭据写入仓库。
-- [ ] 真实解析 release 构建，逐平台记录首帧、播放、音量、静音、切房、返回、弹幕和日志结果。
-- [ ] 使用 `PrintWindow(PW_RENDERFULLCONTENT)` 或现有工具抓窗口表面；屏幕合成截图不作为唯一证据。
-- [ ] 每个平台使用 `PASS/FAIL/BLOCKED/N/A/NOT_RUN`，并记录证据文件名。
-- [ ] 提交：`test(windows): add public function smoke checklist`。
-- [ ] 推送：`git push origin master`。
+- [x] 编写只负责启动、记录 build 版本、测试 ID 和日志路径的 smoke 脚本，不把凭据写入仓库。
+- [ ] 真实解析 release 构建，逐平台记录首帧、播放、音量、静音、切房、返回、弹幕和日志结果（本轮保持 `NOT_RUN`）。
+- [x] 使用 `PrintWindow(PW_RENDERFULLCONTENT)` 或现有工具抓窗口表面；屏幕合成截图不作为唯一证据。
+- [x] 每个平台使用 `PASS/FAIL/BLOCKED/N/A/NOT_RUN`，并记录证据文件名；生成阶段总体状态固定为 `NOT_RUN`，每条 checklist 默认使用唯一截图路径。
+- [x] 提交：`test(windows): add public function smoke checklist`（`325a8d6`，已从 worker worktree 合并）。
+- [ ] 推送：`git push origin master`（待当前主线最终验证后执行）。
 
 ## 阶段 5：收口门禁
 
