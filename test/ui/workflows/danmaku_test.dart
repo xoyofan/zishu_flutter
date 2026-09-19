@@ -538,24 +538,17 @@ void main() {
     final countBefore = captureDanmakuCount(tester);
     expect(countBefore, 3);
 
-    // 切「关注」:关注面板出现。
+    // 切「关注」:关注面板出现(顶部无标题,用户口径 2026-09-19;
+    // 面板 key 断言已足够,壳层顶栏另有「我的关注」入口文本勿混淆)。
     await tester.tap(find.byKey(const Key('play-side-tab-follow')));
     await _pumpStable(tester);
     expect(find.byKey(const Key('play-side-follow-panel')), findsOneWidget);
-    // 侧栏面板内的标题(壳层顶栏也有「我的关注」入口,故限定在面板子树内)。
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('play-side-follow-panel')),
-        matching: find.text('我的关注'),
-      ),
-      findsOneWidget,
-    );
 
-    // 切「推荐」:推荐面板出现。
+    // 切「推荐」:推荐面板出现(顶部无标题,用户口径 2026-09-19)。
     await tester.tap(find.byKey(const Key('play-side-tab-recommend')));
     await _pumpStable(tester);
     expect(find.byKey(const Key('play-side-recommend-panel')), findsOneWidget);
-    expect(find.text('相关推荐'), findsOneWidget);
+    expect(find.text('相关推荐'), findsNothing);
 
     // 切回「聊天」:条目数与切换前一致——会话不因 tab 切换而重建/丢消息。
     await tester.tap(find.byKey(const Key('play-side-tab-chat')));

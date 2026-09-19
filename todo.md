@@ -731,6 +731,6 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 **结论**:上一轮两处未完成项收口 —— ①列表行重写为 web FollowRoomRowView 四列表格;②切房后右侧不再退回聊天 tab。门禁 507/0 全绿。
 
 - **四列行**:分类条(54px,CategoryColors 底 18% + 中性字)/ 主播名(72px,FollowAnchorName 平台色,省略)/ 标题(弹性省略)/ 人数(人形图标+文本)。行高 24(对齐 web 1.4rem)、底部分隔线、去行内 ★(web 无,超关以置顶排序表达);separated→builder(分隔线移到行上)。
-- **切房保持 tab**:新增全局 KeepAlive (tabIndex/followGrid/followSite),TabBar.onTap 与面板变更写回,DefaultTabController.initialIndex 恢复 —— 顶部(壳层常驻)/左侧(舞台随路由)/右侧(active 态全局)三块解耦,右侧点条目 pushReplacement 后不退回聊天。离开播放页后偏好也保留(会话级)。
+- **切房保持 tab**:新增全局 KeepAlive `playSidePanelPrefsProvider`(tabIndex/followGrid/followSite),TabBar.onTap 与面板变更写回,DefaultTabController.initialIndex 恢复 —— 顶部(壳层常驻)/左侧(舞台随路由)/右侧(active 态全局)三块解耦,右侧点条目 pushReplacement 后不退回聊天。离开播放页后偏好也保留(会话级)。
 - 测试 +2(四列内容/单行紧凑、切房后关注面板仍挂载);坑:builder 化后分页计数改 delegate.childCount(separated 时代的 (n+1)/2 换算已废)。
 - golden:play_style_follow 36700→37693B(两行文字→四列单行+分类条)。

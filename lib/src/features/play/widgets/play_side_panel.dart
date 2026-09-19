@@ -23,6 +23,7 @@ import '../../follow/application/settings_provider.dart';
 import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
+import '../../../shared/presentation/widgets/platform_icon.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import 'play_meta_bar.dart';
 import 'play_recommend_panel.dart';
@@ -1519,31 +1520,38 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
       key: const Key('play-side-follow-panel'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _PanelTitle(
-          tokens,
-          '我的关注',
-          trailing: Tooltip(
-            message: _grid ? '切换为列表视图' : '切换为封面预览',
-            child: IconButton(
-              key: const Key('play-side-follow-view-toggle'),
-              onPressed: () => setState(() => _grid = !_grid),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
-              icon: Icon(
-                _grid ? Icons.list_rounded : Icons.grid_view_rounded,
-                size: 15,
-                color: _grid ? tokens.textSecondary : tokens.brand,
+        // 无「我的关注」标题(用户口径 2026-09-19:顶部不要标题);
+        // 视图切换按钮挪进平台筛选行,对齐 web `follow-tab-toolbar`
+        // (list 按钮 + 筛选 chips 同一行)。
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const SizedBox(width: AppSpacing.sm),
+            Tooltip(
+              message: _grid ? '切换为列表视图' : '切换为封面预览',
+              child: IconButton(
+                key: const Key('play-side-follow-view-toggle'),
+                onPressed: () => setState(() => _grid = !_grid),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                icon: Icon(
+                  _grid ? Icons.list_rounded : Icons.grid_view_rounded,
+                  size: 15,
+                  color: _grid ? tokens.textSecondary : tokens.brand,
+                ),
               ),
             ),
-          ),
-        ),
-        _SidePlatformChips(
-          value: _siteFilter,
-          onChanged: (site) => setState(() {
-            _siteFilter = site;
-            // 换平台等于换列表:分页窗口回到首屏(否则一换平台就直接铺满 48×n)。
-            _visibleCount = _kFollowPageSize;
-          }),
+            Expanded(
+              child: _SidePlatformChips(
+                value: _siteFilter,
+                onChanged: (site) => setState(() {
+                  _siteFilter = site;
+                  // 换平台等于换列表:分页窗口回到首屏(否则一换平台就直接铺满 48×n)。
+                  _visibleCount = _kFollowPageSize;
+                }),
+              ),
+            ),
+          ],
         ),
         Expanded(
           child: entries.isEmpty
@@ -1604,7 +1612,11 @@ class _FollowMoreHint extends StatelessWidget {
   }
 }
 
-/// 侧栏平台筛选 chips:横向滚动的小 chip(侧栏窄,Wrap 会折成多行)。
+/// 侧栏平台筛选:平台图标格子(与顶栏平台 tab 同款 [PlatformIcon]),
+/// Wrap 自动折行(用户口径 2026-09-19:「chips 不用文字,用平台图标;
+/// 可以 2 行显示,不必非要一行」)。
+///
+/// 选中态对齐顶栏:图标底色提亮 + 品牌色描边 + 品牌色柔光。
 class _SidePlatformChips extends StatelessWidget {
   const _SidePlatformChips({required this.value, required this.onChanged});
 
@@ -1614,72 +1626,48 @@ class _SidePlatformChips extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    return SizedBox(
-      height: 28,
-      child: ListView.separated(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-        itemCount: PlatformBrandCatalog.navigationPlatforms.length,
-        separatorBuilder: (context, _) => const SizedBox(width: 5),
-        itemBuilder: (context, index) {
-          final brand = PlatformBrandCatalog.navigationPlatforms[index];
-          final selected = value == brand.id;
-          final accent = brand.id == 'all' ? tokens.brand : brand.color;
-          return InkWell(
-            key: Key('play-side-follow-site-${brand.id}'),
-            borderRadius: AppRadius.allPill,
-            onTap: () => onChanged(brand.id),
-            child: Container(
-              alignment: Alignment.center,
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              decoration: BoxDecoration(
-                color: selected
-                    ? accent.withValues(alpha: 0.18)
-                    : tokens.surface,
-                borderRadius: AppRadius.allPill,
-                border: Border.all(color: selected ? accent : tokens.border),
-              ),
-              child: Text(
-                brand.id == 'all' ? '全平台' : brand.name,
-                style: AppTypography.caption.copyWith(
-                  fontSize: 10.5,
-                  fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                  color: selected ? tokens.textPrimary : tokens.textSecondary,
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+      child: Wrap(
+        spacing: 5,
+        runSpacing: 4,
+        children: [
+          for (final brand in PlatformBrandCatalog.navigationPlatforms)
+            Tooltip(
+              message: brand.id == 'all' ? '全平台' : brand.name,
+              child: InkWell(
+                key: Key('play-side-follow-site-${brand.id}'),
+                borderRadius: AppRadius.allSm,
+                onTap: () => onChanged(brand.id),
+                child: AnimatedContainer(
+                  duration: AppMotion.fast,
+                  width: 30,
+                  height: 30,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: value == brand.id
+                        ? tokens.surfaceRaised
+                        : Colors.transparent,
+                    border: Border.all(
+                      color: value == brand.id
+                          ? brand.color
+                          : Colors.transparent,
+                    ),
+                    borderRadius: AppRadius.allSm,
+                    boxShadow: value == brand.id
+                        ? [
+                            BoxShadow(
+                              color: brand.color.withValues(alpha: 0.22),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: PlatformIcon(id: brand.id, size: 24),
                 ),
               ),
             ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// 面板标题行:左标题(12px 加粗)+ 可选右侧操作。
-class _PanelTitle extends StatelessWidget {
-  const _PanelTitle(this.tokens, this.title, {this.trailing});
-
-  final ZishuTokens tokens;
-  final String title;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.sm, AppSpacing.sm, 6, 4),
-      child: Row(
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 12,
-              height: 1.2,
-              fontWeight: FontWeight.w600,
-              color: tokens.textPrimary,
-            ),
-          ),
-          const Spacer(),
-          ?trailing,
         ],
       ),
     );

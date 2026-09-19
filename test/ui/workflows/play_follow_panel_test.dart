@@ -188,12 +188,6 @@ Finder _card(String site, String roomId) =>
 Finder _row(String site, String roomId) =>
     find.byKey(Key('play-room-row-$site-$roomId'));
 
-/// 面板内是否有 GridView(不带 first,供 findsNothing 断言)。
-Finder _anyGridInPanel() => find.descendant(
-  of: find.byKey(const Key('play-side-follow-panel')),
-  matching: find.byType(GridView),
-);
-
 /// 面板内的**垂直** ListView(关注列表)。面板里还有平台筛选 chips 的水平
 /// ListView(_SidePlatformChips),必须按滚动方向过滤,否则 finder 误中。
 Finder _verticalListsInPanel() => find.descendant(
@@ -399,7 +393,9 @@ void main() {
         findsOneWidget,
         reason: '用户口径(2026-09-19):默认用列表显示,每条一行',
       );
-      expect(_anyGridInPanel(), findsNothing, reason: '默认不应是封面网格');
+      // 视图形态按锚点断言(面板里 'all' 平台图标的四象限色块内部也有
+      // 一个 2x2 GridView,按 GridView 类型断言会误中)。
+      expect(_card('douyu', '6001'), findsNothing, reason: '默认不是封面网格');
 
       await tester.tap(find.byKey(const Key('play-side-follow-view-toggle')));
       await _pumpFrames(tester, 3);

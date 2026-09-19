@@ -2,7 +2,7 @@
 ///
 /// 数据与规则全在 [playRecommendProvider](见
 /// `features/play/application/play_recommend_provider.dart`);本文件只负责呈现:
-/// - 标题「相关推荐」+ 兜底提示行 + 2 列封面网格;
+/// - 无标题(用户口径 2026-09-19)+ 兜底提示行 + 2 列封面网格;
 /// - 首屏加载渲染灰底骨架卡(每站 [kRecommendPerSite] 个);
 /// - 滚到底部自动追加下一页(「加载更多…」/「没有更多了」)。
 ///
@@ -108,24 +108,12 @@ class _PlayRecommendPanelState extends ConsumerState<PlayRecommendPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.tokens;
     final state = ref.watch(playRecommendProvider(_args));
+    // 无「相关推荐」标题(用户口径 2026-09-19:顶部不要标题),直接铺内容。
     return Column(
       key: const Key('play-side-recommend-panel'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.sm, AppSpacing.sm, 6, 4),
-          child: Text(
-            '相关推荐',
-            style: TextStyle(
-              fontSize: 12,
-              height: 1.2,
-              fontWeight: FontWeight.w600,
-              color: tokens.textPrimary,
-            ),
-          ),
-        ),
         Expanded(child: _body(context, state)),
       ],
     );
