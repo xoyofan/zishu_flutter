@@ -26,6 +26,7 @@
         {
           "room_id": 4444,
           "game_nick": "在播的测试房",
+          "game_roomName": "4444的房间名",
           "game_introduction": "测试赛况直播中",
           "game_imgUrl": "//huyaimg.msstatic.com/c.jpg",
           "game_screenshot": "https://img.huya.com/c.jpg",
@@ -35,6 +36,7 @@
         {
           "room_id": 9527,
           "game_nick": "测试主播",
+          "game_roomName": "9527的房间名",
           "game_introduction": "重复房间被去重"
         }
       ]

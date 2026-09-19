@@ -98,7 +98,7 @@ class _RoomCardMeta extends StatelessWidget {
             title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: AppTypography.title.copyWith(fontSize: 14),
+            style: context.textTitle.copyWith(fontSize: 14),
           ),
           const SizedBox(height: AppSpacing.xs),
           // 固定行高:内容缺失也占满一行,保证同网格卡片等高。
@@ -150,7 +150,7 @@ class _MetaChip extends StatelessWidget {
         text,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: AppTypography.caption.copyWith(fontSize: 10.5),
+        style: context.textCaption.copyWith(fontSize: 10.5),
       ),
     );
   }
@@ -247,7 +247,7 @@ class _CoverPlaceholder extends StatelessWidget {
       child: Center(
         child: Text(
           room.category.isEmpty ? room.site : room.category,
-          style: AppTypography.bodySecondary,
+          style: context.textSecondary,
         ),
       ),
     );

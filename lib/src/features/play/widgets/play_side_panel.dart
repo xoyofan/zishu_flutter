@@ -1039,13 +1039,13 @@ class _ChatTabState extends ConsumerState<_ChatTab>
     );
     final chat = ref.watch(danmakuSessionProvider(params));
     if (!chatEnabled) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(AppSpacing.md),
+          padding: const EdgeInsets.all(AppSpacing.md),
           child: Text(
             '聊天已关闭',
             textAlign: TextAlign.center,
-            style: AppTypography.caption,
+            style: context.textCaption,
           ),
         ),
       );
@@ -1086,7 +1086,7 @@ class _ChatTabState extends ConsumerState<_ChatTab>
                   widget.playbackStatus.label,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTypography.caption,
+                  style: context.textCaption,
                 ),
               ),
               const SizedBox(width: 12),
@@ -1105,7 +1105,7 @@ class _ChatTabState extends ConsumerState<_ChatTab>
                   _connectionLabel(chat.connection, chat.supported),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTypography.caption,
+                  style: context.textCaption,
                 ),
               ),
               const Spacer(),
@@ -1155,7 +1155,7 @@ class _ChatTabState extends ConsumerState<_ChatTab>
                     child: Text(
                       chat.isUnsupported ? '当前站点暂不支持弹幕' : '暂无弹幕，等待水友发言…',
                       textAlign: TextAlign.center,
-                      style: AppTypography.caption,
+                      style: context.textCaption,
                     ),
                   ),
                 )
@@ -1278,7 +1278,7 @@ class _ChatRow extends StatelessWidget {
               children: [
                 TextSpan(
                   text: data.user,
-                  style: AppTypography.bodySecondary.copyWith(
+                  style: context.textSecondary.copyWith(
                     color: _userColor(),
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
@@ -1287,14 +1287,14 @@ class _ChatRow extends StatelessWidget {
                 ),
                 TextSpan(
                   text: '：',
-                  style: AppTypography.bodySecondary.copyWith(
+                  style: context.textSecondary.copyWith(
                     fontSize: 14,
                     height: 1.48,
                   ),
                 ),
                 TextSpan(
                   text: data.message,
-                  style: AppTypography.bodySecondary.copyWith(
+                  style: context.textSecondary.copyWith(
                     color: tokens.textPrimary,
                     fontSize: 14,
                     height: 1.48,
@@ -1814,7 +1814,7 @@ class _FollowMoreHint extends StatelessWidget {
       child: Text(
         '向下滚动加载更多…',
         textAlign: TextAlign.center,
-        style: AppTypography.caption,
+        style: context.textCaption,
       ),
     );
   }
@@ -2044,7 +2044,7 @@ class _SettingRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Expanded(child: Text(label, style: AppTypography.caption)),
+        Expanded(child: Text(label, style: context.textCaption)),
         trailing,
       ],
     );
@@ -2137,7 +2137,7 @@ class _PanelHint extends StatelessWidget {
             Text(
               text,
               textAlign: TextAlign.center,
-              style: AppTypography.caption,
+              style: context.textCaption,
             ),
           ],
         ),

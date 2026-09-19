@@ -141,7 +141,7 @@ class _LoadingMoreFooter extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AppSpacing.sm),
-          Text('加载中…', style: AppTypography.caption),
+          Text('加载中…', style: context.textCaption),
         ],
       ),
     );

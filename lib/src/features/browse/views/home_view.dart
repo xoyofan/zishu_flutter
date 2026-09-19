@@ -84,7 +84,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
             Center(
               child: Text(
                 '暂无直播间,下拉刷新试试',
-                style: AppTypography.bodySecondary,
+                style: context.textSecondary,
               ),
             ),
           ],
@@ -121,7 +121,7 @@ class _ErrorRetry extends StatelessWidget {
         children: [
           Icon(Icons.error_outline_rounded, size: 40, color: context.tokens.error),
           const SizedBox(height: AppSpacing.md),
-          Text(message, style: AppTypography.bodySecondary),
+          Text(message, style: context.textSecondary),
           const SizedBox(height: AppSpacing.lg),
           TextButton.icon(
             onPressed: onRetry,

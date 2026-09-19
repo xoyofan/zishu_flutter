@@ -44,7 +44,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('设置', style: AppTypography.title.copyWith(fontSize: 18)),
+              Text('设置', style: context.textTitle.copyWith(fontSize: 18)),
               const SizedBox(height: AppSpacing.lg),
               _SettingsGroup(title: '账号', children: [_AccountSettingRow()]),
               _SettingsGroup(
@@ -202,7 +202,7 @@ class _SettingsGroup extends StatelessWidget {
         children: [
           Text(
             title,
-            style: AppTypography.body.copyWith(
+            style: context.textBody.copyWith(
               fontWeight: FontWeight.w700,
               color: tokens.textSecondary,
             ),
@@ -238,10 +238,10 @@ class _AccountSettingRow extends ConsumerWidget {
           size: 18,
         ),
       ),
-      title: Text(label, style: AppTypography.body),
+      title: Text(label, style: context.textBody),
       subtitle: Text(
         authenticated ? '登录状态已恢复，可同步我的关注' : '登录后同步我的关注',
-        style: AppTypography.bodySecondary,
+        style: context.textSecondary,
       ),
       trailing: authenticated
           ? TextButton(
@@ -283,13 +283,13 @@ class _SettingsRow extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: AppTypography.body.copyWith(
+                  style: context.textBody.copyWith(
                     fontWeight: FontWeight.w600,
                   ),
                 ),
                 if (hint != null) ...[
                   const SizedBox(height: 2),
-                  Text(hint!, style: AppTypography.bodySecondary),
+                  Text(hint!, style: context.textSecondary),
                 ],
               ],
             ),
@@ -335,7 +335,7 @@ class _StyledDropdown<T> extends StatelessWidget {
           size: 16,
           color: tokens.textSecondary,
         ),
-        style: AppTypography.body,
+        style: context.textBody,
         items: [
           for (final item in items)
             DropdownMenuItem(value: item.value, child: Text(item.label)),

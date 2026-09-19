@@ -217,7 +217,7 @@ class _Hint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    final style = AppTypography.caption.copyWith(color: tokens.textSecondary);
+    final style = context.textCaption.copyWith(color: tokens.textSecondary);
     if (compact) {
       return Padding(
         padding: const EdgeInsets.fromLTRB(
@@ -269,7 +269,7 @@ class _Footer extends StatelessWidget {
       child: Text(
         text,
         textAlign: TextAlign.center,
-        style: AppTypography.caption.copyWith(color: tokens.textSecondary),
+        style: context.textCaption.copyWith(color: tokens.textSecondary),
       ),
     );
   }

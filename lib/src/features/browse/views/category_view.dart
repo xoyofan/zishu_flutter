@@ -291,7 +291,7 @@ class _GroupTab extends StatelessWidget {
                   displayCategoryGroupName(site, group.name),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTypography.body.copyWith(
+                  style: context.textBody.copyWith(
                     color: selected ? tokens.textPrimary : tokens.textSecondary,
                     fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
                   ),
@@ -419,7 +419,7 @@ class _CategoryTile extends ConsumerWidget {
                           item.name.isEmpty
                               ? '?'
                               : String.fromCharCode(item.name.runes.first),
-                          style: AppTypography.body.copyWith(
+                          style: context.textBody.copyWith(
                             color: tokens.textPrimary,
                             fontWeight: FontWeight.w600,
                           ),
@@ -479,7 +479,7 @@ class _CategoryTile extends ConsumerWidget {
               displayCategoryName(site, item.name, item.cid),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: AppTypography.bodySecondary.copyWith(
+              style: context.textSecondary.copyWith(
                 color: selected || favorited
                     ? tokens.textPrimary
                     : tokens.textSecondary,
@@ -554,7 +554,7 @@ class _HintPlaceholder extends StatelessWidget {
         children: [
           Icon(icon, size: 40, color: tokens.textSecondary),
           const SizedBox(height: AppSpacing.md),
-          Text(message, style: AppTypography.bodySecondary),
+          Text(message, style: context.textSecondary),
         ],
       ),
     );
@@ -577,7 +577,7 @@ class _ErrorRetry extends StatelessWidget {
         children: [
           Icon(Icons.error_outline_rounded, size: 40, color: tokens.error),
           const SizedBox(height: AppSpacing.md),
-          Text(message, style: AppTypography.bodySecondary),
+          Text(message, style: context.textSecondary),
           const SizedBox(height: AppSpacing.lg),
           TextButton.icon(
             onPressed: onRetry,

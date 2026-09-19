@@ -37,7 +37,7 @@ class AnchorHero extends StatelessWidget {
                   children: [
                     Text(
                       profile.nickname,
-                      style: AppTypography.title.copyWith(
+                      style: context.textTitle.copyWith(
                         fontSize: 22,
                         fontWeight: FontWeight.w700,
                       ),
@@ -79,10 +79,10 @@ class _Stat extends StatelessWidget {
       children: [
         Text(
           value,
-          style: AppTypography.title.copyWith(fontSize: 15),
+          style: context.textTitle.copyWith(fontSize: 15),
         ),
         const SizedBox(height: 2),
-        Text(label, style: AppTypography.caption),
+        Text(label, style: context.textCaption),
       ],
     );
   }

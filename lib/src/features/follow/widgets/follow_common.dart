@@ -64,7 +64,7 @@ class FollowCoverImage extends StatelessWidget {
           fallbackLabel,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: AppTypography.bodySecondary,
+          style: context.textSecondary,
         ),
       ),
     );
@@ -136,7 +136,7 @@ class FollowCategoryTag extends StatelessWidget {
         display,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: AppTypography.caption,
+        style: context.textCaption,
       ),
     );
   }
@@ -206,7 +206,7 @@ class FollowAnchorName extends StatelessWidget {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       textAlign: textAlign,
-      style: AppTypography.body.copyWith(
+      style: context.textBody.copyWith(
         fontSize: fontSize,
         fontWeight: fontWeight,
         color: color,

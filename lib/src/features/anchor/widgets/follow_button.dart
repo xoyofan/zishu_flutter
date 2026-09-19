@@ -50,7 +50,7 @@ class _FollowButtonState extends State<FollowButton> {
                 const SizedBox(width: AppSpacing.xs),
                 Text(
                   followed ? '已关注' : '关注',
-                  style: AppTypography.body.copyWith(
+                  style: context.textBody.copyWith(
                     color: followed ? tokens.textSecondary : tokens.surfaceSoft,
                     fontWeight: FontWeight.w700,
                   ),
@@ -96,7 +96,7 @@ class AnchorAvatar extends StatelessWidget {
             errorWidget: (_, _, _) => Center(
               child: Text(
                 label.isEmpty ? '?' : label.substring(0, 1),
-                style: AppTypography.title.copyWith(
+                style: context.textTitle.copyWith(
                   fontSize: 26,
                   color: tokens.textSecondary,
                 ),

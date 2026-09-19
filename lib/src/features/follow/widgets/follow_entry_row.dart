@@ -108,7 +108,7 @@ class FollowEntryRow extends StatelessWidget {
               const SizedBox(width: 2),
               Text(
                 live ? room.online : '未开播',
-                style: AppTypography.caption.copyWith(
+                style: context.textCaption.copyWith(
                   fontSize: 11,
                   color: live ? tokens.textPrimary : tokens.textSecondary,
                   fontFeatures: const [FontFeature.tabularFigures()],

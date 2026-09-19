@@ -26,7 +26,7 @@ class RelatedRoomList extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('相关直播', style: AppTypography.title),
+        Text('相关直播', style: context.textTitle),
         const SizedBox(height: AppSpacing.md),
         SizedBox(
           height: _listHeight,
@@ -83,7 +83,7 @@ class _RelatedCard extends StatelessWidget {
                       room.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppTypography.body.copyWith(fontWeight: FontWeight.w600),
+                      style: context.textBody.copyWith(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: 2),
                     Row(
@@ -93,7 +93,7 @@ class _RelatedCard extends StatelessWidget {
                             room.anchorName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: AppTypography.caption,
+                            style: context.textCaption,
                           ),
                         ),
                         if (room.category.isNotEmpty) ...[

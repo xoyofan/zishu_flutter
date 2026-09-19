@@ -50,7 +50,7 @@ class _CoverFallback extends StatelessWidget {
           label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: AppTypography.bodySecondary,
+          style: context.textSecondary,
         ),
       ),
     );

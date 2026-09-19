@@ -48,7 +48,7 @@ class TimelineTile extends StatelessWidget {
                 child: Text(
                   entry.relativeLabel,
                   textAlign: TextAlign.right,
-                  style: AppTypography.caption,
+                  style: context.textCaption,
                 ),
               ),
             ),
@@ -132,7 +132,7 @@ class _EntryCard extends StatelessWidget {
                       room.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppTypography.body.copyWith(fontWeight: FontWeight.w600),
+                      style: context.textBody.copyWith(fontWeight: FontWeight.w600),
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Row(
@@ -142,7 +142,7 @@ class _EntryCard extends StatelessWidget {
                             room.anchorName,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
-                            style: AppTypography.caption,
+                            style: context.textCaption,
                           ),
                         ),
                         if (room.category.isNotEmpty) ...[
@@ -152,7 +152,7 @@ class _EntryCard extends StatelessWidget {
                         const Spacer(),
                         Icon(Icons.visibility_rounded, size: 10, color: tokens.textSecondary),
                         const SizedBox(width: 3),
-                        Text(room.online, style: AppTypography.caption),
+                        Text(room.online, style: context.textCaption),
                       ],
                     ),
                   ],

@@ -100,7 +100,7 @@ class OnlineTag extends StatelessWidget {
         children: [
           Icon(Icons.visibility_rounded, size: 10, color: tokens.textSecondary),
           const SizedBox(width: 3),
-          Text(online, style: AppTypography.caption),
+          Text(online, style: context.textCaption),
         ],
       ),
     );
@@ -129,7 +129,7 @@ class _BadgeChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: AppTypography.caption.copyWith(
+        style: context.textCaption.copyWith(
           color: foreground,
           fontWeight: FontWeight.w700,
         ),

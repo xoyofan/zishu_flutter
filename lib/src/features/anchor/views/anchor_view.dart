@@ -111,9 +111,9 @@ class _MessageView extends StatelessWidget {
         children: [
           Icon(icon, size: 40, color: tokens.textSecondary),
           const SizedBox(height: AppSpacing.md),
-          Text(title, style: AppTypography.title),
+          Text(title, style: context.textTitle),
           const SizedBox(height: AppSpacing.xs),
-          Text(hint, style: AppTypography.bodySecondary),
+          Text(hint, style: context.textSecondary),
         ],
       ),
     );

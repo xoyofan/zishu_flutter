@@ -21,9 +21,9 @@ class FollowEmptyState extends StatelessWidget {
         children: [
           Icon(Icons.favorite_border_rounded, size: 44, color: tokens.textSecondary),
           const SizedBox(height: AppSpacing.md),
-          Text('暂无关注', style: AppTypography.title),
+          Text('暂无关注', style: context.textTitle),
           const SizedBox(height: AppSpacing.xs),
-          Text('筛选条件下没有可显示的关注,去首页看看吧', style: AppTypography.bodySecondary),
+          Text('筛选条件下没有可显示的关注,去首页看看吧', style: context.textSecondary),
           if (onBrowse != null) ...[
             const SizedBox(height: AppSpacing.lg),
             OutlinedButton(

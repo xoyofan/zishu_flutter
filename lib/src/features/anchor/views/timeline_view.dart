@@ -39,7 +39,7 @@ class TimelineView extends ConsumerWidget {
                 children: [
                   Text(
                     '动态时间线',
-                    style: AppTypography.title.copyWith(
+                    style: context.textTitle.copyWith(
                       fontSize: 20,
                       fontWeight: FontWeight.w700,
                     ),
@@ -47,7 +47,7 @@ class TimelineView extends ConsumerWidget {
                   const SizedBox(height: AppSpacing.xs),
                   Text(
                     '主播开播动态流,按时间从近到远排列(样例数据)',
-                    style: AppTypography.bodySecondary,
+                    style: context.textSecondary,
                   ),
                 ],
               ),
@@ -90,14 +90,14 @@ class TimelineView extends ConsumerWidget {
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
     if (async.hasError) {
-      return const Center(
-        child: Text('加载失败,请稍后重试', style: AppTypography.bodySecondary),
+      return Center(
+        child: Text('加载失败,请稍后重试', style: context.textSecondary),
       );
     }
     final entries = async.value?.visible ?? const [];
     if (entries.isEmpty) {
-      return const Center(
-        child: Text('该平台暂无动态', style: AppTypography.bodySecondary),
+      return Center(
+        child: Text('该平台暂无动态', style: context.textSecondary),
       );
     }
     return ListView.builder(
@@ -147,7 +147,7 @@ class _SiteFilterChip extends StatelessWidget {
       checkmarkColor: brand.color,
       side: BorderSide(color: selected ? brand.color : tokens.border),
       shape: RoundedRectangleBorder(borderRadius: AppRadius.allSm),
-      labelStyle: AppTypography.body.copyWith(
+      labelStyle: context.textBody.copyWith(
         color: selected ? brand.color : tokens.textSecondary,
         fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
       ),

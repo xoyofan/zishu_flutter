@@ -87,7 +87,7 @@ class _PlatformChip extends StatelessWidget {
             ],
             Text(
               label,
-              style: AppTypography.body.copyWith(
+              style: context.textBody.copyWith(
                 fontSize: 12,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
                 color: selected ? tokens.textPrimary : tokens.textSecondary,

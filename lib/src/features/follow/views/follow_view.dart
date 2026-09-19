@@ -209,7 +209,7 @@ class _FollowViewState extends ConsumerState<FollowView> {
         children: [
           Text(
             '我的关注',
-            style: AppTypography.title.copyWith(fontSize: 18),
+            style: context.textTitle.copyWith(fontSize: 18),
           ),
           const Spacer(),
           Flexible(
@@ -237,13 +237,13 @@ class _FollowViewState extends ConsumerState<FollowView> {
                     onPressed: _exitBatch,
                     child: Text('取消',
                         style:
-                            AppTypography.body.copyWith(color: tokens.textSecondary)),
+                            context.textBody.copyWith(color: tokens.textSecondary)),
                   ),
                   TextButton(
                     onPressed: () => _toggleSelectAll(items),
                     child: Text(
                       _allSelected(items) ? '全不选' : '全选',
-                      style: AppTypography.body,
+                      style: context.textBody,
                     ),
                   ),
                   TextButton.icon(
@@ -252,7 +252,7 @@ class _FollowViewState extends ConsumerState<FollowView> {
                         size: 16, color: tokens.error),
                     label: Text(
                       '删除所选 (${_selectedKeys.length})',
-                      style: AppTypography.body.copyWith(color: tokens.error),
+                      style: context.textBody.copyWith(color: tokens.error),
                     ),
                   ),
                   TextButton.icon(
@@ -262,7 +262,7 @@ class _FollowViewState extends ConsumerState<FollowView> {
                         size: 16, color: tokens.brand),
                     label: Text(
                       '开提醒 (${_selectedKeys.length})',
-                      style: AppTypography.body.copyWith(color: tokens.brand),
+                      style: context.textBody.copyWith(color: tokens.brand),
                     ),
                   ),
                   TextButton(
@@ -270,7 +270,7 @@ class _FollowViewState extends ConsumerState<FollowView> {
                         _selectedKeys.isEmpty ? null : () => _setRemindSelected(false),
                     child: Text('关提醒',
                         style:
-                            AppTypography.body.copyWith(color: tokens.textSecondary)),
+                            context.textBody.copyWith(color: tokens.textSecondary)),
                   ),
                 ] else
                   TextButton.icon(
@@ -279,7 +279,7 @@ class _FollowViewState extends ConsumerState<FollowView> {
                         size: 16, color: tokens.textSecondary),
                     label: Text('批量管理',
                         style:
-                            AppTypography.body.copyWith(color: tokens.textSecondary)),
+                            context.textBody.copyWith(color: tokens.textSecondary)),
                   ),
               ],
             ),
@@ -317,7 +317,7 @@ class _FollowViewState extends ConsumerState<FollowView> {
               dropdownColor: tokens.surfaceRaised,
               icon: Icon(Icons.expand_more_rounded,
                   size: 16, color: tokens.textSecondary),
-              style: AppTypography.body,
+              style: context.textBody,
               items: [
                 for (final sort in FollowSort.values)
                   DropdownMenuItem(value: sort, child: Text(sort.label)),
@@ -360,7 +360,7 @@ class _FollowViewState extends ConsumerState<FollowView> {
               shape: WidgetStatePropertyAll(
                 RoundedRectangleBorder(borderRadius: AppRadius.allSm),
               ),
-              textStyle: WidgetStatePropertyAll(AppTypography.body.copyWith(
+              textStyle: WidgetStatePropertyAll(context.textBody.copyWith(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               )),

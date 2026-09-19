@@ -405,7 +405,7 @@ class _DrawerHint extends StatelessWidget {
         child: Text(
           text,
           textAlign: TextAlign.center,
-          style: AppTypography.caption.copyWith(color: tokens.textSecondary),
+          style: context.textCaption.copyWith(color: tokens.textSecondary),
         ),
       ),
     );
@@ -450,7 +450,7 @@ class _CategoryLeaf extends StatelessWidget {
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: AppTypography.caption.copyWith(
+              style: context.textCaption.copyWith(
                 fontSize: AppDirectoryDrawer.catFontSize,
                 height: 1.15,
                 color: tokens.textPrimary,

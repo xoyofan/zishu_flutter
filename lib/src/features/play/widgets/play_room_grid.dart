@@ -197,7 +197,7 @@ class PlayRoomCard extends StatelessWidget {
                         child: Center(
                           child: Text(
                             '未开播',
-                            style: AppTypography.caption.copyWith(
+                            style: context.textCaption.copyWith(
                               fontSize: 10.5,
                               color: tokens.coverScrimText,
                               fontWeight: FontWeight.w600,
@@ -227,7 +227,7 @@ class PlayRoomCard extends StatelessWidget {
                       room.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: AppTypography.bodySecondary.copyWith(
+                      style: context.textSecondary.copyWith(
                         fontSize: 10,
                         color: tokens.textSecondary,
                       ),
@@ -337,7 +337,7 @@ class PlayRoomRow extends StatelessWidget {
                   category,
                   maxLines: 1,
                   overflow: TextOverflow.clip,
-                  style: AppTypography.caption.copyWith(
+                  style: context.textCaption.copyWith(
                     fontSize: 10,
                     color: tokens.textSecondary,
                   ),
@@ -361,7 +361,7 @@ class PlayRoomRow extends StatelessWidget {
                   room.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTypography.caption.copyWith(
+                  style: context.textCaption.copyWith(
                     color: tokens.textSecondary,
                   ),
                 ),
@@ -379,7 +379,7 @@ class PlayRoomRow extends StatelessWidget {
                   const SizedBox(width: 2),
                   Text(
                     room.online,
-                    style: AppTypography.caption.copyWith(
+                    style: context.textCaption.copyWith(
                       fontSize: 10,
                       color: tokens.textSecondary,
                     ),

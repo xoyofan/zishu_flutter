@@ -273,7 +273,7 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
         if (!compact)
           Expanded(
             child: Center(
-              child: Text('直播中 · 低延迟追帧中', style: AppTypography.caption),
+              child: Text('直播中 · 低延迟追帧中', style: context.textCaption),
             ),
           )
         else
@@ -524,7 +524,7 @@ class _QualitySelectBox extends StatelessWidget {
               maxLines: 1,
               softWrap: false,
               overflow: TextOverflow.ellipsis,
-              style: AppTypography.bodySecondary,
+              style: context.textSecondary,
             ),
           ),
           const Icon(Icons.arrow_drop_down_rounded, size: 18),
@@ -590,7 +590,7 @@ class _LineSelectBox extends StatelessWidget {
               maxLines: 1,
               softWrap: false,
               overflow: TextOverflow.ellipsis,
-              style: AppTypography.bodySecondary,
+              style: context.textSecondary,
             ),
           ),
           const Icon(Icons.arrow_drop_down_rounded, size: 18),

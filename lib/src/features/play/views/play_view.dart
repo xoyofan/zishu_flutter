@@ -671,7 +671,7 @@ class _RoomHeader extends StatelessWidget {
                       const SizedBox(width: 3),
                       Text(
                         category.trim().isNotEmpty ? category : '直播',
-                        style: AppTypography.caption.copyWith(
+                        style: context.textCaption.copyWith(
                           color: badgeFg,
                           fontWeight: FontWeight.w600,
                         ),
@@ -713,7 +713,7 @@ class _RoomHeader extends StatelessWidget {
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AppTypography.title.copyWith(fontSize: 15),
+                style: context.textTitle.copyWith(fontSize: 15),
               ),
             ),
           ),
@@ -990,10 +990,10 @@ class _StagePlaceholder extends StatelessWidget {
       children: [
         Icon(icon, size: 56, color: tokens.surfaceRaised),
         const SizedBox(height: AppSpacing.md),
-        Text(text, style: AppTypography.bodySecondary),
+        Text(text, style: context.textSecondary),
         if (detail != null) ...[
           const SizedBox(height: AppSpacing.xs),
-          Text(detail!, style: AppTypography.caption),
+          Text(detail!, style: context.textCaption),
         ],
         if (action != null) ...[const SizedBox(height: AppSpacing.md), action!],
       ],
@@ -1038,14 +1038,14 @@ class _ErrorCard extends StatelessWidget {
               textAlign: TextAlign.center,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
-              style: AppTypography.bodySecondary.copyWith(
+              style: context.textSecondary.copyWith(
                 color: tokens.textPrimary,
               ),
             ),
           ),
           if (progress.isNotEmpty) ...[
             const SizedBox(height: AppSpacing.xs),
-            Text(progress, style: AppTypography.caption),
+            Text(progress, style: context.textCaption),
           ],
           const SizedBox(height: AppSpacing.md),
           _RetryButton(onRetry: onRetry),
@@ -1104,7 +1104,7 @@ class _SleepTimerBadge extends StatelessWidget {
           const SizedBox(width: AppSpacing.xs),
           Text(
             '定时 $remaining',
-            style: AppTypography.caption.copyWith(color: tokens.textPrimary),
+            style: context.textCaption.copyWith(color: tokens.textPrimary),
           ),
         ],
       ),

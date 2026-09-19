@@ -36,7 +36,7 @@ class UserCredentialsView extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('用户', style: AppTypography.title.copyWith(fontSize: 18)),
+              Text('用户', style: context.textTitle.copyWith(fontSize: 18)),
               const SizedBox(height: AppSpacing.lg),
               const _Group(
                 title: '账号',
@@ -55,7 +55,7 @@ class UserCredentialsView extends ConsumerWidget {
                     child: Text(
                       '凭证仅存本机,用于解析需要登录态的站点;'
                       '输入框只在本页可见,保存后仅显示脱敏摘要。',
-                      style: AppTypography.caption.copyWith(
+                      style: context.textCaption.copyWith(
                         color: tokens.textSecondary,
                       ),
                     ),
@@ -110,7 +110,7 @@ class _AccountRow extends ConsumerWidget {
                 AuthPhase.anonymous => '未登录 · 点顶栏头像可登录',
               },
               key: const Key('user-account-username'),
-              style: AppTypography.body,
+              style: context.textBody,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -238,13 +238,13 @@ class _SiteCredentialTileState extends ConsumerState<_SiteCredentialTile> {
                     children: [
                       Text(
                         widget.brand.name,
-                        style: AppTypography.body.copyWith(
+                        style: context.textBody.copyWith(
                           fontWeight: FontWeight.w600,
                         ),
                       ),
                       Text(
                         parsingReady ? '解析已接入' : '该平台解析尚未接入',
-                        style: AppTypography.caption.copyWith(
+                        style: context.textCaption.copyWith(
                           color: tokens.textSecondary,
                         ),
                       ),
@@ -274,7 +274,7 @@ class _SiteCredentialTileState extends ConsumerState<_SiteCredentialTile> {
                 child: Text(
                   '${credential.maskedPreview}'
                   '${_savedAtLabel(credential)}',
-                  style: AppTypography.caption.copyWith(
+                  style: context.textCaption.copyWith(
                     color: tokens.textSecondary,
                   ),
                   maxLines: 1,
@@ -291,11 +291,11 @@ class _SiteCredentialTileState extends ConsumerState<_SiteCredentialTile> {
                 autocorrect: false,
                 enableSuggestions: false,
                 keyboardType: TextInputType.multiline,
-                style: AppTypography.body,
+                style: context.textBody,
                 decoration: InputDecoration(
                   isDense: true,
                   hintText: _hintFor(site),
-                  hintStyle: AppTypography.caption.copyWith(
+                  hintStyle: context.textCaption.copyWith(
                     color: tokens.textSecondary,
                   ),
                   filled: true,
@@ -312,7 +312,7 @@ class _SiteCredentialTileState extends ConsumerState<_SiteCredentialTile> {
                   child: Text(
                     _error,
                     key: Key('user-credential-error-$site'),
-                    style: AppTypography.caption.copyWith(color: tokens.error),
+                    style: context.textCaption.copyWith(color: tokens.error),
                   ),
                 ),
               const SizedBox(height: AppSpacing.sm),
@@ -388,7 +388,7 @@ class _StatusBadge extends StatelessWidget {
       ),
       child: Text(
         configured ? '已配置' : '未配置',
-        style: AppTypography.caption.copyWith(
+        style: context.textCaption.copyWith(
           color: color,
           fontWeight: FontWeight.w600,
         ),
@@ -416,7 +416,7 @@ class _Group extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: AppSpacing.sm),
             child: Text(
               title,
-              style: AppTypography.body.copyWith(
+              style: context.textBody.copyWith(
                 fontWeight: FontWeight.w700,
                 color: tokens.textSecondary,
               ),

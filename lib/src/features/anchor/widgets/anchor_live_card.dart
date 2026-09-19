@@ -86,7 +86,7 @@ class AnchorLiveCard extends StatelessWidget {
                         room.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppTypography.title.copyWith(fontSize: 15),
+                        style: context.textTitle.copyWith(fontSize: 15),
                       ),
                     ),
                     if (room.category.isNotEmpty) ...[
@@ -98,7 +98,7 @@ class AnchorLiveCard extends StatelessWidget {
                 const SizedBox(height: AppSpacing.sm),
                 Text(
                   '${room.anchorName} 正在直播',
-                  style: AppTypography.bodySecondary,
+                  style: context.textSecondary,
                 ),
                 const SizedBox(height: AppSpacing.lg),
                 SizedBox(
@@ -121,7 +121,7 @@ class AnchorLiveCard extends StatelessWidget {
                           const SizedBox(width: AppSpacing.sm),
                           Text(
                             '进入直播间',
-                            style: AppTypography.title.copyWith(
+                            style: context.textTitle.copyWith(
                               fontSize: 15,
                               fontWeight: FontWeight.w700,
                               color: tokens.surfaceSoft,
@@ -164,9 +164,9 @@ class _OfflineCard extends StatelessWidget {
             color: tokens.textSecondary,
           ),
           const SizedBox(height: AppSpacing.md),
-          Text('主播当前未直播', style: AppTypography.bodySecondary),
+          Text('主播当前未直播', style: context.textSecondary),
           const SizedBox(height: AppSpacing.xs),
-          Text('可以先看看下方相关直播', style: AppTypography.caption),
+          Text('可以先看看下方相关直播', style: context.textCaption),
         ],
       ),
     );

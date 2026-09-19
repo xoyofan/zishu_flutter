@@ -202,7 +202,7 @@ class FollowEntryTile extends StatelessWidget {
                                   live ? room.online : '未开播',
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: AppTypography.caption.copyWith(
+                                  style: context.textCaption.copyWith(
                                     fontSize: 10.5,
                                     color: live
                                         ? tokens.textPrimary
@@ -257,7 +257,7 @@ class FollowEntryTile extends StatelessWidget {
                   room.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: AppTypography.bodySecondary.copyWith(
+                  style: context.textSecondary.copyWith(
                     fontSize: 11.5,
                     color: tokens.textSecondary,
                   ),
@@ -290,7 +290,7 @@ class _TileCategoryTag extends StatelessWidget {
         label,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: AppTypography.caption.copyWith(
+        style: context.textCaption.copyWith(
           fontSize: 10,
           color: tokens.brand,
           fontWeight: FontWeight.w600,
@@ -319,7 +319,7 @@ class _TilePlatformTag extends StatelessWidget {
         label,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: AppTypography.caption.copyWith(
+        style: context.textCaption.copyWith(
           fontSize: 10,
           color: tokens.surface,
           fontWeight: FontWeight.w700,
