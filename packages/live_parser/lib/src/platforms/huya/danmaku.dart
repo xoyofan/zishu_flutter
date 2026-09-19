@@ -41,6 +41,10 @@ const int _decoAppIdConsumeLevel = 11200;
 /// `LIST<DecorationInfo>` 累积读取)。
 const List<int> _decorationTags = [8, 9, 12, 15];
 
+/// 虎牙 sMessageId 形如「数字-数字」时视为弱 id(web huyaDanmakuDedupKey 的
+/// 排除规则同款),不去重判重。
+final RegExp _kHuyaWeakId = RegExp(r'^\d+-\d+$');
+
 const Duration kHuyaDanmakuHeartbeat = Duration(seconds: 60);
 
 const String kHuyaDanmakuUrl = 'wss://cdnws.api.huya.com:443';
@@ -191,13 +195,16 @@ class HuyaDanmakuSession implements DanmakuSession {
       case _uriChatMessage:
         final message = _chatFromNotice(msg);
         // WS 常对同一条推送多次(对齐 web huyaDanmakuDedup,cap 800):
-        // 契约暂无 sMessageId,先用「用户+正文」兜底 key(web id 无效时的
-        // fallback 同款)。
-        if (message != null &&
-            !_chatDedup.allow('${message.userName}\u0000${message.text}')) {
-          return;
+        // 优先 sMessageId 判重;虎牙 sMessageId 常为「数字-数字」格式(web
+        // huyaDanmakuDedupKey 的 ^\d+-\d+$ 排除规则视为无效),此时与空 id
+        // 一致走「用户+正文」兜底 key。
+        if (message != null) {
+          final key = message.id.isNotEmpty && !_kHuyaWeakId.hasMatch(message.id)
+              ? message.id
+              : '${message.userName}\u0000${message.text}';
+          if (!_chatDedup.allow(key)) return;
+          _messagesController.add(message);
         }
-        if (message != null) _messagesController.add(message);
       case _uriOnlineCount:
         final online = TarsReader(msg).readInt(0);
         _messagesController.add(
@@ -271,6 +278,15 @@ class HuyaDanmakuSession implements DanmakuSession {
       // 装饰数据残缺只丢徽章不丢正文(web 整帧 catch 会丢整条,这里更保守)。
     }
 
+    // 消息 id:MessageNotice.sMessageId(tag 20,web huyaJce.ts 同 tag)。
+    // 读取须在装饰(tag 8-15)之后 —— Tars 字段按 tag 升序排布。
+    var sMessageId = '';
+    try {
+      sMessageId = reader.readString(20);
+    } on TarsDecodeException {
+      // 无 id 不影响正文。
+    }
+
     return DanmakuMessage(
       type: DanmakuMessageType.chat,
       roomId: roomId,
@@ -281,6 +297,7 @@ class HuyaDanmakuSession implements DanmakuSession {
       badgeName: badgeName,
       badgeLevel: badgeLevel,
       userLevel: userLevel,
+      id: sMessageId,
       rawType: 'huya:1400',
     );
   }

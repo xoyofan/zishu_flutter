@@ -282,6 +282,20 @@ class BilibiliDanmakuSession implements DanmakuSession {
     var badgeColorLevel = 0;
     final metaUser = meta.length > 15 ? jsonMapOf(meta[15]) : null;
     final newMedal = jsonMapOf(jsonMapOf(metaUser)['user'])['medal'];
+    // 消息 id:info[0][15].extra JSON 的 id_str(web bilibiliMeta.ts:274-290),
+    // 用于协议重推去重;缺失回落「用户+正文」key。
+    var danmakuId = '';
+    if (metaUser != null) {
+      final extraText = jsonText(metaUser['extra']);
+      if (extraText.isNotEmpty) {
+        try {
+          final extra = jsonMapOf(jsonDecode(extraText));
+          danmakuId = jsonText(extra['id_str']).trim();
+        } on FormatException {
+          // extra 非 JSON:忽略 id。
+        }
+      }
+    }
     if (newMedal is Map) {
       final medal = jsonMapOf(newMedal);
       badgeName = jsonText(medal['name']);
@@ -320,9 +334,10 @@ class BilibiliDanmakuSession implements DanmakuSession {
       userLevel = ul.isNotEmpty ? _intOf(ul[0]) : 0;
     }
 
-    // 协议重推去重(对齐 web bilibiliDanmakuDedup,cap 1200):契约暂无
-    // id 字段,先用「用户+正文」兜底 key(web id 无效时的 fallback 同款)。
-    if (!_chatDedup.allow('$userName\u0000$text0')) return;
+    // 协议重推去重(对齐 web bilibiliDanmakuDedup,cap 1200):
+    // 优先 id_str,缺失回落「用户+正文」key(web fallback 同款)。
+    final dedupKey = danmakuId.isNotEmpty ? danmakuId : '$userName\u0000$text0';
+    if (!_chatDedup.allow(dedupKey)) return;
 
     _messagesController.add(
       DanmakuMessage(
@@ -340,6 +355,7 @@ class BilibiliDanmakuSession implements DanmakuSession {
         badgeColorBorder: badgeColorBorder,
         badgeTextColor: badgeTextColor,
         badgeColorLevel: badgeColorLevel,
+        id: danmakuId,
         rawType: cmd,
       ),
     );

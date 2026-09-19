@@ -394,6 +394,7 @@ class DanmakuMessage {
     this.badgeColorBorder = 0,
     this.badgeTextColor = 0,
     this.badgeColorLevel = 0,
+    this.id = '',
     this.sentAt,
     this.rawType = '',
   });
@@ -425,6 +426,12 @@ class DanmakuMessage {
   /// 粉丝牌等级数字色(0xRRGGBB;0 = 协议未提供,UI 回落文字色)。
   /// B 站新协议 `v2_medal_color_level`(对齐 web fanBadges/bilibili.ts:137-141)。
   final int badgeColorLevel;
+
+  /// 协议消息 id(空 = 未提供)。用于弹幕去重(协议重推同一条时按 id 判重),
+  /// 消除「用户+正文」兜底 key 对同名同文的误杀。
+  /// - huya:MessageNotice.sMessageId(tag 20);
+  /// - bilibili:info[0][15].extra JSON 的 id_str(web bilibiliMeta.ts:274-290)。
+  final String id;
   final DateTime? sentAt;
 
   /// 上游原始 type(如 `chatmsg`),便于 UI/日志区分细分来源。
