@@ -27,7 +27,8 @@ class SoopBrowseRepository implements BrowseRepository {
   @override
   Future<CategoryResult> fetchCategories(String site) async {
     final cached = _categoryCache;
-    if (cached != null) {
+    // 空分类按未命中处理,作废重拉(web e389570 空壳分组同款校验语义)。
+    if (cached != null && cached.isNotEmpty) {
       return CategoryResult(
         site: kSoopSiteId,
         groups: [CategoryGroup(id: '1', name: '热门', items: cached)],
@@ -55,7 +56,8 @@ class SoopBrowseRepository implements BrowseRepository {
       }
       if (list.length < kSoopCategoryPageSize) break;
     }
-    _categoryCache = items;
+    // 空分类不落缓存,避免上游异常响应霸占缓存(web e389570 同款语义)。
+    if (items.isNotEmpty) _categoryCache = items;
     return CategoryResult(
       site: kSoopSiteId,
       groups: [CategoryGroup(id: '1', name: '热门', items: items)],

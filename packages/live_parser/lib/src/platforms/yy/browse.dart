@@ -6,6 +6,7 @@ import 'dart:convert';
 import '../../contracts/contracts.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
+import '../../registry/category_cache.dart';
 import '../../utils/format_online.dart';
 import '../douyu/json_utils.dart';
 import 'normalize.dart';
@@ -26,7 +27,10 @@ class YyBrowseRepository implements BrowseRepository {
   @override
   Future<CategoryResult> fetchCategories(String site) async {
     final cached = _categoryCache;
-    if (cached != null) return CategoryResult(site: kYySiteId, groups: cached);
+    // 空壳分组(有分组无子项)按未命中处理,作废重拉(web e389570 同款校验)。
+    if (hasRealCategoryGroups(cached)) {
+      return CategoryResult(site: kYySiteId, groups: cached!);
+    }
 
     final header = await _getJson(Uri.parse('https://www.yy.com/yyweb/module/data/header'));
     final tabs = jsonListOf(header['categoryTabs']);
@@ -74,7 +78,8 @@ class YyBrowseRepository implements BrowseRepository {
         ));
       }
     }
-    _categoryCache = groups;
+    // 空壳分组不落缓存,避免上游异常响应霸占缓存(web e389570 同款语义)。
+    if (hasRealCategoryGroups(groups)) _categoryCache = groups;
     return CategoryResult(site: kYySiteId, groups: groups);
   }
 

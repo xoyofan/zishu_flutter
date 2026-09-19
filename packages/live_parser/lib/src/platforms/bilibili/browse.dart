@@ -6,6 +6,7 @@ import '../../http/parser_http.dart';
 import '../../utils/format_online.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
+import '../../registry/category_cache.dart';
 import '../douyu/json_utils.dart';
 import 'promo_tag.dart';
 import 'room_api.dart';
@@ -22,7 +23,10 @@ class BilibiliBrowseRepository implements BrowseRepository {
   @override
   Future<CategoryResult> fetchCategories(String site) async {
     final cached = _categoryCache;
-    if (cached != null) return CategoryResult(site: kBilibiliSiteId, groups: cached);
+    // 空壳分组(有分组无子项)按未命中处理,作废重拉(web e389570 同款校验)。
+    if (hasRealCategoryGroups(cached)) {
+      return CategoryResult(site: kBilibiliSiteId, groups: cached!);
+    }
 
     final parents = jsonListOf(
       await bilibiliFetchJson(
@@ -48,7 +52,8 @@ class BilibiliBrowseRepository implements BrowseRepository {
         CategoryGroup(id: jsonText(parent['id']), name: jsonText(parent['name']), items: items),
       );
     }
-    _categoryCache = groups;
+    // 空壳分组不落缓存,避免上游异常响应霸占缓存(web e389570 同款语义)。
+    if (hasRealCategoryGroups(groups)) _categoryCache = groups;
     return CategoryResult(site: kBilibiliSiteId, groups: groups);
   }
 

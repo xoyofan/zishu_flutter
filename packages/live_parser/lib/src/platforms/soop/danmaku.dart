@@ -1,7 +1,8 @@
 /// SOOP 弹幕:自有文本协议 WebSocket。
 ///
-/// 帧以 `ESC TAB`(`\x1b\x09`)开头、字段以 `\x0c` 分隔;连接后先发 connect
-/// 包,200ms 后发 join 包,之后每 20s 发一次心跳。协议与 pure_live 对齐。
+/// 帧以 `ESC TAB`(`\x1b\x09`)开头:4 位 opcode + 6 位 size + 字段(`\x0c`
+/// 分隔);连接后先发 connect 包,200ms 后发 join 包,之后每 20s 发一次
+/// 心跳。接收侧只放行 0005 聊天帧(opcode 白名单,对齐 web 768f8cd)。
 library;
 
 import 'dart:async';
@@ -19,6 +20,10 @@ const Duration kSoopDanmakuHeartbeat = Duration(seconds: 20);
 
 /// join 包延迟:connect 包发出后等待 200ms 再进房(pure_live 同款)。
 const Duration kSoopDanmakuJoinDelay = Duration(milliseconds: 200);
+
+/// 聊天帧 opcode:实测 wire 上 0001/0002 是握手 ACK、0004 是观众列表、
+/// 0127 是粉丝勋章(每 ~2s 成对刷屏),只有 0005 是真实聊天。
+const String kSoopChatOpcode = '0005';
 
 const String _escape = '\x1b\x09';
 const String _separator = '\x0c';
@@ -112,28 +117,39 @@ class SoopDanmakuSession implements DanmakuSession {
 
   void _onData(Object? data) {
     if (_closed || data is! List<int>) return;
-    final messages = _splitBySeparator(data)
-        .map((part) => utf8.decode(part, allowMalformed: true))
-        .toList();
-    // 聊天帧:字段足够、第二字段不是控制码、且不含「|」分隔的批量行。
-    if (messages.length <= 6) return;
-    final text = messages[1];
-    if (text.isEmpty ||
-        text == '-1' ||
-        text == '1' ||
-        text.contains('|')) {
-      return;
+    // packet = ESC+TAB + 4 位 opcode + 6 位 size + 字段(0x0c 分隔);一条
+    // WS 消息可能拼接多个包。opcode 白名单门控:非 0005 的系统帧一律丢弃
+    // (0001/0002 握手 ACK、0004 观众列表、0127 粉丝勋章),否则会被当成
+    // 无意义弹幕刷屏(web 768f8cd 同款语义)。
+    final text = utf8.decode(data, allowMalformed: true);
+    for (final packet in text.split(_escape)) {
+      if (packet.length < 4 || packet.substring(0, 4) != kSoopChatOpcode) {
+        continue;
+      }
+      final parts = packet.split(_separator);
+      // 聊天帧:字段足够、第二字段不是控制码、且不含「|」分隔的批量行。
+      if (parts.length <= 6) continue;
+      final comment = parts[1].trim();
+      final user = parts[6].trim();
+      if (comment.isEmpty ||
+          user.isEmpty ||
+          comment == '-1' ||
+          comment == '1' ||
+          comment.contains('|')) {
+        continue;
+      }
+      _messagesController.add(
+        DanmakuMessage(
+          type: DanmakuMessageType.chat,
+          roomId: roomId,
+          userName: user,
+          userId: '',
+          text: comment,
+          color: _soopChatColor(parts.length > 9 ? parts[9] : ''),
+          rawType: 'chat',
+        ),
+      );
     }
-    _messagesController.add(
-      DanmakuMessage(
-        type: DanmakuMessageType.chat,
-        roomId: roomId,
-        userName: messages[6],
-        userId: '',
-        text: text,
-        rawType: 'chat',
-      ),
-    );
   }
 
   void _onDisconnected(DanmakuSessionState state) {
@@ -155,17 +171,10 @@ class SoopDanmakuSession implements DanmakuSession {
   }
 }
 
-/// 按单字节分隔符切分,**保留空段**(字段按位置取,与 pure_live splitList 一致)。
-List<List<int>> _splitBySeparator(List<int> data) {
-  if (data.isEmpty) return const [];
-  final parts = <List<int>>[];
-  var start = 0;
-  for (var i = 0; i < data.length; i++) {
-    if (data[i] == 0x0c) {
-      parts.add(data.sublist(start, i));
-      start = i + 1;
-    }
-  }
-  parts.add(data.sublist(start, data.length));
-  return parts;
+/// SOOP 文字色字段(parts[9],十进制 RGB 整数):空/非法按 UI 默认色(0);
+/// -1 等 32 位补码值按低 24 位截断(web colorFromPackedInt 同构,-1 → 白色)。
+int _soopChatColor(String raw) {
+  final value = int.tryParse(raw.trim());
+  if (value == null) return 0;
+  return value & 0xFFFFFF;
 }

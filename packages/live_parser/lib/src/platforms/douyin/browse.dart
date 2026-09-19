@@ -5,6 +5,7 @@ import 'dart:convert';
 
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
+import '../../registry/category_cache.dart';
 import '../../utils/format_online.dart';
 import '../douyu/json_utils.dart';
 import 'ab_sign.dart';
@@ -99,7 +100,10 @@ class DouyinBrowseRepository implements BrowseRepository {
   @override
   Future<CategoryResult> fetchCategories(String site) async {
     final cached = _categoryCache;
-    if (cached != null) return CategoryResult(site: kDouyinSiteId, groups: cached);
+    // 空壳分组(有分组无子项)按未命中处理,作废重拉(web e389570 同款校验)。
+    if (hasRealCategoryGroups(cached)) {
+      return CategoryResult(site: kDouyinSiteId, groups: cached!);
+    }
 
     String html = '';
     try {
@@ -136,7 +140,9 @@ class DouyinBrowseRepository implements BrowseRepository {
       ),
     ];
 
-    _categoryCache = groups;
+    // 空壳分组不落缓存,避免上游异常响应霸占缓存(web e389570 同款语义)。
+    // 注意「娱乐」组可能解析出空 items,只要主分组有子项缓存仍有效。
+    if (hasRealCategoryGroups(groups)) _categoryCache = groups;
     return CategoryResult(site: kDouyinSiteId, groups: groups);
   }
 
