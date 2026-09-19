@@ -888,10 +888,14 @@ class _ChatRowData {
     this.badgeColorLevel = 0,
     this.userLevel = 0,
     this.color = 0,
+    this.segments = const [],
   });
 
   final String user;
   final String message;
+
+  /// 富文本段(空 = 纯文本,正文渲染回退单段 [message],零破坏)。
+  final List<DanmakuSegment> segments;
 
   /// 平台 id:徽章/等级 pill 的样式分档依据(对齐 web ChatFanBadge/
   /// ChatUserLevelBadge 的 per-site 分支)。
@@ -933,6 +937,7 @@ class _ChatRowData {
       badgeColorLevel: message.badgeColorLevel,
       userLevel: message.userLevel,
       color: message.color,
+      segments: message.segments,
     );
   }
 }
@@ -1349,6 +1354,9 @@ class _NewMessagesButton extends StatelessWidget {
 /// 不随间距设置变化;间距由列表行 padding 表达)。
 const double _kChatLineHeight = 1.48;
 
+/// 表情图边长 = 正文字号 × 该系数(对齐 web 表情与文字同行的视觉比例)。
+const double _kEmojiSizeScale = 1.6;
+
 class _ChatRow extends StatelessWidget {
   const _ChatRow({required this.data, required this.fontSize});
 
@@ -1363,6 +1371,38 @@ class _ChatRow extends StatelessWidget {
       hash = (hash * 31 + unit) % 360;
     }
     return HSLColor.fromAHSL(1, hash.toDouble(), 0.6, 0.68).toColor();
+  }
+
+  /// 正文段 spans:按 [DanmakuSegment] 富文本段展开(抖音表情图消息)。
+  ///
+  /// 回退链:
+  /// - segments 为空(默认)→ 单段 [data.message] 纯文本,历史行为零破坏;
+  /// - 文本段 / url 为空 / 图片加载失败(errorBuilder)→ 「[表情名]」文本,
+  ///   样式与正文一致;
+  /// - 表情段 url 非空 → [WidgetSpan] 内联 [Image.network],边长 = 字号 ×
+  ///   [_kEmojiSizeScale],`fit: contain`,中线对齐文字。
+  List<InlineSpan> _buildBodySpans(TextStyle bodyStyle) {
+    final segments = data.segments;
+    if (segments.isEmpty) {
+      return [TextSpan(text: data.message, style: bodyStyle)];
+    }
+    final emojiSide = fontSize * _kEmojiSizeScale;
+    return [
+      for (final segment in segments)
+        if (segment.isEmoji && segment.url.isNotEmpty)
+          WidgetSpan(
+            alignment: PlaceholderAlignment.middle,
+            child: Image.network(
+              segment.url,
+              width: emojiSide,
+              height: emojiSide,
+              fit: BoxFit.contain,
+              errorBuilder: (_, _, _) => Text(segment.text, style: bodyStyle),
+            ),
+          )
+        else
+          TextSpan(text: segment.text, style: bodyStyle),
+    ];
   }
 
   @override
@@ -1413,9 +1453,9 @@ class _ChatRow extends StatelessWidget {
                     height: _kChatLineHeight,
                   ),
                 ),
-                TextSpan(
-                  text: data.message,
-                  style: context.textSecondary.copyWith(
+                // 正文段:按 segments 富文本展开(空 = 单段纯文本)。
+                ..._buildBodySpans(
+                  context.textSecondary.copyWith(
                     color: tokens.textPrimary,
                     fontSize: fontSize,
                     height: _kChatLineHeight,
