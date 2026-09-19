@@ -90,24 +90,27 @@ void main() {
     expect(find.byKey(const Key('category-item-3203')), findsOneWidget);
   });
 
-  testWidgets('点击子分类 tile:选中态切换且不抛异常', (tester) async {
+  testWidgets('点击子分类 tile:路由跳转到带 cid 的房间页(2026-09-20 口径)',
+      (tester) async {
     final router = await pumpApp(tester);
     router.go('/douyu/category');
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
 
-    await tester.tap(find.byKey(const Key('category-group-1')));
-    await tester.pump(const Duration(milliseconds: 50));
-
-    // 切到第二组再点其中的子分类,验证 tile 可交互且无异常。
-    await tester.tap(find.byKey(const Key('category-group-2')));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.tap(find.byKey(const Key('category-item-16')));
+    // 默认选中第一组(网游竞技),点其中 fixture 有房间数据的「英雄联盟」tile。
+    await tester.tap(find.byKey(const Key('category-item-1')));
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
 
+    // 对齐 web CategoryIndexView:tile 是 RouterLink,点击路由跳转到
+    // /douyu/category/1 纯房间页,索引页的分组 tabs/tile 不再保留。
+    expect(
+      router.routeInformationProvider.value.uri.path,
+      '/douyu/category/1',
+    );
+    expect(find.byKey(const Key('category-item-1')), findsNothing);
+    expect(keyCount(tester, 'category-group-'), 0);
+    expect(keyCount(tester, 'room-card-'), greaterThan(0));
     expect(tester.takeException(), isNull);
-    // 第二组「娱乐天地」的子分类 tile 仍在(选择动作只影响房间区,不销毁 tiles)。
-    expect(find.byKey(const Key('category-item-16')), findsOneWidget);
   });
 }

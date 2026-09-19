@@ -124,36 +124,24 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('分类页:点收藏星不会顺带切换选中的子分类', (tester) async {
+  testWidgets('分类页:点收藏星只收藏,不触发 tile 路由跳转', (tester) async {
     final container = await _pumpApp(tester);
-    // 裸索引路由 + 先点 tile '1' 提供选中态(选中档描边宽 2,未选中宽 1)。
-    container.read(routerProvider).go('/douyu/category');
+    // 2026-09-20 口径:索引页 tile 点击是路由跳转,收藏星必须自己命中,
+    // 不得穿透到 tile 把页面带去房间路由。
+    final router = container.read(routerProvider);
+    router.go('/douyu/category');
     await _frames(tester);
-    await tester.tap(find.byKey(const Key('category-item-1')));
-    await _frames(tester);
 
-    double borderWidthOf(String cid) {
-      final containerWidget = tester.widget<Container>(
-        find
-            .descendant(
-              of: find.byKey(Key('category-item-$cid')),
-              matching: find.byType(Container),
-            )
-            .first,
-      );
-      return ((containerWidget.decoration! as BoxDecoration).border! as Border)
-          .top
-          .width;
-    }
-
-    expect(borderWidthOf('1'), 2, reason: '点选后 tile 1 应处于选中态');
-
-    // 点另一个 tile 的收藏星:只收藏,不改变选中档。
     await tester.tap(find.byKey(const Key('category-favorite-8')));
     await _frames(tester);
+
     expect(_isFavorited(container, 'douyu', '8'), isTrue);
-    expect(borderWidthOf('1'), 2, reason: '选中态应仍是 cid=1');
-    expect(borderWidthOf('8'), 1, reason: '点星标不得把 cid=8 变成选中态');
+    // 仍停留在分类索引页:路由未变,tile 网格还在。
+    expect(
+      router.routeInformationProvider.value.uri.path,
+      '/douyu/category',
+    );
+    expect(find.byKey(const Key('category-item-8')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
