@@ -27,8 +27,8 @@
 
 | ID | 功能 | 当前自动化 | Windows 真实 | 说明 |
 |---|---|---|---|---|
-| `VOL` | 房间音量隔离与恢复 | NOT_RUN | NOT_RUN | UI、设置状态和播放器最终音量必须一致 |
-| `MUTE` | 静音/取消静音 | NOT_RUN | NOT_RUN | 区分全局静音和房间音量为 0 |
+| `VOL` | 房间音量隔离与恢复 | PASS | NOT_RUN | UI、设置状态和播放器最终音量必须一致 |
+| `MUTE` | 静音/取消静音 | PASS | NOT_RUN | 区分全局静音和房间音量为 0 |
 | `QUALITY` | 默认画质与切换 | NOT_RUN | NOT_RUN | 切换不能污染其他播放状态 |
 | `LINE` | 线路格式、线路切换和备用线路 | NOT_RUN | NOT_RUN | 重开后仍遵守线路偏好 |
 | `DANMAKU` | 弹幕连接、切房、设置和去重 | NOT_RUN | NOT_RUN | 聊天与飘屏会话边界一致 |
@@ -42,10 +42,10 @@
 
 | 用例 ID | 场景 | 预期 | 自动化 | Windows 真实 | 证据 |
 |---|---|---|---|---|---|
-| `VOL-001` | 房间 A 设置音量 35 后进入房间 B | B 使用 B 的记忆值或默认值，不能继承 A | PASS | NOT_RUN | `test/features/playback/room_volume_provider_test.dart`（纯逻辑）；Windows 仍待真实验证 |
-| `VOL-002` | 从 B 返回 A | A 恢复 35 | PASS | NOT_RUN | `test/features/playback/room_volume_provider_test.dart`（纯逻辑）；生命周期待验证 |
+| `VOL-001` | 房间 A 设置音量 35 后进入房间 B | B 使用 B 的记忆值或默认值，不能继承 A | PASS | NOT_RUN | 生命周期测试验证 A→B 的最终调用序列与 snapshot |
+| `VOL-002` | 从 B 返回 A | A 恢复 35 | PASS | NOT_RUN | 生命周期测试验证 A→B→A 的最终值 |
 | `VOL-003` | `douyu:123` 与 `huya:123` | 两个平台音量独立 | PASS | NOT_RUN | `test/features/playback/room_volume_provider_test.dart` |
-| `VOL-004` | `open` 完成后底层音量重置为 100 | 最终播放器实际音量仍为设置值 | NOT_RUN | NOT_RUN | `test/features/playback/play_controller_volume_lifecycle_test.dart` + playback log |
+| `VOL-004` | `open` 完成后底层音量重置为 100 | 最终播放器实际音量仍为设置值 | PASS | NOT_RUN | `play_controller_volume_lifecycle_test.dart`；开流后最终 snapshot=35 |
 | `VOL-005` | 切换画质 | 音量和静音状态保持 | NOT_RUN | NOT_RUN | public playback state test |
 | `VOL-006` | 切换线路 | 音量和静音状态保持 | NOT_RUN | NOT_RUN | public playback state test |
 | `VOL-007` | 断流恢复/重新解析 | 音量和静音状态保持 | NOT_RUN | NOT_RUN | recovery test + playback log |
@@ -66,11 +66,12 @@
 
 ### 阶段 2：音量状态完整回归
 
-- 状态：进行中
-- 纯逻辑子阶段：已完成，`room_volume_provider_test.dart` **10/10 通过**，覆盖 10 个已注册平台
-- 生命周期子阶段：未开始
+- 状态：已完成（自动化）
+- 纯逻辑子阶段：`room_volume_provider_test.dart` **10/10 通过**，覆盖 10 个已注册平台
+- 生命周期子阶段：`play_controller_volume_lifecycle_test.dart` **6/6 通过**；相关播放选择测试合计阶段验证 **33/33 通过**
 - Windows 真实：NOT_RUN
-- 当前问题：`BUG-WIN-VOLUME-001` 尚未通过真实播放器生命周期复现；重点转向 `PlayController._open()` 的 `open`/`_applyRoomVolume` 异步时序
+- 已修复：`BUG-WIN-VOLUME-001` 的 open 完成后音量回退问题
+- 剩余风险：仍需 Windows release 真实播放验证 UI slider、`PlayerSnapshot` 和 media-kit 实际音量的一致性
 
 ### 阶段 3：其他公共播放状态
 
@@ -91,14 +92,15 @@
 
 ### BUG-WIN-VOLUME-001
 
-- 状态：NOT_RUN
+- 状态：自动化已修复，Windows 真实验证待执行
 - 影响范围：所有使用同一 `LivePlayer` 实例的播放平台
 - 场景：房间 A 调整音量后进入房间 B
 - 已知现象：用户观察到音量条未变化或显示值与实际音量不一致，实际音量可能回到 100%
-- 预期：当前房间音量设置、音量 slider、`PlayerSnapshot.volume` 和底层播放器实际音量一致
-- 初步关注点：`PlayController._open()` 当前并行调用 `player.open()` 与 `_applyRoomVolume()`；需测试 `open` 完成后是否覆盖音量
-- 回归测试：`test/features/playback/play_controller_volume_lifecycle_test.dart`
-- 修复提交：NOT_RUN
+- 根因：`PlayController._open()` 原先并行启动 `player.open()` 与 `_applyRoomVolume()`；`open` 重建底层音频管线后可能把音量恢复为 100%，没有完成后的最终补偿
+- 修复：`_openAndApplyVolume` 在当前 generation 下先应用一次，等待 `player.open()` 完成后再应用一次；旧 generation 不执行收尾补偿
+- 自动化回归：`test/features/playback/play_controller_volume_lifecycle_test.dart` **6/6 通过**
+- 相关纯逻辑：`test/features/playback/room_volume_provider_test.dart` **10/10 通过**
+- 修复提交：待本阶段提交
 - Windows 证据：NOT_RUN
 
 ## 6. 状态更新规则
