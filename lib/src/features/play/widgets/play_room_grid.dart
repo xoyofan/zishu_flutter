@@ -21,6 +21,7 @@ import 'package:flutter/material.dart';
 import 'package:live_parser/live_parser.dart';
 
 import '../../../shared/domain/category_display.dart';
+import '../../../shared/presentation/category_colors.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/widgets/cover_badges.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -252,12 +253,16 @@ class PlayRoomList extends StatelessWidget {
   });
 
   final List<RoomSummary> rooms;
+
+  /// 兼容保留(列表行不再渲染 ★,对齐 web FollowRoomRowView;超关以排序
+  /// 置顶表达)。网格视图([PlayRoomGrid])仍使用它画卡面 ★。
   final RoomKeySet superKeys;
   final void Function(RoomSummary room)? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return ListView.separated(
+    // 行自带底部分隔线(web `border-bottom`),行间不再加空隙。
+    return ListView.builder(
       padding: const EdgeInsets.fromLTRB(
         AppSpacing.sm,
         0,
@@ -265,13 +270,11 @@ class PlayRoomList extends StatelessWidget {
         AppSpacing.sm,
       ),
       itemCount: rooms.length,
-      separatorBuilder: (context, _) => const SizedBox(height: 6),
       itemBuilder: (context, index) {
         final room = rooms[index];
         return PlayRoomRow(
           key: ValueKey('play-room-row-${room.site}-${room.roomId}'),
           room: room,
-          isSpecial: superKeys.contains('${room.site}:${room.roomId}'),
           onTap: onTap == null ? null : () => onTap!(room),
         );
       },
@@ -279,21 +282,21 @@ class PlayRoomList extends StatelessWidget {
   }
 }
 
-/// 紧凑列表单行:主播名 + 特别关注 ★ + 标题。
+/// 紧凑列表单行:**四列表格**(对齐 web `FollowRoomRowView.vue`,2026-09-19
+/// 用户口径「每个主播应该一行显示:游戏分类 主播名 标题 观看人数」)。
 ///
-/// 用户口径「列表模式前面不用房间缩略图」:列表视图的价值是**扫得快**,
-/// 行首再塞一张 44dp 封面只是挤压文字、把行高撑到 52dp,一屏少看几条。
-/// 想看封面切回网格视图即可,两种视图各司其职。
+/// web 规格(CSS 变量,1rem=16):行高 1.4rem=22.4、分类列 3.4rem=54.4、
+/// 主播名列 6.5em(0.68rem 字号)≈70、列距 4px、行底边框
+/// `color-mix(chrome-border 50%)`;主播名在播时用平台色,标题中性色
+/// 单行省略;人数列人形图标 + 文本(tabular-nums),行内**无 ★**。
 class PlayRoomRow extends StatelessWidget {
   const PlayRoomRow({
     super.key,
     required this.room,
-    this.isSpecial = false,
     this.onTap,
   });
 
   final RoomSummary room;
-  final bool isSpecial;
   final VoidCallback? onTap;
 
   bool get _live => room.online.trim().isNotEmpty;
@@ -301,45 +304,87 @@ class PlayRoomRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
+    final category = displayCategoryName(room.site, room.category, room.cid);
+    final categoryStyle = CategoryColors.opaqueFor(
+      category: room.category,
+      site: room.site,
+      cid: room.cid,
+    );
     return Material(
       color: tokens.surface,
-      borderRadius: AppRadius.allSm,
-      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 5),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
+        child: Container(
+          height: 24,
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(
+                color: tokens.border.withValues(alpha: 0.5),
+              ),
+            ),
+          ),
+          child: Row(
             children: [
+              // 分类条:分类色底 + 中性前景(web 为条纹底,文字取中性色)。
+              Container(
+                width: 54,
+                height: double.infinity,
+                alignment: Alignment.center,
+                color: categoryStyle?.background.withValues(alpha: 0.18),
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: Text(
+                  category,
+                  maxLines: 1,
+                  overflow: TextOverflow.clip,
+                  style: AppTypography.caption.copyWith(
+                    fontSize: 10,
+                    color: tokens.textSecondary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              // 主播名:固定列宽,平台色(在播),单行省略。
+              SizedBox(
+                width: 72,
+                child: FollowAnchorName(
+                  site: room.site,
+                  name: room.anchorName,
+                  live: _live,
+                  fontSize: 11,
+                ),
+              ),
+              const SizedBox(width: 4),
+              // 标题:弹性列,单行省略。
+              Expanded(
+                child: Text(
+                  room.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: AppTypography.caption.copyWith(
+                    color: tokens.textSecondary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              // 观看人数:人形图标 + 文本(仅开播;侧栏口径本就只显在播)。
               Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Flexible(
-                    child: FollowAnchorName(
-                      site: room.site,
-                      name: room.anchorName,
-                      live: _live,
-                      fontSize: 12,
+                  Icon(
+                    Icons.person_outline_rounded,
+                    size: 11,
+                    color: tokens.textSecondary,
+                  ),
+                  const SizedBox(width: 2),
+                  Text(
+                    room.online,
+                    style: AppTypography.caption.copyWith(
+                      fontSize: 10,
+                      color: tokens.textSecondary,
                     ),
                   ),
-                  if (isSpecial) ...[
-                    const SizedBox(width: 3),
-                    Icon(Icons.star_rounded, size: 11, color: tokens.brand),
-                  ],
                 ],
-              ),
-              const SizedBox(height: 2),
-              Text(
-                room.title.isEmpty
-                    ? displayCategoryName(room.site, room.category, room.cid)
-                    : room.title,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: AppTypography.bodySecondary.copyWith(
-                  fontSize: 10.5,
-                  color: tokens.textSecondary,
-                ),
               ),
             ],
           ),

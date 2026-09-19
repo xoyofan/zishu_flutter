@@ -207,14 +207,13 @@ Finder _verticalListsInPanel() => find.descendant(
 Finder _followList() => _verticalListsInPanel().first;
 
 /// 列表当前**窗口**条目数:读 builder delegate 声明的 childCount
-/// (ListView.separated 把条目与 separator 交错,实际条目数 = (n+1)~/2;
+/// (行自带底边框后是普通 ListView.builder,childCount 即条目数;
 /// 不能用 estimatedChildCount —— 那是按可视区估算的,GridView 才是精确值)。
 int _listChildCount(WidgetTester tester) {
   final delegate =
       tester.widget<ListView>(_followList()).childrenDelegate
           as SliverChildBuilderDelegate;
-  final count = delegate.childCount ?? -1;
-  return count <= 0 ? 0 : (count + 1) ~/ 2;
+  return delegate.childCount ?? -1;
 }
 
 void main() {
@@ -414,6 +413,73 @@ void main() {
       await tester.tap(find.byKey(const Key('play-side-follow-view-toggle')));
       await _pumpFrames(tester, 3);
       expect(_row('douyu', '6001'), findsOneWidget, reason: '可切回列表');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('列表行四列:分类 / 主播名 / 标题 / 观看人数(对齐 web RowView)', (
+      tester,
+    ) async {
+      SharedPreferencesAsyncPlatform.instance =
+          InMemorySharedPreferencesAsync.withData(<String, Object>{
+            'zishu.follow.list': jsonEncode([
+              _seedEntry(
+                roomId: '7001',
+                title: '四列样式的标题',
+                anchor: '四列主播',
+                online: '2.3万',
+              ),
+            ]),
+          });
+
+      final play = await _pumpFollowTab(tester);
+      await _awaitFollowRestored(tester, play.container, 1);
+      await _pumpFrames(tester, 3);
+
+      final rowRect = tester.getRect(_row('douyu', '7001'));
+      // 四列内容齐备:分类(种子固定英雄联盟)/ 主播名 / 标题 / 人数。
+      expect(find.text('英雄联盟'), findsWidgets);
+      expect(find.text('四列主播'), findsOneWidget);
+      expect(find.text('四列样式的标题'), findsOneWidget);
+      expect(find.text('2.3万'), findsOneWidget);
+
+      // 单行:主播名与标题在同一行内(y 重叠),行高紧凑(<30)。
+      final anchorRect = tester.getRect(find.text('四列主播'));
+      final titleRect = tester.getRect(find.text('四列样式的标题'));
+      expect(titleRect.top, closeTo(anchorRect.top, 8),
+          reason: '四列应水平排布在同一行');
+      expect(rowRect.height, lessThan(30),
+          reason: '对齐 web 行高 1.4rem 的紧凑观感');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('切房后右侧仍停在关注 tab(会话级偏好,顶部/左侧/右侧解耦)', (
+      tester,
+    ) async {
+      SharedPreferencesAsyncPlatform.instance =
+          InMemorySharedPreferencesAsync.withData(<String, Object>{
+            'zishu.follow.list': jsonEncode([
+              _seedEntry(roomId: '5001', title: '待进入的房间'),
+            ]),
+          });
+
+      final play = await _pumpFollowTab(tester);
+      await _awaitFollowRestored(tester, play.container, 1);
+      await _pumpFrames(tester, 3);
+
+      // 从关注 tab 点条目切房:路由换成新房间,右侧应仍停在「关注」。
+      await tester.tap(_row('douyu', '5001'));
+      await _pumpFrames(tester, 6);
+
+      expect(
+        play.router.routeInformationProvider.value.uri.path,
+        '/douyu/play/5001',
+        reason: '前置:切房成功',
+      );
+      expect(
+        find.byKey(const Key('play-side-follow-panel')),
+        findsOneWidget,
+        reason: '切房后侧栏应仍显示关注面板(不再退回聊天 tab)',
+      );
       expect(tester.takeException(), isNull);
     });
   });

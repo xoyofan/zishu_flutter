@@ -28,6 +28,64 @@ import 'play_meta_bar.dart';
 import 'play_recommend_panel.dart';
 import 'play_room_grid.dart';
 
+/// 播放页侧栏的 UI 状态(会话级,跨切房保持)。
+///
+/// 切房走 `pushReplacement`:侧栏随路由整体重建,若 tab/视图是 widget 本地
+/// 状态,点关注里的房间跳过去后右侧会退回「聊天」tab(用户口径 2026-09-19:
+/// 「点击某一个后跳转后有右侧还是在当前关注 tab active」)。把这三项收进
+/// **全局 KeepAlive provider** —— 顶部(AreaShell)/左侧(舞台)/右侧(侧栏)
+/// 三块由此解耦:右侧点击只换舞台内容,右侧自身的 active 态不重置。
+class PlaySidePanelPrefs {
+  const PlaySidePanelPrefs({
+    this.tabIndex = 0,
+    this.followGrid = false,
+    this.followSite = 'all',
+  });
+
+  /// 侧栏 tab:0=聊天 1=关注 2=推荐 3=设置。默认聊天(对齐 web)。
+  final int tabIndex;
+
+  /// 关注面板:true=封面网格,false=紧凑列表(用户口径默认列表)。
+  final bool followGrid;
+
+  /// 关注面板平台筛选('all' 或平台 id)。
+  final String followSite;
+
+  PlaySidePanelPrefs copyWith({
+    int? tabIndex,
+    bool? followGrid,
+    String? followSite,
+  }) =>
+      PlaySidePanelPrefs(
+        tabIndex: tabIndex ?? this.tabIndex,
+        followGrid: followGrid ?? this.followGrid,
+        followSite: followSite ?? this.followSite,
+      );
+}
+
+/// 全局(非 autoDispose):离开播放页也保留,下次进房延续上次的 tab/视图。
+final playSidePanelPrefsProvider =
+    NotifierProvider<PlaySidePanelPrefsController, PlaySidePanelPrefs>(
+  PlaySidePanelPrefsController.new,
+);
+
+class PlaySidePanelPrefsController extends Notifier<PlaySidePanelPrefs> {
+  @override
+  PlaySidePanelPrefs build() => const PlaySidePanelPrefs();
+
+  void update({
+    int? tabIndex,
+    bool? followGrid,
+    String? followSite,
+  }) {
+    state = state.copyWith(
+      tabIndex: tabIndex,
+      followGrid: followGrid,
+      followSite: followSite,
+    );
+  }
+}
+
 class PlaySidePanel extends ConsumerStatefulWidget {
   const PlaySidePanel({
     super.key,
@@ -140,6 +198,12 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
         border: Border(left: BorderSide(color: tokens.border)),
       ),
       child: DefaultTabController(
+        // 初始 tab 从会话级偏好恢复:切房(pushReplacement)重建侧栏后,
+        // 右侧仍停在上次的 tab(如「关注」),不再退回聊天。
+        initialIndex: ref
+            .watch(playSidePanelPrefsProvider)
+            .tabIndex
+            .clamp(0, 3),
         length: 4,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -164,6 +228,9 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
                 onToggleSuperFollow: _toggleSuperFollow,
               ),
             TabBar(
+              onTap: (index) => ref
+                  .read(playSidePanelPrefsProvider.notifier)
+                  .update(tabIndex: index),
               tabs: const [
                 KeyedSubtree(
                   key: Key('play-side-tab-chat'),
@@ -1390,8 +1457,15 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
   /// true = 封面网格,false = 紧凑列表(每条一行)。
   /// **默认列表**是用户口径(2026-09-19:「默认用列表显示 列表显示每个
   /// 是一行」);web 真源默认封面预览(`previewCover: true`),此处有意偏离。
-  bool _grid = false;
-  String _siteFilter = 'all';
+  /// 取值与变更都会写进会话级偏好 —— 切房重建后不丢。
+  bool get _grid => ref.watch(playSidePanelPrefsProvider).followGrid;
+  set _grid(bool value) =>
+      ref.read(playSidePanelPrefsProvider.notifier).update(followGrid: value);
+
+  String get _siteFilter => ref.watch(playSidePanelPrefsProvider).followSite;
+  set _siteFilter(String value) => ref
+      .read(playSidePanelPrefsProvider.notifier)
+      .update(followSite: value);
 
   /// 已展示条数(分页窗口)。对齐 web `PLAY_FOLLOW_PAGE_SIZE = 48`:
   /// 首屏只放 48 条,滚到底再放一页,底部提示「向下滚动加载更多…」。
