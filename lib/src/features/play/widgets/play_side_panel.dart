@@ -228,46 +228,50 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
                 onToggleFollow: _toggleFollow,
                 onToggleSuperFollow: _toggleSuperFollow,
               ),
-            TabBar(
-              onTap: (index) => ref
-                  .read(playSidePanelPrefsProvider.notifier)
-                  .update(tabIndex: index),
-              tabs: const [
-                KeyedSubtree(
-                  key: Key('play-side-tab-chat'),
-                  child: Tab(text: '聊天'),
+            // 高度对齐 web `--el-tabs-header-height: 2rem`(32px)。
+            SizedBox(
+              height: 32,
+              child: TabBar(
+                onTap: (index) => ref
+                    .read(playSidePanelPrefsProvider.notifier)
+                    .update(tabIndex: index),
+                tabs: const [
+                  KeyedSubtree(
+                    key: Key('play-side-tab-chat'),
+                    child: Tab(text: '聊天'),
+                  ),
+                  KeyedSubtree(
+                    key: Key('play-side-tab-follow'),
+                    child: Tab(text: '关注'),
+                  ),
+                  KeyedSubtree(
+                    key: Key('play-side-tab-recommend'),
+                    child: Tab(text: '推荐'),
+                  ),
+                  KeyedSubtree(
+                    key: Key('play-side-tab-settings'),
+                    child: Tab(text: '设置'),
+                  ),
+                ],
+                labelColor: tokens.brand,
+                unselectedLabelColor: tokens.textSecondary,
+                indicatorColor: tokens.brand,
+                indicatorWeight: 2,
+                dividerColor: tokens.border,
+                labelStyle: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  height: 1.15,
                 ),
-                KeyedSubtree(
-                  key: Key('play-side-tab-follow'),
-                  child: Tab(text: '关注'),
+                unselectedLabelStyle: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w500,
+                  height: 1.15,
                 ),
-                KeyedSubtree(
-                  key: Key('play-side-tab-recommend'),
-                  child: Tab(text: '推荐'),
-                ),
-                KeyedSubtree(
-                  key: Key('play-side-tab-settings'),
-                  child: Tab(text: '设置'),
-                ),
-              ],
-              labelColor: tokens.brand,
-              unselectedLabelColor: tokens.textSecondary,
-              indicatorColor: tokens.brand,
-              indicatorWeight: 2,
-              dividerColor: tokens.border,
-              labelStyle: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                height: 1.15,
+                labelPadding: EdgeInsets.zero,
+                splashFactory: NoSplash.splashFactory,
+                overlayColor: const WidgetStatePropertyAll(Colors.transparent),
               ),
-              unselectedLabelStyle: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w500,
-                height: 1.15,
-              ),
-              labelPadding: EdgeInsets.zero,
-              splashFactory: NoSplash.splashFactory,
-              overlayColor: const WidgetStatePropertyAll(Colors.transparent),
             ),
             Expanded(
               child: TabBarView(
@@ -332,10 +336,6 @@ class _SideHeader extends StatelessWidget {
     return Container(
       key: const Key('play-side-header'),
       height: headerHeight,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.sm,
-        vertical: 5,
-      ),
       decoration: BoxDecoration(
         color: context.tokens.surface,
         border: Border(bottom: BorderSide(color: tokens.border)),
@@ -343,10 +343,14 @@ class _SideHeader extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // 头像贴边出血:占满头高(无上下内边距、左侧贴边),对齐 web
+          // `--room-aside-avatar-size = head-h + 2*pad-y`。
           _SideAvatar(avatar: avatar, label: anchor, live: isLive),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
-            child: Column(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 5),
+              child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -429,12 +433,20 @@ class _SideHeader extends StatelessWidget {
               ],
             ),
           ),
+          ),
           const SizedBox(width: AppSpacing.xs),
-          _SideActions(
-            followed: followed,
-            superFollowed: superFollowed,
-            onToggleFollow: onToggleFollow,
-            onToggleSuperFollow: onToggleSuperFollow,
+          Padding(
+            padding: const EdgeInsets.only(
+              top: 5,
+              bottom: 5,
+              right: AppSpacing.sm,
+            ),
+            child: _SideActions(
+              followed: followed,
+              superFollowed: superFollowed,
+              onToggleFollow: onToggleFollow,
+              onToggleSuperFollow: onToggleSuperFollow,
+            ),
           ),
         ],
       ),
@@ -457,9 +469,9 @@ class _SideAvatar extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = context.tokens;
     final fallback = label.isEmpty ? '?' : label.substring(0, 1);
+    // 64×头高(贴边出血:高度由 Row stretch 撑满,不留上下 padding)。
     return SizedBox(
-      width: 54,
-      height: 54,
+      width: 64,
       child: Stack(
         clipBehavior: Clip.none,
         children: [
@@ -735,6 +747,8 @@ class _ChatRowData {
     this.badgeColorStart = 0,
     this.badgeColorEnd = 0,
     this.badgeColorBorder = 0,
+    this.badgeTextColor = 0,
+    this.badgeColorLevel = 0,
     this.userLevel = 0,
     this.color = 0,
   });
@@ -758,6 +772,10 @@ class _ChatRowData {
   final int badgeColorEnd;
   final int badgeColorBorder;
 
+  /// 粉丝牌文字色/等级数字色(B 站新协议;0 = 未提供,回落白/文字色)。
+  final int badgeTextColor;
+  final int badgeColorLevel;
+
   /// 用户等级(0 = 不渲染等级 pill)。
   final int userLevel;
 
@@ -774,6 +792,8 @@ class _ChatRowData {
       badgeColorStart: message.badgeColorStart,
       badgeColorEnd: message.badgeColorEnd,
       badgeColorBorder: message.badgeColorBorder,
+      badgeTextColor: message.badgeTextColor,
+      badgeColorLevel: message.badgeColorLevel,
       userLevel: message.userLevel,
       color: message.color,
     );
@@ -983,24 +1003,36 @@ class _ChatTabState extends ConsumerState<_ChatTab>
                 ),
               ),
               const Spacer(),
+              // 对齐 web SideChatTab:图标 + 「刷新」文字的小按钮(高 24)。
               Tooltip(
                 message: '重新连接弹幕',
-                child: IconButton(
+                child: TextButton(
                   key: const Key('play-side-chat-refresh'),
                   onPressed: chat.supported
                       ? () => ref
                             .read(danmakuSessionProvider(params).notifier)
                             .reconnect()
                       : null,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 24,
-                    minHeight: 24,
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(0, 24),
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    foregroundColor: tokens.textSecondary,
                   ),
-                  icon: Icon(
-                    Icons.refresh_rounded,
-                    size: 15,
-                    color: tokens.textSecondary,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.refresh_rounded, size: 13),
+                      const SizedBox(width: 2),
+                      Text(
+                        '刷新',
+                        style: TextStyle(
+                          fontSize: 11,
+                          height: 1,
+                          color: tokens.textSecondary,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
@@ -1037,15 +1069,19 @@ class _ChatTabState extends ConsumerState<_ChatTab>
                   ),
                 ),
               if (pending > 0)
+                // 对齐 web .chat-new-bar:底部水平居中,距底 0.5rem=8。
                 Positioned(
-                  right: AppSpacing.sm,
-                  bottom: AppSpacing.sm,
-                  child: _NewMessagesButton(
-                    count: pending,
-                    onTap: () {
-                      _seenCount = rows.length;
-                      _scrollToBottom();
-                    },
+                  left: 0,
+                  right: 0,
+                  bottom: 8,
+                  child: Center(
+                    child: _NewMessagesButton(
+                      count: pending,
+                      onTap: () {
+                        _seenCount = rows.length;
+                        _scrollToBottom();
+                      },
+                    ),
                   ),
                 ),
             ],
@@ -1056,7 +1092,8 @@ class _ChatTabState extends ConsumerState<_ChatTab>
   }
 }
 
-/// 「N 条新消息」跳底按钮:用户离开底部且有新消息时浮在列表右下角。
+/// 「N 条新消息」跳底按钮:用户离开底部且有新消息时浮在列表底部居中
+/// (对齐 web .chat-new-bar;字号 0.8rem→12)。
 class _NewMessagesButton extends StatelessWidget {
   const _NewMessagesButton({required this.count, required this.onTap});
 
@@ -1077,7 +1114,7 @@ class _NewMessagesButton extends StatelessWidget {
           child: Text(
             '$count 条新消息',
             style: const TextStyle(
-              fontSize: 10,
+              fontSize: 12,
               height: 1.1,
               color: Colors.white,
               fontWeight: FontWeight.w600,
@@ -1111,9 +1148,10 @@ class _ChatRow extends StatelessWidget {
       children: [
         // 徽章顺序对齐 web SideChatTab.vue:38-44 —— 平台用户等级 pill 在前、
         // 粉丝牌在后(用户口径 2026-09-19:「平台等级应该在粉丝等级前显示」)。
+        // 间距对齐 web:徽章 margin-right 0.14em(14px 基 ≈ 2px)。
         if (data.userLevel > 0) ...[
           _UserLevelBadge(site: data.site, level: data.userLevel),
-          const SizedBox(width: 3),
+          const SizedBox(width: 2),
         ],
         if (fanBadge != null) ...[
           _FanBadge(
@@ -1123,8 +1161,10 @@ class _ChatRow extends StatelessWidget {
             colorStart: data.badgeColorStart,
             colorEnd: data.badgeColorEnd,
             colorBorder: data.badgeColorBorder,
+            textColor: data.badgeTextColor,
+            levelColor: data.badgeColorLevel,
           ),
-          const SizedBox(width: 3),
+          const SizedBox(width: 2),
         ],
         Expanded(
           child: Text.rich(
@@ -1135,19 +1175,27 @@ class _ChatRow extends StatelessWidget {
                   style: AppTypography.bodySecondary.copyWith(
                     color: _userColor(),
                     fontWeight: FontWeight.w600,
+                    fontSize: 14,
+                    height: 1.48,
                   ),
                 ),
-                TextSpan(text: '：', style: AppTypography.bodySecondary),
+                TextSpan(
+                  text: '：',
+                  style: AppTypography.bodySecondary.copyWith(
+                    fontSize: 14,
+                    height: 1.48,
+                  ),
+                ),
                 TextSpan(
                   text: data.message,
                   style: AppTypography.bodySecondary.copyWith(
                     color: tokens.textPrimary,
+                    fontSize: 14,
+                    height: 1.48,
                   ),
                 ),
               ],
             ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
@@ -1200,10 +1248,11 @@ List<Color> _huyaBarGradient(int level) {
 }
 
 /// 粉丝牌(对齐 web ChatFanBadge 文字态各平台分支;图片分支待契约补 URL):
-/// - 斗鱼:胶囊「团名 级」,等级梯度底(web 斗鱼为官方图片牌,文字态用
-///   同族 LEVEL_TIER_GRADIENTS 档位配色兜底);
-/// - B 站:胶囊「团名 级」,协议渐变(to left, start→end)+ 描边,
-///   无协议色时同样梯度兜底;
+/// - 斗鱼:胶囊只显示团名(web `CHAT_FAN_BADGE_HIDE_LEVEL_SITES` 含 douyu,
+///   等级已绘在官方 PNG 里;文字态无梯度 → 中性深底白字兜底;无团名不渲染);
+/// - B 站:胶囊「团名 级」,协议渐变(`to left`:start 在右→end 在左)+ 描边,
+///   start/end 互补缺省;无协议色时中性深底兜底(web 走官方边框图);
+///   消费协议文字色/等级数字色(0 = 回落白/文字色);
 /// - 抖音:红色渐变圆盘只显示等级数字(douyinTextFallback 明确样式);
 /// - 虎牙:渐变条 = 等级圆盘(黑 22% 叠层) + 团名(HUYA_BAR_GRADIENTS 7 档);
 /// - 其他:品牌色 pill。
@@ -1215,6 +1264,8 @@ class _FanBadge extends StatelessWidget {
     this.colorStart = 0,
     this.colorEnd = 0,
     this.colorBorder = 0,
+    this.textColor = 0,
+    this.levelColor = 0,
   });
 
   final String site;
@@ -1224,23 +1275,36 @@ class _FanBadge extends StatelessWidget {
   final int colorEnd;
   final int colorBorder;
 
+  /// 粉丝牌文字色(0xRRGGBB;0 = 默认白)。
+  final int textColor;
+
+  /// 粉丝牌等级数字色(0xRRGGBB;0 = 回落 [textColor])。
+  final int levelColor;
+
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
     final hasName = name != null && name!.trim().isNotEmpty;
-    final label = hasName ? '${name!.trim()} $level' : '$level';
+    // web 斗鱼/B站文字态无梯度兜底:中性深底白字(web 无协议图/色时走
+    // 官方图片牌,flutter 无图 → 深底占位保持可读)。
+    const neutralBg = Color(0xff3a3a3a);
+    final resolvedTextColor = textColor != 0 ? Color(textColor) : Colors.white;
+    final resolvedLevelColor = levelColor != 0
+        ? Color(levelColor)
+        : resolvedTextColor;
 
     // 抖音:红色渐变圆盘(无团名,只显示等级数字)。
+    // 尺寸对齐 web douyinTextFallback(14px 基):min 1.4em=19.6、字 0.78em≈11。
     if (site == 'douyin') {
       return _BadgeBox(
-        height: 14,
-        minWidth: 14,
+        height: 19.6,
+        minWidth: 19.6,
         radius: 999,
         gradient: const [Color(0xfffe2c55), Color(0xffff6b35)],
         child: Text(
           '$level',
           style: const TextStyle(
-            fontSize: 9,
+            fontSize: 11,
             height: 1.1,
             color: Colors.white,
             fontWeight: FontWeight.w800,
@@ -1249,16 +1313,18 @@ class _FanBadge extends StatelessWidget {
       );
     }
     // 虎牙:渐变条 = 圆盘等级 + 团名。
+    // 尺寸对齐 web huyaComposed(14px 基):条 1.15em≈16、圆盘 1.05em×0.67em≈10、
+    // 圆盘字 0.67em≈9.4、团名 0.79em≈11。
     if (site == 'huya') {
       return _BadgeBox(
-        height: 14,
+        height: 16,
         radius: 2,
         gradient: _huyaBarGradient(level),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              constraints: const BoxConstraints(minWidth: 12, minHeight: 12),
+              constraints: const BoxConstraints(minWidth: 10, minHeight: 10),
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 color: Colors.black.withValues(alpha: 0.22),
@@ -1267,7 +1333,7 @@ class _FanBadge extends StatelessWidget {
               child: Text(
                 '$level',
                 style: const TextStyle(
-                  fontSize: 8.5,
+                  fontSize: 9.4,
                   height: 1.1,
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
@@ -1279,7 +1345,7 @@ class _FanBadge extends StatelessWidget {
               Text(
                 name!.trim(),
                 style: const TextStyle(
-                  fontSize: 9,
+                  fontSize: 11,
                   height: 1.1,
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
@@ -1290,37 +1356,65 @@ class _FanBadge extends StatelessWidget {
         ),
       );
     }
-    // B 站:协议渐变(to left, start→end)+ 描边;无协议色回落等级梯度。
+    // B 站:协议渐变(to left:start 在右)+ 描边;无协议色回落中性深底。
     if (site == 'bilibili') {
-      final hasProtocolColor = colorStart != 0 || colorEnd != 0;
+      // 互补缺省(web buildBilibiliBadgeStyle:start=colorStart||colorEnd)。
+      final start = colorStart != 0 ? colorStart : colorEnd;
+      final end = colorEnd != 0 ? colorEnd : colorStart;
+      final hasProtocolColor = start != 0 || end != 0;
       return _BadgeBox(
-        height: 15,
+        height: 21,
         radius: 999,
-        gradient: hasProtocolColor
-            ? [Color(colorStart), Color(colorEnd)]
-            : _levelTier(level, const [50, 40, 30, 20, 10]),
+        gradient: hasProtocolColor ? [Color(start), Color(end)] : null,
+        color: hasProtocolColor ? null : neutralBg,
         // web `linear-gradient(to left, start, end)`:start 在右、end 在左。
-        reverseGradient: hasProtocolColor,
+        gradientBegin: Alignment.centerRight,
+        gradientEnd: Alignment.centerLeft,
         border: colorBorder != 0 ? Color(colorBorder) : null,
-        child: Text(
-          label,
-          style: const TextStyle(
-            fontSize: 9,
-            height: 1.1,
-            color: Colors.white,
-            fontWeight: FontWeight.w700,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (hasName)
+              Flexible(
+                child: Text(
+                  name!.trim(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12.6,
+                    height: 1.1,
+                    color: resolvedTextColor,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            if (hasName) const SizedBox(width: 2),
+            Text(
+              '$level',
+              style: TextStyle(
+                fontSize: 12.6,
+                height: 1.1,
+                color: resolvedLevelColor,
+                fontWeight: FontWeight.w700,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+          ],
         ),
       );
     }
-    // 斗鱼:胶囊「团名 级」,等级梯度(文字态兜底)。
+    // 斗鱼:胶囊只显示团名(等级已绘在官方 PNG,文字态不再重复;
+    // 无团名则无可显示内容 → 不渲染)。
     if (site == 'douyu') {
+      if (!hasName) return const SizedBox.shrink();
       return _BadgeBox(
         height: 15,
         radius: 999,
-        gradient: _levelTier(level, const [50, 40, 30, 20, 10]),
+        color: neutralBg,
         child: Text(
-          label,
+          name!.trim(),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
           style: const TextStyle(
             fontSize: 9,
             height: 1.1,
@@ -1337,7 +1431,7 @@ class _FanBadge extends StatelessWidget {
       color: tokens.brand.withValues(alpha: 0.18),
       border: tokens.brand.withValues(alpha: 0.6),
       child: Text(
-        label,
+        label(hasName),
         style: TextStyle(
           fontSize: 9,
           height: 1.1,
@@ -1347,6 +1441,9 @@ class _FanBadge extends StatelessWidget {
       ),
     );
   }
+
+  /// 默认平台分支的胶囊文案:「团名 级」或纯等级。
+  String label(bool hasName) => hasName ? '${name!.trim()} $level' : '$level';
 }
 
 /// 用户等级 pill(对齐 web ChatUserLevelBadge 文字兜底):
@@ -1374,8 +1471,8 @@ class _UserLevelBadge extends StatelessWidget {
       label = '$level';
       colors = _levelTier(level, const [80, 60, 40, 20, 10]);
     } else {
-      // 其他平台:web default 灰底「Lv N」。
-      label = 'Lv $level';
+      // 其他平台:web userLevelLabel 默认纯数字,灰底不变(default #6b7280)。
+      label = '$level';
       colors = const [Color(0xff6b7280)];
     }
     return _BadgeBox(
@@ -1398,6 +1495,9 @@ class _UserLevelBadge extends StatelessWidget {
 }
 
 /// 徽章底座:固定行高 + 渐变/纯色/描边 + 居中内容。
+///
+/// 渐变默认方向对齐 CSS `linear-gradient(90deg, A, B)`:colors[0] 在左;
+/// B 站 `to left`(start 在右)由调用方显式传 [gradientBegin]/[gradientEnd] 覆写。
 class _BadgeBox extends StatelessWidget {
   const _BadgeBox({
     required this.height,
@@ -1407,7 +1507,8 @@ class _BadgeBox extends StatelessWidget {
     this.gradient,
     this.color,
     this.border,
-    this.reverseGradient = false,
+    this.gradientBegin = Alignment.centerLeft,
+    this.gradientEnd = Alignment.centerRight,
   });
 
   final double height;
@@ -1416,7 +1517,8 @@ class _BadgeBox extends StatelessWidget {
   final List<Color>? gradient;
   final Color? color;
   final Color? border;
-  final bool reverseGradient;
+  final Alignment gradientBegin;
+  final Alignment gradientEnd;
   final Widget child;
 
   @override
@@ -1425,8 +1527,8 @@ class _BadgeBox extends StatelessWidget {
       gradient: gradient == null
           ? null
           : LinearGradient(
-              begin: reverseGradient ? Alignment.centerLeft : Alignment.centerRight,
-              end: reverseGradient ? Alignment.centerRight : Alignment.centerLeft,
+              begin: gradientBegin,
+              end: gradientEnd,
               colors: gradient!,
             ),
       color: color,
@@ -1757,12 +1859,11 @@ class _SettingsPanel extends ConsumerWidget {
           children: [
             _SettingRow(
               label: '聊天',
-              trailing: Switch(
+              trailing: _MiniSwitch(
                 key: const Key('play-side-setting-chat'),
                 value: settings.chatEnabled,
                 onChanged: (enabled) =>
                     ref.read(settingsProvider.notifier).setChatEnabled(enabled),
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
             ),
             // 细粒度弹幕设置(透明度/字号/速度/显示区域)统一走对话框:
@@ -1803,7 +1904,8 @@ class _SettingsGroup extends StatelessWidget {
       ),
       decoration: BoxDecoration(
         color: context.tokens.surfaceSoft,
-        borderRadius: AppRadius.allSm,
+        // 对齐 web .settings-group 圆角(--fluent-radius-sm ≈ 8)。
+        borderRadius: BorderRadius.circular(AppRadius.md),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1811,7 +1913,8 @@ class _SettingsGroup extends StatelessWidget {
           Text(
             title,
             style: TextStyle(
-              fontSize: 11,
+              // 对齐 web .settings-group__title(.78rem ≈ 12.5)。
+              fontSize: 12.5,
               height: 1.2,
               color: context.tokens.brand,
               fontWeight: FontWeight.w600,
@@ -1838,6 +1941,58 @@ class _SettingRow extends StatelessWidget {
         Expanded(child: Text(label, style: AppTypography.caption)),
         trailing,
       ],
+    );
+  }
+}
+
+/// 自绘迷你开关(对齐 web el-switch 密度:轨道 30×16、圆角 8、滑块 12)。
+///
+/// 选中轨道 amber(#f3d04e,web `--amber`);未选中透明底 + #3a3a3a 描边。
+/// 保留 Material Switch 的 value/onChanged/Semantics(toggled) 语义,
+/// 只是视觉收敛为侧栏密度尺寸。
+class _MiniSwitch extends StatelessWidget {
+  const _MiniSwitch({
+    super.key,
+    required this.value,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    const track = Color(0xfff3d04e);
+    const offBorder = Color(0xff3a3a3a);
+    return Semantics(
+      toggled: value,
+      child: GestureDetector(
+        onTap: () => onChanged(!value),
+        child: AnimatedContainer(
+          duration: AppMotion.fast,
+          width: 30,
+          height: 16,
+          decoration: BoxDecoration(
+            color: value ? track : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: value ? track : offBorder),
+          ),
+          child: AnimatedAlign(
+            duration: AppMotion.fast,
+            alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+            child: AnimatedContainer(
+              duration: AppMotion.fast,
+              width: 12,
+              height: 12,
+              margin: const EdgeInsets.all(1),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: value ? Colors.white : context.tokens.textSecondary,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

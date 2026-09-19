@@ -395,7 +395,7 @@ void main() {
     );
   });
 
-  testWidgets('danmakuBadges:粉丝牌(名+级)/等级圆盘/用户等级 pill 对齐 web 语义', (
+  testWidgets('danmakuBadges:粉丝牌(团名)/等级圆盘/用户等级 pill 对齐 web 语义', (
     tester,
   ) async {
     final connector = _FakeDanmakuConnector();
@@ -405,17 +405,21 @@ void main() {
 
     final session = connector.session!;
     session.emitConnected();
-    // 斗鱼/B 站/虎牙式:有团名 → 名牌「团名 级」。
+    // 斗鱼粉丝牌(对齐 web CHAT_FAN_BADGE_HIDE_LEVEL_SITES):只显团名,
+    // 等级数字在官方 PNG 内不另绘。
     session.push(_chat('徽章哥', '都有', badgeLevel: 12, badgeName: '提督骑士团', userLevel: 31));
-    // 抖音式:无团名 → 仅等级圆盘(对齐 web douyinTextFallback)。
-    session.push(_chat('抖音哥', '仅圆盘', badgeLevel: 10, userLevel: 18));
+    // 斗鱼无团名:不渲染粉丝牌(web 图片牌无档可挂,文字态亦无团名可显)。
+    session.push(_chat('抖音哥', '仅等级', badgeLevel: 10, userLevel: 18));
     // 素人:无徽章 → 不渲染任何徽章,也不渲染 Lv 0。
     session.push(_chat('素人', '无徽章'));
     await _pumpStable(tester);
 
-    expect(find.text('提督骑士团 12'), findsOneWidget,
-        reason: '有团名时粉丝牌显示「团名 级」');
-    expect(find.text('10'), findsOneWidget, reason: '无团名时仅显示等级(斗鱼胶囊兜底)');
+    expect(find.text('提督骑士团'), findsOneWidget,
+        reason: '斗鱼粉丝牌只显示团名(web 隐藏等级数字)');
+    expect(find.text('提督骑士团 12'), findsNothing,
+        reason: '斗鱼牌不再拼接等级数字');
+    expect(find.text('10'), findsNothing,
+        reason: '斗鱼无团名时不渲染粉丝牌');
     // 斗鱼 UL 文字兜底对齐 web buildDouyuUserLevelStyle:「LV N」。
     expect(find.text('LV31'), findsOneWidget);
     expect(find.text('LV18'), findsOneWidget);
@@ -424,7 +428,7 @@ void main() {
     // 徽章顺序对齐 web SideChatTab.vue:38-44:平台等级 pill 在粉丝牌之前
     // (同一行内按 x 坐标比较;「徽章哥」一条同时带 LV31 与粉丝牌)。
     final levelRect = tester.getRect(find.text('LV31'));
-    final fanRect = tester.getRect(find.text('提督骑士团 12'));
+    final fanRect = tester.getRect(find.text('提督骑士团'));
     expect(levelRect.left, lessThan(fanRect.left),
         reason: '平台等级(用户口径:平台等级在粉丝等级前)应排在粉丝牌左边');
     // 两枚徽章由同一 Row 水平排布;高度不同(胶囊 vs 渐变条)顶部可差零点几
@@ -503,22 +507,22 @@ void main() {
       reason: '用户名颜色应按 hash(用户名) 稳定色相计算',
     );
 
-    // 粉丝团徽章:「badgeLevel > 0」且无团名(构造未传 badgeName)→
-    // 渲染纯等级圆盘「N」(对齐 web douyinTextFallback 分支)。
+    // 粉丝团徽章:斗鱼无团名(构造未传 badgeName)→ 不渲染粉丝牌
+    // (web 图片牌无档可挂、文字兜底无团名可显;等级数字也不再单独绘制)。
     expect(
       find.descendant(
         of: find.byType(PlaySidePanel),
         matching: find.text('12'),
       ),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.descendant(
         of: find.byType(PlaySidePanel),
         matching: find.text('7'),
       ),
-      findsOneWidget,
-      reason: '两条注入消息均带徽章(等级 12/7),应各渲染一个等级圆盘',
+      findsNothing,
+      reason: '两条注入消息均无团名,斗鱼粉丝牌不渲染',
     );
   });
 
