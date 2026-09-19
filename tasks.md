@@ -68,7 +68,7 @@
 | U0 | design tokens + ZishuTheme:`ZishuTokens` ThemeExtension(深/浅)+ AppSpacing/AppRadius/AppTypography/AppBreakpoints/AppMotion + PlatformBrandCatalog | — | [x] | analyze 0 issue |
 | U1 | AppShell:44px 顶部导航、平台 tabs、右侧工具区,go_router 导航(context.go) | U0 | [x] | analyze;nav-* 锚点测试进行中 |
 | U2 | RoomCard + RoomGrid 自适应网格(CachedNetworkImage + tokens 化)+ fixture 数据源 | U1 | [x] | analyze;room-card 锚点测试进行中 |
-| U3 | 分类页(分组 tabs + 子分类网格 + 分类房间分页) | U2 | [x] category_view 已建(测试进行中) | 冒烟 |
+| U3 | 分类页(分组 tabs + 子分类网格 + 分类房间分页) | U2 | [x] 两形态对齐 web(2026-09-20):裸 `/site/category` 索引只显示分类,tile 点击路由跳转;带 cid 纯房间页 | 冒烟+真机截图 |
 | U4 | Riverpod 接线:BrowseController(分页/refresh)/PlayController(generation fence)/SearchController(防抖+直达)/Follow/Settings/Anchor/Timeline 全部 AsyncNotifier 化 | U2 | [x] | 各 feature provider 已落 |
 | U5 | 播放页:LivePlayer 抽象 + MediaKitLivePlayer + 四态舞台(解析中/失败/fixture 占位/真实画面)+ 控制条 + 画质/线路条 + 328px 侧栏 | U4 | [x] 布局与编排完成;真实播放接线在 G1 | 手测:切档/切线(G1 后) |
 | U6 | 弹幕 overlay + 聊天侧栏(静态样例已入侧栏;真弹幕等 P9/G2) | U4 | [~] fixture 版 | 手测 |
@@ -321,6 +321,7 @@ A1 分支合并(master,零冲突)+ 真实解析版真机模拟中发现的三个
 |---|---|---|
 | 2026-09-11 | A1 合并后门禁 | analyze 0 issue / test 222 / build OK |
 | 2026-09-11 | 真实解析 exe 真机模拟(点击进房) | 视频帧差 57.4(在播)、聊天亮行 429→473(弹幕在流) |
+| 2026-09-20 | U3 分类索引口径修正:analyze(lib/src+test)0 issue(parser 轨 9 条既有);category/favorite/my_category_nav/platform 3 站/navigation/mobile 共 42 用例全过;`build windows --debug` OK | 索引页只显示分类(tile 点击路由跳转),真机 PrintWindow 截图确认无房间区 |
 | 2026-09-11 | 修复后门禁:`flutter analyze` + `flutter test` 全量 | **No issues / 229 passed / 0 failed**(较上轮 +7 转发器单测) |
 | 2026-09-11 | `flutter build windows --debug`(真实解析开关) | OK(18.0s) |
 | 2026-09-11 | 对齐服务器:reset --hard origin/master(f1397e4)+release 重建 | exe OK(39.3s),纯远端代码 |

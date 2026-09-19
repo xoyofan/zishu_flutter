@@ -88,6 +88,8 @@ void main() {
     expect(find.byKey(const Key('category-item-1')), findsOneWidget);
     expect(find.byKey(const Key('category-item-8')), findsOneWidget);
     expect(find.byKey(const Key('category-item-3203')), findsOneWidget);
+    // 2026-09-20 口径:索引页只显示分类,没有底部房间区。
+    expect(keyCount(tester, 'room-card-'), 0);
   });
 
   testWidgets('点击子分类 tile:路由跳转到带 cid 的房间页(2026-09-20 口径)',
