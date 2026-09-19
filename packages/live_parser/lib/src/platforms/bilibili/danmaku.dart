@@ -278,6 +278,8 @@ class BilibiliDanmakuSession implements DanmakuSession {
     var badgeColorStart = 0;
     var badgeColorEnd = 0;
     var badgeColorBorder = 0;
+    var badgeTextColor = 0;
+    var badgeColorLevel = 0;
     final metaUser = meta.length > 15 ? jsonMapOf(meta[15]) : null;
     final newMedal = jsonMapOf(jsonMapOf(metaUser)['user'])['medal'];
     if (newMedal is Map) {
@@ -285,7 +287,8 @@ class BilibiliDanmakuSession implements DanmakuSession {
       badgeName = jsonText(medal['name']);
       badgeLevel = jsonInt(medal['level']);
       // 新协议带 v2_medal_color_*(hex 字符串);UI 端做 bilibiliComposed 渐变
-      // (对齐 web ChatFanBadge/buildBilibiliBadgeStyle:to left, start→end)。
+      // (对齐 web ChatFanBadge/buildBilibiliBadgeStyle:to left, start→end);
+      // 文字/等级数字色 = v2_medal_color_text/level(web bilibili.ts:121-141)。
       badgeColorStart = _hexColorOf(jsonText(medal['v2_medal_color_start']).isNotEmpty
           ? jsonText(medal['v2_medal_color_start'])
           : jsonText(medal['color_start']));
@@ -295,6 +298,8 @@ class BilibiliDanmakuSession implements DanmakuSession {
       badgeColorBorder = _hexColorOf(jsonText(medal['v2_medal_color_border']).isNotEmpty
           ? jsonText(medal['v2_medal_color_border'])
           : jsonText(medal['color_border']));
+      badgeTextColor = _hexColorOf(jsonText(medal['v2_medal_color_text']));
+      badgeColorLevel = _hexColorOf(jsonText(medal['v2_medal_color_level']));
     }
     if (badgeName.isEmpty && badgeLevel <= 0 && info.length > 3 && info[3] is List) {
       final medal = info[3] as List<Object?>;
@@ -333,6 +338,8 @@ class BilibiliDanmakuSession implements DanmakuSession {
         badgeColorStart: badgeColorStart,
         badgeColorEnd: badgeColorEnd,
         badgeColorBorder: badgeColorBorder,
+        badgeTextColor: badgeTextColor,
+        badgeColorLevel: badgeColorLevel,
         rawType: cmd,
       ),
     );

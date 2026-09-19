@@ -392,6 +392,8 @@ class DanmakuMessage {
     this.badgeColorStart = 0,
     this.badgeColorEnd = 0,
     this.badgeColorBorder = 0,
+    this.badgeTextColor = 0,
+    this.badgeColorLevel = 0,
     this.sentAt,
     this.rawType = '',
   });
@@ -415,6 +417,14 @@ class DanmakuMessage {
 
   /// 粉丝牌描边色(0xRRGGBB;0 = 协议未提供)。
   final int badgeColorBorder;
+
+  /// 粉丝牌文字色(0xRRGGBB;0 = 协议未提供,UI 回落白色)。
+  /// B 站新协议 `v2_medal_color_text`(对齐 web fanBadges/bilibili.ts:121-126)。
+  final int badgeTextColor;
+
+  /// 粉丝牌等级数字色(0xRRGGBB;0 = 协议未提供,UI 回落文字色)。
+  /// B 站新协议 `v2_medal_color_level`(对齐 web fanBadges/bilibili.ts:137-141)。
+  final int badgeColorLevel;
   final DateTime? sentAt;
 
   /// 上游原始 type(如 `chatmsg`),便于 UI/日志区分细分来源。

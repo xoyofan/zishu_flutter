@@ -185,10 +185,13 @@ void main() {
     expect(m.badgeName, '提督骑士团');
     expect(m.badgeLevel, 12);
     expect(m.userLevel, 31);
-    // 老结构十进制色:web 口径 [8]=start/[9]=end/[5]=border。
+    // 老结构十进制色:web 口径 [8]=start/[9]=end/[5]=border;老结构无
+    // text/level 色(web 同样只在 v2 新协议取),应为 0。
     expect(m.badgeColorStart, 0xbb00bb);
     expect(m.badgeColorEnd, 0xcc00cc);
     expect(m.badgeColorBorder, 0x00ffff);
+    expect(m.badgeTextColor, 0);
+    expect(m.badgeColorLevel, 0);
 
     await sub.cancel();
     await session.close();
@@ -217,6 +220,8 @@ void main() {
           'v2_medal_color_start': '#BB00BB',
           'v2_medal_color_end': '#CC00CC',
           'v2_medal_color_border': '#00FFFF',
+          'v2_medal_color_text': '#EDEDED',
+          'v2_medal_color_level': '#FFFFFF',
         },
       },
       medalInfo: [12, '老结构牌', 12],
@@ -234,6 +239,9 @@ void main() {
     expect(received[0].badgeColorStart, 0xbb00bb);
     expect(received[0].badgeColorEnd, 0xcc00cc);
     expect(received[0].badgeColorBorder, 0x00ffff);
+    // 文字色/等级数字色 = v2_medal_color_text/level(web bilibili.ts:121-141)。
+    expect(received[0].badgeTextColor, 0xededed);
+    expect(received[0].badgeColorLevel, 0xffffff);
     expect(received[1].badgeName, isEmpty);
     expect(received[1].badgeLevel, 0);
     expect(received[1].userLevel, 0);
