@@ -104,6 +104,50 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   /// 有界重连策略(上限 / 退避 / 健康窗口的唯一来源)。
   static const PlaybackRetryPolicy _policy = PlaybackRetryPolicy();
 
+  /// 直播 mpv 属性调优表:构造期([_applyLiveTuning])按序逐条 setProperty,
+  /// 对此后每一次 open/起播生效(playerProvider 是 app 单例,构造先于任何
+  /// 开流;mpv 属性在 loadfile 前设置即约束该次会话)。抽成常量表是让配置
+  /// 可被单测直接断言(VM 测试无法实例化 NativePlayer)。
+  ///
+  /// 缓冲上限的语义与取值依据(mpv 手册,DOCS/man/options.rst):
+  /// - `cache-secs=60`:「How many seconds of audio/video to prefetch if the
+  ///   cache is active … Setting this option is usually only useful for
+  ///   limiting readahead」—— cache 激活(网络流默认激活)时以**秒**为单位的
+  ///   前向预读上限;默认值极高(实际由字节顶兜底),显式设 60 即「回放缓冲
+  ///   约 60s 封顶」,与 web 真源 hls.js `backBufferLength: 60`(SFVideoLive
+  ///   commit 7515cff,默认无上限导致长时观看内存持续涨)对齐。它与
+  ///   `demuxer-readahead-secs` 取较大者生效(设 60 覆盖 2s 只放宽数值,
+  ///   真正封顶靠字节顶)。
+  /// - `demuxer-max-bytes=33554432`(32 MiB):「This controls how much the
+  ///   demuxer is allowed to buffer ahead … The demuxer will stop reading
+  ///   additional packets as soon as one of the limits is reached」—— 前向
+  ///   字节硬顶;高码率(≥4.5 Mbps)下先于 60s 到达,内存上限约 32 MiB。
+  /// - `demuxer-max-back-bytes=4194304`(4 MiB):「This controls how much
+  ///   past data the demuxer is allowed to preserve … there is no control how
+  ///   many seconds are actually cached」—— 已播(回看)缓冲**只有字节上限、
+  ///   无秒级控制**,故 60s 语义无法落在它上面;4 MiB 本就封顶(总缓存用量被
+  ///   手册限定为前向+回退之和),比真源的 60s 回看余量更省内存,不放大。
+  static const List<(String, String)> kLiveTuningProperties = [
+    ('force-seekable', 'yes'),
+    (
+      'protocol_whitelist',
+      'httpproxy,udp,rtp,tcp,tls,data,file,http,https,crypto,rtmp,rtmps,rtsp,srt',
+    ),
+    ('demuxer-lavf-probesize', '2097152'),
+    ('demuxer-lavf-analyzeduration', '2'),
+    ('network-timeout', '15'),
+    ('hwdec-software-fallback', '1'),
+    // video-sync=audio:直播以音频为同步基准(对齐 pure_live 的
+    // media_kit_video/windows/video_output.cc),避免视频按显示时钟追帧
+    // 造成的周期性小回退(观感为"回跳")。
+    ('video-sync', 'audio'),
+    ('volume-max', '100'),
+    ('demuxer-max-bytes', '33554432'),
+    ('demuxer-max-back-bytes', '4194304'),
+    ('demuxer-readahead-secs', '2'),
+    ('cache-secs', '60'),
+  ];
+
   /// 恢复重解析的节流策略:避免"重试→恢复→重试"高速空转。
   static const PlaybackRecoveryPolicy _recoveryPolicy = PlaybackRecoveryPolicy();
 
@@ -393,7 +437,8 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
 
   /// 参照 pure_live 的直播卡顿根治方案:直接给 mpv 设属性,而非只靠 Flutter
   /// 侧轮询。核心是把 demuxer 缓存设为有界低延迟(32MiB 前向 / 4MiB 回退 /
-  /// 2s 预读),并把网络超时压到 15s——这样断流或卡死的直播流会主动抛 error
+  /// 2s 预读,另加 `cache-secs=60` 秒级封顶,依据见 [kLiveTuningProperties]),
+  /// 并把网络超时压到 15s——这样断流或卡死的直播流会主动抛 error
   /// (而非无限缓冲把画面冻住)。单条线路断流先由 mpv 播放列表内部自动跳下一条,
   /// 全组耗尽(events.completed)或冻结卡顿(缓冲看门狗)时再由 [_reopenIfStalled] 整组轮转。
   /// 另外 `demuxer-lavf-*` 加速探测、缓存落临时目录避免原生内存爬升。
@@ -404,31 +449,19 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     if (platform is! NativePlayer) return; // Web/测试等非原生后端跳过。
     try {
       await platform.waitForPlayerInitialization;
+      for (final (name, value) in kLiveTuningProperties) {
+        await platform.setProperty(name, value);
+      }
+      // 缓存目录依赖运行期路径,无法进常量表;其余动态项在下方逐条设置。
       final cacheDir =
           '${Directory.systemTemp.path}${Platform.pathSeparator}zishu_demuxer_cache';
       await Directory(cacheDir).create(recursive: true);
-      await platform.setProperty('force-seekable', 'yes');
-      await platform.setProperty(
-        'protocol_whitelist',
-        'httpproxy,udp,rtp,tcp,tls,data,file,http,https,crypto,rtmp,rtmps,rtsp,srt',
-      );
       await platform.setProperty('demuxer-cache-dir', cacheDir);
-      await platform.setProperty('demuxer-lavf-probesize', '2097152');
-      await platform.setProperty('demuxer-lavf-analyzeduration', '2');
-      await platform.setProperty('network-timeout', '15');
-      await platform.setProperty('hwdec-software-fallback', '1');
       // 音频输出必须显式指定:mpv `ao=auto` 在部分 Windows 环境会退化成 null
       // (实测 AO: [null] → 完全无声,且 mpv 自身仍报 vol=100/muted=false)。
       if (Platform.isWindows) {
         await platform.setProperty('ao', 'wasapi,openal,null');
       }
-      // 直播以音频为同步基准(对齐 pure_live 的 media_kit_video/windows/video_output.cc),
-      // 避免视频按显示时钟追帧造成的周期性小回退(观感为"回跳")。
-      await platform.setProperty('video-sync', 'audio');
-      await platform.setProperty('volume-max', '100');
-      await platform.setProperty('demuxer-max-bytes', '33554432');
-      await platform.setProperty('demuxer-max-back-bytes', '4194304');
-      await platform.setProperty('demuxer-readahead-secs', '2');
       // 直播为单曲播放:播放列表耗尽即停在末条,由看门狗整组轮转重连。
       await _player.setPlaylistMode(PlaylistMode.none);
     } catch (_) {

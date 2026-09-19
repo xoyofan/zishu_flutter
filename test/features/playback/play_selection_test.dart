@@ -117,4 +117,78 @@ void main() {
       expect(pickStreamLine(null, 'hls'), isNull);
     });
   });
+
+  group('pickStreamLine 起播 FLV 优选(对齐 SFVideoLive 45241d2/a074399)', () {
+    // 白名单站点(douyu/bilibili/douyin)同档既有 hls 又有 flv 时,
+    // auto 起播应选 FLV(实测 FLV 首帧约为 HLS 一半甚至更少)。
+    test('白名单站点 auto:同档 hls+flv 优选 flv', () {
+      final quality = qualityOf('原画', [
+        lineOf('hls', 'https://cdn/a.m3u8'),
+        lineOf('flv', 'https://cdn/a.flv'),
+      ]);
+
+      for (final site in ['douyu', 'bilibili', 'douyin']) {
+        expect(pickStreamLine(quality, 'auto', site: site)?.format, 'flv', reason: site);
+        expect(pickStreamLine(quality, null, site: site)?.format, 'flv', reason: site);
+      }
+    });
+
+    test('site 大小写与空白不影响白名单命中', () {
+      final quality = qualityOf('原画', [
+        lineOf('hls', 'https://cdn/a.m3u8'),
+        lineOf('flv', 'https://cdn/a.flv'),
+      ]);
+
+      expect(pickStreamLine(quality, 'auto', site: ' DouYu ')?.format, 'flv');
+    });
+
+    test('契约首选已是 flv 时原样返回(斗鱼兜底形态不冲突)', () {
+      // 斗鱼解析侧:HLS preview 仅在无 FLV 时兜底;正常形态是 flv 在前、
+      // 兜底 hls 在后。FLV 优选不得改变选择,更不得把兜底 hls 提为首选。
+      final quality = qualityOf('蓝光8M', [
+        lineOf('flv', 'https://cdn/a.flv'),
+        lineOf('hls', 'https://cdn/h5preview.m3u8'),
+      ]);
+
+      expect(pickStreamLine(quality, 'auto', site: 'douyu')?.url, 'https://cdn/a.flv');
+    });
+
+    test('白名单站点同档只有 hls 时回退契约首选', () {
+      final quality = qualityOf('原画', [lineOf('hls', 'https://cdn/a.m3u8')]);
+
+      expect(pickStreamLine(quality, 'auto', site: 'bilibili')?.format, 'hls');
+    });
+
+    test('非白名单站点(虎牙)auto 维持契约首选 HLS', () {
+      // web 真源实测虎牙 FLV 多数不起帧(1/4),明确排除在白名单外。
+      final quality = qualityOf('蓝光6M', [
+        lineOf('hls', 'https://cdn/a.m3u8'),
+        lineOf('flv', 'https://cdn/a.flv'),
+      ]);
+
+      expect(pickStreamLine(quality, 'auto', site: 'huya')?.format, 'hls');
+      expect(pickStreamLine(quality, 'auto')?.format, 'hls', reason: '未传 site 维持旧行为');
+      expect(pickStreamLine(quality, 'auto', site: 'unknown')?.format, 'hls');
+    });
+
+    test('白名单站点显式偏好 hls 时尊重用户,不被 FLV 优选覆盖', () {
+      final quality = qualityOf('原画', [
+        lineOf('hls', 'https://cdn/a.m3u8'),
+        lineOf('flv', 'https://cdn/a.flv'),
+      ]);
+
+      expect(pickStreamLine(quality, 'hls', site: 'douyu')?.format, 'hls');
+    });
+
+    test('白名单站点显式偏好 flv 命中不变,未命中仍回退契约首选', () {
+      final flvFirst = qualityOf('原画', [
+        lineOf('flv', 'https://cdn/a.flv'),
+        lineOf('hls', 'https://cdn/a.m3u8'),
+      ]);
+      final hlsOnly = qualityOf('原画', [lineOf('hls', 'https://cdn/a.m3u8')]);
+
+      expect(pickStreamLine(flvFirst, 'flv', site: 'douyu')?.format, 'flv');
+      expect(pickStreamLine(hlsOnly, 'flv', site: 'douyu')?.format, 'hls');
+    });
+  });
 }

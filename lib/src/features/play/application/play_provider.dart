@@ -136,7 +136,8 @@ class PlayController extends AsyncNotifier<PlayState> {
     }
 
     final quality = pickPlayQuality(payload, preferredQuality);
-    final line = pickStreamLine(quality, preferredFormat);
+    // 传入 site:白名单站点 auto 起播优选 FLV(首帧提速,见 play_selection)。
+    final line = pickStreamLine(quality, preferredFormat, site: params.site);
     final next = PlayState(
       payload: payload,
       quality: quality,
@@ -162,6 +163,7 @@ class PlayController extends AsyncNotifier<PlayState> {
     final line = pickStreamLine(
       quality,
       ref.read(settingsProvider).preferredLineFormat.value,
+      site: params.site,
     );
     if (line == null) {
       _qualityOverride = quality.name;
@@ -276,6 +278,7 @@ class PlayController extends AsyncNotifier<PlayState> {
       final line = pickStreamLine(
         next,
         ref.read(settingsProvider).preferredLineFormat.value,
+        site: params.site,
       );
       if (line == null) {
         PlaybackLog.write('resolve_fail', {
