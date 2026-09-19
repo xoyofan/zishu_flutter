@@ -181,11 +181,7 @@ class PlayController extends AsyncNotifier<PlayState> {
     if (current == null || current.payload == null) return;
     final generation = ++_generation;
     state = AsyncData(current.copyWith(line: line, generation: generation));
-    unawaited(
-      ref
-          .read(playerProvider)
-          .open(line, _fallbackLines(current.quality, line)),
-    );
+    _open(line, _fallbackLines(current.quality, line));
   }
 
   /// 切换舞台弹幕叠加层显隐(纯展示开关,不重开流、不换代际)。
