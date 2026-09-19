@@ -278,7 +278,10 @@ class RoomSummary {
   /// - douyu:getAnchorNewCard 的 `functionShow.giftCard.total`
   ///   (web 真源另有弹幕 WS oni 实时榜,轻量刷新不复刻 WS);
   /// - soop:channel dashboard 的 `subscription.total`;
-  /// - huya/bilibili/douyin/yy/kuaishou:上游需要额外签名/Tars 协议或
+  /// - huya:在播时 `liveui/getVipBarList`(Tars wup 二进制协议,
+  ///   `platforms/huya/huya_wup.dart`)的 `VipBarListRsp.iTotalNum`;
+  ///   wup 失败/为 0 留空;
+  /// - bilibili/douyin/yy/kuaishou:上游需要额外签名/Tars 协议或
   ///   真源本身无此字段,恒为空。
   final String vip;
 
@@ -410,6 +413,58 @@ class SiteCapabilities {
 /// 弹幕消息类别:chat 为普通弹幕,其余按平台消息逐步接入(P9)。
 enum DanmakuMessageType { chat, gift, enter, welcome, other }
 
+/// 弹幕富文本段类型:文本 / 表情图。
+enum DanmakuSegmentType { text, emoji }
+
+/// 弹幕富文本段:文本段与表情图段按协议顺序排列。
+///
+/// 对齐 web 真源通用段模型 `{type, text, name?, url?}`:
+/// - 抖音 `DouyinRichSegment`(SFVideoLive packages/shared/src/protocol/
+///   douyin/protobuf-lite.ts:613-618);
+/// - twitch `TwitchEmoteSegment`(apps/web/src/utils/danmaku/twitchEmotes.ts:14-18)。
+///
+/// name 不单列:表情段 [text] 恒为 `[表情名]` 括号形态,UI 需要纯名字时
+/// 去括号即可(web normalizeEmojiName 同语义)。
+class DanmakuSegment {
+  const DanmakuSegment({
+    required this.type,
+    this.text = '',
+    this.url = '',
+  });
+
+  /// 文本段。
+  const DanmakuSegment.text(this.text)
+    : type = DanmakuSegmentType.text,
+      url = '';
+
+  /// 表情图段:[text] 为 `[表情名]`,[url] 为表情图 CDN(协议未携带时为空,
+  /// UI 回退渲染 [text] 原文,web DanmakuRichText 同语义)。
+  const DanmakuSegment.emoji({required this.text, this.url = ''})
+    : type = DanmakuSegmentType.emoji;
+
+  final DanmakuSegmentType type;
+  final String text;
+
+  /// 表情图 CDN 地址;文本段恒为空。
+  final String url;
+
+  bool get isEmoji => type == DanmakuSegmentType.emoji;
+
+  @override
+  bool operator ==(Object other) =>
+      other is DanmakuSegment &&
+      other.type == type &&
+      other.text == text &&
+      other.url == url;
+
+  @override
+  int get hashCode => Object.hash(type, text, url);
+
+  @override
+  String toString() =>
+      'DanmakuSegment(${type.name}, text: $text${url.isEmpty ? '' : ', url: $url'})';
+}
+
 /// 弹幕会话状态。
 enum DanmakuSessionState { connecting, connected, disconnected }
 
@@ -433,6 +488,7 @@ class DanmakuMessage {
     this.id = '',
     this.sentAt,
     this.rawType = '',
+    this.segments = const [],
   });
 
   final DanmakuMessageType type;
@@ -472,4 +528,15 @@ class DanmakuMessage {
 
   /// 上游原始 type(如 `chatmsg`),便于 UI/日志区分细分来源。
   final String rawType;
+
+  /// 富文本段:文本段与表情图段按序排列。
+  ///
+  /// **空(默认)= 纯文本**:UI 直接渲染 [text],零破坏;非空时 UI 按
+  /// segments 渲染(文本段用 [text]、表情图段用图片 CDN),各文本段拼接
+  /// 与 [text] 一致。
+  /// - douyin:WebcastChatMessage Text(#22/#4) 的 image piece(web 真源
+  ///   parseDouyinTextMessage,protobuf-lite.ts:494-527);
+  /// - huya:MessageNotice 当前协议(web 真源 huyaJce.ts parseMessageNotice
+  ///   391-435 行)无表情段,正文括号表情保持纯文本,segments 恒空。
+  final List<DanmakuSegment> segments;
 }

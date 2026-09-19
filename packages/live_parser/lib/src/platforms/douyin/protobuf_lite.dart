@@ -7,6 +7,8 @@ library;
 import 'dart:convert';
 import 'dart:typed_data';
 
+import '../../models/models.dart';
+
 /// 一个 protobuf 字段:wire=0 时 value 为 int,wire=2 时为 [Uint8List]。
 class PbField {
   const PbField(this.num, this.wire, this.value);
@@ -169,6 +171,7 @@ class DouyinChatItem {
     required this.sentAtMs,
     this.badgeLevel = 0,
     this.userLevel = 0,
+    this.segments = const [],
   });
 
   final String user;
@@ -182,6 +185,10 @@ class DouyinChatItem {
 
   /// 荣誉/消费等级(User.payGrade 的 field 6)。
   final int userLevel;
+
+  /// 富文本段:仅当协议携带表情 image piece 时非空;纯文本消息保持空
+  /// (UI 直接渲染 [text])。契约见 DanmakuMessage.segments。
+  final List<DanmakuSegment> segments;
 }
 
 String _parseUserName(Uint8List? userBuf) {
@@ -219,56 +226,123 @@ int _parseUserPayGradeLevel(Uint8List? userBuf) {
   return pbFieldUint(decodePbFields(payGrade), 6);
 }
 
-String _textPieceImageName(Uint8List imageBuf) {
-  final imageFields = decodePbFields(imageBuf);
-  final contentBuf = pbFieldBytes(imageFields, 8);
-  if (contentBuf == null) return '';
-  final contentFields = decodePbFields(contentBuf);
-  final name = pbFieldString(contentFields, 1);
-  return name.isNotEmpty ? name : pbFieldString(contentFields, 4);
-}
-
-String _parseTextPiece(Uint8List piece) {
-  final pieceFields = decodePbFields(piece);
-  final text = pbFieldString(pieceFields, 3);
-  if (text.isNotEmpty) return text;
-  final imagePieceBuf = pbFieldBytes(pieceFields, 8);
-  if (imagePieceBuf != null) {
-    final imageBuf = pbFieldBytes(decodePbFields(imagePieceBuf), 1);
-    if (imageBuf != null) {
-      final name = _textPieceImageName(imageBuf).trim();
-      if (name.isNotEmpty) {
-        return name.startsWith('[') && name.endsWith(']') ? name : '[$name]';
-      }
-    }
+/// Image 字段 #1(repeated bytes)中第一个 http(s) URL(web 真源
+/// parseImageUrlList,protobuf-lite.ts:149-157)。
+String _firstHttpUrl(List<PbField> imageFields) {
+  for (final field in imageFields) {
+    if (field.num != 1 || field.wire != 2) continue;
+    final url = utf8.decode(field.value as Uint8List, allowMalformed: true).trim();
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
   }
   return '';
 }
 
-/// 解析 Text(富文本)字段:合并文本、表情名;取不到时用 field 2/1 兜底。
-String _parseDouyinText(Uint8List? textBuf) {
-  if (textBuf == null) return '';
+/// TextPieceImage(#8.#1 = Image)里的表情:名字取 Image.#8(Content)的
+/// #1/#4,图片 URL 取 Image.#1 第一个 http(s) 地址(web 真源
+/// parseTextPieceImage + parseImageContentName,protobuf-lite.ts:441-461;
+/// zishu 旧实现 `_textPieceImageName` 同源,这里补上 url)。
+(String, String) _textPieceImage(Uint8List imageBuf) {
+  final imageFields = decodePbFields(imageBuf);
+  final url = _firstHttpUrl(imageFields);
+  final contentBuf = pbFieldBytes(imageFields, 8);
+  if (contentBuf == null) return ('', url);
+  final contentFields = decodePbFields(contentBuf);
+  final name = pbFieldString(contentFields, 1);
+  return (name.isNotEmpty ? name : pbFieldString(contentFields, 4), url);
+}
+
+/// 单个 TextPiece:优先文本(#3),其次表情 image(#8),再次 @用户(#4);
+/// 对齐 web 真源 parseDouyinTextMessage 的 piece 分支顺序
+/// (protobuf-lite.ts:506-522)。返回 (拼入正文, 表情段或 null)。
+(String, DanmakuSegment?) _parseTextPiece(Uint8List piece) {
+  final pieceFields = decodePbFields(piece);
+  final text = pbFieldString(pieceFields, 3);
+  if (text.isNotEmpty) return (text, null);
+  final imagePieceBuf = pbFieldBytes(pieceFields, 8);
+  if (imagePieceBuf != null) {
+    final imageBuf = pbFieldBytes(decodePbFields(imagePieceBuf), 1);
+    if (imageBuf != null) {
+      final (name, url) = _textPieceImage(imageBuf);
+      final trimmed = name.trim();
+      if (trimmed.isNotEmpty) {
+        // formatDouyinEmojiName(protobuf-lite.ts:466-472):补 [ ] 括号。
+        final display = trimmed.startsWith('[') && trimmed.endsWith(']')
+            ? trimmed
+            : '[$trimmed]';
+        return (display, DanmakuSegment.emoji(text: display, url: url));
+      }
+    }
+  }
+  // @用户 piece(parseTextPieceUser,protobuf-lite.ts:463-471)按纯文本展开。
+  final userBuf = pbFieldBytes(pieceFields, 4);
+  if (userBuf != null) {
+    final name = _parseUserName(userBuf);
+    if (name.isNotEmpty) return ('@$name', null);
+  }
+  return ('', null);
+}
+
+/// 相邻文本段合并(对齐 web pushTextSegment,protobuf-lite.ts:478-491)。
+void _appendTextSegment(List<DanmakuSegment> segments, String text) {
+  if (text.isEmpty) return;
+  final last = segments.isEmpty ? null : segments.last;
+  if (last != null && !last.isEmoji) {
+    segments[segments.length - 1] = DanmakuSegment.text('${last.text}$text');
+    return;
+  }
+  segments.add(DanmakuSegment.text(text));
+}
+
+/// 解析 Text(富文本)字段:合并文本、表情名;并产出表情段。
+///
+/// 对齐 web 真源 parseDouyinTextMessage(protobuf-lite.ts:494-527):
+/// pieces(#4 repeated)逐段展开,文本段相邻合并;无 pieces 时回退
+/// #2/#1 整串文本。纯文本(无表情段)时 segments 留空 —— UI 直接渲染
+/// text,与「纯文本消息 segments 保持空」契约一致。
+({String text, List<DanmakuSegment> segments}) _parseDouyinText(Uint8List? textBuf) {
+  if (textBuf == null) return (text: '', segments: const []);
   final fields = decodePbFields(textBuf);
   final fallback = pbFieldString(fields, 2).isNotEmpty
       ? pbFieldString(fields, 2)
       : pbFieldString(fields, 1);
   final pieces = pbRepeatedBytes(fields, 4);
-  if (pieces.isEmpty) return fallback;
+  if (pieces.isEmpty) return (text: fallback, segments: const []);
+
   final buffer = StringBuffer();
+  final segments = <DanmakuSegment>[];
   for (final piece in pieces) {
-    buffer.write(_parseTextPiece(piece));
+    final (text, emoji) = _parseTextPiece(piece);
+    if (emoji != null) {
+      buffer.write(text);
+      segments.add(emoji);
+      continue;
+    }
+    buffer.write(text);
+    _appendTextSegment(segments, text);
   }
   final joined = buffer.toString();
-  return joined.isNotEmpty ? joined : fallback;
+  if (joined.isEmpty) return (text: fallback, segments: const []);
+  final hasEmoji = segments.any((segment) => segment.isEmoji);
+  return (
+    text: joined,
+    segments: hasEmoji ? List.unmodifiable(segments) : const [],
+  );
 }
 
 /// 解析 WebcastChatMessage / WebcastEmojiChatMessage 负载。
 DouyinChatItem? parseDouyinChatPayload(Uint8List payload) {
   final fields = decodePbFields(payload);
-  final textBuf = pbFieldBytes(fields, 22);
-  var text = textBuf != null ? _parseDouyinText(textBuf) : '';
+  // 富文本 Text(#22)优先;纯文本兜底 #3,再富文本 #4(WebcastEmojiChatMessage
+  // 的 Text,web parseEmojiChatMessage 同用 parseDouyinTextMessage),最后 #5。
+  var primary = _parseDouyinText(pbFieldBytes(fields, 22));
+  var text = primary.text;
+  var segments = primary.segments;
   if (text.isEmpty) text = pbFieldString(fields, 3);
-  if (text.isEmpty) text = _parseDouyinText(pbFieldBytes(fields, 4));
+  if (text.isEmpty) {
+    primary = _parseDouyinText(pbFieldBytes(fields, 4));
+    text = primary.text;
+    segments = primary.segments;
+  }
   if (text.isEmpty) text = pbFieldString(fields, 5);
   if (text.isEmpty) return null;
 
@@ -298,6 +372,7 @@ DouyinChatItem? parseDouyinChatPayload(Uint8List payload) {
     sentAtMs: parsePbCommonCreateTime(payload),
     badgeLevel: badgeLevel,
     userLevel: userLevel,
+    segments: segments,
   );
 }
 

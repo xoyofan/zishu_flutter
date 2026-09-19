@@ -174,6 +174,79 @@ void main() {
       await subscription.cancel();
       await session.close();
     });
+
+    test('富文本表情段:#22 image piece → segments(text/emoji 按序);纯文本 segments 空', () async {
+      final fake = FakeDouyinApi()
+        ..enterResponse = douyinFixture('enter_live.json');
+      final transport = _FakeTransport();
+      final connector = DouyinDanmakuConnector(
+        DouyinClient(httpClient: fake),
+        transport: transport,
+        heartbeatInterval: const Duration(seconds: 30),
+      );
+      final session = await connector.connect(
+        const DanmakuSessionRequest(site: 'douyin', roomId: '123456'),
+      );
+      final socket = transport.sockets.single;
+      final received = <DanmakuMessage>[];
+      final subscription = session.messages.listen(received.add);
+
+      // Text{#4: [text'你好', emoji'呲牙', text'哈哈']},结构对齐 web 真源
+      // parseDouyinTextMessage(packages/shared/src/protocol/douyin/
+      // protobuf-lite.ts:494-527):表情名补 [ ] 括号,url 取 Image.#1 首个
+      // http(s) 地址,相邻文本段不合并不跨界。
+      const emojiUrl =
+          'https://p3-webcast.douyinpic.com/webcast/emoji/emoji_001.png';
+      socket.push(
+        _pushFrame(
+          _response(
+            message: _message(
+              'WebcastChatMessage',
+              _chatPayload(
+                text: '',
+                nick: '表情哥',
+                userId: 77,
+                richText: [
+                  ..._pbBytes(4, _textPieceText('你好')),
+                  ..._pbBytes(4, _textPieceEmoji(name: '呲牙', url: emojiUrl)),
+                  ..._pbBytes(4, _textPieceText('哈哈')),
+                ],
+              ),
+            ),
+          ),
+          logId: 4,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(received, hasLength(1));
+      expect(received.single.text, '你好[呲牙]哈哈', reason: '表情名以 [名] 形态拼入正文');
+      expect(received.single.segments, [
+        const DanmakuSegment.text('你好'),
+        const DanmakuSegment.emoji(text: '[呲牙]', url: emojiUrl),
+        const DanmakuSegment.text('哈哈'),
+      ], reason: 'text/emoji 段按协议顺序保留');
+
+      // 纯文本消息(#3 兜底路径):segments 保持空(UI 直接渲染 text)。
+      socket.push(
+        _pushFrame(
+          _response(
+            message: _message(
+              'WebcastChatMessage',
+              _chatPayload(text: '纯文本弹幕', nick: '素人', userId: 78),
+            ),
+          ),
+          logId: 5,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(received, hasLength(2));
+      expect(received.last.text, '纯文本弹幕');
+      expect(received.last.segments, isEmpty);
+
+      await subscription.cancel();
+      await session.close();
+    });
   });
 }
 
@@ -206,6 +279,7 @@ List<int> _chatPayload({
   required int userId,
   int payGradeLevel = 0,
   int fansBadgeLevel = 0,
+  List<int> richText = const [],
 }) {
   final user = [
     ..._pbUint(1, userId),
@@ -241,8 +315,26 @@ List<int> _chatPayload({
     ..._pbBytes(1, common),
     ..._pbBytes(2, user),
     ..._pbString(3, text),
+    // Text 富文本(#22):web 真源 parseChatMessage 的首选路径
+    // (packages/shared/src/protocol/douyin/protobuf-lite.ts:530-551)。
+    if (richText.isNotEmpty) ..._pbBytes(22, richText),
   ];
 }
+
+/// TextPiece{#3 = 文本}(protobuf-lite.ts:508)。
+List<int> _textPieceText(String value) => _pbString(3, value);
+
+/// TextPiece{#8 = TextPieceImage{#1 = Image}};Image{#1 = url bytes,
+/// #8 = Content{#1 = 表情名}}(web 真源 parseTextPieceImage +
+/// parseImageContentName + parseImageUrlList,protobuf-lite.ts:441-461、149-157)。
+List<int> _textPieceEmoji({required String name, required String url}) =>
+    _pbBytes(
+      8,
+      _pbBytes(
+        1,
+        [..._pbString(1, url), ..._pbBytes(8, _pbString(1, name))],
+      ),
+    );
 
 List<int> _message(String method, List<int> payload) => [
   ..._pbString(1, method),

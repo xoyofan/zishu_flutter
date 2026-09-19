@@ -120,6 +120,26 @@ class TarsWriter {
     }
   }
 
+  /// `map<string, string>`(wup RequestPacket 的 context/status 等空 map 也走此编码)。
+  void writeStringMap(Map<String, String> value, int tag) {
+    _writeHead(TarsType.map, tag);
+    writeInt(value.length, 0);
+    value.forEach((key, item) {
+      writeString(key, 0);
+      writeString(item, 1);
+    });
+  }
+
+  /// `map<string, vector<byte>>`(wup UniAttribute sBuffer:属性名 → struct 编码)。
+  void writeBytesMap(Map<String, Uint8List> value, int tag) {
+    _writeHead(TarsType.map, tag);
+    writeInt(value.length, 0);
+    value.forEach((key, item) {
+      writeString(key, 0);
+      writeBytes(item, 1);
+    });
+  }
+
   /// 自定义结构:STRUCT_BEGIN + 字段 + STRUCT_END。
   void writeStruct(void Function(TarsWriter) writeFields, int tag) {
     _writeHead(TarsType.structBegin, tag);
@@ -340,6 +360,24 @@ class TarsReader {
       final size = readInt(0);
       for (var i = 0; i < size; i++) {
         result.add(readString(0));
+      }
+    }
+    return result;
+  }
+
+  /// 读 `map<string, vector<byte>>`(wup 响应 sBuffer:属性名 → struct 编码;
+  /// value 固定写为 tag1 的 SimpleList,与 @tars/stream UniAttribute 一致)。
+  Map<String, Uint8List> readBytesMap(int tag) {
+    final result = <String, Uint8List>{};
+    if (_skipToTag(tag)) {
+      final head = _readHead();
+      if (head.type != TarsType.map) {
+        throw TarsDecodeException('type mismatch for map: ${head.type}');
+      }
+      final size = readInt(0);
+      for (var i = 0; i < size; i++) {
+        final key = readString(0);
+        result[key] = readBytes(1);
       }
     }
     return result;

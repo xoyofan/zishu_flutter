@@ -60,7 +60,8 @@ void main() {
     expect(summary.title, 'B站测试房间');
     expect(summary.anchorName, 'B站主播');
     expect(summary.cid, '325');
-    expect(summary.category, '网游');
+    // 二级分区优先(web pickText(area_name, parent_area_name) 同口径)。
+    expect(summary.category, '英雄联盟');
     expect(summary.online, '1.2万');
     expect(summary.cover, contains('hdslb.com'));
     // 粉丝数取同响应 attention(web follow/status.ts 的 bilibili 快照);

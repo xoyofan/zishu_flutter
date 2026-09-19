@@ -56,7 +56,8 @@ void main() {
     expect(payload.roomId, '9527');
     expect(payload.anchorName, 'B站主播');
     expect(payload.title, 'B站测试房间');
-    expect(payload.category, '网游');
+    // 二级分区优先(web pickText(area_name, parent_area_name) 同口径)。
+    expect(payload.category, '英雄联盟');
     expect(payload.cid, '325');
     expect(payload.avatar, 'https://i0.hdslb.com/bfs/face/a.jpg');
     // get_info 已带主播名/头像 → 省掉一次 get_anchor_in_room 请求

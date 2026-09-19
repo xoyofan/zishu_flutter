@@ -4,6 +4,7 @@ library;
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
@@ -23,19 +24,32 @@ class FakeHuyaApi extends http.BaseClient {
   /// 别名房间页 HTML(含 ProfileRoom 数字房间号)。
   String aliasPageHtml = '';
 
+  /// cdnws.api.huya.com wup 响应原始字节(null → HTTP 500,模拟 wup 不可达)。
+  Uint8List? wupResponseBytes;
+
   final List<RecordedRequest> requests = [];
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest baseRequest) async {
     final request = baseRequest as http.Request;
-    requests.add(RecordedRequest(request.method, request.url.toString(), request.body));
+    requests.add(RecordedRequest(request.method, request.url.toString(), _safeBody(request)));
     final response = _route(request);
-    final bytes = utf8.encode(response.body);
+    final bytes = response.bodyBytes;
     return http.StreamedResponse(
       Stream.value(bytes),
       response.statusCode,
       contentLength: bytes.length,
     );
+  }
+
+  /// wup 请求体是二进制 Tars 流(非 UTF-8 文本),解码失败时无损回退 latin1,
+  /// 保证 [RecordedRequest.body] 永不抛 FormatException。
+  String _safeBody(http.Request request) {
+    try {
+      return utf8.decode(request.bodyBytes);
+    } on FormatException {
+      return latin1.decode(request.bodyBytes);
+    }
   }
 
   http.Response _route(http.Request request) {
@@ -61,6 +75,11 @@ class FakeHuyaApi extends http.BaseClient {
     }
     if (url.host == 'search.cdn.huya.com') {
       return _json(searchResponse);
+    }
+    if (url.host == 'cdnws.api.huya.com') {
+      final bytes = wupResponseBytes;
+      if (bytes == null) return http.Response('wup unavailable', 500);
+      return http.Response.bytes(bytes, 200);
     }
     return http.Response('fake route missing: $url', 500);
   }

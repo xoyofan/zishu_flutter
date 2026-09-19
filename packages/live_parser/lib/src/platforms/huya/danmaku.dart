@@ -227,6 +227,11 @@ class HuyaDanmakuSession implements DanmakuSession {
       nickName = userInfo.readString(2);
     });
     final content = reader.readString(3);
+    // 表情:MessageNotice 当前协议(web 真源 huyaJce.ts parseMessageNotice
+    // 391-435 行)只有 userInfo@0/content@3/color@5/decorations@8/9/12/15/
+    // sMessageId@20,没有独立表情段;正文内嵌的 `[表情名]` 括号文本 web 端
+    // 也不做图片化(DanmakuRichText 的 emoji 映射表仅 douyin 加载)。故虎牙
+    // 保持纯文本,DanmakuMessage.segments 恒空,不拆段。
     var fontColor = 0;
     reader.readStruct(6, (format) {
       fontColor = format.readInt(0);

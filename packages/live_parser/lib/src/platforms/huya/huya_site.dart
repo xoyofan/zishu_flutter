@@ -11,6 +11,7 @@ import '../../registry/cached_room_resolver.dart';
 import '../../utils/format_online.dart';
 import 'browse.dart';
 import 'danmaku.dart';
+import 'huya_wup.dart';
 import '../douyu/json_utils.dart';
 import 'normalize.dart';
 import 'room_api.dart';
@@ -24,11 +25,18 @@ class HuyaClient {
     : parserHttp = ParserHttp(
         client: httpClient,
         defaultHeaders: const {'Referer': 'https://www.huya.com/'},
-      );
+      ),
+      // wup 贵宾查询与元信息接口共享注入的 httpClient(测试 fake 生效);
+      // 各自只在「自有 client」时负责关闭。
+      wup = HuyaWupClient(httpClient: httpClient);
 
   final ParserHttp parserHttp;
+  final HuyaWupClient wup;
 
-  void close() => parserHttp.close();
+  void close() {
+    parserHttp.close();
+    wup.close();
+  }
 }
 
 /// 虎牙房间解析。
@@ -49,9 +57,14 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver, RoomSummar
   /// `huyaRoomState` 判在播,`formatOnline(totalCount|userCount)` 作热度;
   /// 粉丝数取 `profileInfo.activityCount ?? liveData.activityCount`(同一
   /// 响应内,零额外请求);`replay` 在本仓契约里归 offline([RoomState] 无
-  /// replay),故 online 留空。贵宾/超粉计数在 web 真源走 Tars wup 二进制
-  /// 协议(`follow/huya-wup.ts`),超出「只打轻量 HTTP 元信息接口」的刷新
-  /// 约定,此处不复刻 —— [RoomSummary.vip] 恒空(数据诚实性:不伪造)。
+  /// replay),故 online 留空。
+  ///
+  /// 贵宾数([RoomSummary.vip],SideHeader「贵宾」行):仅在播时按 web
+  /// 真源 `follow/huya-wup.ts` 走 Tars wup 协议 `liveui/getVipBarList`
+  /// (见 [HuyaWupClient]),presenterUid 取 `profileInfo.uid ?? liveData.uid`、
+  /// channelId 取 `liveData.liveChannel ?? liveData.channel ?? uid`;
+  /// wup 失败/为 0 一律留空(数据诚实性:不伪造)。超粉(svip tone 行)
+  /// web 侧走 getSuperFansInfo,本轮未实现。
   @override
   Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
     final http = _client.parserHttp;
@@ -74,19 +87,49 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver, RoomSummar
       [liveData['introduction'], liveData['roomName']],
       anchorName,
     );
+    // 2026-09 真实探针(tool/_probe_huya_cid.dart)实证:profileRoom 的
+    // liveData 已不再下发 `sGameFullName`(字段整体消失),中文名在
+    // `gameFullName`(如「英雄联盟」),`gameHostName` 是缩写(如 lol)。
+    // sGameFullName 保留在链尾兼容旧缓存形态。归一(缩写/cid → 中文)由
+    // 宿主 app 侧 displayCategoryName 完成,本层只负责带回原始名。
     final category = _firstText(
-      [liveData['sGameFullName'], liveData['gameHostName'], profileInfo['gameHostName']],
-      '',
-    );
-    final cid = _firstText(
       [
-        liveData['gameId'],
-        liveData['iGid'],
-        liveData['gid'],
-        profileInfo['gameId'],
+        liveData['gameFullName'],
+        liveData['sGameFullName'],
+        liveData['gameHostName'],
+        profileInfo['gameHostName'],
       ],
       '',
     );
+    // cid = 虎牙分区 gid(与 browse/进房 payload 同源)。实证 `gameId` 不是
+    // 分区 id(取值 0 或 IntegerId 820),只能作末位兜底;0 视为缺失。
+    final cid = _firstNonZeroText([
+      liveData['gid'],
+      liveData['iGid'],
+      liveData['gameId'],
+      profileInfo['gameId'],
+    ]);
+
+    // 贵宾数(web fetchHuyaVipCount 口径:仅 isLive 时查询,失败/0 留空)。
+    final presenterUid = _firstPositiveInt([
+      profileInfo['uid'],
+      liveData['uid'],
+    ]);
+    final channelId = _firstPositiveInt([
+      liveData['liveChannel'],
+      liveData['channel'],
+    ]);
+    var vip = '';
+    if (state == HuyaRoomState.live && presenterUid > 0) {
+      final count = await _client.wup.fetchVipBarCount(
+        presenterUid: presenterUid,
+        channelId: channelId > 0 ? channelId : presenterUid,
+      );
+      if (count != null && count > 0) {
+        vip = '$count';
+      }
+    }
+
     return RoomSummary(
       site: kHuyaSiteId,
       roomId: rid,
@@ -103,6 +146,7 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver, RoomSummar
       followers: formatExactCount(
         profileInfo['activityCount'] ?? liveData['activityCount'],
       ),
+      vip: vip,
     );
   }
 
@@ -283,6 +327,24 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver, RoomSummar
       if (text.isNotEmpty) return text;
     }
     return fallback;
+  }
+
+  /// 取第一个可解析且 >0 的整数(uid/liveChannel 等主键类字段,0 视为缺失)。
+  int _firstPositiveInt(List<Object?> values) {
+    for (final value in values) {
+      final parsed = int.tryParse(jsonText(value));
+      if (parsed != null && parsed > 0) return parsed;
+    }
+    return 0;
+  }
+
+  /// 首个非空且非 '0' 的字段文本(上游用 0 表示「无此 id」)。
+  String _firstNonZeroText(List<Object?> values) {
+    for (final value in values) {
+      final text = jsonText(value);
+      if (text.isNotEmpty && text != '0') return text;
+    }
+    return '';
   }
 
   _HuyaRoomBaseInfo _baseRoomInfo({

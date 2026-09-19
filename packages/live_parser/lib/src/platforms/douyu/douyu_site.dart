@@ -84,6 +84,9 @@ class DouyuRoomResolver implements RoomResolver, RoomSummaryRefresher {
     final hn = jsonText(mobile['hn']);
     final mobileTitle = jsonText(mobile['roomName']);
     final mobileAnchor = jsonText(mobile['nickname']);
+    // 分类名:mobile cate2Name 优先(web resolveDouyuFollowCategory 同源),
+    // 回退 betard(BetardRoom 已把缺失的 cate_name 兜到 second_lvl_name)。
+    final mobileCategory = jsonText(mobile['cate2Name']);
     return RoomSummary(
       site: kDouyuSiteId,
       roomId: rid,
@@ -92,7 +95,7 @@ class DouyuRoomResolver implements RoomResolver, RoomSummaryRefresher {
           : (room.roomName.isNotEmpty ? room.roomName : room.nickname),
       anchorName: mobileAnchor.isNotEmpty ? mobileAnchor : room.nickname,
       cid: room.cateId,
-      category: room.cateName,
+      category: mobileCategory.isNotEmpty ? mobileCategory : room.cateName,
       // 热度只在在播时有意义;`hn` 缺失/为 0 时留空。
       online: live && hn.isNotEmpty && hn != '0' ? hn : '',
       cover: room.cover,

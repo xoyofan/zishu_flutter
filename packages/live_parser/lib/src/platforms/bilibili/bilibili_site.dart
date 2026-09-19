@@ -96,6 +96,8 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
     }
 
     final live = jsonInt(info['live_status']) == 1;
+    // 二级分类名优先(web pickText(area_name, parent_area_name) 同口径)。
+    final refreshAreaName = jsonText(info['area_name']);
     return RoomSummary(
       site: kBilibiliSiteId,
       roomId: rid,
@@ -104,7 +106,9 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
           : jsonText(info['title']),
       anchorName: anchorName,
       cid: jsonText(info['area_id']),
-      category: jsonText(info['parent_area_name'] ?? info['area_name']),
+      category: refreshAreaName.isNotEmpty
+          ? refreshAreaName
+          : jsonText(info['parent_area_name']),
       online: live ? formatOnlineCount(info['online']) : '',
       cover: bilibiliCoverFromRoom(info),
       followers: formatExactCount(info['attention']),
@@ -156,6 +160,9 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
         : await anchorFuture;
     final anchorName = infoUname.isEmpty ? anchor.uname : infoUname;
     final avatar = infoAvatar.isEmpty ? anchor.face : infoAvatar;
+    // 二级分类名优先(web follow/status.ts:pickText(area_name,
+    // parent_area_name));parent 是大分类(如「网游」),area 才是细分区。
+    final areaName = jsonText(info['area_name']);
     final base = _Base(
       rid: rid,
       sourceUrl: url,
@@ -163,7 +170,7 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
       title: jsonText(info['title']).isEmpty ? anchorName : jsonText(info['title']),
       cover: bilibiliCoverFromRoom(info),
       avatar: avatar,
-      category: jsonText(info['parent_area_name'] ?? info['area_name']),
+      category: areaName.isNotEmpty ? areaName : jsonText(info['parent_area_name']),
       cid: jsonText(info['area_id'] ?? ''),
     );
 

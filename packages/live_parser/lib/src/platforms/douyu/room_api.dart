@@ -64,9 +64,19 @@ class BetardRoom {
       avatar: _avatarFromJson(json['avatar']),
       videoLoop: jsonInt(json['videoLoop']),
       cateId: jsonText(json['cate_id']),
-      cateName: jsonText(json['cate_name']),
+      // 实测(2026-09 探针)betard 已不再下发 `cate_name`(响应里只有
+      // `cate1_id/cate2_id/cate3_id/cate_id/second_lvl_name`),在播分类名
+      // 在 `second_lvl_name`(如「王者荣耀」);保留 cate_name 兼容旧 fixture。
+      cateName: _cateNameOf(json),
       showTime: jsonInt(json['show_time']),
     );
+  }
+
+  /// 在播分类名:`cate_name` 缺失时回退 `second_lvl_name`(上游真实字段)。
+  static String _cateNameOf(Map<String, dynamic> json) {
+    final cateName = jsonText(json['cate_name']);
+    if (cateName.isNotEmpty) return cateName;
+    return jsonText(json['second_lvl_name']);
   }
 
   static String _coverFromJson(Map<String, dynamic> json) {

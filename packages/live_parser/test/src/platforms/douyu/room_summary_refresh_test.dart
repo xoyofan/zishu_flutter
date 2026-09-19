@@ -98,6 +98,51 @@ void main() {
     expect(summary.vip, '');
   });
 
+  test('分类:mobile cate2Name 优先;betard 无 cate_name 时兜 second_lvl_name', () async {
+    // 2026-09 真实探针(tool/_probe_douyu_refresh_fields.dart)实证:
+    // betard 响应已不再下发 `cate_name`,分类名在 `second_lvl_name`;
+    // m.douyu roomInfo 在 `cate2Name`。两者都与 web
+    // `resolveDouyuFollowCategory` 的候选链一致(mobileInfo.cate2Name 优先)。
+    fake
+      ..betardResponse = {
+        'room': {
+          'room_id': 9527,
+          'nickname': '测试主播',
+          'show_status': 1,
+          'room_name': '斗鱼测试房间',
+          'room_pic': 'https://rpic.douyucdn.cn/live_cover/240x135.jpg',
+          'cate_id': 181,
+          'second_lvl_name': '王者荣耀',
+        },
+      }
+      ..roomInfoResponse = {
+        'code': 0,
+        'data': {
+          'roomInfo': {'hn': '1.2万', 'cate2Name': '王者荣耀'},
+        },
+      }
+      ..anchorCardResponse = {'code': 0, 'data': {}};
+
+    final summary = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'douyu', roomIdOrUrl: '9527'),
+    );
+
+    expect(summary.cid, '181');
+    expect(summary.category, '王者荣耀');
+
+    // mobile 缺 cate2Name(接口偶发)时回退 betard second_lvl_name。
+    fake.roomInfoResponse = {
+      'code': 0,
+      'data': {
+        'roomInfo': {'hn': '1.2万'},
+      },
+    };
+    final fallback = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'douyu', roomIdOrUrl: '9527'),
+    );
+    expect(fallback.category, '王者荣耀', reason: 'betard second_lvl_name 兜底');
+  });
+
   test('离线:即使上游给了热度,online 也必须为空串', () async {
     fake
       ..betardResponse = _betard(showStatus: 2)

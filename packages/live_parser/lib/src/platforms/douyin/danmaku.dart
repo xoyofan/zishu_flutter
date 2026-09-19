@@ -243,6 +243,7 @@ class DouyinDanmakuSession implements DanmakuSession {
               ? DateTime.fromMillisecondsSinceEpoch(chat.sentAtMs)
               : null,
           rawType: 'chat',
+          segments: chat.segments,
         ),
       );
     }

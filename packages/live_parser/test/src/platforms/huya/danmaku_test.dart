@@ -300,6 +300,31 @@ void main() {
     await session.close();
   });
 
+  test('表情:真源 MessageNotice 无表情段,正文括号表情保持纯文本(segments 恒空)', () async {
+    final session = await connector.connect(
+      const DanmakuSessionRequest(site: 'huya', roomId: '9527'),
+    );
+    final socket = transport.sockets.single;
+    final received = <DanmakuMessage>[];
+    final sub = session.messages.listen(received.add);
+
+    // 虎牙协议(web 真源 huyaJce.ts parseMessageNotice 391-435 行)不存在
+    // 表情段;正文 `[表情名]` 括号是纯文本的一部分,web 端 emoji 映射表仅
+    // douyin 加载、虎牙不图片化。解析侧不拆段,segments 恒空。
+    socket.pushBytes(
+      _pushFrame(1400, _chatNotice(nick: '表情哥', content: '[微笑]你好[传送]')),
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(received, hasLength(1));
+    expect(received.single.text, '[微笑]你好[传送]', reason: '括号表情保持原文,不改写不拆段');
+    expect(received.single.segments, isEmpty);
+
+    await sub.cancel();
+    await session.close();
+  });
+
   test('chat 协议重推去重:user+text 兜底 key(对齐 web huyaDanmakuDedup)', () async {
     final session = await connector.connect(
       const DanmakuSessionRequest(site: 'huya', roomId: '9527'),
