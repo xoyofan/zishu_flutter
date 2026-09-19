@@ -625,10 +625,13 @@ class _RoomHeader extends StatelessWidget {
     final tokens = context.tokens;
     // 分类徽标配色:优先分类色板(web `categoryHeaderStyle`),无分类色回退
     // 平台色;前景按底色亮度取对比色。
+    // 收藏与徽标映射统一用分类号:soop 的 cid 是房间号,按分类号才能
+    // 命中「我的分类」判重与跨平台/中文映射表。
+    final favoriteCid = cateNo.isNotEmpty ? cateNo : cid;
     final categoryStyle = CategoryColors.opaqueFor(
       category: category,
       site: site,
-      cid: cid,
+      cid: favoriteCid,
     );
     final badgeBg = categoryStyle?.background ??
         (category.trim().isNotEmpty ? brandColor : null);
@@ -640,7 +643,7 @@ class _RoomHeader extends StatelessWidget {
             : tokens.surfaceSoft);
     // 徽标文字统一走跨平台中文映射(twitch/soop 等海外平台的英文/韩文
     // 原名按 cid/别名归一为中文,与侧栏 formatCategoryHeaderLabel 同口径)。
-    final categoryLabel = formatCategoryHeaderLabel(site, category, cid);
+    final categoryLabel = formatCategoryHeaderLabel(site, category, favoriteCid);
     // 自适应高度(web `padding .28rem .5rem .32rem`):内容撑开,不再固定 44。
     return Container(
       padding: const EdgeInsets.fromLTRB(2, 4.5, 4, 5),
@@ -661,9 +664,10 @@ class _RoomHeader extends StatelessWidget {
               builder: (context, ref, _) {
                 // 分类徽标(web PlayHeader.vue:82-133):平台图标 + 分类文字 +
                 // 内嵌收藏星标(仅房间带分类上下文时);星标点击切换「我的分类」。
-                final favorited = cid.isNotEmpty &&
+                final favorited = favoriteCid.isNotEmpty &&
                     ref.watch(myCategoriesProvider).any(
-                          (entry) => entry.site == site && entry.cid == cid,
+                          (entry) =>
+                              entry.site == site && entry.cid == favoriteCid,
                         );
                 return Container(
                   padding: const EdgeInsets.symmetric(
@@ -697,7 +701,7 @@ class _RoomHeader extends StatelessWidget {
                                   site: site,
                                   // 分类收藏的 cid 必须是**分类号**;soop 的
                                   // payload.cid 是房间号,真实分类号在 cateNo。
-                                  cid: cateNo.isNotEmpty ? cateNo : cid,
+                                  cid: favoriteCid,
                                   // 收藏快照存中文展示名(与 web 收藏口径一致),
                                   // 渲染侧还会再映射一次兜底旧快照。
                                   name: categoryLabel,

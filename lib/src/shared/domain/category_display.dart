@@ -9,6 +9,8 @@
 /// 语义与 web 保持一致:命中跨平台映射用 canonical 中文名,否则回落平台原名。
 library;
 
+import 'package:live_parser/live_parser.dart' show soopZhCategoryName;
+
 import 'cross_categories_data.dart';
 import 'cross_categories_data_models.dart';
 
@@ -310,6 +312,15 @@ String displayCategoryName(
   // 若仍走名称映射,「体育」会被登记为「户外」的别名而互相抢占:
   // 侧栏出现两个「户外」、「体育」整项消失。
   if (siteId == 'all') return raw;
+  // soop:分类号反查 zh_CN 进程表(解析层分类预热时填充),覆盖 cross 表
+  // 之外的冷门分类;表未就绪/未命中再走跨平台表与原名。
+  if (siteId == 'soop') {
+    final cateNo = (cid ?? '').toString().trim();
+    if (cateNo.isNotEmpty) {
+      final zh = soopZhCategoryName(cateNo);
+      if (zh != null && zh.isNotEmpty) return zh;
+    }
+  }
   final entry = findCrossCategory(site, raw, cid);
   if (entry?.name != null && entry!.name.isNotEmpty) return entry.name;
   return raw;
