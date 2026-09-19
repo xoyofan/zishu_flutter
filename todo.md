@@ -765,3 +765,18 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 
 ### 本轮明确不做(记录于计划 §不做)
 - 徽章图片态全套(契约缺口)、超粉 V/guard/wealth、≤420 音量浮层、弹幕浮层锚定形态、飘屏速度连续模型、侧栏 pad-x 10.4 全局替换、侧栏头死按钮接通。
+
+## 2026-09-19 分类页直达列表 + 飘屏去昵称 + twitch/soop 中文化根治(7950e56/4d36b0d)
+
+**结论**:三条用户口径落地,其中 twitch/soop 未翻译的根因经 SFVideo 真源核对后**推翻了「表缺条目」的假设** —— 是请求缺本地化参数。
+
+### 口径落地
+- **分类页**:带具体分类上下文进入(hover 分类/我的分类/侧栏分类,路由带 cid/key)只渲染房间列表,去掉分组 tabs 与顶部子分类网格;裸 /site/category 保持索引三栏(对齐 web CategoryRoomsView vs CategoryIndexView 双视图语义)。
+- **飘屏去昵称**:buildSpan 单段纯正文;侧栏聊天行保留「昵称:正文」(web SideChatTab 语义,两个面不同)。
+- **twitch**:GQL 补 Accept-Language: zh-CN(web twitch.ts:76-84)+ 分类/房间查询补 displayName,名称 displayName||name 再 remap —— 上游直出中文,remap 只是归一。
+- **soop**:categoryList 补 lang=zh_CN + Accept-Language(缺它上游仍韩文);分类树记录 cid→中文(soop/zh_categories.dart,web soopZhCategoryMap 同构),房间列表按 category_no 反查覆盖韩文。
+- **remap bug**:「动物与动物园」别名本身含逗号被生成脚本错拆为 3 条 → 修为单条(完整串此前匹配不上)。
+
+### 方法论升级(用户建议):从 SFVideo 提交历史挖功能演进
+- SFVideo 361 commits:近期 ~40 个为桌面原生化(Tauri+Rust crates/live-parser+libmpv),**对齐基准应以 crates/live-parser 为最新真源**(streaming-server 是旧 web 端)。
+- 候选对齐清单(记录,待裁决):起播 FLV 优选(斗鱼首帧 2.3s→1.0s)、进房单清晰度档解析、HLS 回放缓冲上限 60s、分类缓存空壳分组校验(虎牙分类不显示根因)、soop opcode 白名单、YY 弹幕禁用标记、twitch emote 解析、房间卡 tags、抖音 Cookie 设置入口、分类面板列数规格表(aff7424 系列)、xhs cursor 翻页。
