@@ -322,6 +322,7 @@ A1 分支合并(master,零冲突)+ 真实解析版真机模拟中发现的三个
 | 2026-09-11 | A1 合并后门禁 | analyze 0 issue / test 222 / build OK |
 | 2026-09-11 | 真实解析 exe 真机模拟(点击进房) | 视频帧差 57.4(在播)、聊天亮行 429→473(弹幕在流) |
 | 2026-09-20 | U3 分类索引口径修正:analyze(lib/src+test)0 issue(parser 轨 9 条既有);category/favorite/my_category_nav/platform 3 站/navigation/mobile 共 42 用例全过;`build windows --debug` OK | 索引页只显示分类(tile 点击路由跳转),真机 PrintWindow 截图确认无房间区 |
+| 2026-09-20 | Twitch 关注恒离线修复(`6cca257`):parser analyze 0 + dart test 361 过;app analyze 0 + build OK;真网络 smoke jinnytty/caedrel/zackrawrr 均刷出在线数 | 数据排查:本地 SharedPreferences 与 dataserve 远端各 69 条完全一致(同步无问题);根因是 TwitchRoomResolver 未实现 RoomSummaryRefresher → online 永远空串按离线处理。真机 release(真实解析开关)关注页三条 Twitch 关注全部在播态(截图验证) |
 | 2026-09-11 | 修复后门禁:`flutter analyze` + `flutter test` 全量 | **No issues / 229 passed / 0 failed**(较上轮 +7 转发器单测) |
 | 2026-09-11 | `flutter build windows --debug`(真实解析开关) | OK(18.0s) |
 | 2026-09-11 | 对齐服务器:reset --hard origin/master(f1397e4)+release 重建 | exe OK(39.3s),纯远端代码 |
