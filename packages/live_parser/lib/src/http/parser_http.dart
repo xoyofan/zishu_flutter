@@ -4,8 +4,12 @@ library;
 
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
+import 'package:http/io_client.dart';
+
+import 'upstream_proxy.dart';
 
 /// 站点解析默认 UA(SFVideoLive 同款)。
 const String kDefaultParserUserAgent =
@@ -28,12 +32,21 @@ class ParserHttp {
     http.Client? client,
     Map<String, String> defaultHeaders = const {},
     this.defaultTimeout = const Duration(seconds: 20),
-  }) : _client = client ?? http.Client(),
+  }) : _client = client ?? _buildDefaultClient(),
        _ownsClient = client == null,
        defaultHeaders = {
          'User-Agent': kDefaultParserUserAgent,
          ...defaultHeaders,
        };
+
+  /// 自建 client 时接上游代理(宿主经 [UpstreamProxy.configure] 配置);
+  /// 外部注入的 client 由注入方自行决定代理行为(fixture 测试不受影响)。
+  static http.Client _buildDefaultClient() {
+    if (!UpstreamProxy.enabled) return http.Client();
+    final inner = HttpClient()
+      ..findProxy = (uri) => UpstreamProxy.findProxyValue;
+    return IOClient(inner);
+  }
 
   final Map<String, String> defaultHeaders;
   final Duration defaultTimeout;

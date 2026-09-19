@@ -6,6 +6,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:math';
 
+import 'upstream_proxy.dart';
+
 /// 建立弹幕 WebSocket 连接的传输工厂。
 abstract interface class DanmakuTransport {
   /// [protocols] 为可选子协议(如 SOOP 要求 `Sec-WebSocket-Protocol: chat`);
@@ -41,15 +43,13 @@ class IoDanmakuTransport implements DanmakuTransport {
     List<String>? protocols,
     Map<String, String>? headers,
   }) async {
-    if (headers == null || headers.isEmpty) {
-      final socket = await WebSocket.connect(
-        url.toString(),
-        protocols: protocols,
-      ).timeout(connectTimeout);
-      return _IoDanmakuSocket(socket);
-    }
-
+    // 统一走手动 Upgrade:HttpClient 接上游代理(CONNECT 隧道)后,
+    // WebSocket.connect 的「只认环境变量」限制就被绕开了(海外站弹幕
+    // wss 在直连不可达的网络下必须经代理,与 HTTP 层同一条配置)。
     final client = HttpClient();
+    if (UpstreamProxy.enabled) {
+      client.findProxy = (uri) => UpstreamProxy.findProxyValue;
+    }
     try {
       // HttpClient 只认 http/https;先降级 scheme 再手动 Upgrade。
       final requestUrl = switch (url.scheme) {
@@ -60,7 +60,7 @@ class IoDanmakuTransport implements DanmakuTransport {
       final request = await client
           .openUrl('GET', requestUrl)
           .timeout(connectTimeout);
-      headers.forEach(request.headers.set);
+      headers?.forEach(request.headers.set);
       request.headers
         ..set(HttpHeaders.connectionHeader, 'Upgrade')
         ..set(HttpHeaders.upgradeHeader, 'websocket')

@@ -10,6 +10,7 @@ export 'src/contracts/contracts.dart';
 export 'src/cross/cross_browse.dart';
 export 'src/http/danmaku_transport.dart';
 export 'src/http/parser_http.dart';
+export 'src/http/upstream_proxy.dart';
 export 'src/models/models.dart';
 export 'src/platforms/douyin/browse.dart';
 export 'src/platforms/douyin/danmaku.dart';
