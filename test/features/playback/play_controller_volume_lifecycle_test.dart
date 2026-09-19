@@ -9,16 +9,45 @@ import 'package:zishu_flutter/src/features/follow/application/settings_provider.
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/shared/application/browse_source.dart';
 import 'package:zishu_flutter/src/shared/application/providers.dart';
+import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 
 import '../../support/scripted_live_player.dart';
 
-class _RoutingRoomSource implements RoomSource {
+class _RoutingRoomSource implements RoomSource, RoomRecoverer {
+  int recoverCalls = 0;
+
   @override
   Future<RoomPayload> resolveRoom({
     required String site,
     required String roomIdOrUrl,
     String? preferredQuality,
   }) async => _payload(roomIdOrUrl, site: site);
+
+  @override
+  Future<RoomPayload> recoverRoom({
+    required String site,
+    required String roomIdOrUrl,
+    String? preferredQuality,
+  }) async {
+    recoverCalls++;
+    return _payload('$roomIdOrUrl-recovered', site: site);
+  }
+}
+
+class _RecoveringScriptedLivePlayer extends ScriptedLivePlayer
+    implements LineRecoveryAware {
+  LineRecoveryHandler? recovery;
+
+  @override
+  void setLineRecovery(LineRecoveryHandler? handler) => recovery = handler;
+
+  Future<void> recoverAndOpen() async {
+    final handler = recovery;
+    if (handler == null) throw StateError('recovery handler not installed');
+    final lines = await handler();
+    if (lines.isEmpty) throw StateError('recovery returned no lines');
+    await open(lines.first, lines.skip(1).toList());
+  }
 }
 
 RoomPayload _payload(String roomId, {String site = 'douyu'}) => RoomPayload(
@@ -53,6 +82,7 @@ RoomPayload _payload(String roomId, {String site = 'douyu'}) => RoomPayload(
 Future<ProviderContainer> _makeContainer({
   required Map<String, double> roomVolumes,
   required ScriptedLivePlayer player,
+  RoomSource? source,
   bool globalMuted = false,
 }) async {
   SharedPreferencesAsyncPlatform.instance =
@@ -63,7 +93,7 @@ Future<ProviderContainer> _makeContainer({
   final container = ProviderContainer(
     overrides: [
       playerProvider.overrideWithValue(player),
-      roomSourceProvider.overrideWithValue(_RoutingRoomSource()),
+      roomSourceProvider.overrideWithValue(source ?? _RoutingRoomSource()),
     ],
   );
   addTearDown(container.dispose);
@@ -104,6 +134,141 @@ Future<void> _startRoom(
 }
 
 void main() {
+  test(
+    're-parsing after a disconnect keeps the room volume and mute state',
+    () async {
+    final player = _RecoveringScriptedLivePlayer();
+    final source = _RoutingRoomSource();
+    final container = await _makeContainer(
+      roomVolumes: {'room_vol_douyu_A': 35},
+      globalMuted: true,
+      player: player,
+      source: source,
+    );
+    final params = (site: 'douyu', roomId: 'A');
+    final keepAlive = container.listen(
+      playControllerProvider(params),
+      (_, _) {},
+      fireImmediately: true,
+    );
+    addTearDown(keepAlive.close);
+    await container.read(playControllerProvider(params).future);
+    for (var i = 0; i < 20 && player.mutedCalls.isEmpty; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    player.resetUnderlyingVolume(100);
+
+    await player.recoverAndOpen();
+    for (var i = 0; i < 20 && player.openCalls.length < 2; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    final state = container.read(playControllerProvider(params)).requireValue;
+    expect(source.recoverCalls, 1);
+    expect(state.payload?.roomId, 'A-recovered');
+    expect(state.generation, 2);
+    expect(player.mutedCalls, [true, true]);
+    expect(player.currentSnapshot.muted, isTrue);
+  });
+
+  test('global mute remains effective after switching rooms', () async {
+    final player = ScriptedLivePlayer();
+    final container = await _makeContainer(
+      roomVolumes: {'room_vol_douyu_A': 35, 'room_vol_douyu_B': 62},
+      player: player,
+    );
+    final settings = container.read(settingsProvider.notifier);
+    await _startRoom(
+      container,
+      (site: 'douyu', roomId: 'A'),
+      player,
+      expectedOpenCount: 1,
+      expectedVolumeCount: 2,
+    );
+    await settings.setGlobalMuted(true);
+    await _startRoom(
+      container,
+      (site: 'douyu', roomId: 'B'),
+      player,
+      expectedOpenCount: 2,
+      expectedVolumeCount: 2,
+    );
+
+    expect(player.mutedCalls, [true]);
+    expect(player.volumeCalls, [35, 35]);
+    expect(player.currentSnapshot.volume, 35);
+    expect(player.currentSnapshot.muted, isTrue);
+  });
+
+  test(
+    'rapid A to B to C switching leaves only C generation, volume and snapshot',
+    () async {
+    final player = ScriptedLivePlayer()..gateNextOpen();
+    final a = await _makeContainer(
+      roomVolumes: {'room_vol_douyu_A': 11, 'room_vol_douyu_B': 22, 'room_vol_douyu_C': 33},
+      player: player,
+    );
+    final b = await _makeContainer(
+      roomVolumes: {'room_vol_douyu_A': 11, 'room_vol_douyu_B': 22, 'room_vol_douyu_C': 33},
+      player: player,
+    );
+    final c = await _makeContainer(
+      roomVolumes: {'room_vol_douyu_A': 11, 'room_vol_douyu_B': 22, 'room_vol_douyu_C': 33},
+      player: player,
+    );
+    final aKeepAlive = a.listen(
+      playControllerProvider((site: 'douyu', roomId: 'A')),
+      (_, _) {},
+      fireImmediately: true,
+    );
+    final bKeepAlive = b.listen(
+      playControllerProvider((site: 'douyu', roomId: 'B')),
+      (_, _) {},
+      fireImmediately: true,
+    );
+    final cKeepAlive = c.listen(
+      playControllerProvider((site: 'douyu', roomId: 'C')),
+      (_, _) {},
+      fireImmediately: true,
+    );
+    addTearDown(() {
+      aKeepAlive.close();
+      bKeepAlive.close();
+      cKeepAlive.close();
+    });
+    final aFuture = a.read(
+      playControllerProvider((site: 'douyu', roomId: 'A')).future,
+    );
+    final bFuture = b.read(
+      playControllerProvider((site: 'douyu', roomId: 'B')).future,
+    );
+    final cFuture = c.read(
+      playControllerProvider((site: 'douyu', roomId: 'C')).future,
+    );
+    await player.openStarted;
+    await Future<void>.delayed(Duration.zero);
+    aKeepAlive.close();
+    bKeepAlive.close();
+    player.completeOpen();
+    await Future.wait([aFuture, bFuture, cFuture]);
+    for (var i = 0; i < 20 && player.volumeCalls.length < 4; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    final state = c.read(
+      playControllerProvider((site: 'douyu', roomId: 'C')),
+    ).requireValue;
+    expect(state.generation, 1);
+    expect(state.payload?.roomId, 'C');
+    expect(player.currentSnapshot.volume, 33);
+    expect(player.volumeCalls, [11, 22, 33, 33]);
+    expect(player.openCalls.map((call) => call.line.url), [
+      'https://cdn.example.com/douyu/A.flv',
+      'https://cdn.example.com/douyu/B.flv',
+      'https://cdn.example.com/douyu/C.flv',
+    ]);
+  });
+
   test('re-applies the current room volume after open resets the underlying player', () async {
     final player = ScriptedLivePlayer()..gateNextOpen();
     final container = await _makeContainer(

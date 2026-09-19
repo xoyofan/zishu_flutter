@@ -322,6 +322,9 @@ class PlayController extends AsyncNotifier<PlayState> {
           generation: ++_generation,
         ),
       );
+      // 恢复重解析由播放器内部随后重新 open,先把当前房间的音量/静音语义
+      // 套回底层,避免恢复路径只更新线路而丢失控制条状态。
+      await _applyRoomVolume(ref.read(playerProvider));
       return [line, ..._fallbackLines(next, line)];
     } catch (error) {
       PlaybackLog.write('resolve_fail', {

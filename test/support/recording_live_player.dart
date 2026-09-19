@@ -89,6 +89,7 @@ class RecordingLivePlayer implements LivePlayer {
 
   @override
   Future<void> setMuted(bool muted) async {
+    if (muted == currentSnapshot.muted) return;
     mutedCalls.add(muted);
     _emit(currentSnapshot.copyWith(muted: muted));
   }
