@@ -16,6 +16,14 @@
 ///  2. parser 侧热门 25 key `packages/live_parser/lib/src/catalog/
 ///     cross_hot_categories_generated.dart`(仅对齐 web HOT_CROSS_CATEGORY_KEYS
 ///     的 25 个 key,供全平台(all)分类索引与 `/all/category/<key>` 过滤规则)。
+///
+/// 分层语义(改表时勿混淆):
+///  - 第一层 remap(`packages/live_parser/.../category_name_remap.dart`)负责
+///    海外平台原始名 → 中文(display 中文名);
+///  - 第二层 cross 全量(产物 1)是 `displayCategoryName` 的兜底池,必须**全量**
+///    328 条 —— 非热门分类(复古游戏/艾尔登法环/阿尔比恩等 303 条)的跨平台
+///    归一全靠它,缺条目即回归;
+///  - 产物 2 的 25 热门 key 只服务于 all 站分类索引,刻意不扩全量(web 同款)。
 library;
 
 import 'dart:convert';
@@ -69,9 +77,45 @@ Future<void> main() async {
     for (final item in decoded)
       if (item is Map) Map<String, dynamic>.from(item),
   ];
+  if (!_validate(entries)) {
+    exitCode = 1;
+    return;
+  }
 
   _generateApp(entries);
   await _generateParser(entries);
+}
+
+/// fail-fast 源数据校验:空表、缺 key/name、重复 key 一律拒绝生成,
+/// 避免半残数据静默替换线上常量表(displayCategoryName 第二层兜底池)。
+bool _validate(List<Map<String, dynamic>> entries) {
+  var ok = true;
+  if (entries.isEmpty) {
+    stderr.writeln('源数据为空:$_kSource');
+    return false;
+  }
+  final seen = <String>{};
+  final dup = <String>{};
+  for (var i = 0; i < entries.length; i++) {
+    final e = entries[i];
+    final key = _str(e['key']);
+    final name = _str(e['name']);
+    if (key.isEmpty || name.isEmpty) {
+      stderr.writeln('第 $i 条缺 key/name: ${e.keys.toList()}');
+      ok = false;
+      continue;
+    }
+    if (!seen.add(key)) dup.add(key);
+  }
+  if (dup.isNotEmpty) {
+    stderr.writeln('源数据存在重复 key: ${dup.toList()}');
+    ok = false;
+  }
+  if (ok) {
+    stdout.writeln('源数据校验通过:${entries.length} 条(全量;displayCategoryName '
+        '第二层兜底池必须与源等条数)');
+  }
+  return ok;
 }
 
 /// 1) app 侧全量映射表(按 key 排序,保证生成结果稳定)。

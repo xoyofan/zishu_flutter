@@ -3,12 +3,15 @@
 /// 分组覆盖:按 key 命中、key alias 归一、按 cid 命中、按 name/alias 子串命中、
 /// 「英雄联盟」不抢「英雄联盟手游」、douyin 特殊分支、douyu cid patch、
 /// huya cid alias、无映射回落平台原名、displayCategoryGroupName 对
-/// douyu/huya/bilibili/douyin 直接返回原名。
+/// douyu/huya/bilibili/douyin 直接返回原名;另含**全量 328 条表**的规模断言
+/// 与非热门分类双向命中样例(证明 displayCategoryName 第二层兜底池是全量表,
+/// 而非 parser 侧仅服务 all 索引的 25 热门 key)。
 library;
 
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:zishu_flutter/src/shared/domain/category_display.dart';
+import 'package:zishu_flutter/src/shared/domain/cross_categories_data.dart';
 
 void main() {
   group('跨平台分类显示映射', () {
@@ -183,6 +186,88 @@ void main() {
       expect(aliasMatchesName('leagueoflegends', 'league of legends'), isTrue);
       // 短输入(>=4 才允许 a 包含 name)不误抢。
       expect(aliasMatchesName('abc', 'abcdefgh'), isFalse);
+    });
+  });
+
+  group('全量 cross 表(displayCategoryName 第二层兜底池,328 条)', () {
+    // 与 web `hotCrossCategories.js` / `tool/sync_cross_map.dart` 的
+    // 25 热门 key 同源;仅用于断言「非热门条目也在兜底池内」。
+    const hotKeys = <String>{
+      'lol', 'sjz', 'jx3', 'wzry', 'hpjy', 'cs2', 'dota2', 'cf', 'yjwj', 'ys',
+      'bhxy', 'aqtw', 'tft', 'hs', 'valorant', 'dnf', 'dzpd', 'dwrg', 'hmwk',
+      'jcc', 'jql', 'wudao', 'huwai', 'xingxiu', 'yanzhi',
+    };
+
+    test('规模量级:全量表 >= 328 条(若被换成 25 热门表则此断言失败)', () {
+      expect(kCrossCategories.length, greaterThanOrEqualTo(328));
+    });
+
+    test('key 无重复,非热门条目 >= 300', () {
+      final keys = kCrossCategories.map((e) => e.key).toSet();
+      expect(keys.length, kCrossCategories.length);
+      final nonHot =
+          kCrossCategories.where((e) => !hotKeys.contains(e.key)).length;
+      expect(nonHot, greaterThanOrEqualTo(300));
+    });
+
+    // 以下样例均抽自 web 真源 cross-categories.json 的**非热门**条目,
+    // 每个 key 验证「双向」:平台原名/别名 → canonical 中文名;cid → key。
+    test('非热门样例均为非 25 热门 key,且都在全量表内', () {
+      const samples = <String>[
+        'gretro_00040008',
+        '14',
+        'g3406_5801_1010087_555_elden-ring_00040173',
+        'g1887_639_albion-online',
+        'g2282_1877_632_black-desert_00040105',
+      ];
+      for (final key in samples) {
+        expect(hotKeys.contains(key), isFalse,
+            reason: '样例 $key 应为非热门条目');
+        expect(findCrossCategoryByKey(key), isNotNull,
+            reason: '样例 $key 应在全量表中');
+      }
+    });
+
+    test('非热门双向:复古游戏(twitch "Retro")', () {
+      expect(displayCategoryName('twitch', 'Retro'), '复古游戏');
+      expect(matchCrossCategoryByCid('twitch', 'retro')!.key, 'gretro_00040008');
+      expect(
+        crossKeyForPlatformCategory('twitch', 'retro', 'Retro'),
+        'gretro_00040008',
+      );
+    });
+
+    test('非热门双向:最终幻想14(douyu 41 / bilibili 102 / 英文别名)', () {
+      expect(matchCrossCategoryByName('FINAL FANTASY XIV ONLINE')!.key, '14');
+      expect(matchCrossCategoryByCid('douyu', '41')!.key, '14');
+      expect(matchCrossCategoryByCid('bilibili', '102')!.key, '14');
+    });
+
+    test('非热门双向:艾尔登法环(twitch "ELDEN RING")房间角标', () {
+      expect(
+        roomCategoryLabel('twitch', nativeCategory: 'Elden Ring',
+            cid: 'elden-ring'),
+        '艾尔登法环',
+      );
+      expect(displayCategoryName('twitch', 'ELDEN RING'), '艾尔登法环');
+    });
+
+    test('非热门双向:阿尔比恩(twitch "Albion Online")', () {
+      expect(
+        roomCategoryLabel('twitch', nativeCategory: 'Albion Online'),
+        '阿尔比恩',
+      );
+      expect(
+        matchCrossCategoryByCid('twitch', 'albion-online')!.key,
+        'g1887_639_albion-online',
+      );
+    });
+
+    test('非热门双向:黑色沙漠(bilibili cid 632 / 别名 Black Desert)', () {
+      expect(displayCategoryName('bilibili', 'Black Desert', '632'), '黑色沙漠');
+      expect(matchCrossCategoryByCid('bilibili', '632')!.name, '黑色沙漠');
+      expect(matchCrossCategoryByName('black desert')!.key,
+          'g2282_1877_632_black-desert_00040105');
     });
   });
 }

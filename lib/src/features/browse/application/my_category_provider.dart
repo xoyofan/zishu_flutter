@@ -1,7 +1,7 @@
 /// 我的分类:用户收藏的分类快捷入口(对齐 SFVideoLive 导航「我的分类」)。
 ///
 /// 条目以 (site, cid) 唯一,name 仅用于渲染与 `/all/category/:key` 路由匹配;
-/// 收藏只落本机 SharedPreferences(`zishu.myCategories`),不上行 data-server
+/// 收藏只落本机 SharedPreferences(`zishu.myCategories.v2`),不上行 data-server
 /// (关注数据才走云同步)。
 library;
 
@@ -49,7 +49,12 @@ class MyCategoryEntry {
 /// 我的分类控制器:本地持久化的收藏集合,带数量上限。
 class MyCategoryController extends Notifier<List<MyCategoryEntry>> {
   /// 存储键(与 follow 的 `zishu.` 前缀一致)。
-  static const String storeKey = 'zishu.myCategories';
+  ///
+  /// v2(2026-09-19):跨平台分类映射表/remap 表修正后(如「动物与动物园」
+  /// 含逗号别名曾被错拆、twitch 英文名中文化),旧快照里的 name 可能是
+  /// 英文原名或错拆名。对齐 web c4f8ba4「改表即升缓存版本」流程,升版让
+  /// 旧键整体作废、用户按新表重新收藏;不迁移旧数据以避免错名残留。
+  static const String storeKey = 'zishu.myCategories.v2';
 
   /// 上限:对齐 SFVideoLive `MAX_MY_CROSS_CATEGORIES`。
   static const int maxCount = 12;
