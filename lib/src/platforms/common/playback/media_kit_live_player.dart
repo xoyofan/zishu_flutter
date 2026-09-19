@@ -16,13 +16,18 @@ import 'live_player.dart';
 import 'playback_log.dart';
 import 'playback_retry.dart';
 import 'player_error.dart';
+import 'twitch_ad_filter.dart';
 import 'window_presentation.dart';
 
 class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   /// [player] 是单测注入点:VM 测试无法加载原生 libmpv(`Player()` 会构造
   /// `NativePlayer` 并 `DynamicLibrary.open`),只能注入 `Player(platformPlayer:)`
   /// 的假后端来驱动事件与命令。生产调用点一律不传,行为与原先完全一致。
-  MediaKitLivePlayer({Player? player}) : _player = player ?? Player() {
+  /// [adFilter] 同理:Twitch 广告过滤代理,生产用默认实例,测试可注入
+  /// 定制判定/上游的实例。
+  MediaKitLivePlayer({Player? player, TwitchAdFilter? adFilter})
+    : _player = player ?? Player(),
+      _adFilter = adFilter ?? TwitchAdFilter() {
     _wire();
     // 参照 pure_live 的直播卡顿根治:mpv 属性调优让断流/卡死的直播流
     // 主动报错而非无限缓冲,再由错误/看门狗路径重连。属性调优失败不阻断播放。
@@ -30,6 +35,17 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   }
 
   final Player _player;
+
+  /// Twitch HLS 广告过滤代理:ttvnw.net 的线路经它改写为本地过滤地址,
+  /// 非 Twitch 线路原样透传(见 [TwitchAdFilter.wrapLine])。
+  final TwitchAdFilter _adFilter;
+
+  /// 广告期看门狗豁免的计时起点(本轮"合法无新段等待"开始时刻)。
+  /// 开流/离房/按真断流处理时清零。
+  DateTime? _adHoldSince;
+
+  /// 广告期豁免策略:按住预算与复查间隔的唯一来源(可单测)。
+  static const AdStallHoldPolicy _adHoldPolicy = AdStallHoldPolicy();
   late final VideoController _videoController = VideoController(_player);
 
   /// 向 UI 广播的快照流。
@@ -357,6 +373,22 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   void _reopenIfStalled() {
     if (_disposedOrEmpty || _givenUp) return;
     _stallTimer = null;
+    // 广告剔除造成的"无新段"是预期内的合法等待:按住看门狗,不计失败、
+    // 不重开(广告期 playlist 全被剔除,重开只会烧掉重连预算,且恢复
+    // 重解析拿到的还是同一批广告地址)。预算封顶见 [AdStallHoldPolicy]。
+    final now = DateTime.now();
+    final adStalled = _adFilter.isAdStalled(_currentLines.first.url);
+    if (_adHoldPolicy.shouldHold(
+      adStalled: adStalled,
+      now: now,
+      holdSince: _adHoldSince,
+    )) {
+      _adHoldSince ??= now;
+      PlaybackLog.write('ad_stall_hold', {'host': _hostOf(_currentLines.first)});
+      _stallTimer = Timer(_adHoldPolicy.recheckInterval, _reopenIfStalled);
+      return;
+    }
+    _adHoldSince = null;
     if (!_policy.canRetry(_stallRetries)) {
       // 自动重试耗尽:**先尝试向宿主重新解析**,而不是直接把错误卡片交出去。
       // 虎牙等签名平台的地址在连续失败期间多半已过期,继续复用 _currentLines
@@ -509,9 +541,20 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       // 进入开流:屏蔽底层事件,直到本次 open 落地再补发真实状态。
       _eventsFenced = true;
       // 切源即重置快照:清错误、退出播放态,进入缓冲。
-      // 整组线路(首选 + 回退)按顺序拼成 mpv 播放列表:某条断流时 mpv 内部
-      // 自动跳下一条,耗尽后再由看门狗整体轮转。
-      _currentLines = [line, ...fallbacks];
+      // Twitch 线路经广告过滤代理改写为本地地址(其余平台原样透传),
+      // 整组线路(首选 + 回退)按顺序拼成 mpv 播放列表:某条断流时 mpv
+      // 内部自动跳下一条,耗尽后再由看门狗整体轮转。
+      final baseLines = [line, ...fallbacks];
+      final wrappedLines = <StreamLine>[];
+      var wrappedAny = false;
+      for (final item in baseLines) {
+        final prepared = await _adFilter.wrapLine(item);
+        if (!identical(prepared, item)) wrappedAny = true;
+        wrappedLines.add(prepared);
+      }
+      _currentLines = wrappedLines;
+      // 新会话从"无广告等待"开始记账。
+      _adHoldSince = null;
       if (resetRetries) {
         _stallRetries = 0;
         // 用户主动重试/切源是唯一的闩锁解除点。
@@ -522,6 +565,9 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
           'lines': _currentLines.length,
           'host': _hostOf(line),
         });
+        if (wrappedAny) {
+          PlaybackLog.write('ad_filter_wrap', {'lines': _currentLines.length});
+        }
       }
       _stallTimer?.cancel();
       _stallTimer = null;
@@ -616,6 +662,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       _lastRecoverAt = null;
       _stallRetries = 0;
       _givenUp = false;
+      _adHoldSince = null;
       _lastErrorKind = PlayerErrorKind.native;
       await _player.stop();
       // 卸载媒体后回到空闲快照:清播放/缓冲/错误,保留音量与静音语义。
@@ -688,6 +735,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     _stallTimer = null;
     _cancelHealthTimer();
     _currentLines = const [];
+    unawaited(_adFilter.dispose());
     for (final subscription in _subscriptions) {
       unawaited(subscription.cancel());
     }
