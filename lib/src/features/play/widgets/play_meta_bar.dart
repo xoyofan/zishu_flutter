@@ -40,11 +40,12 @@ class PlayMetaBar extends StatelessWidget {
   final VoidCallback onToggleFollow;
   final VoidCallback onToggleSuperFollow;
 
-  /// 头像直径(实测 32-36px,取中值)。
-  static const double _kAvatarSize = 34;
+  /// 头像尺寸(web 竖屏堆叠:head 44 + 2×pad-y ≈ 52,左侧贴边出血,
+  /// 圆角 `0 0 2px 0`)。
+  static const double _kAvatarSize = 52;
 
-  /// 「关注 / 超关」按钮列宽(实测 ≈72px)。
-  static const double _kActionsWidth = 72;
+  /// 「关注 / 超关」按钮列宽(web `3.7rem` ≈ 59px)。
+  static const double _kActionsWidth = 59;
 
   /// 统计格图标尺寸。
   static const double _kStatIconSize = 12;
@@ -56,47 +57,46 @@ class PlayMetaBar extends StatelessWidget {
         ? payload!.anchorName.trim()
         : '主播信息';
     final isLive = payload?.isLive ?? false;
-    // 高度随系统字号缩放:与侧栏信息头同口径(固定高度在大字体下会把第二行
-    // 统计挤出容器,移动端实测溢出)。
-    final height = MediaQuery.textScalerOf(context).scale(64.0);
+    // 高度由内容撑开(web 竖屏堆叠基准 head-h 2.75rem ≈ 44,但 flutter 字体
+    // metrics 实测装不下三行文字,固定高会溢出 2-6px;IntrinsicHeight 让头像
+    // 与按钮列 stretch 到内容自然高,任何字体缩放档都不溢出)。
     return Container(
       key: const Key('play-meta-bar'),
-      height: height,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 5),
+      // 头像左侧贴边出血(web 负 margin),无左 padding。
+      padding: const EdgeInsets.symmetric(vertical: 3),
       decoration: BoxDecoration(
         color: tokens.surface,
         border: Border(bottom: BorderSide(color: tokens.border)),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: _MetaAvatar(
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _MetaAvatar(
               avatar: payload?.avatar.trim() ?? '',
               // 无头像时用昵称首字兜底(与侧栏信息头同语义)。
               label: anchor,
               live: isLive,
             ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(width: AppSpacing.sm),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   anchor,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 14,
-                    height: 1.08,
+                    fontSize: 13,
+                    height: 1.05,
                     fontWeight: FontWeight.w600,
                     color: isLive ? tokens.liveBadge : tokens.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 2),
                 Row(
                   children: [
                     _MetaStat(
@@ -117,7 +117,6 @@ class PlayMetaBar extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: 2),
                 Row(
                   children: [
                     _MetaStat(
@@ -152,7 +151,8 @@ class PlayMetaBar extends StatelessWidget {
               onToggleSuperFollow: onToggleSuperFollow,
             ),
           ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -188,9 +188,12 @@ class _MetaAvatar extends StatelessWidget {
     final fallback = label.isEmpty ? '?' : label.substring(0, 1);
     return Container(
       width: PlayMetaBar._kAvatarSize,
-      height: PlayMetaBar._kAvatarSize,
+      height: double.infinity,
+      // 左贴边出血 + 圆角 `0 0 2px 0`(web SideHeader.vue:326-350)。
       decoration: BoxDecoration(
-        shape: BoxShape.circle,
+        borderRadius: const BorderRadius.only(
+          bottomRight: Radius.circular(2),
+        ),
         color: tokens.surfaceRaised,
         border: Border.all(
           color: live ? tokens.liveBadge : tokens.border,
@@ -257,7 +260,7 @@ class _MetaStat extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 10.5,
-              height: 1.15,
+              height: 1.05,
               color: tokens.textSecondary,
             ),
           ),
@@ -373,7 +376,7 @@ class _MetaActionButton extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 11,
+                      fontSize: 10.5,
                       height: 1.1,
                       fontWeight: FontWeight.w600,
                       color: foreground,

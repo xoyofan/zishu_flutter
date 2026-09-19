@@ -12,6 +12,8 @@ import '../../../platforms/common/playback/live_player.dart'
 import '../../../platforms/common/playback/playback_retry.dart'
     show retryProgressLabel;
 import '../../../shared/presentation/design_tokens.dart';
+import '../../../shared/presentation/category_colors.dart';
+import '../../../shared/presentation/widgets/platform_icon.dart';
 import '../../browse/application/my_category_provider.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
@@ -358,6 +360,14 @@ class _PlayViewState extends ConsumerState<PlayView> {
     final showPanel = _sidePanelVisible && !isLandscapePhone;
     // 侧栏宽度按视口分档(268/328/392/425),对齐 main.css:228-244。
     final sidePanelWidth = AppSpacing.playSidePanelWidthFor(size.width);
+    // 舞台圆角(web `.play-frame` 12px,≤640 为 0;沉浸铺满态不裁)。
+    final stageRadius = BorderRadius.circular(
+      size.width < AppBreakpoints.compact ? 0 : 12,
+    );
+    Widget stageInFrame(Widget child) => ClipRRect(
+          borderRadius: stageRadius,
+          child: child,
+        );
 
     // 舞台整块挂 MouseRegion:鼠标在视频任意位置移动都唤醒控制条(隐藏
     // chrome 态下重新排程自动隐藏),这是"淡出后移动鼠标即唤出"的入口。
@@ -528,7 +538,7 @@ class _PlayViewState extends ConsumerState<PlayView> {
                 ? Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      Expanded(flex: 3, child: stage),
+                      Expanded(flex: 3, child: stageInFrame(stage)),
                       if (showPanel) ...[
                         const SizedBox(height: AppSpacing.md),
                         Expanded(
@@ -545,7 +555,7 @@ class _PlayViewState extends ConsumerState<PlayView> {
                       ],
                     ],
                   )
-                : stage,
+                : stageInFrame(stage),
           ),
         ],
       );
@@ -606,57 +616,114 @@ class _RoomHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    // 平台色底上按亮度取对比文字色,避免散落色值。
-    final onBrand =
-        ThemeData.estimateBrightnessForColor(brandColor) == Brightness.dark
-        ? tokens.textPrimary
-        : tokens.surfaceSoft;
-    return SizedBox(
-      height: 44,
+    // 分类徽标配色:优先分类色板(web `categoryHeaderStyle`),无分类色回退
+    // 平台色;前景按底色亮度取对比色。
+    final categoryStyle = CategoryColors.opaqueFor(
+      category: category,
+      site: site,
+      cid: cid,
+    );
+    final badgeBg = categoryStyle?.background ??
+        (category.trim().isNotEmpty ? brandColor : null);
+    final badgeFg = categoryStyle?.foreground ??
+        (badgeBg == null
+            ? tokens.textSecondary
+            : ThemeData.estimateBrightnessForColor(badgeBg) == Brightness.dark
+            ? tokens.textPrimary
+            : tokens.surfaceSoft);
+    // 自适应高度(web `padding .28rem .5rem .32rem`):内容撑开,不再固定 44。
+    return Container(
+      padding: const EdgeInsets.fromLTRB(2, 4.5, 4, 5),
       child: Row(
         children: [
           IconButton(
-            // 测试锚点:返回上一页按钮。
+            // 测试锚点:返回上一页按钮。点击区 32(web 2rem×2rem)。
             key: const Key('play-back'),
             tooltip: '返回',
             onPressed: onBack,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             icon: const Icon(Icons.arrow_back_rounded, size: 18),
           ),
-          const SizedBox(width: AppSpacing.xs),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-            decoration: BoxDecoration(
-              color: brandColor.withValues(alpha: 0.92),
-              borderRadius: AppRadius.allSm,
+          const SizedBox(width: AppSpacing.sm),
+          if (badgeBg != null)
+            Consumer(
+              builder: (context, ref, _) {
+                // 分类徽标(web PlayHeader.vue:82-133):平台图标 + 分类文字 +
+                // 内嵌收藏星标(仅房间带分类上下文时);星标点击切换「我的分类」。
+                final favorited = cid.isNotEmpty &&
+                    ref.watch(myCategoriesProvider).any(
+                          (entry) => entry.site == site && entry.cid == cid,
+                        );
+                return Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: badgeBg.withValues(alpha: 0.92),
+                    borderRadius: AppRadius.allSm,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      PlatformIcon(id: site, size: 12),
+                      const SizedBox(width: 3),
+                      Text(
+                        category.trim().isNotEmpty ? category : '直播',
+                        style: AppTypography.caption.copyWith(
+                          color: badgeFg,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      if (cid.isNotEmpty) ...[
+                        const SizedBox(width: 2),
+                        InkWell(
+                          key: const Key('play-category-favorite'),
+                          onTap: () => ref
+                              .read(myCategoriesProvider.notifier)
+                              .toggle(
+                                MyCategoryEntry(
+                                  site: site,
+                                  cid: cid,
+                                  name: category,
+                                ),
+                              ),
+                          child: Icon(
+                            favorited
+                                ? Icons.star_rounded
+                                : Icons.star_border_rounded,
+                            size: 12,
+                            color: favorited
+                                ? tokens.brand
+                                : badgeFg.withValues(alpha: 0.85),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                );
+              },
             ),
-            // 徽标显示当前房间分类(用户口径 2026-09-18:「左上角不是文字:直播
-            // 而是当前的分类」);无分类上下文时回退「直播」。
-            child: Text(
-              category.trim().isNotEmpty ? category : '直播',
-              style: AppTypography.caption.copyWith(
-                color: onBrand,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Center(
+              // 仅标题(web 不在标题里拼分类:分类已由左侧徽标承载)。
               child: Text(
-                [if (category.isNotEmpty) category, title].join(' · '),
+                title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: AppTypography.title.copyWith(fontSize: 14),
+                style: AppTypography.title.copyWith(fontSize: 15),
               ),
             ),
           ),
-          if (cid.isNotEmpty)
-            _CategoryFavoriteButton(site: site, cid: cid, name: category),
           IconButton(
             // 测试锚点:侧栏折叠/展开按钮。
             key: const Key('play-side-panel-toggle'),
             tooltip: sidePanelVisible ? '收起侧栏' : '展开侧栏',
             onPressed: onToggleSidePanel,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             icon: Icon(
               sidePanelVisible
                   ? Icons.keyboard_double_arrow_right_rounded
@@ -666,45 +733,6 @@ class _RoomHeader extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// 播放页头部的「收藏当前分类」星标。
-///
-/// 对齐参考实现 `PlayHeader.vue`:`categoryFavoritable` 为真(房间带分类
-/// 上下文)时在分类旁显示星标,点击在「我的分类」里增/删当前分类。
-/// 无分类上下文(cid 为空)时不渲染 —— 不伪造可收藏目标。
-class _CategoryFavoriteButton extends ConsumerWidget {
-  const _CategoryFavoriteButton({
-    required this.site,
-    required this.cid,
-    required this.name,
-  });
-
-  final String site;
-  final String cid;
-  final String name;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = context.tokens;
-    final favorited = ref.watch(myCategoriesProvider).any(
-          (entry) => entry.site == site && entry.cid == cid,
-        );
-    return IconButton(
-      key: const Key('play-category-favorite'),
-      tooltip: favorited ? '取消收藏' : '收藏到我的分类',
-      padding: EdgeInsets.zero,
-      constraints: const BoxConstraints(minWidth: 30, minHeight: 30),
-      onPressed: () => ref
-          .read(myCategoriesProvider.notifier)
-          .toggle(MyCategoryEntry(site: site, cid: cid, name: name)),
-      icon: Icon(
-        favorited ? Icons.star_rounded : Icons.star_border_rounded,
-        size: 16,
-        color: favorited ? tokens.brand : tokens.textSecondary,
       ),
     );
   }
