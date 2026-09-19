@@ -37,6 +37,7 @@ export 'src/platforms/youtube/dlp.dart';
 export 'src/platforms/youtube/normalize.dart';
 export 'src/platforms/youtube/room_api.dart';
 export 'src/platforms/youtube/youtube_site.dart';
+export 'src/platforms/yy/biz_names.dart';
 export 'src/platforms/yy/browse.dart';
 export 'src/platforms/yy/normalize.dart';
 export 'src/platforms/yy/room_api.dart';

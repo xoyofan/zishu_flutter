@@ -65,6 +65,8 @@ void main() {
       expect(result.rooms.first.title, '永远都是小女孩');
       expect(result.rooms.first.online, '4.1万');
       expect(result.rooms.first.cover, 'https://img.yy.com/cover.jpg');
+      // 推荐流 biz='other' 无分类语义 → 回退「推荐」。
+      expect(result.rooms.first.category, '推荐');
       final request = fake.requests.singleWhere((item) => item.url.path == '/more/page.action');
       expect(request.url.queryParameters['biz'], 'other');
       expect(request.url.queryParameters['subBiz'], 'idx');
@@ -95,7 +97,8 @@ void main() {
 
       expect(result.page, 2);
       expect(result.rooms.single.cid, '7');
-      expect(result.rooms.single.category, 'sing');
+      // biz 反查分类中文名(fetchCategories 时登记的 sing→音乐)。
+      expect(result.rooms.single.category, '音乐');
       expect(result.rooms.single.online, '1.2千');
       final request = fake.requests.last;
       expect(request.url.queryParameters['moduleId'], '308');

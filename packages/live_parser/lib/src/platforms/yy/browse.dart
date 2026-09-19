@@ -9,6 +9,7 @@ import '../../models/models.dart';
 import '../../registry/category_cache.dart';
 import '../../utils/format_online.dart';
 import '../douyu/json_utils.dart';
+import 'biz_names.dart';
 import 'normalize.dart';
 
 const Map<String, String> _yyBrowseHeaders = {
@@ -23,6 +24,7 @@ class YyBrowseRepository implements BrowseRepository {
   final ParserHttp _http;
   List<CategoryGroup>? _categoryCache;
   final Map<String, _YyCategoryParams> _categoryParams = {};
+  final Map<String, String> _categoryNames = {};
 
   @override
   Future<CategoryResult> fetchCategories(String site) async {
@@ -63,11 +65,17 @@ class YyBrowseRepository implements BrowseRepository {
               (await _http.get(Uri.parse(pageUrl), headers: _yyBrowseHeaders)).bodyBytes,
             );
             final params = _parseCategoryPageInfo(html);
-            if (params != null) _categoryParams[cid] = params;
+            if (params != null) {
+              _categoryParams[cid] = params;
+              // biz(英文业务键)→ 分类中文名,供房间列表/详情/搜索反查
+              // (YY 上游房间只有 biz,不含中文名;同 biz 多分类保留首个)。
+              rememberYyBizName(params.biz, name);
+            }
           } on Object {
             // 分类页仅用于补充列表参数，抓取失败不影响分类项。
           }
         }
+        _categoryNames[cid] = name;
         items.add(CategoryItem(cid: cid, name: name, pic: httpsYyUrl(sub['cover'])));
       }
       if (items.isNotEmpty) {
@@ -99,7 +107,8 @@ class YyBrowseRepository implements BrowseRepository {
       }),
     );
     final list = jsonListOf(jsonMapOf(data['data'])['data']);
-    return _toResult(list, request.page, request.limit);
+    // 首页推荐流的 biz='other' 无分类语义,回退「推荐」(与抖音聚合口径一致)。
+    return _toResult(list, request.page, request.limit, fallbackCategory: '推荐');
   }
 
   Future<RoomListResult> _fetchCategoryRooms(String cid, int page, int limit) async {
@@ -125,7 +134,13 @@ class YyBrowseRepository implements BrowseRepository {
       }),
     );
     final list = jsonListOf(jsonMapOf(data['data'])['data']);
-    return _toResult(list, page, limit, cid: cid);
+    return _toResult(
+      list,
+      page,
+      limit,
+      cid: cid,
+      fallbackCategory: _categoryNames[cid],
+    );
   }
 
   Future<Map<String, dynamic>> _getJson(Uri url) async {
@@ -140,6 +155,7 @@ class YyBrowseRepository implements BrowseRepository {
     int page,
     int limit, {
     String? cid,
+    String? fallbackCategory,
   }) {
     final rooms = <RoomSummary>[];
     for (final value in raw) {
@@ -155,7 +171,15 @@ class YyBrowseRepository implements BrowseRepository {
               : jsonText(item['name']),
           anchorName: jsonText(item['name']),
           cid: cid ?? jsonText(item['ssid']),
-          category: jsonText(item['biz']),
+          // biz 是英文业务键:优先反查分类中文名,分类上下文/推荐兜底,
+          // 最后原值(反查表未就绪时仍可见上游原文)。
+          category: () {
+            final biz = jsonText(item['biz']);
+            return yyBizName(biz) ??
+                ((fallbackCategory != null && fallbackCategory.isNotEmpty)
+                    ? fallbackCategory
+                    : biz);
+          }(),
           online: formatOnlineCount(item['users']),
           cover: httpsYyUrl(item['thumb2'] ?? item['thumb'] ?? item['avatar']),
         ),

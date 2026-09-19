@@ -7,6 +7,7 @@ import '../../contracts/contracts.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
 import '../../registry/cached_room_resolver.dart';
+import 'biz_names.dart';
 import 'browse.dart';
 import 'normalize.dart';
 import 'room_api.dart';
@@ -72,7 +73,7 @@ class YyRoomResolver implements RoomResolver, RoomSummaryRefresher {
       anchorName: detail?.name ?? '',
       // 与 resolveRoom 同口径:cid 取 ssid。
       cid: detail?.ssid ?? roomId,
-      category: detail?.biz ?? '',
+      category: detail == null ? '' : (yyBizName(detail.biz) ?? detail.biz),
       // totalViewer 本就是格式化热度串("145.9万"),原样下发;离线空串。
       online: totalViewer,
       cover: detail?.thumb ?? '',
@@ -216,7 +217,7 @@ class YyRoomResolver implements RoomResolver, RoomSummaryRefresher {
         title: detail.desc.isNotEmpty ? detail.desc : detail.name,
         cover: detail.thumb,
         avatar: detail.avatar,
-        category: detail.biz,
+        category: yyBizName(detail.biz) ?? detail.biz,
         cid: detail.ssid,
         roomState: roomState,
         streams: streams,

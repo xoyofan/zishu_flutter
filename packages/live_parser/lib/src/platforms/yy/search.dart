@@ -10,6 +10,7 @@ import '../../utils/format_online.dart';
 import '../../utils/search_helpers.dart';
 import '../douyu/json_utils.dart';
 import 'normalize.dart';
+import 'biz_names.dart';
 
 class YySearchRepository implements SearchRepository {
   YySearchRepository(this._http);
@@ -77,7 +78,10 @@ class YySearchRepository implements SearchRepository {
             avatar: httpsYyUrl(item['headurl']),
             cover: httpsYyUrl(item['posterurl']),
             state: live ? SearchHitState.live : SearchHitState.offline,
-            category: jsonText(item['biz'] ?? item['subbiz']).trim(),
+            category: () {
+              final biz = jsonText(item['biz'] ?? item['subbiz']).trim();
+              return yyBizName(biz) ?? biz;
+            }(),
             online: formatOnlineCount(item['users']),
           ));
         } else {
