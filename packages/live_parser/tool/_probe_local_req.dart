@@ -8,7 +8,11 @@ Future<void> main() async {
   request.headers.set('Sec-WebSocket-Version', '13');
   request.headers.set('Sec-WebSocket-Key', 'dGhlIHNhbXBsZSBub25jZQ==');
   request.headers.set('Sec-WebSocket-Protocol', 'chat');
-  await request.close().timeout(const Duration(seconds: 3)).catchError((_) => null as Object);
+  try {
+    await request.close().timeout(const Duration(seconds: 3));
+  } on Object {
+    stdout.writeln('升级请求无响应(被黑洞)');
+  }
   client.close();
   exit(0);
 }

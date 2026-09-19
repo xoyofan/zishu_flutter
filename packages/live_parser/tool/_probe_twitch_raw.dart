@@ -14,7 +14,6 @@ Future<void> main() async {
   socket.add(utf8.encode('CAP REQ :twitch.tv/tags\r\n'));
   socket.add(utf8.encode('PASS SCHMOOPIIE\r\n'));
   socket.add(utf8.encode('NICK justinfan81234\r\n'));
-  var sentJoin = false;
   Timer(const Duration(seconds: 20), () {
     stdout.writeln('== 20s 到,退出 ==');
     socket.close();
@@ -27,5 +26,4 @@ Future<void> main() async {
     stdout.writeln('>> JOIN #ibai');
     socket.add(utf8.encode('JOIN #ibai\r\n'));
   });
-  await sentJoin ? Future<void>.delayed(const Duration(seconds: 1)) : null;
 }
