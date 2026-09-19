@@ -188,7 +188,7 @@
 - [x] 使用 `PrintWindow(PW_RENDERFULLCONTENT)` 或现有工具抓窗口表面；屏幕合成截图不作为唯一证据。
 - [x] 每个平台使用 `PASS/FAIL/BLOCKED/N/A/NOT_RUN`，并记录证据文件名；生成阶段总体状态固定为 `NOT_RUN`，每条 checklist 默认使用唯一截图路径。
 - [x] 提交：`test(windows): add public function smoke checklist`（`325a8d6`，已从 worker worktree 合并）。
-- [ ] 推送：`git push origin master`（待当前主线最终验证后执行）。
+- [x] 推送：`git push origin master`（当前远端包含 `4ce078e`）。
 
 ## 阶段 5：收口门禁
 
