@@ -4,22 +4,22 @@
 >
 > 状态枚举：`PASS` / `FAIL` / `BLOCKED` / `N/A` / `NOT_RUN`。
 >
-> 当前阶段：阶段 3（其他公共播放状态）。尚未开始 Windows 真实 smoke，所有真实列保持 `NOT_RUN`。
+> 当前阶段：阶段 4（平台参数化与 Windows 真实验收）。Windows 真实 smoke 尚未开始，真实列保持 `NOT_RUN`。
 
 ## 1. 平台能力基线
 
 | 平台 | Browse | Search | Multi-quality | Multi-line | Danmaku | Status refresh | Playback | 自动化契约 | Windows 真实 |
 |---|---:|---:|---:|---:|---:|---:|---:|---|---|
-| `douyu` | PASS | PASS | PASS | PASS | PASS | PASS | PASS | NOT_RUN | NOT_RUN |
-| `huya` | PASS | PASS | PASS | PASS | PASS | PASS | PASS | NOT_RUN | NOT_RUN |
-| `bilibili` | PASS | PASS | PASS | PASS | PASS | PASS | PASS | NOT_RUN | NOT_RUN |
-| `douyin` | PASS | PASS | PASS | PASS | PASS | PASS | PASS | NOT_RUN | NOT_RUN |
-| `kuaishou` | PASS | N/A | PASS | PASS | PASS | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN |
-| `yy` | PASS | PASS | PASS | PASS | N/A | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN |
-| `twitch` | PASS | PASS | PASS | PASS | PASS | PASS | NOT_RUN | NOT_RUN | NOT_RUN |
-| `soop` | PASS | PASS | PASS | PASS | PASS | NOT_RUN | NOT_RUN | NOT_RUN | NOT_RUN |
-| `youtube` | PASS | N/A | PASS | PASS | PASS | N/A | NOT_RUN | NOT_RUN | NOT_RUN |
-| `iptv` | N/A | N/A | N/A | N/A | N/A | N/A | NOT_RUN | NOT_RUN | NOT_RUN |
+| `douyu` | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | NOT_RUN |
+| `huya` | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | NOT_RUN |
+| `bilibili` | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | NOT_RUN |
+| `douyin` | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | NOT_RUN |
+| `kuaishou` | PASS | N/A | PASS | PASS | PASS | NOT_RUN | NOT_RUN | PASS | NOT_RUN |
+| `yy` | PASS | PASS | PASS | PASS | N/A | NOT_RUN | NOT_RUN | PASS | NOT_RUN |
+| `twitch` | PASS | PASS | PASS | PASS | PASS | PASS | NOT_RUN | PASS | NOT_RUN |
+| `soop` | PASS | PASS | PASS | PASS | PASS | NOT_RUN | NOT_RUN | PASS | NOT_RUN |
+| `youtube` | PASS | N/A | PASS | PASS | PASS | N/A | NOT_RUN | PASS | NOT_RUN |
+| `iptv` | N/A | N/A | N/A | N/A | N/A | N/A | PASS | NOT_RUN | NOT_RUN |
 
 > 上表中的 `PASS` 表示能力已在当前代码/解析测试记录中存在，不表示本轮 Windows 真实 smoke 已通过。真实验证必须在阶段 4 逐平台填入证据。
 
@@ -89,8 +89,10 @@
 
 ### 阶段 4：平台参数化与 Windows 真实验收
 
-- 状态：未开始
-- 范围：所有已注册平台能力契约和真实 Windows smoke
+- 状态：进行中
+- 阶段 4.1：平台能力契约 **7/7 通过**；`live_parser` 分析通过，解析测试 **378 通过 / 10 跳过（真实网络）**
+- 已验证：10 个目标平台均注册；能力位与 repository/connector 存在性一致；不支持能力不伪造接口；房间音量 key 跨平台隔离
+- 待完成：Windows release 真实 smoke 与证据记录
 
 ### 阶段 5：收口门禁
 

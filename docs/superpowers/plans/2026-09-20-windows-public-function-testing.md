@@ -169,11 +169,12 @@
 - Create: `test/features/platform/public_capability_matrix_test.dart`
 - Modify: `docs/testing/windows-public-function-matrix.md`
 
-- [ ] 对所有已注册平台验证 capability、room key、未支持入口过滤和错误隔离。
-- [ ] 对不支持的能力明确断言 `N/A`，不要求伪造真实数据。
-- [ ] 运行测试并更新平台表。
-- [ ] 提交：`test(platforms): add public capability contract matrix`。
-- [ ] 推送：`git push origin master`。
+- [x] 对所有已注册平台验证 capability、room key、未支持入口过滤和错误隔离。
+- [x] 对不支持的能力明确断言 `N/A`，不要求伪造真实数据。
+- [x] 运行测试：Flutter 契约 7/7；`dart analyze` 通过；`dart test` 378 通过、10 个真实网络测试跳过。
+- [x] 更新平台表。
+- [x] 提交：`test(platforms): add public capability contract matrix`。
+- [x] 推送：`git push origin master`。
 
 ### Task 4.2：Windows 真实 smoke 记录
 
