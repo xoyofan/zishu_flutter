@@ -131,12 +131,12 @@
 - Test: `test/features/playback/playback_public_state_matrix_test.dart`
 - Modify: `docs/testing/windows-public-function-matrix.md`
 
-- [ ] 参数化覆盖默认画质、切画质、线路格式、备用线路、重新解析和失败恢复。
-- [ ] 验证切画质/线路不重置音量、静音和房间身份。
-- [ ] 验证旧 generation 的 open 结果不会覆盖新选择。
-- [ ] 运行 parser 相关 fixture 与 app 播放测试。
-- [ ] 更新矩阵并提交：`test(playback): cover quality line and recovery state matrix`。
-- [ ] 推送：`git push origin master`。
+- [x] 参数化覆盖默认画质、切画质、线路格式、备用线路、重新解析和失败恢复。
+- [x] 验证切画质/线路不重置音量、静音和房间身份。
+- [x] 验证旧 generation 的 open 结果不会覆盖新选择。
+- [x] 运行 parser 相关 fixture 与 app 播放测试。
+- [x] 更新矩阵并提交：`test(playback): cover quality line and recovery state matrix`。
+- [x] 推送：`git push origin master`。
 
 ### Task 3.2：弹幕会话和侧栏状态矩阵
 
