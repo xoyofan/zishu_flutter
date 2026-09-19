@@ -2,6 +2,23 @@ import 'package:flutter/material.dart';
 
 /// SFVideoLive 深色视觉基线的 design tokens。
 /// Widget 内禁止散落裸色值/裸数字,一律引用此处。
+/// on-video(叠在视频画面上的控件)恒定暗色语义,移植自 pure_live
+/// `shared/presentation/design_tokens.dart` 的 AppOnVideo:这类控件永远
+/// 压在深色 scrim/暗底上,颜色不随应用主题翻转。
+abstract final class AppOnVideo {
+  /// 控制条底部渐变 scrim 的终色(黑 72%)。
+  static const Color scrim = Color(0xB8000000);
+
+  /// 顶部房间条实底(纯黑)。
+  static const Color bar = Color(0xFF000000);
+
+  /// on-video 主文字/图标(白 87%)。
+  static const Color text = Color(0xDEFFFFFF);
+
+  /// on-video 次级文字/图标(白 55%)。
+  static const Color textMuted = Color(0x8CFFFFFF);
+}
+
 abstract final class AppColors {
   /// 页面默认背景 #181818。
   static const Color background = Color(0xFF181818);
