@@ -135,7 +135,7 @@ class PlayController extends AsyncNotifier<PlayState> {
       return state.value ?? PlayState(generation: generation);
     }
 
-    final quality = pickPlayQuality(payload, preferredQuality);
+    final quality = _pickPlayableQuality(payload, preferredQuality);
     // 传入 site:白名单站点 auto 起播优选 FLV(首帧提速,见 play_selection)。
     final line = pickStreamLine(quality, preferredFormat, site: params.site);
     final next = PlayState(
@@ -321,5 +321,18 @@ class PlayController extends AsyncNotifier<PlayState> {
   List<StreamLine> _fallbackLines(StreamQuality? quality, StreamLine? line) {
     if (quality == null || line == null) return const [];
     return [for (final candidate in quality.lines) if (candidate.url != line.url) candidate];
+  }
+
+  /// 按偏好挑**可起播**的档位:在 [pickPlayQuality] 结果落在空线路占位档
+  /// (懒取流:解析侧只给实给档真实线路,其余档位占位;或服务器把高请求
+  /// 档降级到低档)时,回退首个有线路的档 —— 选中占位档会让 line=null,
+  /// 进房黑屏且不触发懒取流。pure_live「没有才退」同口径。
+  StreamQuality? _pickPlayableQuality(RoomPayload payload, String? preferredName) {
+    final selected = pickPlayQuality(payload, preferredName);
+    if (selected == null || selected.lines.isNotEmpty) return selected;
+    return payload.streams.firstWhere(
+      (stream) => stream.lines.isNotEmpty,
+      orElse: () => selected,
+    );
   }
 }

@@ -164,8 +164,20 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
             }
           }()
         : null;
+    // 懒取流:偏好档(设置里的默认画质,经档位表映射成 qn)直接作为请求
+    // 参数,进房即取目标档;匹配不到档位表时回退 10000(原画)。
+    final preferredRequestQn = matchQualityPreference(
+      kBilibiliQnTiers,
+      request.preferredQuality,
+      (tier) => tier.name,
+    )?.qn;
     final Future<Map<String, dynamic>>? playFuture = isLive
-        ? fetchBilibiliRoomPlayInfo(http, credentials, rid)
+        ? fetchBilibiliRoomPlayInfo(
+            http,
+            credentials,
+            rid,
+            qn: preferredRequestQn ?? 10000,
+          )
         : null;
     final anchor = anchorFuture == null
         ? (uname: '', face: '')
@@ -196,29 +208,44 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
       throw const ParserHttpException('未获取到可播放的 B 站流地址');
     }
 
-    final streams = <StreamQuality>[];
-    for (final quality in qualities) {
-      final lines = bilibiliTierLines(data, quality.qn);
-      if (lines == null) continue;
-      streams.add(
-        StreamQuality(
-          name: quality.name,
-          rate: quality.qn,
-          lines: [
-            for (final line in lines)
-              StreamLine(
-                name: line.name,
-                url: line.url,
-                format: line.format,
-                headers: bilibiliPlaybackHeaders,
-              ),
-          ],
-        ),
-      );
-    }
-    if (streams.isEmpty) {
+    // 懒取流(对齐 soop resolveTier 口径):一次 getRoomPlayInfo 只返回
+    // current_qn 单档的真实流。此前把同一批地址经 preferQn 回退复制到全部
+    // 档位,画质菜单「多级重复」—— 原画/蓝光/超清/高清四档播放内容完全
+    // 相同,切档无效果。现在真实线路只挂服务器实给档(current_qn,可能
+    // 因登录态低于请求 qn),其余档位以空线路占位供菜单列出;用户切档时
+    // 由播放侧带新的 preferredQuality 重新解析取流。
+    final actualQn = bilibiliCurrentQn(data);
+    final realTier = qualities.firstWhere(
+      (quality) => quality.qn == actualQn,
+      orElse: () => matchQualityPreference(qualities, request.preferredQuality,
+              (quality) => quality.name) ??
+          qualities.first,
+    );
+    final lines = bilibiliTierLines(data, realTier.qn);
+    if (lines == null) {
       throw const ParserHttpException('未获取到可播放的 B 站流地址');
     }
+
+    // 实给档放首位(playUrl / 播放侧选中都取 streams.first);其余档位
+    // 官网顺序空线路占位。availableQualities 保持全档官网顺序。
+    final streams = <StreamQuality>[
+      StreamQuality(
+        name: realTier.name,
+        rate: realTier.qn,
+        lines: [
+          for (final line in lines)
+            StreamLine(
+              name: line.name,
+              url: line.url,
+              format: line.format,
+              headers: bilibiliPlaybackHeaders,
+            ),
+        ],
+      ),
+      for (final quality in qualities)
+        if (quality.qn != realTier.qn)
+          StreamQuality(name: quality.name, rate: quality.qn, lines: const []),
+    ];
 
     return _payload(
       base,

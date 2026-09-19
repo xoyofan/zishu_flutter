@@ -13,20 +13,35 @@
                   {
                     "codec_name": "avc",
                     "base_url": "/live-bvc/9527?proto=ts",
-                    "current_qn": 250,
-                    "accept_qn": [10000, 250, 150],
+                    "current_qn": 10000,
+                    "accept_qn": [
+                      10000,
+                      250,
+                      150
+                    ],
                     "url_info": [
-                      { "host": "https://cn-hbxy-cm-01.bilivideo.com", "extra": "?expires=1" },
-                      { "host": "https://cn-hbxy-cm-02.bilivideo.com", "extra": "?expires=1b" }
+                      {
+                        "host": "https://cn-hbxy-cm-01.bilivideo.com",
+                        "extra": "?expires=1"
+                      },
+                      {
+                        "host": "https://cn-hbxy-cm-02.bilivideo.com",
+                        "extra": "?expires=1b"
+                      }
                     ]
                   },
                   {
                     "codec_name": "hevc",
                     "base_url": "/live-bvc/9527?proto=ts-hevc",
-                    "current_qn": 250,
-                    "accept_qn": [250],
+                    "current_qn": 10000,
+                    "accept_qn": [
+                      250
+                    ],
                     "url_info": [
-                      { "host": "https://hevc.bilivideo.com", "extra": "?x=1" }
+                      {
+                        "host": "https://hevc.bilivideo.com",
+                        "extra": "?x=1"
+                      }
                     ]
                   }
                 ]
@@ -42,10 +57,19 @@
                   {
                     "base_url": "/live-bvc/9527?proto=flv",
                     "current_qn": 10000,
-                    "accept_qn": [10000, 250],
+                    "accept_qn": [
+                      10000,
+                      250
+                    ],
                     "url_info": [
-                      { "host": "https://cn-hb-flv.bilivideo.com", "extra": "?expires=2" },
-                      { "host": "https://backup-flv.bilivideo.com", "extra": "?expires=3" }
+                      {
+                        "host": "https://cn-hb-flv.bilivideo.com",
+                        "extra": "?expires=2"
+                      },
+                      {
+                        "host": "https://backup-flv.bilivideo.com",
+                        "extra": "?expires=3"
+                      }
                     ]
                   }
                 ]
@@ -56,9 +80,14 @@
                   {
                     "base_url": "/live-bvc/9527?proto=fmp4",
                     "current_qn": 10000,
-                    "accept_qn": [10000],
+                    "accept_qn": [
+                      10000
+                    ],
                     "url_info": [
-                      { "host": "https://fmp4.bilivideo.com", "extra": "?x=2" }
+                      {
+                        "host": "https://fmp4.bilivideo.com",
+                        "extra": "?x=2"
+                      }
                     ]
                   }
                 ]

@@ -263,6 +263,25 @@ List<StreamLineDraft>? bilibiliTierLines(
   return lines.isEmpty ? null : lines;
 }
 
+/// 服务器实际下发的清晰度(取首个 codec 的 current_qn)。
+///
+/// 一次 getRoomPlayInfo 只返回**单档**真实流:所有 codec 的 current_qn
+/// 一致(实测 qn=10000/400/250/150/80 请求均如此)。未登录/无权限时它
+/// 可能低于请求 qn —— 匿名请求 10000 常被降到 250。返回 0 表示无 codec。
+int bilibiliCurrentQn(Map<String, dynamic>? data) {
+  final playurl = jsonMapOf(jsonMapOf(data?['playurl_info'])['playurl']);
+  final streams = jsonListOf(playurl['stream']).whereType<Map<String, dynamic>>();
+  for (final stream in streams) {
+    for (final format in jsonListOf(stream['format']).whereType<Map<String, dynamic>>()) {
+      for (final codec in jsonListOf(format['codec']).whereType<Map<String, dynamic>>()) {
+        final qn = _intOf(codec['current_qn']);
+        if (qn > 0) return qn;
+      }
+    }
+  }
+  return 0;
+}
+
 /// accept_qn ∩ 官方档位表(保持官网顺序)。
 List<({int qn, String name})> bilibiliAvailableQualities(Map<String, dynamic>? data) {
   final playurl = jsonMapOf(jsonMapOf(data?['playurl_info'])['playurl']);

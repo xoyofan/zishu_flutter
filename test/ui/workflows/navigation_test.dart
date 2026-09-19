@@ -24,11 +24,16 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart' show StreamLine;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:zishu_flutter/src/app/app_router.dart';
 import 'package:zishu_flutter/src/app/app_shell.dart';
 import 'package:zishu_flutter/src/app/app_theme.dart';
+import 'package:zishu_flutter/src/features/follow/application/settings_provider.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
+import 'package:zishu_flutter/src/shared/application/auth_provider.dart';
 
 /// 测试替身:VM 下替代 MediaKitLivePlayer,不触碰任何原生播放内核。
 class _FakeLivePlayer implements LivePlayer {
@@ -80,6 +85,14 @@ class _FakeLivePlayer implements LivePlayer {
   void dispose() => calls.add('dispose');
 }
 
+/// 测试替身:登录态固定匿名。真实 AuthController 在「有存储后端 + 无缓存凭据」
+/// 时会向 data-server 发起默认账号登录(themeToggle 用例注入内存存储后触发),
+/// fake_async 测试环境不允许真实 HTTP,这里整体替换掉登录态。
+class _AnonymousAuthController extends AuthController {
+  @override
+  AuthState build() => const AuthState(phase: AuthPhase.anonymous);
+}
+
 /// 测试宿主:与 WindowsApp 相同的 router/theme,额外在 builder 补 Material
 /// 祖先,保证播放页 Slider/ChoiceChip 等控件在 VM 测试环境可正常构建。
 class _TestApp extends ConsumerWidget {
@@ -113,9 +126,15 @@ void main() {
 
   /// pump 测试宿主(注入 FakeLivePlayer)并返回 router。
   /// router 从显式 ProviderContainer 读取,播放页(无 Scaffold)同样可用。
-  Future<GoRouter> pumpApp(WidgetTester tester) async {
+  /// [anonymousAuth] 为真时追加匿名 auth 覆盖(themeToggle 用例注入内存存储
+  /// 后,真实 AuthController 会向 data-server 发起登录),默认不改变既有
+  /// 用例的容器构成。
+  Future<GoRouter> pumpApp(WidgetTester tester, {bool anonymousAuth = false}) async {
     final container = ProviderContainer(
-      overrides: [playerProvider.overrideWithValue(_FakeLivePlayer())],
+      overrides: [
+        playerProvider.overrideWithValue(_FakeLivePlayer()),
+        if (anonymousAuth) authProvider.overrideWith(_AnonymousAuthController.new),
+      ],
     );
     addTearDown(container.dispose);
     await tester.pumpWidget(
@@ -125,6 +144,35 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
     return container.read(routerProvider);
+  }
+
+  /// 把 SharedPreferencesAsync 切到独立内存后端(用例结束恢复原实例)。
+  /// 持久化断言用:被测代码与测试读回共享同一存储,写盘即可同步回读。
+  void useInMemoryPrefs() {
+    final previous = SharedPreferencesAsyncPlatform.instance;
+    SharedPreferencesAsyncPlatform.instance =
+        InMemorySharedPreferencesAsync.withData(<String, Object>{});
+    addTearDown(() => SharedPreferencesAsyncPlatform.instance = previous);
+  }
+
+  /// 窄屏/宽屏视口切换(用例结束恢复默认 800x600)。
+  void useViewport(WidgetTester tester, Size size) {
+    tester.view.physicalSize = size;
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+  }
+
+  /// 轮询至 settingsProvider hydrated(异步 _restore 挂在 microtask/await 后)。
+  Future<void> pumpUntilHydrated(WidgetTester tester, ProviderContainer container) async {
+    for (var attempt = 0; attempt < 10; attempt++) {
+      if (container.read(settingsProvider).hydrated) {
+        await tester.pump(const Duration(milliseconds: 50));
+        return;
+      }
+      await tester.pump(const Duration(milliseconds: 50));
+    }
+    fail('settingsProvider 未在限定帧数内完成 hydrated');
   }
 
   /// 深链/跳转到 [location] 并稳定数帧(NoTransitionPage 无过渡动画)。
@@ -420,6 +468,123 @@ void main() {
           .widget<FilterChip>(find.byKey(const Key('home-platform-chip-all')))
           .selected,
       isTrue,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('themeToggleTopBar:顶栏 nav-theme 默认深色,点击切浅色并写盘,再点还原', (
+    tester,
+  ) async {
+    suppressRenderFlexOverflow();
+    // 1600x900:≥ desktop 断点(1366)顶栏动作显示文案,可断言 label 随目标态。
+    useViewport(tester, const Size(1600, 900));
+    useInMemoryPrefs();
+    final router = await pumpApp(
+      tester,
+      anonymousAuth: true,
+    );
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(AppShell)),
+    );
+    await pumpUntilHydrated(tester, container);
+
+    // 默认深色:按钮显示「点击后要切到的目标」= 浅色(light_mode 图标),
+    // 对齐 web NavSidebar(`themeMode === 'dark' ? '浅色' : '深色'`)。
+    expect(router.routeInformationProvider.value.uri.path, '/all');
+    expect(container.read(settingsProvider).themeMode, ThemeModeChoice.dark);
+    expect(find.text('浅色'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('nav-theme')),
+        matching: find.byIcon(Icons.light_mode_outlined),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      await SharedPreferencesAsync().getString('zishu.settings.themeMode'),
+      isNull,
+      reason: '出厂默认深色不经按钮写入,存储为空',
+    );
+
+    // 点击 → light:provider 更新、目标态文案翻转为「深色」、持久化写盘。
+    await tester.tap(find.byKey(const Key('nav-theme')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(container.read(settingsProvider).themeMode, ThemeModeChoice.light);
+    expect(find.text('深色'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('nav-theme')),
+        matching: find.byIcon(Icons.dark_mode_outlined),
+      ),
+      findsOneWidget,
+    );
+    expect(
+      await SharedPreferencesAsync().getString('zishu.settings.themeMode'),
+      'light',
+    );
+
+    // 再点 → 还原 dark:light↔dark 往返闭环,字段同步写盘。
+    await tester.tap(find.byKey(const Key('nav-theme')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(container.read(settingsProvider).themeMode, ThemeModeChoice.dark);
+    expect(find.text('浅色'), findsOneWidget);
+    expect(
+      await SharedPreferencesAsync().getString('zishu.settings.themeMode'),
+      'dark',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('themeToggleBottomBar:移动底栏 nav-theme 与顶栏同款切换且持久化', (
+    tester,
+  ) async {
+    suppressRenderFlexOverflow();
+    // 390x844:窄于 phone 断点(768),AppShell 渲染移动底栏(顶栏让位平台条,
+    // nav-theme 锚点唯一落在底栏「主题」项)。
+    useViewport(tester, const Size(390, 844));
+    useInMemoryPrefs();
+    await pumpApp(
+      tester,
+      anonymousAuth: true,
+    );
+    final container = ProviderScope.containerOf(
+      tester.element(find.byType(AppShell)),
+    );
+    await pumpUntilHydrated(tester, container);
+
+    // 默认深色:底栏「主题」项文案同样表示目标态(浅色),与顶栏同源。
+    expect(container.read(settingsProvider).themeMode, ThemeModeChoice.dark);
+    expect(find.text('浅色'), findsOneWidget);
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('nav-theme')),
+        matching: find.byIcon(Icons.light_mode_outlined),
+      ),
+      findsOneWidget,
+    );
+
+    // 点击 → light:状态与持久化字段同步更新(与顶栏共用 _toggleTheme)。
+    await tester.tap(find.byKey(const Key('nav-theme')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(container.read(settingsProvider).themeMode, ThemeModeChoice.light);
+    expect(find.text('深色'), findsOneWidget);
+    expect(
+      await SharedPreferencesAsync().getString('zishu.settings.themeMode'),
+      'light',
+    );
+
+    // 再点 → 还原 dark,与顶栏行为一致(同份判定与切换实现)。
+    await tester.tap(find.byKey(const Key('nav-theme')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(container.read(settingsProvider).themeMode, ThemeModeChoice.dark);
+    expect(find.text('浅色'), findsOneWidget);
+    expect(
+      await SharedPreferencesAsync().getString('zishu.settings.themeMode'),
+      'dark',
     );
     expect(tester.takeException(), isNull);
   });
