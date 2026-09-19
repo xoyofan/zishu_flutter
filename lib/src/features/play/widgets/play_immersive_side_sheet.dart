@@ -7,7 +7,7 @@ import '../../../shared/presentation/zishu_tokens.dart';
 ///
 /// web 真源结构(挂在 #play-frame 内的绝对定位层):
 /// - 透明遮罩铺满舞台,点击关闭(`onBackdropClick`);
-/// - 右缘 drawer = 左侧 toggle 把手(0.82rem × 40px,左圆角 8px,
+/// - 右缘 drawer = 左侧 toggle 把手(1.15rem × 40px,左圆角 4px,
 ///   chevron-right,点击收起)+ 右侧 panel(与播放侧栏同宽,全高,
 ///   左边框 + 左投影 `-6px 0 28px rgba(0,0,0,.55)`);
 /// - 出入动效:遮罩 opacity + drawer `translateX(100%)`,
@@ -26,8 +26,9 @@ class PlayImmersiveSideSheet extends StatelessWidget {
     required this.child,
   });
 
-  /// toggle 把手宽度:web `--drawer-toggle-width: 0.82rem` ≈ 13.1px。
-  static const double _toggleWidth = 13.1;
+  /// toggle 把手宽度:web `--drawer-toggle-width: 1.15rem` ≈ 18.4px
+  /// (styles/main.css:47 覆盖了组件内 0.82rem 兜底值)。
+  static const double _toggleWidth = 18.4;
 
   /// toggle 把手高度:web `--drawer-toggle-height: 40px`。
   static const double _toggleHeight = 40;
@@ -96,7 +97,9 @@ class PlayImmersiveSideSheet extends StatelessWidget {
                               bottom: BorderSide(color: tokens.border),
                             ),
                             borderRadius: const BorderRadius.horizontal(
-                              left: Radius.circular(AppRadius.md),
+                              // web `--drawer-toggle-radius` =
+                              // `--el-border-radius-base`(4px,非 8 兜底)。
+                              left: Radius.circular(AppRadius.sm),
                             ),
                           ),
                           child: InkWell(
