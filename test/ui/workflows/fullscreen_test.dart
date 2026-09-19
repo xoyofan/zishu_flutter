@@ -384,6 +384,28 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('PiP 中按 Esc:退出小窗并恢复进入前的全屏呈现态', (tester) async {
+    await _pumpPlay(tester);
+    _player.calls.clear();
+
+    await tester.tap(find.byKey(const Key('play-toggle-fullscreen')));
+    await _pumpFrames(tester, 2);
+    expect(find.byKey(const Key('play-immersive-stage')), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('play-toggle-pip')));
+    await _pumpFrames(tester, 2);
+    expect(find.byType(PipResizeSurface), findsOneWidget);
+
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.escape);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.escape);
+    await _pumpFrames(tester, 2);
+
+    expect(find.byType(PipResizeSurface), findsNothing);
+    expect(find.byKey(const Key('play-immersive-stage')), findsOneWidget);
+    expect(_player.calls, contains('pip:exit'));
+    expect(_player.calls, contains('fullscreen:true'));
+    expect(tester.takeException(), isNull);
+  });
   test('Esc 分派优先级:画中画 > 全屏 > 网页全屏 > 返回上一页', () {
     expect(
       resolveEscapePresentationAction(

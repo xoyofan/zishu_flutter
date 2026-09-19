@@ -133,6 +133,7 @@ class PlayScreenController extends Notifier<PlayScreenState> {
     _set(wasPip ? PlayScreenState(mode: mode) : previous.copyWith(mode: mode));
     if (wasPip) {
       await player.exitPictureInPicture();
+      if (!ref.mounted) return;
     }
     await player.setFullscreen(mode.wantsSystemFullscreen);
   }
@@ -162,6 +163,7 @@ class PlayScreenController extends Notifier<PlayScreenState> {
     if (player == null || _mirror.pip) return;
     _set(_mirror.copyWith(pip: true, modeBeforePip: _mirror.mode));
     await player.setFullscreen(false);
+    if (!ref.mounted) return;
     await player.enterPictureInPicture();
   }
 
@@ -170,8 +172,15 @@ class PlayScreenController extends Notifier<PlayScreenState> {
     final player = _player;
     if (player == null || !_mirror.pip) return;
     final restore = _mirror.modeBeforePip;
-    _set(_mirror.copyWith(pip: false, mode: restore));
+    _set(
+      PlayScreenState(
+        mode: restore,
+        pip: false,
+        modeBeforePip: PlayScreenMode.normal,
+      ),
+    );
     await player.exitPictureInPicture();
+    if (!ref.mounted) return;
     await player.setFullscreen(restore.wantsSystemFullscreen);
   }
 
