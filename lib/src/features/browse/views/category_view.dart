@@ -13,9 +13,11 @@ import '../application/my_category_provider.dart';
 import '../widgets/browse_sidebar.dart';
 import '../widgets/room_grid.dart';
 
-/// 分类页:左侧大类分组 tabs + 右侧子分类网格与房间列表。
-/// 分组数据来自 [browseCategoriesProvider],选中子分类后由
-/// [browseRoomsProvider] 按 (site, cid) 拉取房间。
+/// 分类页,两种形态对齐 web:
+/// - `/:site/category`(裸路由,顶栏「分类」入口):分组 tabs + 子分类网格,
+///   **只显示分类不显示房间**(对齐 web `CategoryIndexView.vue`);
+/// - `/:site/category/:cid`(带具体分类):纯房间列表,由
+///   [browseRoomsProvider] 按 (site, cid) 拉取(对齐 web `CategoryRoomsView.vue`)。
 class CategoryView extends ConsumerStatefulWidget {
   const CategoryView({
     super.key,
@@ -41,9 +43,8 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
   /// 左侧分组栏宽度。
   static const double _tabsWidth = 132;
 
-  /// 用户手动选中的组/子分类;null 表示按路由参数或默认规则推导。
+  /// 用户手动选中的分组;null 表示按路由参数或默认规则推导。
   String? _selectedGroupId;
-  String? _selectedCid;
 
   @override
   void didUpdateWidget(covariant CategoryView oldWidget) {
@@ -52,10 +53,7 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
     if (oldWidget.site != widget.site ||
         oldWidget.cid != widget.cid ||
         oldWidget.categoryKey != widget.categoryKey) {
-      setState(() {
-        _selectedGroupId = null;
-        _selectedCid = null;
-      });
+      setState(() => _selectedGroupId = null);
     }
   }
 
@@ -80,14 +78,16 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
     };
   }
 
-  /// 分组 tabs + 右侧(子分类网格 + 房间网格)的主内容。
+  /// 分组 tabs + 右侧内容区的主内容。
   ///
-  /// 用户口径(2026-09-19):**带具体分类上下文进入**(顶栏 hover 分类、
-  /// 「我的分类」、侧栏分类点击 —— 路由带 cid/key 且能命中)时,只显示该
-  /// 分类下的房间列表:不要分组 tabs、不要顶部子分类网格,侧栏目录也隐藏
-  /// (对齐 web `CategoryRoomsView.vue`:选定分类 = 纯房间页)。
-  /// 裸 `/site/category`(无分类上下文,分类索引入口)保持原三栏浏览形态
-  /// (对齐 web `CategoryIndexView.vue`)。
+  /// 用户口径(2026-09-20):**带具体分类上下文进入**(顶栏 hover 分类、
+  /// 「我的分类」、侧栏/索引页分类点击 —— 路由带 cid/key 且能命中)时,
+  /// 只显示该分类下的房间列表:不要分组 tabs、不要子分类网格,侧栏目录
+  /// 也隐藏(对齐 web `CategoryRoomsView.vue`:选定分类 = 纯房间页)。
+  /// 裸 `/site/category`(顶栏「分类」入口,分类索引)**只显示分类**:
+  /// 分组 tabs + 子分类网格铺满内容区,没有底部房间区;点子分类 tile 走
+  /// 路由跳转到带 cid 的房间页(对齐 web `CategoryIndexView.vue` 里
+  /// `CategoryGrid` 的 RouterLink 行为)。
   Widget _content(BuildContext context, CategoryResult result) {
     final tokens = context.tokens;
     final group = _pickGroup(result.groups);
@@ -123,31 +123,17 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
                 isAll: widget.site == 'all',
                 width: _tabsWidth,
                 site: widget.site,
-                onGroupTap: (target) => setState(() {
-                  _selectedGroupId = target.id;
-                  _selectedCid = null;
-                }),
+                onGroupTap: (target) =>
+                    setState(() => _selectedGroupId = target.id),
               ),
               Container(width: 1, color: tokens.border),
-              Expanded(
-                child: _CategoryPanel(
-                  site: widget.site,
-                  group: group,
-                  selectedItem: item,
-                  brandColor: _brandColor(context),
-                  onItemTap: (target) =>
-                      setState(() => _selectedCid = target.cid),
-                ),
-              ),
+              Expanded(child: _CategoryGrid(site: widget.site, group: group)),
             ],
           ),
         ),
       ],
     );
   }
-
-  Color _brandColor(BuildContext context) =>
-      PlatformBrandCatalog.byId(widget.site)?.color ?? context.tokens.brand;
 
   /// 解析当前选中的分组:手动选择 > cid 归属 > categoryKey 匹配 > 第一组。
   CategoryGroup _pickGroup(List<CategoryGroup> groups) {
@@ -157,7 +143,7 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
         if (group.id == selectedId) return group;
       }
     }
-    final cid = _selectedCid ?? widget.cid;
+    final cid = widget.cid;
     if (cid != null && cid.isNotEmpty) {
       for (final group in groups) {
         if (group.items.any((item) => item.cid == cid)) return group;
@@ -179,7 +165,7 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
 
   /// 解析当前选中的子分类:cid 精确匹配,其次 categoryKey 匹配子分类名或 cid。
   CategoryItem? _pickItem(CategoryGroup group) {
-    final cid = _selectedCid ?? widget.cid;
+    final cid = widget.cid;
     if (cid != null && cid.isNotEmpty) {
       for (final item in group.items) {
         if (item.cid == cid) return item;
@@ -305,58 +291,37 @@ class _GroupTab extends StatelessWidget {
   }
 }
 
-/// 右侧面板:子分类网格(顶部)+ 选中子分类的房间网格(独立滚动)。
-class _CategoryPanel extends StatelessWidget {
-  const _CategoryPanel({
-    required this.site,
-    required this.group,
-    required this.selectedItem,
-    required this.brandColor,
-    required this.onItemTap,
-  });
+/// 分类索引的内容网格:子分类 tile 铺满内容区独立滚动,点击路由跳转到
+/// 带 cid 的房间页(web `CategoryGrid` 的 RouterLink 语义,不在索引页内
+/// 原地展开房间)。
+class _CategoryGrid extends StatelessWidget {
+  const _CategoryGrid({required this.site, required this.group});
 
   final String site;
   final CategoryGroup group;
-  final CategoryItem? selectedItem;
-  final Color brandColor;
-  final ValueChanged<CategoryItem> onItemTap;
 
   @override
   Widget build(BuildContext context) {
-    final item = selectedItem;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        ConstrainedBox(
-          constraints: const BoxConstraints(maxHeight: 160),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Wrap(
-              spacing: AppSpacing.lg,
-              runSpacing: AppSpacing.md,
-              children: [
-                for (final entry in group.items)
-                  _CategoryTile(
-                    item: entry,
-                    site: site,
-                    selected: item?.cid == entry.cid,
-                    brandColor: brandColor,
-                    onTap: () => onItemTap(entry),
-                  ),
-              ],
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(AppSpacing.lg),
+      child: Wrap(
+        spacing: AppSpacing.lg,
+        runSpacing: AppSpacing.md,
+        children: [
+          for (final entry in group.items)
+            _CategoryTile(
+              item: entry,
+              site: site,
+              onTap: entry.cid.isEmpty
+                  ? null
+                  : () => context.go(
+                      site == 'all'
+                          ? '/all/category/${Uri.encodeComponent(entry.cid)}'
+                          : '/$site/category/${Uri.encodeComponent(entry.cid)}',
+                    ),
             ),
-          ),
-        ),
-        Container(height: 1, color: context.tokens.border),
-        Expanded(
-          child: item == null
-              ? const _HintPlaceholder(
-                  icon: Icons.touch_app_rounded,
-                  message: '选择一个子分类查看直播间',
-                )
-              : _RoomSection(site: site, cid: item.cid, isAll: site == 'all'),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -364,13 +329,11 @@ class _CategoryPanel extends StatelessWidget {
 /// 子分类方块:图片缺失时用名称首字占位。
 ///
 /// 右上角带「我的分类」收藏星(对齐参考实现 `CategoryGrid.vue` 的 `favoritable`:
-/// 星标常驻、收藏后分类名与描边高亮)。星标自己在最上层命中,不触发 tile 选中。
+/// 星标常驻、收藏后分类名与描边高亮)。星标自己在最上层命中,不触发 tile 跳转。
 class _CategoryTile extends ConsumerWidget {
   const _CategoryTile({
     required this.item,
     required this.site,
-    required this.selected,
-    required this.brandColor,
     required this.onTap,
   });
 
@@ -378,13 +341,12 @@ class _CategoryTile extends ConsumerWidget {
 
   /// 收藏归属站点(`all` = 全平台聚合,与「我的分类」管理弹窗同口径)。
   final String site;
-  final bool selected;
-  final Color brandColor;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = context.tokens;
+    final brandColor = PlatformBrandCatalog.byId(site)?.color ?? tokens.brand;
     final favorited = item.cid.isNotEmpty &&
         ref.watch(myCategoriesProvider).any(
               (entry) => entry.site == site && entry.cid == item.cid,
@@ -408,8 +370,7 @@ class _CategoryTile extends ConsumerWidget {
                     borderRadius: AppRadius.allMd,
                     color: tokens.surfaceRaised,
                     border: Border.all(
-                      color: selected || favorited ? brandColor : tokens.border,
-                      width: selected ? 2 : 1,
+                      color: favorited ? brandColor : tokens.border,
                     ),
                   ),
                   clipBehavior: Clip.antiAlias,
@@ -482,9 +443,7 @@ class _CategoryTile extends ConsumerWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: context.textSecondary.copyWith(
-                color: selected || favorited
-                    ? tokens.textPrimary
-                    : tokens.textSecondary,
+                color: favorited ? tokens.textPrimary : tokens.textSecondary,
               ),
             ),
           ],
