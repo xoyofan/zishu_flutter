@@ -1904,32 +1904,64 @@ class _PlatformCategoryFlyout extends ConsumerWidget {
 }
 
 /// 分类看板:单组平台平铺网格,多组平台横向分栏(列间 1px 竖线)。
-class _CategoryBoard extends StatelessWidget {
+class _CategoryBoard extends StatefulWidget {
   const _CategoryBoard({required this.site, required this.groups});
 
   /// 列宽 4.2rem ≈ 67px(同 `.nav-platform-menu__column`)。
   static const double _kColumnWidth = 67.2;
 
+  /// 列内容最大高度:_FlyoutPanel maxHeight(416) 减面板上下 padding
+  /// (8.8+9.6);条目超出后列内纵向滚动(对齐 web `scrolly` 语义)。
+  static const double _kBoardContentMax = 396;
+
   final String site;
   final List<CategoryGroup> groups;
 
   @override
+  _CategoryBoardState createState() => _CategoryBoardState();
+}
+
+class _CategoryBoardState extends State<_CategoryBoard> {
+  /// 每个纵向滚动视图独立 controller:Scrollbar(thumbVisibility) 在
+  /// PrimaryScrollController 上多 ScrollPosition 会直接报错(实测)。
+  final _scrollControllers = <int, ScrollController>{};
+
+  ScrollController _controllerFor(int index) => _scrollControllers
+      .putIfAbsent(index, () => ScrollController());
+
+  @override
+  void dispose() {
+    for (final controller in _scrollControllers.values) {
+      controller.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final site = widget.site;
+    final groups = widget.groups;
     if (groups.length == 1) {
       // 单一大组:平铺网格(对齐 `.nav-platform-menu__hot-track`)。
-      return SingleChildScrollView(
-        child: Wrap(
-          children: [
-            for (final item in groups.first.items)
-              SizedBox(
-                width: _kColumnWidth,
-                child: _CategoryChip(
-                  key: ValueKey('flyout-category-${item.cid}'),
-                  label: displayCategoryName(site, item.name, item.cid),
-                  onTap: () => _goCategory(context, item.cid),
+      // soop 等单组可达 300+ 条:限高内纵向滚动 + 常驻滚动条
+      // (对齐 web `nav-platform-menu__hot-scroll scrolly`)。
+      return _FlyoutScrollbar(
+        controller: _controllerFor(0),
+        child: SingleChildScrollView(
+          controller: _controllerFor(0),
+          child: Wrap(
+            children: [
+              for (final item in groups.first.items)
+                SizedBox(
+                  width: _CategoryBoard._kColumnWidth,
+                  child: _CategoryChip(
+                    key: ValueKey('flyout-category-${item.cid}'),
+                    label: displayCategoryName(site, item.name, item.cid),
+                    onTap: () => _goCategory(context, item.cid),
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       );
     }
@@ -1940,41 +1972,50 @@ class _CategoryBoard extends StatelessWidget {
         children: [
           for (final group in groups)
             Container(
-              width: _kColumnWidth,
+              width: _CategoryBoard._kColumnWidth,
               padding: const EdgeInsets.only(left: 2.4),
+              constraints: const BoxConstraints(maxHeight: _CategoryBoard._kBoardContentMax),
               decoration: BoxDecoration(
                 border: Border(right: BorderSide(color: context.tokens.border)),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.only(bottom: 3.8),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: BorderSide(color: context.tokens.border),
+              // 列内容超高时列内纵向滚动:此前是无界 Column,内容一多
+              // 直接撑破 _FlyoutPanel 的 maxHeight 报 bottom overflow。
+              child: _FlyoutScrollbar(
+                controller: _controllerFor(groups.indexOf(group)),
+                child: SingleChildScrollView(
+                  controller: _controllerFor(groups.indexOf(group)),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.only(bottom: 3.8),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(color: context.tokens.border),
+                          ),
+                        ),
+                        child: Text(
+                          displayCategoryGroupName(site, group.name),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w700,
+                            color: context.tokens.textSecondary,
+                          ),
+                        ),
                       ),
-                    ),
-                    child: Text(
-                      displayCategoryGroupName(site, group.name),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        color: context.tokens.textSecondary,
-                      ),
-                    ),
+                      for (final item in group.items)
+                        _CategoryChip(
+                          key: ValueKey('flyout-category-${item.cid}'),
+                          label: displayCategoryName(site, item.name, item.cid),
+                          onTap: () => _goCategory(context, item.cid),
+                        ),
+                    ],
                   ),
-                  for (final item in group.items)
-                    _CategoryChip(
-                      key: ValueKey('flyout-category-${item.cid}'),
-                      label: displayCategoryName(site, item.name, item.cid),
-                      onTap: () => _goCategory(context, item.cid),
-                    ),
-                ],
+                ),
               ),
             ),
         ],
@@ -1985,7 +2026,27 @@ class _CategoryBoard extends StatelessWidget {
   /// 跳平台分类页:带 cid 进 `/:site/category/:cid`,CategoryView 据此高亮
   /// 所属分组与子分类(落地页形态见 [_categoryRoute])。
   void _goCategory(BuildContext context, String cid) =>
-      context.go(_categoryRoute(site, cid: cid));
+      context.go(_categoryRoute(widget.site, cid: cid));
+}
+
+/// 浮层内纵向滚动条:常驻 4px 细条(对齐 web `scrolly` 的
+/// `scrollbar-width: thin` + 4px `--scrollbar-size`)。
+class _FlyoutScrollbar extends StatelessWidget {
+  const _FlyoutScrollbar({required this.child, required this.controller});
+
+  final ScrollController controller;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scrollbar(
+      controller: controller,
+      thumbVisibility: true,
+      thickness: 4,
+      radius: const Radius.circular(999),
+      child: child,
+    );
+  }
 }
 
 /// 分类条目:hover → 金(平台主色)+ chip 底(同 `.nav-platform-menu__item:hover`)。
