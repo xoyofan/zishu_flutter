@@ -97,6 +97,16 @@ class Win32Window {
 
   // window handle for hosted content.
   HWND child_content_ = nullptr;
+
+  // True once |Show| ran. While false, an SC_MAXIMIZE posted while the window
+  // is still hidden (Dart applies the saved maximized state before runApp)
+  // is deferred instead of being forwarded to DefWindowProc, which would
+  // surface the un-rendered window as a blank full-screen flash.
+  bool shown_ = false;
+
+  // Set when a maximized request arrived while the window was hidden; |Show|
+  // consumes it to present the window maximized in a single step.
+  bool pending_maximize_ = false;
 };
 
 #endif  // RUNNER_WIN32_WINDOW_H_

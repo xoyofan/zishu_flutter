@@ -150,7 +150,17 @@ bool Win32Window::Create(const std::wstring& title,
 }
 
 bool Win32Window::Show() {
-  return ShowWindow(window_handle_, SW_SHOWNORMAL);
+  shown_ = true;
+  // Present the window in its final state in one step: if a maximized request
+  // was deferred while hidden, show maximized directly. Showing with
+  // SW_SHOWNORMAL afterwards (the old order) visibly restored the maximized
+  // window down to its creation size - a resize flash on every maximized
+  // launch.
+  if (pending_maximize_) {
+    pending_maximize_ = false;
+    return ShowWindow(window_handle_, SW_SHOWMAXIMIZED) != 0;
+  }
+  return ShowWindow(window_handle_, SW_SHOWNORMAL) != 0;
 }
 
 // static
@@ -205,6 +215,20 @@ Win32Window::MessageHandler(HWND hwnd,
                    rect.bottom - rect.top, TRUE);
       }
       return 0;
+    }
+
+    case WM_SYSCOMMAND: {
+      // While still hidden, defer a maximized request instead of forwarding
+      // it: DefWindowProc(SC_MAXIMIZE) would call ShowWindow(SW_MAXIMIZE) and
+      // surface the un-rendered window as a blank full-screen flash before
+      // the first Flutter frame exists. |Show| replays the request with
+      // SW_SHOWMAXIMIZED once content is ready. Runtime requests after the
+      // window is visible are unaffected.
+      if ((wparam & 0xFFF0) == SC_MAXIMIZE && !shown_) {
+        pending_maximize_ = true;
+        return 0;
+      }
+      break;
     }
 
     case WM_ACTIVATE:
