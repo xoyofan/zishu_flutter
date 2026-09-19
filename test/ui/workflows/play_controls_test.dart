@@ -430,12 +430,42 @@ void main() {
     await tester.tapAt(const Offset(200, 300));
     await _pumpFrames(tester, 2);
     expect(_player.calls, contains('play'), reason: '点击视频帧应切到播放');
-
     // 点控制条上的播放按钮:走按钮自身回调,同样落到 play 通路。
     final beforeButton = _player.calls.length;
     await tester.tap(find.byKey(const Key('play-toggle-play')));
     await _pumpFrames(tester, 2);
     expect(_player.calls.length, greaterThan(beforeButton));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('控制条右组聚拢贴播放区右缘(自适应宽度,对齐 pure_live)', (tester) async {
+    final play = await _pumpPlay(tester);
+    await _awaitSettingsHydrated(tester, play.container);
+    await _pumpFrames(tester, 3);
+
+    final bar = tester.getRect(find.byType(PlayerControlsBar));
+    // 右组最后一个按钮 = 全屏,应贴控制条右缘(仅留条内边距)。
+    final fs = tester.getRect(find.byKey(const Key('play-toggle-fullscreen')));
+    // ignore: avoid_print
+    print('[dbg] bar=$bar fs=$fs');
+    for (final key in ['play-toggle-play', 'play-toggle-mute', 'play-toggle-danmaku', 'play-quality-menu', 'play-line-menu', 'play-toggle-pip', 'play-sleep-timer', 'play-refresh-stream', 'play-toggle-widescreen']) {
+      final f = find.byKey(Key(key));
+      if (f.evaluate().isNotEmpty) {
+        // ignore: avoid_print
+        print('[dbg] $key -> ${tester.getRect(f)}');
+      }
+    }
+    expect(bar.right - fs.right, lessThan(24),
+        reason: '全屏按钮应贴控制条右缘(自适应播放区宽度,Spacer 聚拢)');
+
+    // 左组(播放)贴左缘,与右组之间有大段弹性空隙(pure_live 手感)。
+    final pp = tester.getRect(find.byKey(const Key('play-toggle-play')));
+    expect(pp.left - bar.left, lessThan(24));
+    expect(
+      fs.left - pp.right,
+      greaterThan(300),
+      reason: '左右两组之间应由 Spacer 撑开,右组聚拢在右缘',
+    );
     expect(tester.takeException(), isNull);
   });
 

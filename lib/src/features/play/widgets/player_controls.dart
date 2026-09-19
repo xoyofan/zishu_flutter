@@ -119,190 +119,219 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
   ) {
     final tokens = context.tokens;
     final payload = play?.payload;
-    return Row(
-      children: [
-        IconButton(
-          // 测试锚点:播放/暂停按钮。
-          key: const Key('play-toggle-play'),
-          tooltip: snapshot.playing ? '暂停 (Space)' : '播放 (Space)',
-          onPressed: () => (snapshot.playing ? player.pause() : player.play()),
-          icon: Icon(
-            snapshot.playing ? Icons.pause_rounded : Icons.play_arrow_rounded,
-            size: 20,
-            color: AppOnVideo.text,
-          ),
-        ),
-        IconButton(
-          // 测试锚点:静音切换按钮。
-          key: const Key('play-toggle-mute'),
-          tooltip: snapshot.muted ? '取消静音 (M)' : '静音 (M)',
-          onPressed: () => player.setMuted(!snapshot.muted),
-          icon: Icon(
-            snapshot.muted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-            size: 20,
-            color: AppOnVideo.text,
-          ),
-        ),
-        if (!compact) ...[
-          SizedBox(
-            width: 96,
-            child: SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: 3,
-                thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-                overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
-              ),
-              child: Slider(
-                value: (snapshot.muted ? 0.0 : snapshot.volume).clamp(
-                  0.0,
-                  100.0,
+    // 布局(pure_live 同款手感):左组贴播放区左缘,右组贴播放区右缘,
+    // 随播放区宽度自适应 —— 两组成两个 Align 分列 Stack 左右,互不挤占。
+    // 右组顺序:画质 → 线路 → 弹幕 → PiP(!compact) → 睡眠定时(超集) →
+    // 刷新 → 网页全屏(!compact) → 全屏。
+    return SizedBox(
+      height: 48,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // ── 左组:播放/暂停 + 静音 + 音量滑杆(!compact) + 直播中文案 ──
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  // 测试锚点:播放/暂停按钮。
+                  key: const Key('play-toggle-play'),
+                  tooltip: snapshot.playing ? '暂停 (Space)' : '播放 (Space)',
+                  onPressed: () =>
+                      (snapshot.playing ? player.pause() : player.play()),
+                  icon: Icon(
+                    snapshot.playing
+                        ? Icons.pause_rounded
+                        : Icons.play_arrow_rounded,
+                    size: 20,
+                    color: AppOnVideo.text,
+                  ),
                 ),
-                max: 100,
-                activeColor: tokens.brand,
-                // 未激活轨道在视频上需保持可见:浅色主题 border 近白会隐形。
-                inactiveColor: AppOnVideo.textMuted,
-                onChanged: (value) => player.setVolume(value),
-              ),
+                IconButton(
+                  // 测试锚点:静音切换按钮。
+                  key: const Key('play-toggle-mute'),
+                  tooltip: snapshot.muted ? '取消静音 (M)' : '静音 (M)',
+                  onPressed: () => player.setMuted(!snapshot.muted),
+                  icon: Icon(
+                    snapshot.muted
+                        ? Icons.volume_off_rounded
+                        : Icons.volume_up_rounded,
+                    size: 20,
+                    color: AppOnVideo.text,
+                  ),
+                ),
+                if (!compact) ...[
+                  const SizedBox(width: AppSpacing.xs),
+                  SizedBox(
+                    width: 96,
+                    child: SliderTheme(
+                      data: SliderTheme.of(context).copyWith(
+                        trackHeight: 3,
+                        thumbShape: const RoundSliderThumbShape(
+                          enabledThumbRadius: 6,
+                        ),
+                        overlayShape: const RoundSliderOverlayShape(
+                          overlayRadius: 10,
+                        ),
+                      ),
+                      child: Slider(
+                        value: (snapshot.muted ? 0.0 : snapshot.volume).clamp(
+                          0.0,
+                          100.0,
+                        ),
+                        max: 100,
+                        activeColor: tokens.brand,
+                        // 未激活轨道在视频上需保持可见:浅色主题 border 近白
+                        // 会隐形。
+                        inactiveColor: AppOnVideo.textMuted,
+                        onChanged: (value) => player.setVolume(value),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                  Text(
+                    '直播中 · 低延迟追帧中',
+                    style: AppTypography.caption.copyWith(
+                      color: AppOnVideo.textMuted,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
-          Expanded(
-            child: Center(
-              child: Text(
-                '直播中 · 低延迟追帧中',
-                style: AppTypography.caption.copyWith(
-                  color: AppOnVideo.textMuted,
+          // ── 右组:画质 → 线路 → 弹幕 → PiP → 睡眠 → 刷新 → 网页全屏 → 全屏 ──
+          Align(
+            alignment: Alignment.centerRight,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (payload != null) ...[
+                  _QualitySelectBox(
+                    payload: payload,
+                    activeQuality: play?.quality,
+                    onQualityTap: (quality) => ref
+                        .read(
+                          playControllerProvider((
+                            site: widget.site,
+                            roomId: widget.roomId,
+                          )).notifier,
+                        )
+                        .switchQuality(quality),
+                  ),
+                  const SizedBox(width: AppSpacing.xs),
+                  _LineSelectBox(
+                    activeQuality: play?.quality,
+                    activeLine: play?.line,
+                    onLineTap: (line) => ref
+                        .read(
+                          playControllerProvider((
+                            site: widget.site,
+                            roomId: widget.roomId,
+                          )).notifier,
+                        )
+                        .switchLine(line),
+                  ),
+                  const SizedBox(width: AppSpacing.sm),
+                ],
+                if (widget.danmakuEnabled)
+                  IconButton(
+                    // 测试锚点:舞台弹幕叠加层显隐开关。
+                    key: const Key('play-toggle-danmaku'),
+                    tooltip: widget.showDanmaku ? '隐藏弹幕' : '显示弹幕',
+                    onPressed: widget.onDanmakuToggle,
+                    icon: Icon(
+                      widget.showDanmaku
+                          ? Icons.subtitles_rounded
+                          : Icons.subtitles_off_rounded,
+                      size: 20,
+                      color: widget.showDanmaku
+                          ? tokens.brand
+                          : AppOnVideo.textMuted,
+                    ),
+                  ),
+                if (!compact)
+                  IconButton(
+                    // 测试锚点:画中画切换。
+                    key: const Key('play-toggle-pip'),
+                    tooltip: '画中画',
+                    onPressed: widget.onTogglePip,
+                    icon: Icon(
+                      Icons.picture_in_picture_alt_rounded,
+                      size: 20,
+                      color: AppOnVideo.text,
+                    ),
+                  ),
+                if (!compact) const _SleepTimerButton(),
+                IconButton(
+                  // 测试锚点:刷新视频(重开当前线路,不重解析 payload)。
+                  key: const Key('play-refresh-stream'),
+                  tooltip: '刷新视频',
+                  onPressed: () {
+                    // 复用 playControllerProvider 的 retry 通路:payload 已就位
+                    // 时只 bump 代际并重新 open 当前线路(轻量重开流),不重解析
+                    // 房间;仅当解析失败(payload 为 null)时 retry 才整体重解析。
+                    ref
+                        .read(
+                          playControllerProvider((
+                            site: widget.site,
+                            roomId: widget.roomId,
+                          )).notifier,
+                        )
+                        .retry();
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('已刷新'),
+                        duration: Duration(seconds: 2),
+                      ),
+                    );
+                  },
+                  icon: Icon(
+                    Icons.refresh_rounded,
+                    size: 20,
+                    color: AppOnVideo.text,
+                  ),
                 ),
-              ),
+                if (!compact)
+                  IconButton(
+                    // 测试锚点:网页全屏切换(视频铺满窗口,不动系统窗口)。
+                    key: const Key('play-toggle-widescreen'),
+                    tooltip: widget.screenMode.isWidescreen
+                        ? '退出网页全屏 (W)'
+                        : '网页全屏 (W)',
+                    onPressed: widget.onToggleWidescreen,
+                    icon: Icon(
+                      widget.screenMode.isWidescreen
+                          ? Icons.close_fullscreen_rounded
+                          : Icons.open_in_full_rounded,
+                      size: 20,
+                      color: widget.screenMode.isWidescreen
+                          ? tokens.brand
+                          : AppOnVideo.text,
+                    ),
+                  ),
+                IconButton(
+                  // 测试锚点:全屏切换按钮。图标随呈现态切换(对齐 pure_live)。
+                  key: const Key('play-toggle-fullscreen'),
+                  tooltip: widget.screenMode.isFullscreen
+                      ? '退出全屏 (F)'
+                      : '全屏 (F)',
+                  onPressed: widget.onToggleFullscreen,
+                  icon: Icon(
+                    widget.screenMode.isFullscreen
+                        ? Icons.fullscreen_exit_rounded
+                        : Icons.fullscreen_rounded,
+                    size: 20,
+                    color: widget.screenMode.isFullscreen
+                        ? tokens.brand
+                        : AppOnVideo.text,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
-        const Spacer(),
-        // 画质/线路 selectbox:自 QualityLineBar 迁入控制栏(2026-09-11
-        // 裁决)。房间未解析成功时不渲染,避免空菜单入口。
-        // 窄条防护:selectbox 包 Flexible(档名/线路名 ellipsis)——
-        // 否则 360/375 宽下控制条横向溢出 15~30px(实测)。
-        if (payload != null) ...[
-          Flexible(
-            child: _QualitySelectBox(
-              payload: payload,
-              activeQuality: play?.quality,
-              onQualityTap: (quality) => ref
-                  .read(
-                    playControllerProvider((
-                      site: widget.site,
-                      roomId: widget.roomId,
-                    )).notifier,
-                  )
-                  .switchQuality(quality),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Flexible(
-            child: _LineSelectBox(
-              activeQuality: play?.quality,
-              activeLine: play?.line,
-              onLineTap: (line) => ref
-                  .read(
-                    playControllerProvider((
-                      site: widget.site,
-                      roomId: widget.roomId,
-                    )).notifier,
-                  )
-                  .switchLine(line),
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-        ],
-        // 弹幕显隐开关:受设置项「弹幕」总开关约束,关闭时整枚按钮隐藏。
-        if (widget.danmakuEnabled)
-          IconButton(
-            // 测试锚点:舞台弹幕叠加层显隐开关。
-            key: const Key('play-toggle-danmaku'),
-            tooltip: widget.showDanmaku ? '隐藏弹幕' : '显示弹幕',
-            onPressed: widget.onDanmakuToggle,
-            icon: Icon(
-              widget.showDanmaku
-                  ? Icons.subtitles_rounded
-                  : Icons.subtitles_off_rounded,
-              size: 20,
-              color: widget.showDanmaku ? tokens.brand : AppOnVideo.textMuted,
-            ),
-          ),
-        if (!compact)
-          IconButton(
-            // 测试锚点:画中画切换。
-            key: const Key('play-toggle-pip'),
-            tooltip: '画中画',
-            onPressed: widget.onTogglePip,
-            icon: Icon(
-              Icons.picture_in_picture_alt_rounded,
-              size: 20,
-              color: AppOnVideo.text,
-            ),
-          ),
-        // 睡眠定时(flutter 超集,置 PiP 与刷新之间)。
-        if (!compact) const _SleepTimerButton(),
-        IconButton(
-          // 测试锚点:刷新视频(重开当前线路,不重解析 payload)。
-          key: const Key('play-refresh-stream'),
-          tooltip: '刷新视频',
-          onPressed: () {
-            // 复用 playControllerProvider 的 retry 通路:payload 已就位时
-            // 只 bump 代际并重新 open 当前线路(轻量重开流),不重解析房间;
-            // 仅当解析失败(payload 为 null)时 retry 才整体重解析,语义也合理。
-            ref
-                .read(
-                  playControllerProvider((
-                    site: widget.site,
-                    roomId: widget.roomId,
-                  )).notifier,
-                )
-                .retry();
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('已刷新'),
-                duration: Duration(seconds: 2),
-              ),
-            );
-          },
-          icon: Icon(
-            Icons.refresh_rounded,
-            size: 20,
-            color: AppOnVideo.text,
-          ),
-        ),
-        if (!compact)
-          IconButton(
-            // 测试锚点:网页全屏切换(视频铺满窗口,不动系统窗口)。
-            key: const Key('play-toggle-widescreen'),
-            tooltip: widget.screenMode.isWidescreen ? '退出网页全屏 (W)' : '网页全屏 (W)',
-            onPressed: widget.onToggleWidescreen,
-            icon: Icon(
-              widget.screenMode.isWidescreen
-                  ? Icons.close_fullscreen_rounded
-                  : Icons.open_in_full_rounded,
-              size: 20,
-              color: widget.screenMode.isWidescreen
-                  ? tokens.brand
-                  : AppOnVideo.text,
-            ),
-          ),
-        IconButton(
-          // 测试锚点:全屏切换按钮。图标随呈现态切换(对齐 pure_live)。
-          key: const Key('play-toggle-fullscreen'),
-          tooltip: widget.screenMode.isFullscreen ? '退出全屏 (F)' : '全屏 (F)',
-          onPressed: widget.onToggleFullscreen,
-          icon: Icon(
-            widget.screenMode.isFullscreen
-                ? Icons.fullscreen_exit_rounded
-                : Icons.fullscreen_rounded,
-            size: 20,
-            color: widget.screenMode.isFullscreen
-                ? tokens.brand
-                : AppOnVideo.text,
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
