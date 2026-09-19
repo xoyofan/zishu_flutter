@@ -114,7 +114,61 @@
 - 修复提交：待本阶段提交
 - Windows 证据：NOT_RUN
 
-## 6. 状态更新规则
+## 7. Task 4.2 Windows 公共 smoke 记录
+
+Task 4.2 的记录脚本为 `tool/windows_public_smoke.ps1`。它只负责创建人工验收 checklist、记录 build/git/evidence 元数据，并可按显式 `-Launch` 请求启动 release exe；不会自动点击、访问网络、登录、写入凭据，也不会根据进程启动结果推断 `PASS`/`FAIL`。未实际执行的条目默认保持 `NOT_RUN`。
+
+### 使用方法
+
+在本 worktree 根目录执行（PowerShell）：
+
+```powershell
+# 只生成 checklist 和 evidence.json；不启动应用、不进行真实平台操作
+powershell -ExecutionPolicy Bypass -File .\\tool\\windows_public_smoke.ps1 -DryRun -Checklist
+
+# 指定 release exe 和证据目录；仍需人工执行 checklist
+powershell -ExecutionPolicy Bypass -File .\\tool\\windows_public_smoke.ps1 `
+  -ExePath build\\windows\\x64\\runner\\Release\\zishu_flutter.exe `
+  -EvidenceDir C:\\temp\\zishu-windows-smoke
+
+# 可选启动应用；启动后仍必须人工验证并记录状态
+powershell -ExecutionPolicy Bypass -File .\\tool\\windows_public_smoke.ps1 -Launch
+```
+
+默认 release exe 为 `build/windows/x64/runner/Release/zishu_flutter.exe`，默认临时证据目录为 `tool/windows-public-smoke/<timestamp>`，该目录已加入 `.gitignore`。也可以通过 `-EvidenceDir` 指向 worktree 外的临时目录。脚本不生成 build、截图、凭据或 playback log。
+
+截图证据推荐使用现有 `tool/win_tool.py` 的窗口表面抓取：
+
+```powershell
+py tool/win_tool.py shot <evidence-dir>\\screenshots\\<platform>-<test-id>.png
+```
+
+该命令使用 `PrintWindow(PW_RENDERFULLCONTENT)`；`shotdesktop` 的屏幕合成截图只能作为补充，不能作为唯一证据。真实验收还应由人工记录首帧、播放、音量、静音、切房、返回、弹幕等适用功能结果。
+
+### 证据 schema
+
+脚本生成 `<evidence-dir>/evidence.json` 和 `<evidence-dir>/checklist.md`。`evidence.json` 的核心字段如下：
+
+- `schemaVersion`：证据格式版本。
+- `generatedAt`：生成时间（UTC）。
+- `testId` / `platform` / `status`：本轮记录的测试 ID、平台和总体状态；状态只能是 `PASS`、`FAIL`、`BLOCKED`、`N/A`、`NOT_RUN`。
+- `build.executable` / `build.version` / `build.gitCommit`：release exe 路径、文件版本（缺少 exe 时为 unavailable）和 Git commit。
+- `evidence.logPath` / `evidence.screenshotPath`：人工日志和截图目录/路径。
+- `evidence.screenshotMethod`：要求优先使用 `PrintWindow(PW_RENDERFULLCONTENT)` 的说明。
+- `checklist[]`：按平台和公共功能 ID 展开的条目；每项包含 `platform`、`testId`、`status`、`logPath`、`screenshotPath`、`notes`，默认状态全部为 `NOT_RUN`。
+
+### 当前执行状态
+
+本 worktree 当前没有可提交的真实 Windows release smoke 证据，矩阵“Windows 真实”列和公共功能“Windows 真实”列继续保持 `NOT_RUN`。原因是本轮只建立启动/记录工具和人工验收模板，真实 release build、Windows 平台操作及窗口表面证据尚未执行；不能把脚本 dry-run 或 exe 启动冒充真实 Windows `PASS`。
+
+### 后续人工步骤
+
+1. 构建 release 版本（必要时加 `--dart-define=ZISHU_REAL_PARSER=true`），确认 build 版本和 commit。
+2. 在不把账号、token、日志或截图提交到仓库的前提下，按平台和功能 ID 人工执行 smoke。
+3. 用 `tool/win_tool.py shot` 获取窗口表面证据，补写 `evidence.json`、日志路径和截图路径；网络不可用或缺少人工前置条件时记录 `BLOCKED`，不执行则保持 `NOT_RUN`。
+4. 复核 `git diff --check`，仅提交脚本、矩阵文档、todo 记录和必要的忽略规则。
+
+## 8. 状态更新规则
 
 1. 测试先写失败用例，再实现修复；
 2. 自动化测试通过后才可将自动化列标记为 `PASS`；

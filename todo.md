@@ -781,7 +781,12 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 - SFVideo 361 commits:近期 ~40 个为桌面原生化(Tauri+Rust crates/live-parser+libmpv),**对齐基准应以 crates/live-parser 为最新真源**(streaming-server 是旧 web 端)。
 - 候选对齐清单(记录,待裁决):起播 FLV 优选(斗鱼首帧 2.3s→1.0s)、进房单清晰度档解析、HLS 回放缓冲上限 60s、分类缓存空壳分组校验(虎牙分类不显示根因)、soop opcode 白名单、YY 弹幕禁用标记、twitch emote 解析、房间卡 tags、抖音 Cookie 设置入口、分类面板列数规格表(aff7424 系列)、xhs cursor 翻页。
 
-## 2026-09-19 侧栏统计真数据 + 关注行分类同步 + 分类预热(6d920cf/4d5b6be/2053a54)
+## 2026-09-20 Windows 公共 smoke Task 4.2
+
+- [x] 建立 `tool/windows_public_smoke.ps1`：生成人工 checklist、build/git/evidence 元数据，支持 dry-run/checklist、可控证据目录和可选 release exe 启动。
+- [x] 默认状态和各平台功能条目保持 `NOT_RUN`；脚本不自动点击、不联网、不写凭据、不伪造 PASS/FAIL。
+- [ ] 真实 Windows release smoke 尚未执行；后续需要 release build、人工逐平台验证，并用 `tool/win_tool.py shot` 的 `PrintWindow(PW_RENDERFULLCONTENT)` 记录窗口表面证据。
+
 
 **结论**:用户报告两条数据缺口修复 + 分类预热落地。门禁全量 **540 passed / 0 failed**(533+7)、parser **325/10skip**、analyze 双 0。
 

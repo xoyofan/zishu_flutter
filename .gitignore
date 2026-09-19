@@ -55,6 +55,7 @@ app.*.map.json
 # 本机截图/会话产物(登录态 session 与运行日志不入库);
 # 对比基准截图(sfvideo/)与本项目实拍(zishu/)入库,供其他电脑直接对比测试
 /outputs/
+tool/windows-public-smoke/
 tool/screenshots/sfvideo_session.json
 
 # IDE / 工具本机配置(不入库)
