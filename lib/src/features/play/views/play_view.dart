@@ -11,6 +11,7 @@ import '../../../platforms/common/playback/live_player.dart'
     show PlayerSnapshot;
 import '../../../platforms/common/playback/playback_retry.dart'
     show retryProgressLabel;
+import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/category_colors.dart';
 import '../../../shared/presentation/widgets/platform_icon.dart';
@@ -632,6 +633,9 @@ class _RoomHeader extends StatelessWidget {
             : ThemeData.estimateBrightnessForColor(badgeBg) == Brightness.dark
             ? tokens.textPrimary
             : tokens.surfaceSoft);
+    // 徽标文字统一走跨平台中文映射(twitch/soop 等海外平台的英文/韩文
+    // 原名按 cid/别名归一为中文,与侧栏 formatCategoryHeaderLabel 同口径)。
+    final categoryLabel = formatCategoryHeaderLabel(site, category, cid);
     // 自适应高度(web `padding .28rem .5rem .32rem`):内容撑开,不再固定 44。
     return Container(
       padding: const EdgeInsets.fromLTRB(2, 4.5, 4, 5),
@@ -671,7 +675,7 @@ class _RoomHeader extends StatelessWidget {
                       PlatformIcon(id: site, size: 12),
                       const SizedBox(width: 3),
                       Text(
-                        category.trim().isNotEmpty ? category : '直播',
+                        categoryLabel.isNotEmpty ? categoryLabel : '直播',
                         style: context.textCaption.copyWith(
                           color: badgeFg,
                           fontWeight: FontWeight.w600,
@@ -687,7 +691,9 @@ class _RoomHeader extends StatelessWidget {
                                 MyCategoryEntry(
                                   site: site,
                                   cid: cid,
-                                  name: category,
+                                  // 收藏快照存中文展示名(与 web 收藏口径一致),
+                                  // 渲染侧还会再映射一次兜底旧快照。
+                                  name: categoryLabel,
                                 ),
                               ),
                           child: Icon(

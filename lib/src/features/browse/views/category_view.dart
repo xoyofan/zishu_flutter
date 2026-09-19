@@ -448,7 +448,9 @@ class _CategoryTile extends ConsumerWidget {
                               MyCategoryEntry(
                                 site: site,
                                 cid: item.cid,
-                                name: item.name,
+                                // 收藏快照存中文展示名,与导航「我的分类」
+                                // chip 渲染口径一致(twitch/soop 原名不直存)。
+                                name: displayCategoryName(site, item.name, item.cid),
                               ),
                             ),
                         child: Container(

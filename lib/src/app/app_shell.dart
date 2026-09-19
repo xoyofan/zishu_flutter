@@ -2313,7 +2313,13 @@ class _MyCategoryChipState extends State<_MyCategoryChip> {
               ),
               SizedBox(width: 4),
               Text(
-                widget.entry.name,
+                // 旧快照可能存的是英文/韩文原名:渲染时按 (site,cid) 再映射
+                // 一次中文名,不重写存储(与 web 展示层归一同口径)。
+                displayCategoryName(
+                  widget.entry.site,
+                  widget.entry.name,
+                  widget.entry.cid,
+                ),
                 style: TextStyle(
                   fontSize: 14.4,
                   fontWeight: FontWeight.w500,
@@ -2489,7 +2495,8 @@ class _RemovableChip extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Text(
-            entry.name,
+            // 同 _MyCategoryChip:旧快照英文名渲染时再映射一次中文。
+            displayCategoryName(entry.site, entry.name, entry.cid),
             style: TextStyle(fontSize: 13, color: context.tokens.brand),
           ),
           InkWell(
