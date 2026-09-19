@@ -29,6 +29,7 @@ import '../../../platforms/common/playback/play_screen_mode.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../application/play_provider.dart';
+import '../application/room_volume_provider.dart';
 import '../application/sleep_timer_provider.dart';
 
 class PlayerControlsBar extends ConsumerStatefulWidget {
@@ -185,7 +186,18 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
                         // 未激活轨道在视频上需保持可见:浅色主题 border 近白
                         // 会隐形。
                         inactiveColor: AppOnVideo.textMuted,
-                        onChanged: (value) => player.setVolume(value),
+                        onChanged: (value) {
+                          unawaited(player.setVolume(value));
+                          unawaited(
+                            ref
+                                .read(roomVolumeStoreProvider)
+                                .save(
+                                  site: widget.site,
+                                  roomId: widget.roomId,
+                                  volume: value,
+                                ),
+                          );
+                        },
                       ),
                     ),
                   ),
@@ -468,7 +480,6 @@ class _LineSelectBox extends StatelessWidget {
   }
 }
 
-
 /// 睡眠定时入口(flutter 超集,web 无对应):预设/自定义分钟后停止播放。
 class _SleepTimerButton extends ConsumerWidget {
   const _SleepTimerButton();
@@ -557,9 +568,9 @@ class _SleepTimerButton extends ConsumerWidget {
               child: const Text('取消'),
             ),
             TextButton(
-              onPressed: () => Navigator.of(
-                dialogContext,
-              ).pop(int.tryParse(controller.text.trim())),
+              onPressed: () =>
+                  Navigator.of(dialogContext)
+                      .pop(int.tryParse(controller.text.trim())),
               child: const Text('确定'),
             ),
           ],
