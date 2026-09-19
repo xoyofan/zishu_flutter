@@ -4,10 +4,12 @@ library;
 import 'package:http/http.dart' as http;
 
 import '../../contracts/contracts.dart';
+import '../../http/danmaku_transport.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
 import '../../registry/cached_room_resolver.dart';
 import 'browse.dart';
+import 'danmaku.dart';
 import 'gql.dart';
 import 'normalize.dart';
 import 'room_api.dart';
@@ -234,6 +236,7 @@ SiteRegistration buildTwitchRegistration({
   http.Client? httpClient,
   TwitchClient? client,
   String clientId = kTwitchWebClientId,
+  DanmakuTransport? danmakuTransport,
 }) {
   final effectiveClient = client ?? TwitchClient(httpClient: httpClient, clientId: clientId);
   return SiteRegistration(
@@ -243,10 +246,12 @@ SiteRegistration buildTwitchRegistration({
       browse: true,
       roomSearch: true,
       anchorSearch: true,
+      danmaku: true,
       multiQuality: true,
     ),
     resolver: CachedRoomResolver(TwitchRoomResolver(effectiveClient)),
     browse: TwitchBrowseRepository(effectiveClient.gql),
     search: TwitchSearchRepository(effectiveClient.gql),
+    danmaku: TwitchDanmakuConnector(transport: danmakuTransport),
   );
 }

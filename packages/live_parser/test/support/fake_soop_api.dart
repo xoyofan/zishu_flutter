@@ -2,6 +2,7 @@
 library;
 
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
@@ -9,6 +10,10 @@ import 'package:http/http.dart' as http;
 
 class FakeSoopApi extends http.BaseClient {
   Object? detailResponse;
+
+  /// 按次出队的 detail 响应(优先于 [detailResponse]);用于「同一接口连打
+  /// 多次、响应不同」的用例(如弹幕连接失败后重取换集群域名)。耗尽后回落。
+  final ListQueue<Object?> detailResponseQueue = ListQueue<Object?>();
   int detailStatus = 200;
   Object? aidResponse;
   Object? assignResponse;
@@ -56,7 +61,12 @@ class FakeSoopApi extends http.BaseClient {
         url.path == '/afreeca/player_live_api.php') {
       final body = Uri.splitQueryString(request.body);
       if (body['type'] == 'aid') return _json(aidResponse);
-      return _json(detailResponse, status: detailStatus);
+      return _json(
+        detailResponseQueue.isNotEmpty
+            ? detailResponseQueue.removeFirst()
+            : detailResponse,
+        status: detailStatus,
+      );
     }
     if (url.host == 'api-channel.sooplive.co.kr' &&
         url.path.startsWith('/v1.1/channel/')) {

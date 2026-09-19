@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:live_parser/live_parser.dart';
 import 'package:test/test.dart';
@@ -47,6 +48,42 @@ void main() {
 
       // 心跳按周期发送。
       expect(packets, contains('\x1b\x09000000000100\x0c'));
+
+      await session.close();
+    });
+
+    test('旧集群域名失败:重取 player_live_api 换新集群,握手带 Origin/UA', () async {
+      // 2026-09-19 实测:旧域 chat.sooplive.co.kr 已 NXDOMAIN,上游按出口
+      // 轮换下发 chat-XXXX.sooplive.com:9000 动态域;第一轮全失败后必须
+      // 重取一次 player_live_api 换新域名再连。
+      final fresh = soopFixture('detail_live.json') as Map<String, dynamic>;
+      final freshChannel = fresh['CHANNEL'] as Map<String, dynamic>;
+      freshChannel['CHDOMAIN'] = 'chat-DEE93652.sooplive.com';
+      freshChannel['CHPT'] = '9000';
+      http.detailResponseQueue
+        ..add(soopFixture('detail_live.json'))
+        ..add(fresh);
+
+      final transport = HostBlockingTransport(blockedHosts: {'chat.sooplive.co.kr'});
+      final connector = SoopDanmakuConnector(
+        ParserHttp(client: http),
+        transport: transport,
+        heartbeatInterval: const Duration(milliseconds: 50),
+      );
+
+      final session = await connector.connect(
+        const DanmakuSessionRequest(site: 'soop', roomId: 'testbj'),
+      );
+
+      expect(transport.attempted, [
+        'ws://chat.sooplive.co.kr:8088',
+        'wss://chat.sooplive.co.kr:8088',
+        // Uri 会把 host 归一为小写。
+        'ws://chat-dee93652.sooplive.com:9000',
+      ]);
+      expect(transport.lastHeaders?['Origin'], 'https://play.sooplive.co.kr');
+      expect(transport.lastHeaders?['Referer'], 'https://play.sooplive.co.kr/');
+      expect(transport.lastHeaders?['User-Agent'], contains('Chrome'));
 
       await session.close();
     });
@@ -154,6 +191,7 @@ class FakeDanmakuTransport implements DanmakuTransport {
   final sockets = <FakeDanmakuSocket>[];
   Uri? lastUrl;
   List<String>? lastProtocols;
+  Map<String, String>? lastHeaders;
 
   @override
   Future<DanmakuSocket> connect(
@@ -163,8 +201,33 @@ class FakeDanmakuTransport implements DanmakuTransport {
   }) async {
     lastUrl = url;
     lastProtocols = protocols;
+    lastHeaders = headers;
     final socket = FakeDanmakuSocket();
     sockets.add(socket);
+    return socket;
+  }
+}
+
+/// 指定 host 的连接直接抛错(模拟旧集群域名 NXDOMAIN/超时),其余正常建连。
+class HostBlockingTransport implements DanmakuTransport {
+  HostBlockingTransport({required this.blockedHosts});
+
+  final Set<String> blockedHosts;
+  final attempted = <String>[];
+  Map<String, String>? lastHeaders;
+
+  @override
+  Future<DanmakuSocket> connect(
+    Uri url, {
+    List<String>? protocols,
+    Map<String, String>? headers,
+  }) async {
+    attempted.add('${url.scheme}://${url.host}:${url.port}');
+    lastHeaders = headers;
+    if (blockedHosts.contains(url.host)) {
+      throw const SocketException('blocked host');
+    }
+    final socket = FakeDanmakuSocket();
     return socket;
   }
 }

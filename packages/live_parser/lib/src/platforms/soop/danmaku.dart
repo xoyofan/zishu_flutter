@@ -21,6 +21,15 @@ const Duration kSoopDanmakuHeartbeat = Duration(seconds: 20);
 /// join 包延迟:connect 包发出后等待 200ms 再进房(pure_live 同款)。
 const Duration kSoopDanmakuJoinDelay = Duration(milliseconds: 200);
 
+/// WS 握手头:上游按平台 Origin/UA 校验(SFVideo soop-danmaku-relay.ts:6-8)。
+const Map<String, String> kSoopChatHandshakeHeaders = {
+  'Origin': 'https://play.sooplive.co.kr',
+  'Referer': 'https://play.sooplive.co.kr/',
+  'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 '
+      '(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+};
+
 /// 聊天帧 opcode:实测 wire 上 0001/0002 是握手 ACK、0004 是观众列表、
 /// 0127 是粉丝勋章(每 ~2s 成对刷屏),只有 0005 是真实聊天。
 const String kSoopChatOpcode = '0005';
@@ -53,24 +62,47 @@ class SoopDanmakuConnector implements DanmakuConnector {
 
     // ws 优先、wss 兜底:真机实测(2026-09-03, web resolve/soop/index.ts)
     // ws://…:9000 可正常握手,wss://…:9000 在多数网络出口直接超时。
+    //
+    // 上游会按出口节点下发聊天集群域名,且旧域名 `chat.sooplive.co.kr` 已
+    // NXDOMAIN 下线(2026-09-19 实测:先拿到旧域全超时,重取 API 后拿到
+    // `chat-XXXX.sooplive.com:9000` 动态域 101 握手成功)。因此两轮候选全
+    // 失败后重取一次 player_live_api,用新集群域名再试一轮。
     Object? lastError;
-    for (final scheme in const ['ws', 'wss']) {
-      final uri = Uri.parse(
-        '$scheme://${detail.chatDomain}:${detail.chatPort}/Websocket/$roomId',
-      );
-      try {
-        final socket = await transport.connect(uri, protocols: const ['chat']);
-        return SoopDanmakuSession(
+    for (var round = 0; round < 2; round++) {
+      var attemptDetail = detail;
+      if (round == 1) {
+        final fresh = parseSoopRoomDetail(
+          await fetchSoopPlayerApi(_http, roomId),
           roomId,
-          detail.chatNo,
-          socket,
-          heartbeatInterval: heartbeatInterval,
         );
-      } catch (error) {
-        lastError = error;
+        if (!fresh.hasChat) break;
+        attemptDetail = fresh;
+      }
+      for (final scheme in const ['ws', 'wss']) {
+        final uri = Uri.parse(
+          '$scheme://${attemptDetail.chatDomain}:${attemptDetail.chatPort}'
+          '/Websocket/$roomId',
+        );
+        try {
+          final socket = await transport.connect(
+            uri,
+            protocols: const ['chat'],
+            headers: kSoopChatHandshakeHeaders,
+          );
+          return SoopDanmakuSession(
+            roomId,
+            attemptDetail.chatNo,
+            socket,
+            heartbeatInterval: heartbeatInterval,
+          );
+        } catch (error) {
+          lastError = error;
+        }
       }
     }
-    throw ParserHttpException('SOOP 弹幕连接失败(ws/wss 均不可达): $lastError');
+    throw ParserHttpException(
+      'SOOP 弹幕连接失败(ws/wss 两轮候选均不可达): $lastError',
+    );
   }
 }
 

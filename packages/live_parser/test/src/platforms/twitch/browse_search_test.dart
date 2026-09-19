@@ -118,7 +118,7 @@ void main() {
       expect(registration.capabilities.anchorSearch, isTrue);
       expect(registration.capabilities.multiQuality, isTrue);
       expect(registration.capabilities.multiLine, isFalse, reason: '每档仅一条 HLS 线路');
-      expect(registration.capabilities.danmaku, isFalse, reason: '弹幕 IRC 尚未接入');
+      expect(registration.capabilities.danmaku, isTrue, reason: '弹幕走公开 IRC(justinfan)');
       expect(registration.capabilities.requiresCookie, isFalse);
       expect(registration.resolver, isA<RoomResolver>());
     });
