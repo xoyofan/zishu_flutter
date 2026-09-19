@@ -2,7 +2,8 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:live_parser/live_parser.dart' show DanmakuMessage, DanmakuMessageType;
+import 'package:live_parser/live_parser.dart'
+    show DanmakuMessage, DanmakuMessageType, DanmakuSegment;
 import 'package:zishu_flutter/src/features/danmaku/domain/danmaku_style.dart';
 import 'package:zishu_flutter/src/features/danmaku/domain/danmaku_track.dart';
 
@@ -11,6 +12,7 @@ DanmakuMessage msg({
   String text = '弹幕',
   String userName = '水友',
   int color = 0,
+  List<DanmakuSegment> segments = const [],
 }) {
   return DanmakuMessage(
     type: DanmakuMessageType.chat,
@@ -18,6 +20,7 @@ DanmakuMessage msg({
     userId: 'u1',
     text: text,
     color: color,
+    segments: segments,
   );
 }
 
@@ -70,6 +73,56 @@ void main() {
     test('空用户名同样只输出正文', () {
       final span = DanmakuStyle.buildSpan(msg(userName: '', text: '仅正文'));
       expect(span.text, '仅正文');
+    });
+
+    test('segments 非空:表情段以「[表情名]」文本参与,不做图片内联', () {
+      // 飘屏绘制走 ParagraphBuilder 纯文本(_buildParagraph),表情段只能以
+      // 「[表情名]」括号文本参与,children 里不得出现 WidgetSpan/图片。
+      final span = DanmakuStyle.buildSpan(msg(
+        text: '哈哈[捂脸]真逗',
+        segments: const [
+          DanmakuSegment.text('哈哈'),
+          DanmakuSegment.emoji(
+            text: '[捂脸]',
+            url: 'https://example.com/emote/rou.png',
+          ),
+          DanmakuSegment.text('真逗'),
+        ],
+      ));
+      expect(span.text, isNull, reason: '多段形态:根 span 只带样式不带 text');
+      expect(span.children, isNotNull);
+      for (final child in span.children!) {
+        expect(child, isA<TextSpan>(), reason: '飘屏不做图片内联,全部为 TextSpan');
+      }
+      final joined = span.children!
+          .map((child) => (child as TextSpan).text ?? '')
+          .join();
+      expect(joined, '哈哈[捂脸]真逗', reason: '各段文本拼接应与 message.text 一致');
+      expect(joined, contains('[捂脸]'), reason: '表情段以「[表情名]」括号形态参与');
+      // 每段显式携带正文样式(颜色/字号),ParagraphBuilder 填充不回退引擎默认黑。
+      for (final child in span.children!) {
+        final segmentSpan = child as TextSpan;
+        expect(segmentSpan.style?.fontSize, DanmakuStyle.fontSize);
+        expect(segmentSpan.style?.color, DanmakuStyle.defaultTextColor);
+      }
+      // 多段结构可正常测量宽度(不回归飘屏空白)。
+      expect(DanmakuStyle.measureWidth(span), greaterThan(0));
+    });
+
+    test('segments 非空且消息带色:各段样式跟随消息色', () {
+      final span = DanmakuStyle.buildSpan(msg(
+        text: '红色弹幕',
+        color: 0xFF0000,
+        segments: const [
+          DanmakuSegment.text('红色'),
+          DanmakuSegment.emoji(text: '[色]'),
+          DanmakuSegment.text('弹幕'),
+        ],
+      ));
+      for (final child in span.children!) {
+        expect((child as TextSpan).style?.color, const Color(0xFFFF0000),
+            reason: '所有正文段(含表情文本段)应与消息色一致');
+      }
     });
   });
 

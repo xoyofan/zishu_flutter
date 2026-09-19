@@ -15,7 +15,10 @@
 /// 3. danmakuIsNotHardcoded:推送内容改变后断言随之变化——旧的硬编码样例
 ///    (星河不入梦/来了来了…)不再出现,新推送内容出现;并验证增量(先 2 条后加 1 条);
 /// 4. danmakuPanelIsolatedFromRoomNav:聊天 → 关注 → 推荐 → 聊天 往返,条目数一致;
-/// 5. playbackStatusIndicator:状态条左侧播放状态可配置(不依赖弹幕数据)。
+/// 5. playbackStatusIndicator:状态条左侧播放状态可配置(不依赖弹幕数据);
+/// 6. danmakuEmojiSegments:抖音表情富文本段——文本段保持 TextSpan,有 url 的
+///    表情段内联 WidgetSpan 表情图(边长=字号×1.6,contain),url 为空回退
+///    「[表情名]」文本;空 segments 消息仍为三段结构(danmakuVisualIntegrity 覆盖)。
 ///
 /// 定位约定(与 driver [expectDanmakuEntries] 一致):
 /// - 弹幕条目 = PlaySidePanel 内含「全角冒号」的 RichText。条目由
@@ -36,6 +39,7 @@ import 'package:live_parser/live_parser.dart'
         DanmakuConnector,
         DanmakuMessage,
         DanmakuMessageType,
+        DanmakuSegment,
         DanmakuSession,
         DanmakuSessionRequest,
         DanmakuSessionState,
@@ -109,6 +113,7 @@ DanmakuMessage _chat(
   String badgeName = '',
   int userLevel = 0,
   int color = 0,
+  List<DanmakuSegment> segments = const [],
 }) {
   return DanmakuMessage(
     type: DanmakuMessageType.chat,
@@ -120,6 +125,7 @@ DanmakuMessage _chat(
     badgeName: badgeName,
     userLevel: userLevel,
     color: color,
+    segments: segments,
     rawType: 'chatmsg',
   );
 }
@@ -524,6 +530,80 @@ void main() {
       findsNothing,
       reason: '两条注入消息均无团名,斗鱼粉丝牌不渲染',
     );
+  });
+
+  testWidgets('danmakuEmojiSegments:表情段内联表情图 WidgetSpan,无图回退文本', (
+    tester,
+  ) async {
+    final connector = _FakeDanmakuConnector();
+    await _pumpHost(tester, connector);
+    _goPlay(tester);
+    await _pumpStable(tester);
+
+    final session = connector.session!;
+    const emojiUrl = 'https://example.com/emote/rou.png';
+    // 抖音富文本形态:文本段 + 表情图段(url)+ 文本段。
+    session.push(
+      _chat(
+        '表情哥',
+        '哈哈[捂脸]真逗',
+        segments: const [
+          DanmakuSegment.text('哈哈'),
+          DanmakuSegment.emoji(text: '[捂脸]', url: emojiUrl),
+          DanmakuSegment.text('真逗'),
+        ],
+      ),
+    );
+    // url 为空:回退「[表情名]」文本(web DanmakuRichText 同语义)。
+    session.push(
+      _chat(
+        '无图妹',
+        '呜[笑哭]',
+        segments: const [
+          DanmakuSegment.text('呜'),
+          DanmakuSegment.emoji(text: '[笑哭]'),
+        ],
+      ),
+    );
+    await _pumpStable(tester);
+
+    TextSpan rowSpanOf(String user) {
+      final finder = find.descendant(
+        of: find.byType(PlaySidePanel),
+        matching: find.byWidgetPredicate(
+          (widget) =>
+              widget is RichText &&
+              widget.text.toPlainText().startsWith('$user：'),
+        ),
+      );
+      return _danmakuRowSpan(tester.widget<RichText>(finder));
+    }
+
+    // 带图表情:children = [用户名, '：', '哈哈', WidgetSpan(表情图), '真逗']。
+    final rich = rowSpanOf('表情哥');
+    expect(rich.children, isNotNull);
+    expect(rich.children, hasLength(5), reason: '用户名 + 冒号 + 3 个正文段');
+    final emojiSpan = rich.children![3];
+    expect(emojiSpan, isA<WidgetSpan>(), reason: '有 url 的表情段应内联 WidgetSpan 图片');
+    final imageWidget = (emojiSpan as WidgetSpan).child;
+    expect(imageWidget, isA<Image>(), reason: 'WidgetSpan 内应是 Image.network(协议 CDN)');
+    final image = imageWidget as Image;
+    expect(image.image, NetworkImage(emojiUrl), reason: '表情图应加载段携带的 url');
+    // 边长 ≈ 字号 × 1.6(默认 chatFontSize=14 → 22.4),fit contain。
+    expect(image.width, 14 * 1.6);
+    expect(image.height, 14 * 1.6);
+    expect(image.fit, BoxFit.contain);
+    // 文本段保持 TextSpan,用户名/冒号段不受影响。
+    expect((rich.children![2] as TextSpan).text, '哈哈');
+    expect((rich.children![4] as TextSpan).text, '真逗');
+
+    // 无图表情:url 为空回退「[表情名]」文本段,不产生 WidgetSpan。
+    final plain = rowSpanOf('无图妹');
+    expect(plain.children, isNotNull);
+    expect(plain.children, hasLength(4), reason: '用户名 + 冒号 + 文本段 + 表情文本回退段');
+    expect((plain.children![2] as TextSpan).text, '呜');
+    expect(plain.children![3], isA<TextSpan>(), reason: 'url 为空的表情段回退文本');
+    expect((plain.children![3] as TextSpan).text, '[笑哭]');
   });
 
   testWidgets('danmakuPanelIsolatedFromRoomNav:切关注/推荐再切回聊天条目仍在', (

@@ -2,7 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 
-import 'package:live_parser/live_parser.dart' show DanmakuMessage;
+import 'package:live_parser/live_parser.dart' show DanmakuMessage, DanmakuSegment;
 
 /// 弹幕视觉归一:颜色归一、描边、富文本(用户名 + 正文)构建。
 ///
@@ -71,19 +71,32 @@ abstract final class DanmakuStyle {
   ///
   /// [fontSize] 可选,A3 由 [DanmakuOverlay] 注入(默认 [DanmakuStyle.fontSize],
   /// 与历史一致)。
+  ///
+  /// segments 非空时按段展开:文本段原样、表情段以「[表情名]」文本参与
+  /// ([DanmakuSegment.text] 恒为括号形态)——飘屏绘制走 `ParagraphBuilder`
+  /// 纯文本([_buildParagraph]),不做图片内联;各段显式携带正文样式,
+  /// 保证描边/填充两遍绘制的颜色与字号不回退到引擎默认(黑色)。
+  /// 空 segments 保持单段 [DanmakuMessage.text](历史行为,零破坏)。
   static TextSpan buildSpan(
     DanmakuMessage message, {
     double fontSize = DanmakuStyle.fontSize,
   }) {
-    final bodyColor = resolveColor(message.color);
+    final bodyStyle = TextStyle(
+      color: resolveColor(message.color),
+      fontSize: fontSize,
+      fontWeight: FontWeight.w500,
+      height: 1.0,
+    );
+    final segments = message.segments;
+    if (segments.isEmpty) {
+      return TextSpan(text: message.text, style: bodyStyle);
+    }
     return TextSpan(
-      text: message.text,
-      style: TextStyle(
-        color: bodyColor,
-        fontSize: fontSize,
-        fontWeight: FontWeight.w500,
-        height: 1.0,
-      ),
+      style: bodyStyle,
+      children: [
+        for (final segment in segments)
+          TextSpan(text: segment.text, style: bodyStyle),
+      ],
     );
   }
 
@@ -117,8 +130,9 @@ abstract final class DanmakuStyle {
 
   ///
   /// 同时兼容两种 span 形态:
-  /// - 单段纯正文([buildSpan] 当前口径:根 span 自带 `text`,无 children);
-  /// - 旧两段富文本(根 span 无 text,`children` 里是用户名 + 正文)。
+  /// - 单段纯正文([buildSpan] 空 segments 口径:根 span 自带 `text`,无 children);
+  /// - 多段富文本(根 span 无 text,`children` 里是按序正文段,含 segments
+  ///   展开的表情文本段 / 旧两段用户名 + 正文)。
   /// 忽略根 `text` 会导致单段弹幕整条空白(ParagraphBuilder 零字符),
   /// 因此先写入根 span 自身 text,再递归写入 children。
   static ui.Paragraph _buildParagraph(
