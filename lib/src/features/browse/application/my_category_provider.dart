@@ -10,6 +10,8 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../shared/domain/category_display.dart';
+
 /// 一条收藏分类。
 class MyCategoryEntry {
   const MyCategoryEntry({
@@ -95,15 +97,23 @@ class MyCategoryController extends Notifier<List<MyCategoryEntry>> {
 
   Future<void> _restore() async {
     try {
-      final raw = await SharedPreferencesAsync().getString(storeKey);
-      if (raw == null || raw.isEmpty) return;
-      final decoded = jsonDecode(raw);
-      if (decoded is! List) return;
-      final restored = [
-        for (final item in decoded)
-          if (MyCategoryEntry.fromJson(item).isValid)
-            MyCategoryEntry.fromJson(item),
-      ];
+      final prefs = SharedPreferencesAsync();
+      final raw = await prefs.getString(storeKey);
+      List<MyCategoryEntry>? restored;
+      if (raw != null && raw.isNotEmpty) {
+        final decoded = jsonDecode(raw);
+        if (decoded is List) {
+          restored = [
+            for (final item in decoded)
+              if (MyCategoryEntry.fromJson(item).isValid)
+                MyCategoryEntry.fromJson(item),
+          ];
+        }
+      } else {
+        // v3 键不存在/为空:尝试从 v2 救援迁移(见 [_migrateFromV2])。
+        restored = await _migrateFromV2(prefs);
+      }
+      if (restored == null) return;
       // 恢复是**一次性**的:若用户在读盘完成前已收藏/取消(本地已非空),
       // 不得用存储回放覆盖用户动作 —— 否则刚点的收藏会被静默抹掉,
       // 且伴随写盘会把被抹掉的结果固化成真实数据(实测:连续 toggle 丢条目)。
@@ -111,6 +121,47 @@ class MyCategoryController extends Notifier<List<MyCategoryEntry>> {
       state = restored;
     } catch (_) {
       // 存储不可用/数据损坏:保持空集合,不阻塞 UI。
+    }
+  }
+
+  /// v2 → v3 一次性救援迁移:升版不应陪葬好数据。
+  ///
+  /// - name 已含中文 → 直接保留(收藏快照本就是中文展示名);
+  /// - 否则按 (site,cid) 过跨平台映射表换中文名保留(如 twitch 英文旧快照);
+  /// - 都救不回(soop 播放页曾错绑「房间号 cid + 韩文快照」)→ 丢弃。
+  /// 迁移结果固化进 v3 键并删除 v2 键,迁移只发生一次。
+  Future<List<MyCategoryEntry>?> _migrateFromV2(
+    SharedPreferencesAsync prefs,
+  ) async {
+    const legacyKey = 'zishu.myCategories.v2';
+    try {
+      final raw = await prefs.getString(legacyKey);
+      if (raw == null || raw.isEmpty) return null;
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return null;
+      final migrated = <MyCategoryEntry>[];
+      for (final item in decoded) {
+        final entry = MyCategoryEntry.fromJson(item);
+        if (!entry.isValid) continue;
+        if (_hasCJK(entry.name)) {
+          migrated.add(entry);
+          continue;
+        }
+        final mapped = displayCategoryName(entry.site, entry.name, entry.cid);
+        if (mapped != entry.name && _hasCJK(mapped)) {
+          migrated.add(
+            MyCategoryEntry(site: entry.site, cid: entry.cid, name: mapped),
+          );
+        }
+      }
+      await prefs.setString(
+        storeKey,
+        jsonEncode([for (final entry in migrated) entry.toJson()]),
+      );
+      await prefs.remove(legacyKey);
+      return migrated;
+    } catch (_) {
+      return null;
     }
   }
 
@@ -129,3 +180,6 @@ final myCategoriesProvider =
     NotifierProvider<MyCategoryController, List<MyCategoryEntry>>(
   MyCategoryController.new,
 );
+
+/// 是否含中文字符(救援迁移的「好快照」判据)。
+bool _hasCJK(String text) => RegExp(r'[\u4e00-\u9fff]').hasMatch(text);
