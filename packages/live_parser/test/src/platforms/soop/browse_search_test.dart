@@ -69,6 +69,17 @@ void main() {
   });
 
   group('SOOP 搜索', () {
+    test('分类请求带 Accept-Language:zh-CN(缺该头时上游直出韩文)', () async {
+      final registration = buildSoopRegistration(httpClient: fake);
+      await registration.browse!.fetchCategories('soop');
+      expect(
+        fake.requests.last.headers['accept-language'],
+        'zh-CN,zh;q=0.9',
+        reason: 'lang=zh_CN 参数需搭配 Accept-Language 头上游才返回中文分类名',
+      );
+    });
+
+
     test('REAL_BROAD 归一为命中项', () async {
       final result = await search.search(
         const SearchRequest(site: 'soop', query: '英雄联盟', limit: 20),

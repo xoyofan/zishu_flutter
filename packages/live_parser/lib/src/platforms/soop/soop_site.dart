@@ -22,6 +22,9 @@ class SoopClient {
         defaultHeaders: const {
           'Referer': 'https://www.sooplive.co.kr/',
           'Origin': 'https://www.sooplive.co.kr',
+          // 与 lang=zh_CN 搭配 categoryList 才返回中文分类名(缺该头时上游仍
+          // 返回韩文,web 真源 soop.ts HEADERS 同款)。
+          'Accept-Language': 'zh-CN,zh;q=0.9',
         },
       );
 
