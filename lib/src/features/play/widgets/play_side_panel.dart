@@ -30,7 +30,7 @@ import '../../../shared/presentation/zishu_tokens.dart';
 import 'chat_badge_image.dart';
 import 'play_meta_bar.dart';
 import 'play_recommend_panel.dart';
-import 'play_room_grid.dart';
+import '../../follow/widgets/follow_room_list.dart';
 
 /// 播放页侧栏的 UI 状态(会话级,跨切房保持)。
 ///
@@ -2186,11 +2186,6 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
     _visibleTotal = entries.length;
     final hasMore = entries.length > _visibleCount;
     final windowed = hasMore ? entries.sublist(0, _visibleCount) : entries;
-    final rooms = [for (final entry in windowed) entry.room];
-    final superKeys = <String>{
-      for (final entry in windowed)
-        if (entry.isSpecial) entry.key,
-    };
     return Column(
       key: const Key('play-side-follow-panel'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -2237,18 +2232,23 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
                 )
               : NotificationListener<ScrollNotification>(
                   onNotification: _onScroll,
-                  child: _grid
-                      ? PlayRoomGrid(
-                          rooms: rooms,
-                          superKeys: superKeys,
-                          keyPrefix: 'play-follow-room-',
-                          onTap: _goRoom,
-                        )
-                      : PlayRoomList(
-                          rooms: rooms,
-                          superKeys: superKeys,
-                          onTap: _goRoom,
-                        ),
+                  // 与「我的关注」页共用同一 [FollowRoomList]:侧栏走 compact
+                  // (卡片隐藏操作/统计、固定 2 列),两档 = 封面卡 / 四列单行。
+                  child: FollowRoomList(
+                    entries: windowed,
+                    density: _grid
+                        ? FollowDensity.card
+                        : FollowDensity.row,
+                    compact: true,
+                    cardColumns: 2,
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.sm,
+                      0,
+                      AppSpacing.sm,
+                      AppSpacing.sm,
+                    ),
+                    onTap: (entry) => _goRoom(entry.room),
+                  ),
                 ),
         ),
         if (hasMore) const _FollowMoreHint(),

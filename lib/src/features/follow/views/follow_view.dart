@@ -1,9 +1,8 @@
 /// 我的关注页(U7):平台筛选 + 排序 + 三种密度 + 批量管理。
 /// 对齐 SFVideoLive FollowView 的信息结构(Flutter 重写):
 /// 业务状态收敛在 FollowController,本页只持有筛选/密度/选择等视图状态。
+/// 列表铺陈交给共享组件 [FollowRoomList](与播放页侧栏「关注」同一套视图)。
 library;
-
-import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,21 +14,8 @@ import '../../../shared/application/providers.dart';
 import '../application/follow_provider.dart';
 import '../application/follow_sort.dart';
 import '../widgets/follow_empty_state.dart';
-import '../widgets/follow_entry_card.dart';
-import '../widgets/follow_entry_row.dart';
-import '../widgets/follow_entry_tile.dart';
 import '../widgets/follow_platform_filter.dart';
-
-/// 列表密度:封面卡 / 横向小图 Tile / 纯文字行。
-enum FollowDensity {
-  card('卡片'),
-  tile('紧凑'),
-  row('单行');
-
-  const FollowDensity(this.label);
-
-  final String label;
-}
+import '../widgets/follow_room_list.dart';
 
 class FollowView extends ConsumerStatefulWidget {
   const FollowView({super.key});
@@ -39,27 +25,6 @@ class FollowView extends ConsumerStatefulWidget {
 }
 
 class _FollowViewState extends ConsumerState<FollowView> {
-  /// 卡片密度下封面卡最大宽(对齐 Vue minmax(240px, 1fr))。
-  static const double _cardMaxExtent = 240;
-
-  /// 卡片元信息区高度预算(上下 padding + 主播名 + 标题 + 统计/操作行)。
-  ///
-  /// 这里是**含 padding 的总高**,不是内容净高:内层 `Padding(6, 4)` 占 10dp,
-  /// 故可用高 = 本值 − 10。
-  /// - 内容净高实测 75dp(textScale 1.0):主播名行 + 2 + 标题行 + 三枚操作行;
-  /// - 原 106 在卡片底部留约 21dp 空白;曾一度收到 76 —— 那是把内容净高当成了
-  ///   总高,可用高只剩 66 → 手机宽度(360~430)下纵向**溢出 9~11dp**
-  ///   (`follow_entry_card.dart` 的元信息 Column)。
-  /// - 取 92 = 内容净高 78.2 + padding 10 + ~3.8dp 浮动。
-  /// - ⚠️ 88 看似够(75+10+3)实则差 0.194dp:探针实测元信息 Column 溢出
-  ///   `A RenderFlex overflowed by 0.194 pixels`。亚像素溢出虽不影响真机
-  ///   release(警戒带只画在 debug),但会让 golden 每张卡片底部多一条 10dp
-  ///   高的警戒带 —— 被 `suppressRenderFlexOverflow` 吞掉后无人察觉。
-  ///   溢出量按字体 metrics 浮点累积,不要用整数估算卡到临界值。
-  /// - 大字体由 [metaHeightFor] 按 textScaler 再放大(其放大量大于文字增长量,
-  ///   故 1.15x/1.3x 本就富余,此前唯独 1.0x 溢出)。
-  static const double _cardMetaHeight = 92;
-
   String _siteFilter = 'all';
   FollowSort _sort = FollowSort.liveFirst;
   FollowDensity _density = FollowDensity.card;
@@ -381,105 +346,24 @@ class _FollowViewState extends ConsumerState<FollowView> {
     if (items.isEmpty) {
       return FollowEmptyState(onBrowse: () => context.go('/all'));
     }
-    const padding = EdgeInsets.fromLTRB(
-      AppSpacing.lg,
-      AppSpacing.sm,
-      AppSpacing.lg,
-      AppSpacing.lg,
+    return FollowRoomList(
+      entries: items,
+      density: _density,
+      selectMode: _batchMode,
+      selectedKeys: _selectedKeys,
+      // 批量模式下点击改为切换选择,长按进入批量;否则进播放页。
+      onTap: (entry) =>
+          _batchMode ? _toggleSelect(entry.key) : _goPlay(entry),
+      onLongPress: (entry) {
+        if (!_batchMode) _enterBatch(entry.key);
+      },
+      onToggleSelect: _toggleSelect,
+      onToggleSpecial: (entry) =>
+          ref.read(followProvider.notifier).toggleSpecial(entry.key),
+      onToggleRemind: (entry) =>
+          ref.read(followProvider.notifier).toggleRemind(entry.key),
+      onRemove: _removeEntry,
+      onAnchorTap: _goAnchor,
     );
-    return switch (_density) {
-      // 卡片网格:先按内容区宽算列数,再用精确格宽推导纵横比,
-      // 保证「封面 16:9 + 固定元信息区」在不同宽度下都不溢出。
-      FollowDensity.card => LayoutBuilder(builder: (context, constraints) {
-          final width = math.max(0.0, constraints.maxWidth - padding.horizontal);
-          final columns = math.max(1, (width / _cardMaxExtent).floor());
-          final cardWidth = width / columns;
-          return GridView.builder(
-            padding: padding,
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: columns,
-              mainAxisSpacing: AppSpacing.md,
-              crossAxisSpacing: AppSpacing.md,
-              childAspectRatio:
-                  cardWidth /
-                  (cardWidth * 9 / 16 + metaHeightFor(_cardMetaHeight, context)),
-            ),
-            itemCount: items.length,
-            itemBuilder: (context, index) => _buildItem(items[index]),
-          );
-        }),
-      FollowDensity.tile => ListView.builder(
-          padding: padding,
-          itemCount: items.length,
-          itemBuilder: (context, index) => Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-            child: _buildItem(items[index]),
-          ),
-        ),
-      // 名单视图:纯文字流式 Wrap —— 每项宽按「主播名 + 人数」内容自适应,
-      // 横向排满即换行(用户诉求:不要缩略图/分类/标题,只留主播名和人数)。
-      FollowDensity.row => SingleChildScrollView(
-          padding: padding,
-          child: Wrap(
-            spacing: AppSpacing.sm,
-            runSpacing: AppSpacing.sm,
-            children: [for (final item in items) _buildItem(item)],
-          ),
-        ),
-    };
-  }
-
-  /// 按当前密度渲染条目;批量模式下点击改为切换选择,长按进入批量。
-  Widget _buildItem(FollowEntry entry) {
-    final selected = _selectedKeys.contains(entry.key);
-    void handleTap() => _batchMode ? _toggleSelect(entry.key) : _goPlay(entry);
-    void handleLongPress() {
-      if (!_batchMode) _enterBatch(entry.key);
-    }
-
-    return switch (_density) {
-      FollowDensity.card => FollowEntryCard(
-          entry: entry,
-          selectMode: _batchMode,
-          selected: selected,
-          onTap: handleTap,
-          onLongPress: handleLongPress,
-          onToggleSelect: () => _toggleSelect(entry.key),
-          onToggleSpecial: () =>
-              ref.read(followProvider.notifier).toggleSpecial(entry.key),
-          onToggleRemind: () =>
-              ref.read(followProvider.notifier).toggleRemind(entry.key),
-          onRemove: () => _removeEntry(entry),
-          onAnchorTap: () => _goAnchor(entry),
-        ),
-      FollowDensity.tile => FollowEntryTile(
-          entry: entry,
-          selectMode: _batchMode,
-          selected: selected,
-          onTap: handleTap,
-          onLongPress: handleLongPress,
-          onToggleSelect: () => _toggleSelect(entry.key),
-          onToggleSpecial: () =>
-              ref.read(followProvider.notifier).toggleSpecial(entry.key),
-          onToggleRemind: () =>
-              ref.read(followProvider.notifier).toggleRemind(entry.key),
-          onRemove: () => _removeEntry(entry),
-          onAnchorTap: () => _goAnchor(entry),
-        ),
-      FollowDensity.row => FollowEntryRow(
-          entry: entry,
-          selectMode: _batchMode,
-          selected: selected,
-          onTap: handleTap,
-          onLongPress: handleLongPress,
-          onToggleSelect: () => _toggleSelect(entry.key),
-          onToggleSpecial: () =>
-              ref.read(followProvider.notifier).toggleSpecial(entry.key),
-          onToggleRemind: () =>
-              ref.read(followProvider.notifier).toggleRemind(entry.key),
-          onRemove: () => _removeEntry(entry),
-          onAnchorTap: () => _goAnchor(entry),
-        ),
-    };
   }
 }

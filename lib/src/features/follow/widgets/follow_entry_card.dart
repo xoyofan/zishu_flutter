@@ -22,6 +22,7 @@ class FollowEntryCard extends StatelessWidget {
     required this.entry,
     this.selectMode = false,
     this.selected = false,
+    this.compact = false,
     this.onTap,
     this.onLongPress,
     this.onToggleSelect,
@@ -36,6 +37,11 @@ class FollowEntryCard extends StatelessWidget {
   /// 批量选择模式:显示复选框、点击改为切换选择。
   final bool selectMode;
   final bool selected;
+
+  /// 侧栏紧凑态:元信息区只留「主播名 + 标题」,隐藏统计/操作行,
+  /// 以适配窄列宽(对齐 web `FollowRoomPreviewView` 的 preview-compact/
+  /// show-stats=false)。与「我的关注」页共用同一组件,仅配置不同。
+  final bool compact;
   final VoidCallback? onTap;
   final VoidCallback? onLongPress;
   final VoidCallback? onToggleSelect;
@@ -116,9 +122,11 @@ class FollowEntryCard extends StatelessWidget {
                           color: tokens.textSecondary,
                         ),
                       ),
-                      const Spacer(),
-                      // 统计/操作行:平台圆点 + 在线数/轮播标,右侧三枚操作。
-                      Row(
+                      if (!compact) ...[
+                        const Spacer(),
+                        // 统计/操作行:平台圆点 + 在线数/轮播标,右侧三枚操作。
+                        // 侧栏 compact 态隐藏(对齐 web show-stats=false)。
+                        Row(
                         children: [
                           FollowPlatformDot(site: room.site),
                           const SizedBox(width: 4),
@@ -185,6 +193,7 @@ class FollowEntryCard extends StatelessWidget {
                           ],
                         ],
                       ),
+                      ],
                     ],
                   ),
                 ),

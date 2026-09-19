@@ -1,8 +1,8 @@
-/// 播放页侧栏的房间封面网格 / 紧凑列表。
+/// 播放页侧栏「推荐」tab 的房间封面网格。
 ///
-/// 对齐 SFVideoLive:侧栏「关注」「推荐」两个 tab 都用
-/// `FollowRoomPreviewView`(sidebar + compact)渲染封面网格,而不是横排缩略图行。
-/// 本文件把这两种呈现抽成共用组件,供 [_FollowPanel] 与 [_RecommendPanel] 切换。
+/// 对齐 SFVideoLive:`FollowRoomPreviewView`(sidebar + compact)的封面网格。
+/// 「关注」tab 已改与「我的关注」页共用 `FollowRoomList`,本文件的
+/// [PlayRoomGrid] / [PlayRoomCard] 现仅供 [_RecommendPanel] 与骨架占位复用。
 ///
 /// 卡片结构(对齐 `.follow-preview-item` + `FollowRoomPreviewView.vue`):
 /// - 16:9 封面四象限:左上**平台**徽章(`.platform-cover-badge`,贴左上、内角 8px)、
@@ -11,8 +11,6 @@
 ///   不占角标位,故本仓占用唯一空置的左下角);
 /// - 离线:整封面压暗 + 居中「未开播」(web `.follow-preview-offline`);
 /// - 封面下方:主播名(单行省略)→ 标题(单行省略,次级色)。
-///
-/// 另有 [PlayRoomList] 紧凑列表视图(纯文字两行,无缩略图),供侧栏切换。
 library;
 
 import 'dart:math' as math;
@@ -21,7 +19,6 @@ import 'package:flutter/material.dart';
 import 'package:live_parser/live_parser.dart';
 
 import '../../../shared/domain/category_display.dart';
-import '../../../shared/presentation/category_colors.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/widgets/cover_badges.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -243,153 +240,3 @@ class PlayRoomCard extends StatelessWidget {
   }
 }
 
-/// 侧栏紧凑列表(封面网格的替代视图):44px 缩略图 + 标题/主播两行。
-class PlayRoomList extends StatelessWidget {
-  const PlayRoomList({
-    super.key,
-    required this.rooms,
-    this.superKeys = const <String>{},
-    this.onTap,
-  });
-
-  final List<RoomSummary> rooms;
-
-  /// 兼容保留(列表行不再渲染 ★,对齐 web FollowRoomRowView;超关以排序
-  /// 置顶表达)。网格视图([PlayRoomGrid])仍使用它画卡面 ★。
-  final RoomKeySet superKeys;
-  final void Function(RoomSummary room)? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    // 行自带底部分隔线(web `border-bottom`),行间不再加空隙。
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(
-        AppSpacing.sm,
-        0,
-        AppSpacing.sm,
-        AppSpacing.sm,
-      ),
-      itemCount: rooms.length,
-      itemBuilder: (context, index) {
-        final room = rooms[index];
-        return PlayRoomRow(
-          key: ValueKey('play-room-row-${room.site}-${room.roomId}'),
-          room: room,
-          onTap: onTap == null ? null : () => onTap!(room),
-        );
-      },
-    );
-  }
-}
-
-/// 紧凑列表单行:**四列表格**(对齐 web `FollowRoomRowView.vue`,2026-09-19
-/// 用户口径「每个主播应该一行显示:游戏分类 主播名 标题 观看人数」)。
-///
-/// web 规格(CSS 变量,1rem=16):行高 1.4rem=22.4、分类列 3.4rem=54.4、
-/// 主播名列 6.5em(0.68rem 字号)≈70、列距 4px、行底边框
-/// `color-mix(chrome-border 50%)`;主播名在播时用平台色,标题中性色
-/// 单行省略;人数列人形图标 + 文本(tabular-nums),行内**无 ★**。
-class PlayRoomRow extends StatelessWidget {
-  const PlayRoomRow({
-    super.key,
-    required this.room,
-    this.onTap,
-  });
-
-  final RoomSummary room;
-  final VoidCallback? onTap;
-
-  bool get _live => room.online.trim().isNotEmpty;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = context.tokens;
-    final category = displayCategoryName(room.site, room.category, room.cid);
-    final categoryStyle = CategoryColors.opaqueFor(
-      category: room.category,
-      site: room.site,
-      cid: room.cid,
-    );
-    return Material(
-      color: tokens.surface,
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          height: 24,
-          padding: const EdgeInsets.symmetric(horizontal: 2),
-          decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: tokens.border.withValues(alpha: 0.5),
-              ),
-            ),
-          ),
-          child: Row(
-            children: [
-              // 分类条:分类色底 + 中性前景(web 为条纹底,文字取中性色)。
-              Container(
-                width: 54,
-                height: double.infinity,
-                alignment: Alignment.center,
-                color: categoryStyle?.background.withValues(alpha: 0.18),
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: Text(
-                  category,
-                  maxLines: 1,
-                  overflow: TextOverflow.clip,
-                  style: context.textCaption.copyWith(
-                    fontSize: 10,
-                    color: tokens.textSecondary,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              // 主播名:固定列宽,平台色(在播),单行省略。
-              SizedBox(
-                width: 72,
-                child: FollowAnchorName(
-                  site: room.site,
-                  name: room.anchorName,
-                  live: _live,
-                  fontSize: 11,
-                ),
-              ),
-              const SizedBox(width: 4),
-              // 标题:弹性列,单行省略。
-              Expanded(
-                child: Text(
-                  room.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: context.textCaption.copyWith(
-                    color: tokens.textSecondary,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              // 观看人数:人形图标 + 文本(仅开播;侧栏口径本就只显在播)。
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.person_outline_rounded,
-                    size: 11,
-                    color: tokens.textSecondary,
-                  ),
-                  const SizedBox(width: 2),
-                  Text(
-                    room.online,
-                    style: context.textCaption.copyWith(
-                      fontSize: 10,
-                      color: tokens.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}

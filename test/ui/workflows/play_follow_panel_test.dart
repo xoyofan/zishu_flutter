@@ -24,6 +24,8 @@ import 'package:shared_preferences_platform_interface/shared_preferences_async_p
 import 'package:zishu_flutter/src/app/app_router.dart';
 import 'package:zishu_flutter/src/app/app_theme.dart';
 import 'package:zishu_flutter/src/features/follow/application/follow_provider.dart';
+import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_card.dart';
+import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_row.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/features/play/views/play_view.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
@@ -188,13 +190,18 @@ Future<({GoRouter router, ProviderContainer container})> _pumpFollowTab(
   return (router: router, container: container);
 }
 
-/// 关注面板内的房间卡锚点(网格视图,PlayRoomCard)。
-Finder _card(String site, String roomId) =>
-    find.byKey(Key('play-follow-room-$site-$roomId'));
+/// 关注面板内的房间卡锚点(网格视图,共享组件 `FollowEntryCard`)。
+/// 卡片/单行同用 `follow-entry-{site}-{roomId}` key,故按外层组件类型定位。
+Finder _card(String site, String roomId) => find.ancestor(
+  of: find.byKey(Key('follow-entry-$site-$roomId')),
+  matching: find.byType(FollowEntryCard),
+);
 
-/// 关注面板内的紧凑列表行锚点(列表视图,PlayRoomRow)。
-Finder _row(String site, String roomId) =>
-    find.byKey(Key('play-room-row-$site-$roomId'));
+/// 关注面板内的四列单行锚点(列表视图,共享组件 `FollowEntryRow`)。
+Finder _row(String site, String roomId) => find.ancestor(
+  of: find.byKey(Key('follow-entry-$site-$roomId')),
+  matching: find.byType(FollowEntryRow),
+);
 
 /// 面板内的**垂直** ListView(关注列表)。面板里还有平台筛选 chips 的水平
 /// ListView(_SidePlatformChips),必须按滚动方向过滤,否则 finder 误中。

@@ -22,6 +22,7 @@ import 'package:zishu_flutter/src/app/app_router.dart';
 import 'package:zishu_flutter/src/app/app_theme.dart';
 import 'package:zishu_flutter/src/apps/windows/windows_app.dart';
 import 'package:zishu_flutter/src/features/browse/widgets/room_card.dart';
+import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_card.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/features/play/widgets/play_room_grid.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
@@ -275,40 +276,26 @@ void main() {
 
     // 口径:离线(含超关)在侧栏任何视图都不出现。
     expect(
-      find.byKey(const ValueKey('play-room-row-douyu-1002')),
+      find.byKey(const Key('follow-entry-douyu-1002')),
       findsNothing,
       reason: '离线超关不再保留(用户口径:不显示没开播的)',
     );
+    // 默认视图为列表(每条一行):与「我的关注」页共用的四列单行。
     expect(
-      find.byKey(const ValueKey('play-follow-room-douyu-1002')),
-      findsNothing,
-    );
-    // 默认视图为列表(每条一行)。
-    expect(
-      find.byKey(const ValueKey('play-room-row-douyu-1001')),
+      find.byKey(const Key('follow-entry-douyu-1001')),
       findsOneWidget,
     );
 
-    // 切到封面网格:在播卡四象限(左上平台 / 右上分类 / 右下热度)。
+    // 切到封面网格:与「我的关注」页共用的紧凑卡片(FollowEntryCard)。
+    // 注:PlayRoomCard 的四象限角标契约由其下方「直 pump PlayRoomGrid」用例锁定。
     await tester.tap(find.byKey(const Key('play-side-follow-view-toggle')));
     await _pumpFrames(tester, 8);
 
-    final liveCard = find.byKey(
-      const ValueKey('play-follow-room-douyu-1001'),
+    final liveCard = find.descendant(
+      of: find.byType(FollowEntryCard),
+      matching: find.byKey(const Key('follow-entry-douyu-1001')),
     );
-    expect(liveCard, findsOneWidget);
-    for (final (key, corner) in <(String, CoverCorner)>[
-      ('cover-badge-platform', CoverCorner.topLeft),
-      ('cover-badge-category', CoverCorner.topRight),
-      ('cover-badge-online', CoverCorner.bottomRight),
-    ]) {
-      _expectCorner(
-        tester,
-        liveCard,
-        find.descendant(of: liveCard, matching: find.byKey(Key(key))),
-        corner,
-      );
-    }
+    expect(liveCard, findsOneWidget, reason: '网格视图应渲染共享紧凑卡片');
     expect(tester.takeException(), isNull);
   });
 

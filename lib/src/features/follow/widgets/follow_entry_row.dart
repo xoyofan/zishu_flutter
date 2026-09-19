@@ -1,12 +1,16 @@
-/// 单行密度条目(名单):纯文字流 —— 只有「主播名 + 在线人数」。
+/// 单行密度条目(共享):web `FollowRoomRowView.vue` 的**四列表格**
+/// —— 分类 / 主播名 / 标题 / 观看人数,一行独占。
 ///
-/// 对齐用户诉求:不要缩略图 / 分类 / 标题 / 操作按钮;每项宽度按内容
-/// 自适应,由 [FollowView] 用 `Wrap` 横向排布,排满一行即换行往下。
-/// 批量模式下前置一枚复选框,点击整体进播放页、长按进批量。
+/// 「我的关注」页(`FollowRoomList` row 密度)与播放页侧栏「关注」列表
+/// 共用本组件,与 web 一致:两处只有一套行视图。侧栏只显示在播,页面
+/// 会显示轮播/离线,故人数列对三态都给出标注(在播=online、轮播=「轮播」
+/// 小标签、离线=「未开播」)。批量模式在行首插入复选框。
 library;
 
 import 'package:flutter/material.dart';
 
+import '../../../shared/domain/category_display.dart';
+import '../../../shared/presentation/category_colors.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -47,28 +51,29 @@ class FollowEntryRow extends StatelessWidget {
     final replay = entry.isReplay;
     final brand = PlatformBrandCatalog.byId(room.site);
     final selectedBg = (brand?.color ?? tokens.brand).withValues(alpha: 0.14);
+    final category = displayCategoryName(room.site, room.category, room.cid);
+    final categoryStyle = CategoryColors.opaqueFor(
+      category: room.category,
+      site: room.site,
+      cid: room.cid,
+    );
 
     return Material(
       // 测试锚点:条目根节点(follow-entry-{site}-{roomId})。
       key: Key('follow-entry-${room.site}-${room.roomId}'),
       color: selected ? selectedBg : tokens.surface,
-      borderRadius: AppRadius.allSm,
-      clipBehavior: Clip.antiAlias,
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
-        borderRadius: AppRadius.allSm,
         child: Container(
-          padding: const EdgeInsets.symmetric(
-            horizontal: AppSpacing.sm,
-            vertical: 5,
-          ),
+          height: 26,
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
           decoration: BoxDecoration(
-            borderRadius: AppRadius.allSm,
-            border: Border.all(color: tokens.border.withValues(alpha: 0.7)),
+            border: Border(
+              bottom: BorderSide(color: tokens.border.withValues(alpha: 0.5)),
+            ),
           ),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
             children: [
               if (selectMode) ...[
                 SizedBox(
@@ -86,51 +91,103 @@ class FollowEntryRow extends StatelessWidget {
                 ),
                 const SizedBox(width: AppSpacing.xs),
               ],
-              // 特别关注 ★ 前缀。
-              if (entry.isSpecial) ...[
-                Icon(Icons.star_rounded, size: 11, color: tokens.brand),
-                const SizedBox(width: 2),
-              ],
-              // 主播名:全站统一平台品牌色。
-              FollowAnchorName(
-                site: room.site,
-                name: room.anchorName,
-                live: live,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              ),
-              const SizedBox(width: 6),
-              // 在线人数:开播为人形图标 + 数字,轮播为循环图标 + 「轮播」
-              // 小标签,离线为时钟 + 「未开播」。
-              Icon(
-                live
-                    ? Icons.people_alt_rounded
-                    : (replay ? Icons.repeat_rounded : Icons.schedule_rounded),
-                size: 11,
-                color: live
-                    ? tokens.liveBadge
-                    : (replay ? kFollowReplayAccent : tokens.textSecondary),
-              ),
-              const SizedBox(width: 2),
-              if (live)
-                Text(
-                  room.online,
-                  style: context.textCaption.copyWith(
-                    fontSize: 11,
-                    color: tokens.textPrimary,
-                    fontFeatures: const [FontFeature.tabularFigures()],
+              // 分类条:分类色底 + 中性前景(对齐 web 行首分类列)。
+              SizedBox(
+                width: 54,
+                child: Container(
+                  height: double.infinity,
+                  alignment: Alignment.center,
+                  color: categoryStyle?.background.withValues(alpha: 0.18),
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: Text(
+                    category,
+                    maxLines: 1,
+                    overflow: TextOverflow.clip,
+                    style: context.textCaption.copyWith(
+                      fontSize: 10,
+                      color: tokens.textSecondary,
+                    ),
                   ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              // 主播名:固定列宽,平台色(在播),特别关注 ★ 前缀,单行省略。
+              SizedBox(
+                width: 84,
+                child: Row(
+                  children: [
+                    if (entry.isSpecial) ...[
+                      Icon(Icons.star_rounded, size: 11, color: tokens.brand),
+                      const SizedBox(width: 2),
+                    ],
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: onAnchorTap,
+                        child: FollowAnchorName(
+                          site: room.site,
+                          name: room.anchorName,
+                          live: live,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 4),
+              // 标题:弹性列,单行省略。
+              Expanded(
+                child: Text(
+                  room.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.textCaption.copyWith(
+                    color: tokens.textSecondary,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 4),
+              // 观看人数列:在播人形图标 + 数字;轮播「轮播」小标签;离线「未开播」。
+              if (live)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.people_alt_rounded,
+                      size: 11,
+                      color: tokens.liveBadge,
+                    ),
+                    const SizedBox(width: 2),
+                    Text(
+                      room.online,
+                      style: context.textCaption.copyWith(
+                        fontSize: 10,
+                        color: tokens.textSecondary,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
                 )
               else if (replay)
                 const FollowReplayBadge()
               else
-                Text(
-                  '未开播',
-                  style: context.textCaption.copyWith(
-                    fontSize: 11,
-                    color: tokens.textSecondary,
-                    fontFeatures: const [FontFeature.tabularFigures()],
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.schedule_rounded,
+                      size: 11,
+                      color: tokens.textSecondary,
+                    ),
+                    const SizedBox(width: 2),
+                    Text(
+                      '未开播',
+                      style: context.textCaption.copyWith(
+                        fontSize: 10,
+                        color: tokens.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
             ],
           ),

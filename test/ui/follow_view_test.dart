@@ -23,6 +23,7 @@ import 'package:zishu_flutter/src/features/follow/widgets/follow_common.dart';
 import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_card.dart';
 import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_row.dart';
 import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_tile.dart';
+import 'package:zishu_flutter/src/features/follow/widgets/follow_room_list.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 import 'package:zishu_flutter/src/shared/application/fixture_sources.dart';
