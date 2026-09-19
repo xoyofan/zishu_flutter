@@ -48,7 +48,7 @@ class TwitchClient {
   void close() => _http.close();
 }
 
-class TwitchRoomResolver implements RoomResolver {
+class TwitchRoomResolver implements RoomResolver, RoomSummaryRefresher {
   TwitchRoomResolver(this._client);
 
   final TwitchClient _client;
@@ -79,6 +79,36 @@ class TwitchRoomResolver implements RoomResolver {
       _cache[key] = (at: DateTime.now(), payload: payload);
     }
     return payload;
+  }
+
+  /// 轻量状态刷新:只打 GQL UseLive 元信息查询,不碰播放令牌/usher 取流
+  /// (RoomSummaryRefresher 契约:刷新不得出现取流/签名相关调用)。
+  ///
+  /// 在播(stream 非空)回填标题/分类/封面与观看数文案;离线一律 `online`
+  /// 空串 —— 宿主以「online 非空」为在播判据。主播不存在按上游报错抛
+  /// 异常,不返回伪造资料;离线时元信息字段留空,宿主合并口径是
+  /// 「刷新非空才覆盖」,不会冲掉本地已有值。
+  @override
+  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+    final login = normalizeTwitchLogin(request.roomIdOrUrl);
+    if (login.isEmpty) {
+      throw const ParserHttpException('无法识别的 Twitch 房间输入');
+    }
+    final user = await _retryTwitch(() => fetchTwitchUser(_client.gql, login));
+    if (user == null) {
+      throw ParserHttpException('主播不存在: $login');
+    }
+    final stream = user.stream;
+    return RoomSummary(
+      site: kTwitchSiteId,
+      roomId: user.login,
+      title: stream?.title ?? '',
+      anchorName: user.name,
+      cid: stream?.gameId ?? '',
+      category: stream?.gameName ?? '',
+      online: stream == null ? '' : twitchOnlineText(stream.viewers),
+      cover: stream?.preview ?? '',
+    );
   }
 
   Future<RoomPayload> _resolve(
