@@ -28,7 +28,8 @@ void main() {
       );
       final socket = transport.sockets.single;
 
-      expect(transport.lastUrl.toString(), 'wss://chat.sooplive.co.kr:8088/Websocket/testbj');
+      // ws 优先(wss 在多数网络出口超时,web resolve/soop 同结论)。
+      expect(transport.lastUrl.toString(), 'ws://chat.sooplive.co.kr:8088/Websocket/testbj');
       expect(transport.lastProtocols, ['chat']);
       expect(
         utf8.decode(socket.sent.first),

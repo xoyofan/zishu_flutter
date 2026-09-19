@@ -51,16 +51,26 @@ class SoopDanmakuConnector implements DanmakuConnector {
       throw const ParserHttpException('SOOP 弹幕参数缺失(可能已下播)');
     }
 
-    final uri = Uri.parse(
-      'wss://${detail.chatDomain}:${detail.chatPort}/Websocket/$roomId',
-    );
-    final socket = await transport.connect(uri, protocols: const ['chat']);
-    return SoopDanmakuSession(
-      roomId,
-      detail.chatNo,
-      socket,
-      heartbeatInterval: heartbeatInterval,
-    );
+    // ws 优先、wss 兜底:真机实测(2026-09-03, web resolve/soop/index.ts)
+    // ws://…:9000 可正常握手,wss://…:9000 在多数网络出口直接超时。
+    Object? lastError;
+    for (final scheme in const ['ws', 'wss']) {
+      final uri = Uri.parse(
+        '$scheme://${detail.chatDomain}:${detail.chatPort}/Websocket/$roomId',
+      );
+      try {
+        final socket = await transport.connect(uri, protocols: const ['chat']);
+        return SoopDanmakuSession(
+          roomId,
+          detail.chatNo,
+          socket,
+          heartbeatInterval: heartbeatInterval,
+        );
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw ParserHttpException('SOOP 弹幕连接失败(ws/wss 均不可达): $lastError');
   }
 }
 
