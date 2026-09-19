@@ -112,6 +112,7 @@ class RoomPayload {
     required this.availableQualities,
     required this.source,
     required this.fetchedAt,
+    this.cateNo = '',
     this.error,
     this.startedAt,
   });
@@ -126,6 +127,11 @@ class RoomPayload {
   final String category;
   final String cid;
   final RoomState roomState;
+
+  /// 平台分类号(soop 等 cid 另作他用的站点填写;如 soop 的 CHANNEL.CATE)。
+  /// 空串表示与 [cid] 同义或站点无分类号概念。收藏分类等需要**分类 id**
+  /// 的场景应优先取本字段,不得拿 [cid](可能是房间号)冒充。
+  final String cateNo;
 
   /// 画质档位 -> 线路。离线/不存在时为空。
   final List<StreamQuality> streams;
@@ -175,6 +181,7 @@ class RoomPayload {
     'cid': cid,
     'roomState': roomState.name,
     'isLive': isLive,
+    if (cateNo.isNotEmpty) 'cateNo': cateNo,
     'streams': streams.map((s) => s.toJson()).toList(),
     'availableQualities': availableQualities.map((q) => q.toJson()).toList(),
     'source': source,
@@ -197,6 +204,7 @@ class RoomPayload {
       (state) => state.name == json['roomState'],
       orElse: () => RoomState.offline,
     ),
+    cateNo: json['cateNo']?.toString() ?? '',
     streams: ((json['streams'] as List?) ?? const [])
         .whereType<Map>()
         .map((item) => StreamQuality.fromJson(Map<String, dynamic>.from(item)))

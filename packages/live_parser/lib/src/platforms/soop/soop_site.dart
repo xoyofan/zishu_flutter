@@ -215,6 +215,9 @@ class SoopRoomResolver implements RoomResolver, RoomSummaryRefresher {
     avatar: soopAvatarUrl(detail.roomId),
     category: detail.category,
     cid: roomId,
+    // cid 是房间号(soop 无二级分类 id);真实分类号单独透出,收藏分类
+    // 等场景按 cateNo 取,不得拿 cid 冒充。
+    cateNo: detail.cateNo,
     roomState: roomState,
     streams: streams,
     availableQualities: qualities ??
