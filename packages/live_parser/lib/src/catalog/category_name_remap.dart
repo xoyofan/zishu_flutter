@@ -35,7 +35,9 @@ const Map<String, List<String>> kCategoryGroups = {
   '帝国时代2': ['age of empires ii'],
   '第一后裔': ['the first descendant'],
   '钓鱼教学': ['how to fish'],
-  '动物与动物园': ['animals', 'aquariums', 'and zoos'],
+  // 注意:该别名本身含逗号(web 真源为单一别名 "animals, aquariums, and
+  // zoos"),不能按逗号拆分。
+  '动物与动物园': ['animals, aquariums, and zoos'],
   '二重螺旋': ['duet night abyss'],
   '方舟：生存进化': ['ark: survival ascended'],
   '复古游戏': ['retro', 'retro game'],

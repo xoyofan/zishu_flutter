@@ -2,6 +2,7 @@
 library;
 
 import '../../catalog/category_name_remap.dart';
+import 'zh_categories.dart';
 import '../../contracts/contracts.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
@@ -41,10 +42,12 @@ class SoopBrowseRepository implements BrowseRepository {
         final cid = jsonText(item['category_no']);
         final name = jsonText(item['category_name']);
         if (cid.isEmpty || name.isEmpty) continue;
+        // zh_CN 上游直出中文名:记录 cid→中文,供房间列表反查(web
+        // soopZhCategoryMap 同构);remap 仅作归一兜底。
+        rememberSoopZhCategory(cid, name);
         items.add(
           CategoryItem(
             cid: cid,
-            // 韩文分类名经 web 真源归一组中文化(배틀그라운드→绝地求生 等)。
             name: remapCategoryName('soop', name),
             pic: httpsSoopUrl(item['cate_img']),
           ),
@@ -78,6 +81,9 @@ class SoopBrowseRepository implements BrowseRepository {
         'nListCnt': '$kSoopCategoryPageSize',
         'nOffset': '0',
         'szPlatform': 'pc',
+        // 上游本地化:带 lang 时 categoryList 直出中文 category_name
+        // (对齐 web services/streaming-server soop.ts:5-10)。
+        'lang': 'zh_CN',
       }),
     );
     return jsonListOf(jsonMapOf(json['data'])['list']);
@@ -127,7 +133,11 @@ class SoopBrowseRepository implements BrowseRepository {
   Future<Map<String, dynamic>> _getJson(Uri url) async {
     final response = await _http.get(
       url,
-      headers: const {'Accept': '*/*'},
+      // 缺 Accept-Language 时上游仍返回韩文(soop.ts 注释同款结论)。
+      headers: const {
+        'Accept': '*/*',
+        'Accept-Language': 'zh-CN,zh;q=0.9',
+      },
     );
     return _http.jsonMap(response);
   }
@@ -144,7 +154,12 @@ class SoopBrowseRepository implements BrowseRepository {
       final item = jsonMapOf(value);
       final roomId = jsonText(item['user_id']).trim();
       if (roomId.isEmpty) continue;
-      final category = remapCategoryName('soop', jsonText(item['category_name']));
+      // 房间流只有韩文 category_name:优先按 category_no 反查中文名
+      // (web soop.ts:111-116 的 zhName 覆盖同构),未命中回退原名+remap。
+      final cateNo = jsonText(item['category_no']);
+      final zhName = soopZhCategoryName(cateNo);
+      final category = zhName ??
+          remapCategoryName('soop', jsonText(item['category_name']));
       rooms.add(
         RoomSummary(
           site: kSoopSiteId,

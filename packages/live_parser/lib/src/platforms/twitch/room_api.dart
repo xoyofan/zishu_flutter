@@ -76,7 +76,7 @@ query UseLive($channelLogin: String!) {
       viewersCount
       createdAt
       type
-      game { id name boxArtURL }
+      game { id name displayName boxArtURL }
       previewImageURL
     }
   }
@@ -101,7 +101,14 @@ TwitchStreamInfo? _streamInfo(Object? value) {
     title: _text(record['title']),
     viewers: (record['viewersCount'] as num?)?.toInt() ?? 0,
     gameId: _text(_mapOf(record['game'])?['id']),
-    gameName: remapCategoryName('twitch', _text(_mapOf(record['game'])?['name'])),
+    gameName: remapCategoryName(
+      'twitch',
+      () {
+        final game = _mapOf(record['game']);
+        final zh = _text(game?['displayName']);
+        return zh.isNotEmpty ? zh : _text(game?['name']);
+      }(),
+    ),
     preview: fillTwitchImageTemplate(_text(record['previewImageURL'])),
   );
 }

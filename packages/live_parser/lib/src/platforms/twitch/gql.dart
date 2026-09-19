@@ -34,7 +34,13 @@ class TwitchGqlClient {
   }) : _http = parserHttp ??
            ParserHttp(
              client: httpClient,
-             defaultHeaders: {'Client-ID': clientId, 'Referer': 'https://www.twitch.tv/'},
+             defaultHeaders: {
+               'Client-ID': clientId,
+               'Referer': 'https://www.twitch.tv/',
+               // 上游本地化:带中文语言头 Twitch 直接返回中文 displayName
+               // (对齐 web services/streaming-server twitch.ts:76-84)。
+               'Accept-Language': 'zh-CN,zh;q=0.9',
+             },
            ),
        _ownsHttp = parserHttp == null;
 

@@ -37,7 +37,7 @@ class TwitchBrowseRepository implements BrowseRepository {
       query: r'''
 query BrowsePage_AllDirectories($limit: Int) {
   games(first: $limit) {
-    edges { node { id name viewersCount boxArtURL } }
+    edges { node { id name displayName viewersCount boxArtURL } }
   }
 }''',
     );
@@ -46,8 +46,14 @@ query BrowsePage_AllDirectories($limit: Int) {
       for (final node in _nodesOf((data as Map?)?['games']))
         CategoryItem(
           cid: _text(node['id']),
-          // 分类名经 web 真源归一组中文化(Just Chatting→聊天 等)。
-          name: remapCategoryName('twitch', _text(node['name'])),
+          // 分类名:优先中文 displayName(带 Accept-Language 后上游直出),
+          // 再经 web 真源归一组兜底(Just Chatting→聊天 等)。
+          name: remapCategoryName(
+            'twitch',
+            _text(node['displayName']).isNotEmpty
+                ? _text(node['displayName'])
+                : _text(node['name']),
+          ),
           pic: fillTwitchImageTemplate(
             _text(node['boxArtURL']),
             width: 285,
