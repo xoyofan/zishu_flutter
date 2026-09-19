@@ -431,6 +431,25 @@ class _SideHeader extends StatelessWidget {
                     color: isLive ? tokens.liveBadge : tokens.textPrimary,
                   ),
                 ),
+                // 分类显示在主播名后面那一行(用户口径 2026-09-19);
+                // 关注数与人气/VIP 合并到同一统计行,控制头高不溢出。
+                const SizedBox(height: 2),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        formatCategoryHeaderLabel(
+                          payload?.site,
+                          category,
+                          payload?.cid,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 10, height: 1.15),
+                      ),
+                    ),
+                  ],
+                ),
                 const SizedBox(height: 3),
                 Row(
                   children: [
@@ -444,25 +463,6 @@ class _SideHeader extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: AppSpacing.sm),
-                    Flexible(
-                      child: Text(
-                        isLive ? '开播中' : '开播 —',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 11,
-                          height: 1.08,
-                          color: isLive
-                              ? tokens.liveBadge
-                              : tokens.textSecondary,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
                     // 人气/观众(web stats[0]「观众」列;online 为空 = 离线或
                     // 尚未刷新回填,显示「—」)。
                     _StatValue(
@@ -478,22 +478,6 @@ class _SideHeader extends StatelessWidget {
                       value: vipText,
                       color: context.tokens.statVip,
                     ),
-                    if (category.isNotEmpty) ...[
-                      const SizedBox(width: AppSpacing.sm),
-                      Flexible(
-                        child: Text(
-                          // 播放页头部:中文优先;跨平台 key(如 huwai)→ 中文名;
-                          // 有原生中文则保留。
-                          formatCategoryHeaderLabel(payload?.site, category, payload?.cid),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: tokens.textSecondary,
-                          ),
-                        ),
-                      ),
-                    ],
                   ],
                 ),
                 if (title.isNotEmpty && title != anchor)
@@ -959,7 +943,10 @@ class PlaybackStatus {
 ///
 /// 能力:
 /// - 状态条左侧播放状态指示 + 弹幕连接状态(已连接/连接中/未连接/当前站点不支持);
-/// - 列表随新消息自动滚底;用户上滑离开底部时暂停,并显示「N 条新消息」跳底按钮;
+/// - 双队列节流(对齐 web useDanmaku):全量直通;限速时新消息进积压队列,
+///   每 speed 秒从头部放一条进显示(首条立即、超限裁头丢最旧),速度滑杆即时生效;
+/// - 默认锚定底部(最新消息在底部、历史向上翻):贴底时新消息自动跟随滚底;
+///   用户上滑离底时暂停跟随,并显示「N 条新消息」跳底按钮;
 /// - 状态条右侧「重新连接」按钮触发 [DanmakuSessionController.reconnect]。
 class _ChatTab extends ConsumerStatefulWidget {
   const _ChatTab({
@@ -980,18 +967,35 @@ class _ChatTabState extends ConsumerState<_ChatTab>
     with AutomaticKeepAliveClientMixin {
   final ScrollController _scrollController = ScrollController();
 
-  /// 已「消费」到列表末尾的消息条数(用于统计用户离开底部后到达的新消息)。
-  int _seenCount = 0;
+  /// 显示队列 A(对齐 web useDanmaku `chatMessages`):已放行的消息行,
+  /// 最新在末尾;超 [_kChatDisplayLimit] 从头部裁掉最旧。
+  final List<_ChatRowData> _displayRows = <_ChatRowData>[];
 
-  /// 节流模式下已放出到列表的消息条数(渲染 chat.messages 前 N 条)。
-  ///
-  /// 对齐 web useDanmaku:限速开启时新消息进 pending,每 N 秒放 1 条;
-  /// 首条立即显示;限速关闭时全量直通、切回时放出全部积压(drain)。
-  int _releasedCount = 0;
+  /// 积压队列 B(对齐 web `chatPending`):仅限速模式使用,新消息先入队,
+  /// 每 speed 秒从头部放一条进显示;超 [_kChatPendingLimit] 从头部裁掉最旧。
+  final List<DanmakuMessage> _pendingMessages = <DanmakuMessage>[];
 
-  /// 当前节流定时器与其间隔(秒);间隔变化(速度滑杆)时重启定时器。
-  Timer? _throttleTimer;
-  int? _throttleIntervalSec;
+  /// 上一次 `chat.messages` 快照:会话侧只追加 + 裁头(`appendDanmakuFeed`),
+  /// 元素对象引用稳定 → 按对象身份 diff 出本次真正新增的批次(每条消息只
+  /// ingest 一次,天然去重)。
+  List<DanmakuMessage>? _lastSnapshot;
+
+  /// 用户是否贴底:贴底时新显示内容自动跟随滚底;离底时累计「N 条新消息」。
+  bool _pinnedToBottom = true;
+
+  /// 离底期间累计的新显示条数(「N 条新消息」按钮文案)。
+  int _unseenCount = 0;
+
+  /// 限速放行定时器(单次,放行后续排,对齐 web setTimeout 链)与其间隔(秒);
+  /// 间隔变化(速度滑杆)时重启。
+  Timer? _releaseTimer;
+  int? _releaseIntervalSec;
+
+  /// 显示队列上限(对齐 web useDanmaku `CHAT_DISPLAY_LIMIT = 200`)。
+  static const int _kChatDisplayLimit = 200;
+
+  /// 积压队列上限(对齐 web useDanmaku `CHAT_PENDING_LIMIT = 100`)。
+  static const int _kChatPendingLimit = 100;
 
   /// TabBarView 只挂载当前页,切换 tab 会 dispose 离屏子页。若聊天页被销毁,
   /// `danmakuSessionProvider`(autoDispose)也会一并销毁 → 会话被 close、消息丢失,
@@ -1002,71 +1006,139 @@ class _ChatTabState extends ConsumerState<_ChatTab>
   @override
   void initState() {
     super.initState();
-    // 用户上滑/下滑时刷新「N 条新消息」显隐(滚到底部即清零)。
+    // 用户上滑/下滑时维护贴底状态与「N 条新消息」显隐。
     _scrollController.addListener(_onScrollChanged);
   }
 
   @override
   void didUpdateWidget(covariant _ChatTab oldWidget) {
     super.didUpdateWidget(oldWidget);
-    // 切房(pushReplacement 重建面板、State 复用):节流进度归零,
-    // 新会话的首条消息重新立即显示。
+    // 切房(pushReplacement 重建面板、State 复用):双队列与放行进度全部归零
+    // (对齐 web clearChatQueues),新会话首条重新立即显示,并恢复贴底 ——
+    // 新房间首批内容出现即默认滚到底部(用户口径:默认从最底下往上走)。
     if (oldWidget.site != widget.site || oldWidget.roomId != widget.roomId) {
-      _throttleTimer?.cancel();
-      _throttleTimer = null;
-      _throttleIntervalSec = null;
-      _releasedCount = 0;
+      _cancelReleaseTimer();
+      _displayRows.clear();
+      _pendingMessages.clear();
+      _lastSnapshot = null;
+      _unseenCount = 0;
+      _pinnedToBottom = true;
     }
   }
 
   @override
   void dispose() {
-    _throttleTimer?.cancel();
+    _cancelReleaseTimer();
     _scrollController.removeListener(_onScrollChanged);
     _scrollController.dispose();
     super.dispose();
   }
 
-  /// 按节流设置截取待渲染行(全量直通 / 每 N 秒最多放行一条)。
-  ///
-  /// 只在 _ChatTab 层做展示节流,不动弹幕会话(与 web 把节流放在
-  /// useDanmaku 组合函数层一致)。
-  List<_ChatRowData> _applyThrottle(
-    List<_ChatRowData> all, {
+  void _cancelReleaseTimer() {
+    _releaseTimer?.cancel();
+    _releaseTimer = null;
+    _releaseIntervalSec = null;
+  }
+
+  // ---- 双队列节流(对齐 web useDanmaku.ts 180-320 行)----
+
+  /// 快照 diff:返回相对上次快照真正新增的消息。会话侧 `appendDanmakuFeed`
+  /// 只在尾部追加、超上限从头部裁剪,故按「上次末条的对象身份」在新快照中
+  /// 定位即可切出新增后缀(覆盖纯追加与「追加 + 裁头」两种形态);找不到
+  /// 身份链(单帧涌入 ≥ 会话上限)时退化为全量重放。
+  List<DanmakuMessage> _diffSnapshot(List<DanmakuMessage> snapshot) {
+    final prev = _lastSnapshot;
+    _lastSnapshot = snapshot;
+    if (identical(prev, snapshot)) return const [];
+    if (prev == null || prev.isEmpty || snapshot.isEmpty) return snapshot;
+    final last = prev.last;
+    for (var i = snapshot.length - 1; i >= 0; i -= 1) {
+      if (identical(snapshot[i], last)) return snapshot.sublist(i + 1);
+    }
+    return snapshot;
+  }
+
+  /// ingest(对齐 web ingestChatBatch):
+  /// - 限速关:新消息直通显示;限速期积压一并放出(web drainChatPendingToDisplay),
+  ///   并停掉放行定时器;
+  /// - 限速开:新消息进积压队列(超 [_kChatPendingLimit] 裁头丢最旧);显示
+  ///   列表为空时首条立即放行(web pushChatPendingBatch);其余交给
+  ///   [_ensureReleaseTimer] 按 speed 逐条放行。
+  void _ingest(
+    List<DanmakuMessage> snapshot, {
     required bool throttled,
     required int intervalSec,
   }) {
+    final batch = _diffSnapshot(snapshot);
     if (!throttled) {
-      // 全量直通;从限速切回时放出全部积压(web drainChatPendingToDisplay)。
-      _throttleTimer?.cancel();
-      _throttleTimer = null;
-      _throttleIntervalSec = null;
-      _releasedCount = all.length;
-      return all;
+      _cancelReleaseTimer();
+      var added = 0;
+      for (final message in batch) {
+        _pushDisplay(message);
+        added += 1;
+      }
+      while (_pendingMessages.isNotEmpty) {
+        _pushDisplay(_pendingMessages.removeAt(0));
+        added += 1;
+      }
+      _onDisplayGrew(added);
+      return;
     }
-    if (_releasedCount > all.length) {
-      _releasedCount = all.length; // 会话侧裁剪(上限)时钳制。
+    if (batch.isNotEmpty) {
+      _pendingMessages.addAll(batch);
+      if (_pendingMessages.length > _kChatPendingLimit) {
+        _pendingMessages.removeRange(
+          0,
+          _pendingMessages.length - _kChatPendingLimit,
+        );
+      }
+      if (_displayRows.isEmpty) {
+        // 首条立即显示(web pushChatPendingBatch:显示空且有积压即放一条)。
+        _releaseOnePending();
+        _onDisplayGrew(1);
+      }
     }
-    if (_releasedCount == 0 && all.isNotEmpty) {
-      _releasedCount = 1; // 首条立即显示(web pushChatPendingBatch 语义)。
+    _ensureReleaseTimer(intervalSec);
+  }
+
+  /// 追加进显示队列,超 [_kChatDisplayLimit] 裁头丢最旧
+  /// (对齐 web pushChatDisplay + CHAT_DISPLAY_LIMIT)。
+  void _pushDisplay(DanmakuMessage message) {
+    _displayRows.add(_ChatRowData.fromMessage(message, widget.site));
+    if (_displayRows.length > _kChatDisplayLimit) {
+      _displayRows.removeRange(0, _displayRows.length - _kChatDisplayLimit);
     }
-    if (_releasedCount >= all.length) {
-      _throttleTimer?.cancel();
-      _throttleTimer = null;
-      _throttleIntervalSec = null;
-      return all;
+  }
+
+  /// 从积压头部放行一条进显示(web releaseOneChatPending 的 shift 语义)。
+  void _releaseOnePending() {
+    if (_pendingMessages.isEmpty) return;
+    _pushDisplay(_pendingMessages.removeAt(0));
+  }
+
+  /// 限速放行调度(web scheduleChatRelease / ensureChatReleaseTimer):
+  /// 无积压不排表;已有定时器且间隔未变则不动;速度滑杆变化 → 重启定时器。
+  void _ensureReleaseTimer(int intervalSec) {
+    if (_pendingMessages.isEmpty) return;
+    if (_releaseTimer != null && _releaseIntervalSec != intervalSec) {
+      _releaseTimer!.cancel();
+      _releaseTimer = null;
     }
-    // 速度滑杆变化 → 重启定时器(web watch speed → clear + ensure)。
-    if (_throttleTimer != null && _throttleIntervalSec != intervalSec) {
-      _throttleTimer!.cancel();
-      _throttleTimer = null;
+    _releaseTimer ??= Timer(Duration(seconds: intervalSec), _onReleaseTick);
+    _releaseIntervalSec = intervalSec;
+  }
+
+  /// 到点放行一条;积压未尽则按当前速度续排下一发(web releaseOneChatPending)。
+  /// 速度在定时器存续期内变化时,下一次调度会用新速度(滑杆即时生效)。
+  void _onReleaseTick() {
+    _releaseTimer = null;
+    if (!mounted || _pendingMessages.isEmpty) return;
+    _releaseOnePending();
+    setState(() {});
+    _onDisplayGrew(1);
+    if (_pendingMessages.isNotEmpty) {
+      _ensureReleaseTimer(ref.read(settingsProvider).chatSpeed);
     }
-    _throttleTimer ??= Timer.periodic(Duration(seconds: intervalSec), (_) {
-      if (!mounted) return;
-      setState(() => _releasedCount += 1);
-    });
-    _throttleIntervalSec = intervalSec;
-    return all.sublist(0, _releasedCount);
   }
 
   /// 用户当前是否停在底部(容差 24px,避免像素误差导致误判)。
@@ -1077,32 +1149,54 @@ class _ChatTabState extends ConsumerState<_ChatTab>
   }
 
   void _onScrollChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    final atBottom = _isAtBottom;
+    final changed =
+        atBottom != _pinnedToBottom || (atBottom && _unseenCount > 0);
+    _pinnedToBottom = atBottom;
+    if (atBottom) _unseenCount = 0;
+    if (changed) setState(() {});
   }
 
   void _scrollToBottom({bool animate = true}) {
     if (!_scrollController.hasClients) return;
     final target = _scrollController.position.maxScrollExtent;
-    if (animate) {
-      _scrollController.animateTo(
-        target,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-      );
-    } else {
+    if (!animate) {
       _scrollController.jumpTo(target);
-    }
-  }
-
-  /// 新消息到达后:贴底时自动滚到底;离开底部时仅累计未读。
-  void _syncAutoScroll(int messageCount) {
-    if (!_scrollController.hasClients) {
-      _seenCount = messageCount;
       return;
     }
-    final wasAtBottom = _isAtBottom || _seenCount == 0;
-    _seenCount = messageCount;
-    if (!wasAtBottom) return;
+    _scrollController
+        .animateTo(
+          target,
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+        )
+        .then((_) {
+      // ListView.builder 惰性构建:尾部行未 realize 时 maxScrollExtent 可能
+      // 滞后(只统计已构建行),动画目标偏短、落点差一至数行。落定后按最新
+      // extent 校正一次,保证「回到底部」真的到底。被打断时该回调不来或被
+      // pinned 守卫挡下,均无害。
+      if (!mounted || !_scrollController.hasClients || !_pinnedToBottom) {
+        return;
+      }
+      final position = _scrollController.position;
+      if (position.pixels < position.maxScrollExtent - 0.5) {
+        _scrollController.jumpTo(position.maxScrollExtent);
+      }
+    });
+  }
+
+  /// 新显示内容到达后:贴底时自动跟随滚底(首帧也在内 —— 默认锚底,
+  /// 用户口径 2026-09-19:「默认应该从最底下往上走」);离底时仅累计未读。
+  ///
+  /// 滚动放在 post-frame:首帧 ListView 尚未挂载(hasClients=false)时也
+  /// 能在挂载后跳到底部,修复旧实现「首帧吞掉滚动、列表停在顶部」的问题。
+  void _onDisplayGrew(int added) {
+    if (added <= 0) return;
+    if (!_pinnedToBottom) {
+      _unseenCount += added;
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted && _scrollController.hasClients) {
         _scrollToBottom(animate: false);
@@ -1152,19 +1246,15 @@ class _ChatTabState extends ConsumerState<_ChatTab>
         ),
       );
     }
-    final allRows = [
-      for (final message in chat.messages) _ChatRowData.fromMessage(message, widget.site),
-    ];
-    final rows = _applyThrottle(
-      allRows,
+    // 双队列 ingest + 限速放行(对齐 web useDanmaku):全量直通 / 逐条放行。
+    _ingest(
+      chat.messages,
       throttled: settings.chatThrottleMode == ChatThrottleMode.perNSeconds,
       intervalSec: settings.chatSpeed,
     );
+    final rows = _displayRows;
 
-    _syncAutoScroll(rows.length);
-
-    final atBottom = _isAtBottom;
-    final pending = atBottom ? 0 : (rows.length - _seenCount).clamp(0, 1 << 30);
+    final newCount = _pinnedToBottom ? 0 : _unseenCount;
     final messageFontSize = settings.chatFontSize.toDouble();
     final rowSpacing = settings.chatLineSpacing.toDouble();
 
@@ -1292,7 +1382,7 @@ class _ChatTabState extends ConsumerState<_ChatTab>
                         ),
                       ),
               ),
-              if (pending > 0)
+              if (newCount > 0)
                 // 对齐 web .chat-new-bar:底部水平居中,距底 0.5rem=8。
                 Positioned(
                   left: 0,
@@ -1300,9 +1390,9 @@ class _ChatTabState extends ConsumerState<_ChatTab>
                   bottom: 8,
                   child: Center(
                     child: _NewMessagesButton(
-                      count: pending,
+                      count: newCount,
                       onTap: () {
-                        _seenCount = rows.length;
+                        setState(() => _unseenCount = 0);
                         _scrollToBottom();
                       },
                     ),

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
+import 'dart:ui' as ui;
 import 'package:live_parser/live_parser.dart' show DanmakuMessage;
 
 import '../domain/danmaku_settings.dart';
@@ -247,6 +248,28 @@ class _LiveDanmaku {
   /// 已飞行时间(秒)。
   double elapsedSeconds = 0;
 
+  /// 缓存布局好的(描边, 填充)段落:文本不随帧变化,布局一次逐帧
+  /// drawParagraph —— 消除「每帧每条两遍文本布局」的掉帧主因。
+  ui.Paragraph? _strokeParagraph;
+  ui.Paragraph? _fillParagraph;
+  double? _builtFontSize;
+
+  /// 取缓存段落(字号变化时重建)。
+  (ui.Paragraph, ui.Paragraph) paragraphs(double fontSize) {
+    if (_strokeParagraph == null ||
+        _fillParagraph == null ||
+        _builtFontSize != fontSize) {
+      final (stroke, fill) = DanmakuStyle.buildParagraphPair(
+        span,
+        fontSize: fontSize,
+      );
+      _strokeParagraph = stroke;
+      _fillParagraph = fill;
+      _builtFontSize = fontSize;
+    }
+    return (_strokeParagraph!, _fillParagraph!);
+  }
+
   /// 飞行进度 0~1,1 表示完全离场。
   double get progress => (elapsedSeconds / totalSeconds).clamp(0.0, 1.0);
 
@@ -279,7 +302,9 @@ class _DanmakuPainter extends CustomPainter {
       // 视口裁剪:完全在左/右边界外的弹幕不绘制。
       if (dx > size.width || dx + item.textWidth < 0) continue;
       final dy = topPadding + item.lane * DanmakuStyle.lineHeightOf(fontSize);
-      DanmakuStyle.paintRichText(canvas, item.span, offset: Offset(dx, dy));
+      final (strokeParagraph, fillParagraph) = item.paragraphs(fontSize);
+      canvas.drawParagraph(strokeParagraph, Offset(dx, dy));
+      canvas.drawParagraph(fillParagraph, Offset(dx, dy));
     }
     canvas.restore();
   }

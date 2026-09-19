@@ -121,6 +121,21 @@ abstract final class DanmakuStyle {
     canvas.drawParagraph(fillPainter, offset);
   }
 
+  /// 构建(描边, 填充)两遍布局好的段落,供 overlay 逐帧缓存绘制。
+  ///
+  /// 飘屏每帧都对每条弹幕重做文本布局(每条两遍)是掉帧主因;文本内容
+  /// 不随帧变化,布局结果可缓存到弹幕条目上,每帧只 drawParagraph。
+  static (ui.Paragraph, ui.Paragraph) buildParagraphPair(
+    TextSpan span, {
+    double fontSize = DanmakuStyle.fontSize,
+  }) {
+    final strokePainter = _buildParagraph(span, stroke: true, fontSize: fontSize)
+      ..layout(ui.ParagraphConstraints(width: double.infinity));
+    final fillPainter = _buildParagraph(span, stroke: false, fontSize: fontSize)
+      ..layout(ui.ParagraphConstraints(width: double.infinity));
+    return (strokePainter, fillPainter);
+  }
+
   /// 测量富文本实际宽度(px),用于轨道分配判定弹幕长度。
   static double measureWidth(TextSpan span) {
     final painter = _buildParagraph(span, stroke: false);

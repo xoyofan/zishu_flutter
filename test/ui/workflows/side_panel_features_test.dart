@@ -264,6 +264,23 @@ Finder _followLabel(String label) => find.descendant(
       matching: find.text(label),
     );
 
+/// 聊天列表的 ScrollController:经锚点 play-side-chat-opacity 向下找 Scrollable
+/// (聊天区非空时 Opacity 子树内恰有一个 ListView → 一个 Scrollable)。
+ScrollController _chatScrollController(WidgetTester tester) {
+  final scrollable = find.descendant(
+    of: find.byKey(const Key('play-side-chat-opacity')),
+    matching: find.byType(Scrollable),
+  );
+  return tester.widget<Scrollable>(scrollable.first).controller!;
+}
+
+/// 当前已构建聊天行的纯文本(「用户名：正文」),顺序自上而下。
+/// ListView.builder 只构建视口内(含 cacheExtent)的行,长列表时是可见子集。
+List<String> _visibleChatTexts(WidgetTester tester) => tester
+    .widgetList<Text>(find.byKey(const Key('play-side-chat-message')))
+    .map((t) => t.textSpan?.toPlainText() ?? '')
+    .toList();
+
 void main() {
   setUp(() {
     // 每个用例独立内存后端:被测代码与测试共享同一存储,写盘即可回读。
@@ -584,6 +601,151 @@ void main() {
           .setChatThrottleMode(ChatThrottleMode.unlimited);
       await _pumpFrames(tester, 2);
       expect(count(), 4, reason: '切回全量应立即放出全部积压');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('聊天全量直通:不限速时新消息当帧全部出现(无 1 秒节拍)',
+        (tester) async {
+      final connector = _FakeDanmakuConnector();
+      final play = await _pumpPlay(tester, danmakuConnector: connector);
+      final container = play.container;
+      await _awaitSettingsHydrated(tester, container);
+      for (var i = 0; i < 10 && connector.session == null; i++) {
+        await _pumpFrames(tester, 1);
+      }
+
+      expect(
+        container.read(settingsProvider).chatThrottleMode,
+        ChatThrottleMode.unlimited,
+        reason: '默认应为全量模式(web DEFAULT_CHAT.speedLimit = false)',
+      );
+
+      final session = connector.session!;
+      session.emitConnected();
+      for (var i = 0; i < 5; i++) {
+        session.push(_chat('直通水友$i', '直通消息$i'));
+      }
+      // 只推 1 帧(50ms,远小于最小限速间隔 1s):5 条应全部直通出现,
+      // 顺序保持推送顺序(web ingestChatBatch 限速关分支直通 pushChatDisplay)。
+      await _pumpFrames(tester, 1);
+      expect(_visibleChatTexts(tester), hasLength(5),
+          reason: '全量模式新消息应直通显示,不进积压队列');
+      expect(_visibleChatTexts(tester).first.startsWith('直通水友0：'), isTrue);
+      expect(_visibleChatTexts(tester).last.startsWith('直通水友4：'), isTrue);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('聊天限速积压超限:pending 裁头丢最旧,放行从剩余最旧开始',
+        (tester) async {
+      final connector = _FakeDanmakuConnector();
+      final play = await _pumpPlay(tester, danmakuConnector: connector);
+      final container = play.container;
+      await _awaitSettingsHydrated(tester, container);
+      for (var i = 0; i < 10 && connector.session == null; i++) {
+        await _pumpFrames(tester, 1);
+      }
+
+      await container
+          .read(settingsProvider.notifier)
+          .setChatThrottleMode(ChatThrottleMode.perNSeconds);
+      await container.read(settingsProvider.notifier).setChatSpeed(1);
+      await _pumpFrames(tester, 2);
+
+      final session = connector.session!;
+      session.emitConnected();
+      // 一次灌 105 条(> 积压上限 100):最旧 5 条(000-004)应被裁头丢弃
+      // (对齐 web CHAT_PENDING_LIMIT + splice 头部)。
+      for (var i = 0; i < 105; i++) {
+        session.push(
+          _chat('积压水友${i.toString().padLeft(3, '0')}', '积压消息$i'),
+        );
+      }
+      await _pumpFrames(tester, 4);
+
+      // 首条立即显示,且是裁头后剩余的最旧一条(005)。
+      expect(_visibleChatTexts(tester), hasLength(1),
+          reason: '限速下应只放行首条');
+      expect(_visibleChatTexts(tester).first.startsWith('积压水友005：'), isTrue,
+          reason: '积压 105 > 上限 100 应裁掉最旧 5 条,首显 005');
+
+      // 逐条放行:推进 1 秒 → 006。
+      await tester.pump(const Duration(seconds: 1));
+      await _pumpFrames(tester, 1);
+      expect(_visibleChatTexts(tester), hasLength(2));
+      expect(_visibleChatTexts(tester).last.startsWith('积压水友006：'), isTrue);
+
+      // 切回全量:剩余积压一次放完(drain),贴底自动跟随;
+      // 最后一条应为 104,被裁掉的 000 永不出现。
+      await container
+          .read(settingsProvider.notifier)
+          .setChatThrottleMode(ChatThrottleMode.unlimited);
+      await _pumpFrames(tester, 3);
+      final controller = _chatScrollController(tester);
+      controller.jumpTo(controller.position.maxScrollExtent);
+      await _pumpFrames(tester, 2);
+      final texts = _visibleChatTexts(tester);
+      expect(texts, isNotEmpty);
+      expect(texts.last.startsWith('积压水友104：'), isTrue,
+          reason: 'drain 后最后一条应为 104(105 条灌入、裁掉最旧 5 条)');
+      expect(find.textContaining('积压水友000：'), findsNothing,
+          reason: '被积压上限裁掉的最旧消息不应再出现');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('聊天默认锚底:首刷滚到最底、贴底跟随、离底计数与跳底',
+        (tester) async {
+      final connector = _FakeDanmakuConnector();
+      final play = await _pumpPlay(tester, danmakuConnector: connector);
+      final container = play.container;
+      await _awaitSettingsHydrated(tester, container);
+      for (var i = 0; i < 10 && connector.session == null; i++) {
+        await _pumpFrames(tester, 1);
+      }
+
+      final session = connector.session!;
+      session.emitConnected();
+      // 80 条一次性灌入(足以撑出滚动),首刷后应默认锚定底部
+      // (用户口径 2026-09-19:默认从最底下往上走)。
+      for (var i = 0; i < 80; i++) {
+        session.push(_chat('锚底水友$i', '锚底消息$i'));
+      }
+      await _pumpFrames(tester, 3);
+
+      final controller = _chatScrollController(tester);
+      double bottomGap() =>
+          (controller.position.pixels - controller.position.maxScrollExtent)
+              .abs();
+      expect(bottomGap(), lessThan(1), reason: '首刷后应默认锚定底部');
+
+      // 贴底时新消息自动跟随。
+      session.push(_chat('锚底水友f', '跟随消息'));
+      await _pumpFrames(tester, 2);
+      expect(bottomGap(), lessThan(1), reason: '贴底时新消息应自动跟随滚底');
+
+      // 用户上滑离底:新消息不再强制滚底,出现「1 条新消息」。
+      final listFinder = find.descendant(
+        of: find.byKey(const Key('play-side-chat-opacity')),
+        matching: find.byType(ListView),
+      );
+      await tester.drag(listFinder, const Offset(0, 320));
+      await _pumpFrames(tester, 8); // 等拖拽惯性结束
+      expect(
+        controller.position.pixels,
+        lessThan(controller.position.maxScrollExtent - 24),
+        reason: '拖拽后应离开底部',
+      );
+
+      session.push(_chat('锚底水友x', '离底期间消息'));
+      await _pumpFrames(tester, 2);
+      expect(bottomGap(), greaterThan(1), reason: '离底时新消息不应强制滚底');
+      expect(find.text('1 条新消息'), findsOneWidget,
+          reason: '离底期间新消息应计入「N 条新消息」');
+
+      // 点按钮回底:计数清零、按钮消失、位置回 max。
+      await tester.tap(find.byKey(const Key('play-side-chat-jump-bottom')));
+      await _pumpFrames(tester, 6); // 220ms 动画 + 240ms extent 校正
+      expect(find.text('1 条新消息'), findsNothing);
+      expect(bottomGap(), lessThan(1), reason: '点击「N 条新消息」应回到底部');
       expect(tester.takeException(), isNull);
     });
   });

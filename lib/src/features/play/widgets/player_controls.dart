@@ -189,13 +189,6 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.sm),
-                  Text(
-                    '直播中 · 低延迟追帧中',
-                    style: AppTypography.caption.copyWith(
-                      color: AppOnVideo.textMuted,
-                    ),
-                  ),
                 ],
               ],
             ),
