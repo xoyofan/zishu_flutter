@@ -151,11 +151,11 @@ py tool/win_tool.py shot <evidence-dir>\\screenshots\\<platform>-<test-id>.png
 
 - `schemaVersion`：证据格式版本。
 - `generatedAt`：生成时间（UTC）。
-- `testId` / `platform` / `status`：本轮记录的测试 ID、平台和总体状态；状态只能是 `PASS`、`FAIL`、`BLOCKED`、`N/A`、`NOT_RUN`。
+- `testId` / `platform` / `status`：本轮记录的测试 ID、平台和总体状态。脚本生成阶段的总体状态固定为 `NOT_RUN`；人工验证后再编辑证据文件，状态只能是 `PASS`、`FAIL`、`BLOCKED`、`N/A`、`NOT_RUN`。
 - `build.executable` / `build.version` / `build.gitCommit`：release exe 路径、文件版本（缺少 exe 时为 unavailable）和 Git commit。
 - `evidence.logPath` / `evidence.screenshotPath`：人工日志和截图目录/路径。
 - `evidence.screenshotMethod`：要求优先使用 `PrintWindow(PW_RENDERFULLCONTENT)` 的说明。
-- `checklist[]`：按平台和公共功能 ID 展开的条目；每项包含 `platform`、`testId`、`status`、`logPath`、`screenshotPath`、`notes`，默认状态全部为 `NOT_RUN`。
+- `checklist[]`：按平台和公共功能 ID 展开的条目；每项包含 `platform`、`testId`、`status`、`logPath`、唯一的 `screenshotPath`（默认 `<platform>-<testId>.png`）、`notes`，默认状态全部为 `NOT_RUN`。
 
 ### 当前执行状态
 

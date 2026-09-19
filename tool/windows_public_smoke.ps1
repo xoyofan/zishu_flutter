@@ -10,8 +10,6 @@ param(
     [string] $BuildVersion,
     [string] $TestId = 'WIN-PUBLIC-4.2',
     [string] $Platform = 'Windows',
-    [ValidateSet('PASS', 'FAIL', 'BLOCKED', 'N/A', 'NOT_RUN')]
-    [string] $Status = 'NOT_RUN',
     [string] $LogPath,
     [string] $ScreenshotPath
 )
@@ -104,15 +102,16 @@ $testCases = @(
 $entries = @()
 foreach ($site in $platforms) {
     foreach ($testCase in $testCases) {
-        $entries += [ordered]@{
-            platform = $site
-            testId = $testCase.id
-            name = $testCase.name
-            status = 'NOT_RUN'
-            logPath = $LogPath
-            screenshotPath = $ScreenshotPath
-            notes = ''
-        }
+            $entryScreenshotPath = Join-Path $ScreenshotPath "$site-$($testCase.id).png"
+            $entries += [ordered]@{
+                platform = $site
+                testId = $testCase.id
+                name = $testCase.name
+                status = 'NOT_RUN'
+                logPath = $LogPath
+                screenshotPath = $entryScreenshotPath
+                notes = ''
+            }
     }
 }
 
@@ -144,7 +143,7 @@ $manifest = [ordered]@{
     generatedAt = (Get-Date).ToUniversalTime().ToString('o')
     testId = $TestId
     platform = $Platform
-    status = $Status
+    status = 'NOT_RUN'
     build = [ordered]@{
         executable = $resolvedExe
         version = $BuildVersion
@@ -182,7 +181,7 @@ $markdown.Add(('- Test ID: `' + $TestId + '`'))
 $markdown.Add(('- Generated (UTC): `' + $manifest.generatedAt + '`'))
 $markdown.Add(('- Build version: `' + $BuildVersion + '`'))
 $markdown.Add(('- Git commit: `' + $manifest.build.gitCommit + '`'))
-$markdown.Add(('- Default status: `' + $Status + '` (change only after manual verification)'))
+$markdown.Add('- Default status: `NOT_RUN` (change only after manual verification)')
 $markdown.Add('')
 $markdown.Add('| Platform | Test ID | Status | Log path | Screenshot path | Notes |')
 $markdown.Add('|---|---|---|---|---|---|')
@@ -202,7 +201,7 @@ $markdown -join "`n" | Set-Content -LiteralPath $checklistPath -Encoding UTF8
 Write-Host "evidence directory: $evidenceRoot"
 Write-Host "metadata: $manifestPath"
 Write-Host "checklist: $checklistPath"
-Write-Host "status: $Status"
+Write-Host 'status: NOT_RUN (generated checklist state; update evidence only after manual verification)'
 if ($launchError) {
     Write-Host "launch: NOT STARTED ($launchError)" -ForegroundColor Yellow
     exit 2

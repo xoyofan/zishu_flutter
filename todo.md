@@ -783,7 +783,7 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 
 ## 2026-09-20 Windows 公共 smoke Task 4.2
 
-- [x] 建立 `tool/windows_public_smoke.ps1`：生成人工 checklist、build/git/evidence 元数据，支持 dry-run/checklist、可控证据目录和可选 release exe 启动。
+- [x] 建立 `tool/windows_public_smoke.ps1`：生成人工 checklist、build/git/evidence 元数据，支持 dry-run/checklist、可控证据目录和可选 release exe 启动；生成总体状态固定为 `NOT_RUN`，每条记录生成唯一截图文件路径。
 - [x] 默认状态和各平台功能条目保持 `NOT_RUN`；脚本不自动点击、不联网、不写凭据、不伪造 PASS/FAIL。
 - [ ] 真实 Windows release smoke 尚未执行；后续需要 release build、人工逐平台验证，并用 `tool/win_tool.py shot` 的 `PrintWindow(PW_RENDERFULLCONTENT)` 记录窗口表面证据。
 
