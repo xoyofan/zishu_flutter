@@ -162,20 +162,23 @@ void main() {
     final star = find.byKey(const Key('play-category-favorite'));
     expect(star, findsOneWidget, reason: '房间带分类上下文时应显示收藏星');
 
+    Icon starIcon() => tester.widget<Icon>(
+          find.descendant(of: star, matching: find.byType(Icon)),
+        );
+
     await tester.tap(star);
     await _frames(tester);
     expect(_isFavorited(container, 'douyu', '1'), isTrue);
     expect(
-      tester
-          .widget<IconButton>(star)
-          .tooltip,
-      '取消收藏',
-      reason: '收藏后 tooltip 应切换为取消收藏',
+      starIcon().icon,
+      Icons.star_rounded,
+      reason: '收藏后星标应实心(星标已内嵌进分类徽标,web PlayHeader 同款)',
     );
 
     await tester.tap(star);
     await _frames(tester);
     expect(_isFavorited(container, 'douyu', '1'), isFalse);
+    expect(starIcon().icon, Icons.star_border_rounded);
     expect(tester.takeException(), isNull);
   });
 
