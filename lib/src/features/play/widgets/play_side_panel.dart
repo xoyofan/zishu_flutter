@@ -20,6 +20,7 @@ import '../../danmaku/widgets/danmaku_settings_dialog.dart';
 import '../../follow/application/follow_provider.dart';
 import '../../follow/application/follow_sort.dart';
 import '../../follow/application/settings_provider.dart';
+import '../../../platforms/common/open_external_url.dart';
 import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
@@ -180,6 +181,25 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
     widget.onToggleSuperFollow?.call();
   }
 
+  /// 切换当前房间的开播提醒(关注条目已有的 remindOn 字段;与关注/超关
+  /// 同款按 key 查询)。未关注时无可提醒目标,入口按钮本身已禁用,此处兜底。
+  void _toggleRemindOn() {
+    final key = _currentKey;
+    final matched = ref.read(followProvider).where((e) => e.key == key);
+    if (matched.isEmpty) return;
+    ref.read(followProvider.notifier).toggleRemind(key);
+  }
+
+  /// 打开当前房间的 web 页(系统默认浏览器)。失败仅提示,不打断播放。
+  Future<void> _openRoomExternal(String url) async {
+    final ok = await openExternalUrl(url);
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('未能打开浏览器：$url')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final payload = widget.payload;
@@ -191,6 +211,7 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
     final matched = followList.where((e) => e.key == key);
     final followed = matched.isNotEmpty;
     final superFollowed = matched.isNotEmpty && matched.first.isSpecial;
+    final remindOn = matched.isNotEmpty && matched.first.remindOn;
 
     return Container(
       key: const Key('play-side-panel'),
@@ -225,8 +246,12 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
                 payload: payload,
                 followed: followed,
                 superFollowed: superFollowed,
+                remindOn: remindOn,
+                externalUrl: roomExternalUrl(site, roomId, payload),
                 onToggleFollow: _toggleFollow,
                 onToggleSuperFollow: _toggleSuperFollow,
+                onToggleRemind: _toggleRemindOn,
+                onOpenExternal: _openRoomExternal,
               ),
             // 高度对齐 web `--el-tabs-header-height: 2rem`(32px)。
             SizedBox(
@@ -307,8 +332,12 @@ class _SideHeader extends StatelessWidget {
     required this.payload,
     required this.followed,
     required this.superFollowed,
+    required this.remindOn,
+    required this.externalUrl,
     required this.onToggleFollow,
     required this.onToggleSuperFollow,
+    required this.onToggleRemind,
+    required this.onOpenExternal,
   });
 
   final String site;
@@ -316,8 +345,16 @@ class _SideHeader extends StatelessWidget {
   final RoomPayload? payload;
   final bool followed;
   final bool superFollowed;
+
+  /// 开播提醒开关(关注条目 remindOn)。未关注时按钮禁用,该值无意义。
+  final bool remindOn;
+
+  /// 当前房间 web 页地址(null = 无稳定外链,按钮禁用)。
+  final String? externalUrl;
   final VoidCallback onToggleFollow;
   final VoidCallback onToggleSuperFollow;
+  final VoidCallback onToggleRemind;
+  final ValueChanged<String> onOpenExternal;
 
   @override
   Widget build(BuildContext context) {
@@ -345,7 +382,16 @@ class _SideHeader extends StatelessWidget {
         children: [
           // 头像贴边出血:占满头高(无上下内边距、左侧贴边),对齐 web
           // `--room-aside-avatar-size = head-h + 2*pad-y`。
-          _SideAvatar(avatar: avatar, label: anchor, live: isLive),
+          _SideAvatar(
+            avatar: avatar,
+            label: anchor,
+            live: isLive,
+            followed: followed,
+            remindOn: remindOn,
+            externalUrl: externalUrl,
+            onToggleRemind: onToggleRemind,
+            onOpenExternal: onOpenExternal,
+          ),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Padding(
@@ -454,16 +500,51 @@ class _SideHeader extends StatelessWidget {
   }
 }
 
+/// 当前房间 web 页地址:解析结果自带的 sourceUrl(解析器实际进入的页面,
+/// 最稳)优先;没有则按平台拼 —— 对齐 web `platformCatalog.ts`
+/// `PLATFORM_EXTERNAL_URLS`(douyu/huya/bilibili);douyin 等无稳定 web
+/// url 的平台返回 null(按钮禁用),若其 payload 自带真实页面 url 则放行。
+@visibleForTesting
+String? roomExternalUrl(String site, String roomId, RoomPayload? payload) {
+  final id = roomId.trim();
+  if (id.isEmpty) return null;
+  final source = payload?.sourceUrl.trim() ?? '';
+  if (source.isNotEmpty) return source;
+  return switch (site) {
+    'douyu' => 'https://www.douyu.com/$id',
+    'huya' => 'https://www.huya.com/$id',
+    'bilibili' => 'https://live.bilibili.com/$id',
+    _ => null,
+  };
+}
+
 class _SideAvatar extends StatelessWidget {
   const _SideAvatar({
     required this.avatar,
     required this.label,
     required this.live,
+    required this.followed,
+    required this.remindOn,
+    required this.externalUrl,
+    required this.onToggleRemind,
+    required this.onOpenExternal,
   });
 
   final String avatar;
   final String label;
   final bool live;
+
+  /// 当前房间是否已关注(决定提醒按钮可用性,web `v-if="roomIsFollowed"`
+  /// 的 flutter 占位等价:不隐藏、禁用)。
+  final bool followed;
+
+  /// 开播提醒开关(web `liveNotifyEnabled`)。
+  final bool remindOn;
+
+  /// 当前房间 web 页地址(null = 无稳定外链)。
+  final String? externalUrl;
+  final VoidCallback onToggleRemind;
+  final ValueChanged<String> onOpenExternal;
 
   @override
   Widget build(BuildContext context) {
@@ -522,9 +603,17 @@ class _SideAvatar extends StatelessWidget {
             top: -4,
             child: _HeaderIconButton(
               key: const Key('play-side-notify'),
-              icon: Icons.notifications_none_rounded,
-              tooltip: '开播提醒',
-              onPressed: () {},
+              // web bell/bell-off 两态(SideHeader.vue:27):关=bell-off
+              // 中性色;开=bell + amber 激活色(语义=开播/下播提醒开关)。
+              icon: remindOn
+                  ? Icons.notifications_rounded
+                  : Icons.notifications_off_rounded,
+              tooltip: followed
+                  ? (remindOn ? '已开启开播/下播提醒，点击关闭' : '开启开播/下播提醒')
+                  : '关注后可开启开播提醒',
+              // 未关注 = 无可提醒目标,禁用(web 直接隐藏,flutter 留占位)。
+              onPressed: followed ? onToggleRemind : null,
+              activeColor: remindOn ? const Color(0xfff3d04e) : null,
             ),
           ),
           Positioned(
@@ -534,7 +623,9 @@ class _SideAvatar extends StatelessWidget {
               key: const Key('play-side-external'),
               icon: Icons.open_in_new_rounded,
               tooltip: '打开直播间页面',
-              onPressed: () {},
+              onPressed: externalUrl == null
+                  ? null
+                  : () => onOpenExternal(externalUrl!),
               accent: const Color(0xFF60A5FA),
             ),
           ),
@@ -551,19 +642,34 @@ class _HeaderIconButton extends StatelessWidget {
     required this.tooltip,
     required this.onPressed,
     this.accent,
+    this.activeColor,
   });
 
   final IconData icon;
   final String tooltip;
-  final VoidCallback onPressed;
+
+  /// null = 禁用(未关注无可提醒目标 / 无稳定 web url)。
+  final VoidCallback? onPressed;
+
+  /// 图标强调色(如外链蓝 #60a5fa,web `.room-aside-link-btn`)。
   final Color? accent;
+
+  /// 激活态色(amber #f3d04e,web `--amber`):图标取该色,底色取该色
+  /// 22% 混底,对齐 web `.room-aside-notify-btn--on`。
+  final Color? activeColor;
 
   @override
   Widget build(BuildContext context) {
+    final active = activeColor;
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: context.tokens.surfaceRaised,
+        color: active != null
+            ? Color.alphaBlend(
+                active.withValues(alpha: 0.22),
+                context.tokens.surfaceRaised,
+              )
+            : context.tokens.surfaceRaised,
         shape: const CircleBorder(),
         child: InkWell(
           customBorder: const CircleBorder(),
@@ -574,7 +680,7 @@ class _HeaderIconButton extends StatelessWidget {
             child: Icon(
               icon,
               size: 11,
-              color: accent ?? context.tokens.textSecondary,
+              color: active ?? accent ?? context.tokens.textSecondary,
             ),
           ),
         ),

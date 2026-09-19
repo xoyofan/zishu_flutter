@@ -23,7 +23,10 @@ import 'package:zishu_flutter/src/features/danmaku/widgets/danmaku_overlay.dart'
 import 'package:zishu_flutter/src/features/follow/application/follow_provider.dart';
 import 'package:zishu_flutter/src/features/follow/application/settings_provider.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
+import 'package:zishu_flutter/src/features/play/widgets/play_side_panel.dart'
+    show roomExternalUrl;
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
+import 'package:zishu_flutter/src/shared/application/fixture_sources.dart';
 
 /// 深链播放页:A8 用一个不在关注种子里的房间,避免初始即「已关注」。
 const String _playLocationA8 = '/douyu/play/606118';
@@ -410,6 +413,97 @@ void main() {
       final path = play.router.routeInformationProvider.value.uri.path;
       expect(path, '/$targetSite/play/$targetRoom',
           reason: '点击推荐条目应跳转到对应播放页');
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('C1 开播提醒铃铛', () {
+    testWidgets('未关注禁用;关注后点按切换 remindOn 两态并落盘', (tester) async {
+      final play = await _pumpPlay(tester, location: _playLocationA8);
+      final container = play.container;
+      const roomKey = 'douyu:606118';
+
+      InkWell notifyInkWell() => tester.widget<InkWell>(find.descendant(
+            of: find.byKey(const Key('play-side-notify')),
+            matching: find.byType(InkWell),
+          ));
+      IconData? notifyIcon() => tester.widget<Icon>(find.descendant(
+            of: find.byKey(const Key('play-side-notify')),
+            matching: find.byType(Icon),
+          )).icon;
+
+      // 未关注:无提醒目标,按钮禁用(bell-off 态);点按不产生关注条目。
+      expect(notifyInkWell().onTap, isNull);
+      expect(notifyIcon(), Icons.notifications_off_rounded);
+      await tester.tap(find.byKey(const Key('play-side-notify')),
+          warnIfMissed: false);
+      await _pumpFrames(tester, 2);
+      expect(container.read(followProvider).any((e) => e.key == roomKey),
+          isFalse);
+
+      // 关注(默认提醒关)→ 按钮可用,仍为 bell-off。
+      await tester.tap(find.byKey(const Key('play-side-follow-btn')));
+      await _pumpFrames(tester, 2);
+      expect(notifyInkWell().onTap, isNotNull);
+      expect(notifyIcon(), Icons.notifications_off_rounded);
+
+      // 点亮:remindOn 翻 true + bell 态,且写盘。
+      await tester.tap(find.byKey(const Key('play-side-notify')));
+      await _pumpFrames(tester, 2);
+      expect(
+        container
+            .read(followProvider)
+            .firstWhere((e) => e.key == roomKey)
+            .remindOn,
+        isTrue,
+      );
+      expect(notifyIcon(), Icons.notifications_rounded);
+      final rawOn = await SharedPreferencesAsync().getString('zishu.follow.list');
+      final storedOn = (jsonDecode(rawOn!) as List)
+          .firstWhere((e) => e['roomId'] == '606118') as Map;
+      expect(storedOn['remindOn'], isTrue);
+
+      // 再点关闭:回 bell-off 态。
+      await tester.tap(find.byKey(const Key('play-side-notify')));
+      await _pumpFrames(tester, 2);
+      expect(
+        container
+            .read(followProvider)
+            .firstWhere((e) => e.key == roomKey)
+            .remindOn,
+        isFalse,
+      );
+      expect(notifyIcon(), Icons.notifications_off_rounded);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('C2 房间外链按钮', () {
+    testWidgets('douyu 外链可用;URL 解析按 payload url 优先、平台拼接兜底',
+        (tester) async {
+      await _pumpPlay(tester, location: _playLocationA8);
+
+      // 有稳定外链 → 按钮可点(真实点击会拉起系统浏览器,这里只断言接线)。
+      final externalInkWell = tester.widget<InkWell>(find.descendant(
+        of: find.byKey(const Key('play-side-external')),
+        matching: find.byType(InkWell),
+      ));
+      expect(externalInkWell.onTap, isNotNull);
+
+      // 解析规则:payload sourceUrl 优先(fixture payload 恒带 douyu url,
+      // 任何 site 都以其为准);无 payload 时 douyu/huya/bilibili 按平台拼。
+      expect(roomExternalUrl('douyu', '63136', null),
+          'https://www.douyu.com/63136');
+      expect(roomExternalUrl('huya', '11342412', null),
+          'https://www.huya.com/11342412');
+      expect(roomExternalUrl('bilibili', '6', null),
+          'https://live.bilibili.com/6');
+      // douyin 无稳定 web url:无 payload url 时禁用(返回 null)。
+      expect(roomExternalUrl('douyin', '123', null), isNull);
+      expect(roomExternalUrl('douyin', '123', fixtureRoomPayload('123')),
+          'https://www.douyu.com/123');
+      // 房间号为空一律禁用。
+      expect(roomExternalUrl('douyu', ' ', null), isNull);
       expect(tester.takeException(), isNull);
     });
   });
