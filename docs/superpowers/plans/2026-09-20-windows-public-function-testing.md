@@ -144,10 +144,10 @@
 - Test: `test/features/danmaku/danmaku_session_lifecycle_test.dart`
 - Modify: `docs/testing/windows-public-function-matrix.md`
 
-- [ ] 覆盖切房销毁旧 session、重连去重、overlay/chat 分离、设置生效和不支持平台不建连。
-- [ ] 运行现有 `test/features/danmaku/` 和 `test/ui/workflows/danmaku_test.dart`。
-- [ ] 更新矩阵并提交：`test(danmaku): cover session lifecycle matrix`。
-- [ ] 推送：`git push origin master`。
+- [x] 覆盖切房销毁旧 session、重连去重、overlay/chat 分离、设置生效和不支持平台不建连。
+- [x] 运行 `test/features/danmaku/`（51/51）和 `test/ui/workflows/danmaku_test.dart`（10/10）。
+- [x] 更新矩阵并提交：`test(danmaku): cover session lifecycle matrix`（`f9b7786`）。
+- [x] 推送：`git push origin master`。
 
 ### Task 3.3：全屏、PiP、返回和主题矩阵
 

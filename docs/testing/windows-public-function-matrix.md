@@ -4,7 +4,7 @@
 >
 > 状态枚举：`PASS` / `FAIL` / `BLOCKED` / `N/A` / `NOT_RUN`。
 >
-> 当前阶段：阶段 1（矩阵与测试基础设施）。尚未开始 Windows 真实 smoke，所有真实列保持 `NOT_RUN`。
+> 当前阶段：阶段 3（其他公共播放状态）。尚未开始 Windows 真实 smoke，所有真实列保持 `NOT_RUN`。
 
 ## 1. 平台能力基线
 
@@ -31,7 +31,7 @@
 | `MUTE` | 静音/取消静音 | PASS | NOT_RUN | 全局静音、房间 0 值、控制条 mute/unmute 已覆盖 |
 | `QUALITY` | 默认画质与切换 | PASS | NOT_RUN | 画质/线路矩阵验证切档后音量、线路格式和 generation |
 | `LINE` | 线路格式、线路切换和备用线路 | PASS | NOT_RUN | 线路切换复用统一 open 生命周期并保留音量/恢复能力 |
-| `DANMAKU` | 弹幕连接、切房、设置和去重 | NOT_RUN | NOT_RUN | 聊天与飘屏会话边界一致 |
+| `DANMAKU` | 弹幕连接、切房、设置和去重 | PASS | NOT_RUN | provider 生命周期 5/5、弹幕目录 51/51、UI workflow 10/10；覆盖切房释放、重连代际、chat/overlay 共享和不支持能力 |
 | `FULLSCREEN` | 系统全屏/网页全屏 | NOT_RUN | NOT_RUN | 窗口状态与 UI 状态一致 |
 | `PIP` | 画中画进入、退出和恢复 | NOT_RUN | NOT_RUN | 不泄漏到下一房间或普通页面 |
 | `FOLLOW` | 关注、超关、状态刷新和同步 | NOT_RUN | NOT_RUN | 房间身份和平台隔离 |
@@ -52,6 +52,11 @@
 | `VOL-008` | 全局静音后切房 | 所有房间实际音量为 0 | NOT_RUN | NOT_RUN | lifecycle test |
 | `VOL-009` | 房间音量设为 0 但未开启全局静音 | 该房间为 0，取消/切房不误恢复成 100 | PASS | NOT_RUN | `test/features/playback/room_volume_provider_test.dart` |
 | `VOL-010` | A→B→C 快速切房 | 只有 C 的最终状态生效 | NOT_RUN | NOT_RUN | lifecycle test |
+| `DAN-001` | 切房销毁旧 session | 旧 session close，迟到消息不进入新房间 | PASS | NOT_RUN | `danmaku_session_lifecycle_test.dart`；过期连接完成后立即 close 且无消息订阅 |
+| `DAN-002` | 重连去重与最新 generation | 只保留最新 session，旧连接不再广播 | PASS | NOT_RUN | `danmaku_session_lifecycle_test.dart`；连续重连只保留最新 session |
+| `DAN-003` | chat/overlay 共享会话 | 只建立一条连接，两个消费者收到同一状态 | PASS | NOT_RUN | `danmaku_session_lifecycle_test.dart`；两个 listener 只触发一次 `connect` |
+| `DAN-004` | 不支持平台不建连 | 返回明确 `supported=false` 空态 | PASS | NOT_RUN | `danmaku_session_lifecycle_test.dart` |
+| `DAN-005` | 弹幕设置 clamp 与生效 | 设置立即生效且始终落在合法范围 | PASS | NOT_RUN | `danmaku_session_lifecycle_test.dart` |
 
 ## 4. 阶段进度
 
@@ -72,8 +77,10 @@
 ### 阶段 3：其他公共播放状态
 
 - 状态：进行中
-- 已完成：阶段 3.1 画质/线路矩阵 **2/2 通过**；发现并修复 `switchLine()` 绕过统一 `_open()` 的状态污染缺口
-- 待完成：恢复重解析、弹幕 session、全屏/PiP、返回和主题矩阵
+- 已完成：
+  - 阶段 3.1 画质/线路矩阵 **2/2 通过**；发现并修复 `switchLine()` 绕过统一 `_open()` 的状态污染缺口
+  - 阶段 3.2 弹幕会话矩阵 **5/5 通过**；弹幕目录 **51/51 通过**；UI workflow **10/10 通过**
+- 待完成：恢复重解析、全屏/PiP、返回和主题矩阵
 
 ### 阶段 4：平台参数化与 Windows 真实验收
 
