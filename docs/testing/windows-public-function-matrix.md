@@ -32,11 +32,11 @@
 | `QUALITY` | 默认画质与切换 | PASS | NOT_RUN | 画质/线路矩阵验证切档后音量、线路格式和 generation |
 | `LINE` | 线路格式、线路切换和备用线路 | PASS | NOT_RUN | 线路切换复用统一 open 生命周期并保留音量/恢复能力 |
 | `DANMAKU` | 弹幕连接、切房、设置和去重 | PASS | NOT_RUN | provider 生命周期 5/5、弹幕目录 51/51、UI workflow 10/10；覆盖切房释放、重连代际、chat/overlay 共享和不支持能力 |
-| `FULLSCREEN` | 系统全屏/网页全屏 | NOT_RUN | NOT_RUN | 窗口状态与 UI 状态一致 |
-| `PIP` | 画中画进入、退出和恢复 | NOT_RUN | NOT_RUN | 不泄漏到下一房间或普通页面 |
+| `FULLSCREEN` | 系统全屏/网页全屏 | PASS | NOT_RUN | `fullscreen_test.dart` 9/9；覆盖 F/Esc、网页全屏、淡出阻断和控制条同源 |
+| `PIP` | 画中画进入、退出和恢复 | PASS | NOT_RUN | `fullscreen_test.dart` + `public_playback_state_test.dart`；覆盖 PiP 退出优先级、恢复进入前模式和销毁清理 |
 | `FOLLOW` | 关注、超关、状态刷新和同步 | NOT_RUN | NOT_RUN | 房间身份和平台隔离 |
-| `THEME` | 深浅主题与设置恢复 | NOT_RUN | NOT_RUN | 壳层、播放页和侧栏一致 |
-| `RETURN` | 返回按钮、Alt+左、鼠标侧键 | NOT_RUN | NOT_RUN | 不抛 `GoError`，返回目标正确 |
+| `THEME` | 深浅主题与设置恢复 | PASS | NOT_RUN | `nav_theme_test.dart`、`light_theme_test.dart`、`public_playback_state_test.dart`；覆盖 dark/light/system 映射与壳层背景 |
+| `RETURN` | 返回按钮、Alt+左、鼠标侧键 | PASS | NOT_RUN | `back_shortcuts_test.dart` 5/5；覆盖栈顶返回、栈底静默和切房后返回 |
 
 ## 3. 音量回归用例
 
@@ -57,6 +57,10 @@
 | `DAN-003` | chat/overlay 共享会话 | 只建立一条连接，两个消费者收到同一状态 | PASS | NOT_RUN | `danmaku_session_lifecycle_test.dart`；两个 listener 只触发一次 `connect` |
 | `DAN-004` | 不支持平台不建连 | 返回明确 `supported=false` 空态 | PASS | NOT_RUN | `danmaku_session_lifecycle_test.dart` |
 | `DAN-005` | 弹幕设置 clamp 与生效 | 设置立即生效且始终落在合法范围 | PASS | NOT_RUN | `danmaku_session_lifecycle_test.dart` |
+| `UI-001` | 全屏/PiP 退出优先级 | PiP > 系统全屏 > 网页全屏 > 路由返回 | PASS | NOT_RUN | `fullscreen_test.dart`；`public_playback_state_test.dart` |
+| `UI-002` | PiP 退出恢复模式并清理记忆 | 恢复进入前模式，退出后不残留 `modeBeforePip` | PASS | NOT_RUN | `public_playback_state_test.dart`；5/5 |
+| `UI-003` | PiP/全屏销毁清理 | 离开播放页不残留窗口级副作用 | PASS | NOT_RUN | `public_playback_state_test.dart`；包含 await 期间销毁回归 |
+| `UI-004` | 返回快捷键和主题切换 | Alt+左/侧键安全返回，主题 provider/MaterialApp/token 同步 | PASS | NOT_RUN | `back_shortcuts_test.dart`、`nav_theme_test.dart`、`light_theme_test.dart` |
 
 ## 4. 阶段进度
 
@@ -76,11 +80,12 @@
 
 ### 阶段 3：其他公共播放状态
 
-- 状态：进行中
+- 状态：已完成
 - 已完成：
   - 阶段 3.1 画质/线路矩阵 **2/2 通过**；发现并修复 `switchLine()` 绕过统一 `_open()` 的状态污染缺口
   - 阶段 3.2 弹幕会话矩阵 **5/5 通过**；弹幕目录 **51/51 通过**；UI workflow **10/10 通过**
-- 待完成：恢复重解析、全屏/PiP、返回和主题矩阵
+  - 阶段 3.3 全屏/PiP/返回/主题矩阵：新增 **5/5**，全屏/PiP **10/10**，返回/主题/浅色 **11/11**；修复 PiP 退出后残留 `modeBeforePip` 及销毁期间异步续段重开系统全屏
+- 剩余风险：恢复重解析专项仍为 `NOT_RUN`；Windows 真实验证仍为 `NOT_RUN`
 
 ### 阶段 4：平台参数化与 Windows 真实验收
 

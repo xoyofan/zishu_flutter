@@ -155,10 +155,11 @@
 - Test: `test/ui/workflows/public_playback_state_test.dart`
 - Modify: `docs/testing/windows-public-function-matrix.md`
 
-- [ ] 覆盖全屏/PiP 退出优先级、切房状态、Esc、Alt+左、侧键返回和主题切换。
-- [ ] 运行现有 fullscreen/back/theme 测试。
-- [ ] 更新矩阵并提交：`test(ui): cover public playback state transitions`。
-- [ ] 推送：`git push origin master`。
+- [x] 覆盖全屏/PiP 退出优先级、切房状态、Esc、Alt+左、侧键返回和主题切换。
+- [x] 运行现有 fullscreen（10/10）、back（5/5）、theme/light（11/11）测试及新增 public playback state（5/5）。
+- [x] 修复并回归 PiP 退出后 `modeBeforePip` 残留状态记忆及 provider 销毁后的异步窗口状态竞态。
+- [x] 更新矩阵并提交：`test(ui): cover public playback state transitions`。
+- [x] 推送：`git push origin master`。
 
 ## 阶段 4：平台参数化与 Windows 真实验收
 
