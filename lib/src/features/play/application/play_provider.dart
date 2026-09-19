@@ -17,6 +17,11 @@ import '../../follow/application/settings_provider.dart';
 import 'play_selection.dart';
 import 'room_volume_provider.dart';
 
+/// 共享播放器上的最新开流操作 token。不同房间的 family controller 共用同一
+/// `LivePlayer`，局部 generation 只能保护单个 controller，不能阻止旧房间的
+/// open 收尾覆盖新房间；因此在播放器编排层再加一层全局 token。
+int _latestPlayerOpenToken = 0;
+
 /// 播放器单例:app 生命周期内复用,不随页面销毁。
 /// dispose 由根 ProviderContainer 统一触发(仅 app 退出时执行)。
 final playerProvider = Provider<LivePlayer>((ref) {
@@ -220,13 +225,16 @@ class PlayController extends AsyncNotifier<PlayState> {
   /// 解析**的地址(签名平台地址此时多半已过期,复用旧地址=无限重开失效源)。
   void _open(StreamLine line, List<StreamLine> fallbacks) {
     final player = ref.read(playerProvider);
+    final openToken = ++_latestPlayerOpenToken;
     // LineRecoveryAware 不是 LivePlayer 的子类型,is 探测不产生类型提升,
     // 用 if-case 对象模式探测并绑定(免显式 as)。
     if (player case LineRecoveryAware aware) {
       aware.setLineRecovery(_recoverLines);
     }
     final generation = _generation;
-    unawaited(_openAndApplyVolume(player, line, fallbacks, generation));
+    unawaited(
+      _openAndApplyVolume(player, line, fallbacks, generation, openToken),
+    );
   }
 
   /// 等待媒体源真正落地后再补套一次房间音量。
@@ -239,11 +247,16 @@ class PlayController extends AsyncNotifier<PlayState> {
     StreamLine line,
     List<StreamLine> fallbacks,
     int generation,
+    int openToken,
   ) async {
     // 先应用一次，让控制条和播放器尽快进入当前房间状态。
     await _applyRoomVolume(player);
     await player.open(line, fallbacks);
-    if (!ref.mounted || generation != _generation) return;
+    if (!ref.mounted ||
+        generation != _generation ||
+        openToken != _latestPlayerOpenToken) {
+      return;
+    }
     await _applyRoomVolume(player);
   }
 

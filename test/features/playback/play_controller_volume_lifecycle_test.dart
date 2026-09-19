@@ -137,39 +137,40 @@ void main() {
   test(
     're-parsing after a disconnect keeps the room volume and mute state',
     () async {
-    final player = _RecoveringScriptedLivePlayer();
-    final source = _RoutingRoomSource();
-    final container = await _makeContainer(
-      roomVolumes: {'room_vol_douyu_A': 35},
-      globalMuted: true,
-      player: player,
-      source: source,
-    );
-    final params = (site: 'douyu', roomId: 'A');
-    final keepAlive = container.listen(
-      playControllerProvider(params),
-      (_, _) {},
-      fireImmediately: true,
-    );
-    addTearDown(keepAlive.close);
-    await container.read(playControllerProvider(params).future);
-    for (var i = 0; i < 20 && player.mutedCalls.isEmpty; i++) {
-      await Future<void>.delayed(Duration.zero);
-    }
-    player.resetUnderlyingVolume(100);
+      final player = _RecoveringScriptedLivePlayer();
+      final source = _RoutingRoomSource();
+      final container = await _makeContainer(
+        roomVolumes: {'room_vol_douyu_A': 35},
+        globalMuted: true,
+        player: player,
+        source: source,
+      );
+      final params = (site: 'douyu', roomId: 'A');
+      final keepAlive = container.listen(
+        playControllerProvider(params),
+        (_, _) {},
+        fireImmediately: true,
+      );
+      addTearDown(keepAlive.close);
+      await container.read(playControllerProvider(params).future);
+      for (var i = 0; i < 20 && player.mutedCalls.isEmpty; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      player.resetUnderlyingVolume(100);
 
-    await player.recoverAndOpen();
-    for (var i = 0; i < 20 && player.openCalls.length < 2; i++) {
-      await Future<void>.delayed(Duration.zero);
-    }
+      await player.recoverAndOpen();
+      for (var i = 0; i < 20 && player.openCalls.length < 2; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
 
-    final state = container.read(playControllerProvider(params)).requireValue;
-    expect(source.recoverCalls, 1);
-    expect(state.payload?.roomId, 'A-recovered');
-    expect(state.generation, 2);
-    expect(player.mutedCalls, [true, true]);
-    expect(player.currentSnapshot.muted, isTrue);
-  });
+      final state = container.read(playControllerProvider(params)).requireValue;
+      expect(source.recoverCalls, 1);
+      expect(state.payload?.roomId, 'A-recovered');
+      expect(state.generation, 2);
+      expect(player.mutedCalls, [true, true]);
+      expect(player.currentSnapshot.muted, isTrue);
+    },
+  );
 
   test('global mute remains effective after switching rooms', () async {
     final player = ScriptedLivePlayer();
@@ -203,71 +204,84 @@ void main() {
   test(
     'rapid A to B to C switching leaves only C generation, volume and snapshot',
     () async {
-    final player = ScriptedLivePlayer()..gateNextOpen();
-    final a = await _makeContainer(
-      roomVolumes: {'room_vol_douyu_A': 11, 'room_vol_douyu_B': 22, 'room_vol_douyu_C': 33},
-      player: player,
-    );
-    final b = await _makeContainer(
-      roomVolumes: {'room_vol_douyu_A': 11, 'room_vol_douyu_B': 22, 'room_vol_douyu_C': 33},
-      player: player,
-    );
-    final c = await _makeContainer(
-      roomVolumes: {'room_vol_douyu_A': 11, 'room_vol_douyu_B': 22, 'room_vol_douyu_C': 33},
-      player: player,
-    );
-    final aKeepAlive = a.listen(
-      playControllerProvider((site: 'douyu', roomId: 'A')),
-      (_, _) {},
-      fireImmediately: true,
-    );
-    final bKeepAlive = b.listen(
-      playControllerProvider((site: 'douyu', roomId: 'B')),
-      (_, _) {},
-      fireImmediately: true,
-    );
-    final cKeepAlive = c.listen(
-      playControllerProvider((site: 'douyu', roomId: 'C')),
-      (_, _) {},
-      fireImmediately: true,
-    );
-    addTearDown(() {
+      final player = ScriptedLivePlayer()..gateNextOpen();
+      final a = await _makeContainer(
+        roomVolumes: {
+          'room_vol_douyu_A': 11,
+          'room_vol_douyu_B': 22,
+          'room_vol_douyu_C': 33,
+        },
+        player: player,
+      );
+      final b = await _makeContainer(
+        roomVolumes: {
+          'room_vol_douyu_A': 11,
+          'room_vol_douyu_B': 22,
+          'room_vol_douyu_C': 33,
+        },
+        player: player,
+      );
+      final c = await _makeContainer(
+        roomVolumes: {
+          'room_vol_douyu_A': 11,
+          'room_vol_douyu_B': 22,
+          'room_vol_douyu_C': 33,
+        },
+        player: player,
+      );
+      final aKeepAlive = a.listen(
+        playControllerProvider((site: 'douyu', roomId: 'A')),
+        (_, _) {},
+        fireImmediately: true,
+      );
+      final bKeepAlive = b.listen(
+        playControllerProvider((site: 'douyu', roomId: 'B')),
+        (_, _) {},
+        fireImmediately: true,
+      );
+      final cKeepAlive = c.listen(
+        playControllerProvider((site: 'douyu', roomId: 'C')),
+        (_, _) {},
+        fireImmediately: true,
+      );
+      addTearDown(() {
+        aKeepAlive.close();
+        bKeepAlive.close();
+        cKeepAlive.close();
+      });
+      final aFuture = a.read(
+        playControllerProvider((site: 'douyu', roomId: 'A')).future,
+      );
+      final bFuture = b.read(
+        playControllerProvider((site: 'douyu', roomId: 'B')).future,
+      );
+      final cFuture = c.read(
+        playControllerProvider((site: 'douyu', roomId: 'C')).future,
+      );
+      await player.openStarted;
+      await Future<void>.delayed(Duration.zero);
       aKeepAlive.close();
       bKeepAlive.close();
-      cKeepAlive.close();
-    });
-    final aFuture = a.read(
-      playControllerProvider((site: 'douyu', roomId: 'A')).future,
-    );
-    final bFuture = b.read(
-      playControllerProvider((site: 'douyu', roomId: 'B')).future,
-    );
-    final cFuture = c.read(
-      playControllerProvider((site: 'douyu', roomId: 'C')).future,
-    );
-    await player.openStarted;
-    await Future<void>.delayed(Duration.zero);
-    aKeepAlive.close();
-    bKeepAlive.close();
-    player.completeOpen();
-    await Future.wait([aFuture, bFuture, cFuture]);
-    for (var i = 0; i < 20 && player.volumeCalls.length < 4; i++) {
-      await Future<void>.delayed(Duration.zero);
-    }
+      player.completeOpen();
+      await Future.wait([aFuture, bFuture, cFuture]);
+      for (var i = 0; i < 20 && player.volumeCalls.length < 4; i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
 
-    final state = c.read(
-      playControllerProvider((site: 'douyu', roomId: 'C')),
-    ).requireValue;
-    expect(state.generation, 1);
-    expect(state.payload?.roomId, 'C');
-    expect(player.currentSnapshot.volume, 33);
-    expect(player.volumeCalls, [11, 22, 33, 33]);
-    expect(player.openCalls.map((call) => call.line.url), [
-      'https://cdn.example.com/douyu/A.flv',
-      'https://cdn.example.com/douyu/B.flv',
-      'https://cdn.example.com/douyu/C.flv',
-    ]);
-  });
+      final state = c
+          .read(playControllerProvider((site: 'douyu', roomId: 'C')))
+          .requireValue;
+      expect(state.generation, 1);
+      expect(state.payload?.roomId, 'C');
+      expect(player.currentSnapshot.volume, 33);
+      expect(player.volumeCalls, [11, 22, 33, 33]);
+      expect(player.openCalls.map((call) => call.line.url), [
+        'https://cdn.example.com/douyu/A.flv',
+        'https://cdn.example.com/douyu/B.flv',
+        'https://cdn.example.com/douyu/C.flv',
+      ]);
+    },
+  );
 
   test('re-applies the current room volume after open resets the underlying player', () async {
     final player = ScriptedLivePlayer()..gateNextOpen();
