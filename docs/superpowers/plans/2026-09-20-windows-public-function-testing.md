@@ -78,13 +78,13 @@
 - Test: `test/features/playback/room_volume_provider_test.dart`
 - Modify: `docs/testing/windows-public-function-matrix.md`
 
-- [ ] 为所有平台参数化验证 `roomVolumeKey` 的小写、去空格和 `site + roomId` 隔离。
-- [ ] 验证房间记忆值、默认值、全局静音、0 音量、负数和大于 100 的钳制。
-- [ ] 先运行并确认缺少测试文件/用例时的失败，再补齐测试。
-- [ ] 运行该测试文件并记录通过数。
-- [ ] 更新矩阵：纯逻辑自动化标记为 `PASS`，Windows 真实列保持 `NOT_RUN`。
-- [ ] 提交：`test(playback): cover room volume isolation matrix`。
-- [ ] 推送：`git push origin master`。
+- [x] 为所有平台参数化验证 `roomVolumeKey` 的小写、去空格和 `site + roomId` 隔离。
+- [x] 验证房间记忆值、默认值、全局静音、0 音量、负数和大于 100 的钳制。
+- [x] 先运行并确认缺少测试文件/用例时的失败，再补齐测试。
+- [x] 运行该测试文件并记录通过数。
+- [x] 更新矩阵：纯逻辑自动化标记为 `PASS`，Windows 真实列保持 `NOT_RUN`。
+- [x] 提交：`test(playback): cover room volume isolation matrix`。
+- [x] 推送：`git push origin master`。
 
 ### Task 2.2：修复并验证切房音量异步竞态
 

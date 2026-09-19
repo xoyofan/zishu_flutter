@@ -42,15 +42,15 @@
 
 | 用例 ID | 场景 | 预期 | 自动化 | Windows 真实 | 证据 |
 |---|---|---|---|---|---|
-| `VOL-001` | 房间 A 设置音量 35 后进入房间 B | B 使用 B 的记忆值或默认值，不能继承 A | NOT_RUN | NOT_RUN | `test/features/playback/play_controller_volume_lifecycle_test.dart` |
-| `VOL-002` | 从 B 返回 A | A 恢复 35 | NOT_RUN | NOT_RUN | 同上 |
-| `VOL-003` | `douyu:123` 与 `huya:123` | 两个平台音量独立 | NOT_RUN | NOT_RUN | `test/features/playback/room_volume_provider_test.dart` |
-| `VOL-004` | `open` 完成后底层音量重置为 100 | 最终播放器实际音量仍为设置值 | NOT_RUN | NOT_RUN | lifecycle test + playback log |
+| `VOL-001` | 房间 A 设置音量 35 后进入房间 B | B 使用 B 的记忆值或默认值，不能继承 A | PASS | NOT_RUN | `test/features/playback/room_volume_provider_test.dart`（纯逻辑）；Windows 仍待真实验证 |
+| `VOL-002` | 从 B 返回 A | A 恢复 35 | PASS | NOT_RUN | `test/features/playback/room_volume_provider_test.dart`（纯逻辑）；生命周期待验证 |
+| `VOL-003` | `douyu:123` 与 `huya:123` | 两个平台音量独立 | PASS | NOT_RUN | `test/features/playback/room_volume_provider_test.dart` |
+| `VOL-004` | `open` 完成后底层音量重置为 100 | 最终播放器实际音量仍为设置值 | NOT_RUN | NOT_RUN | `test/features/playback/play_controller_volume_lifecycle_test.dart` + playback log |
 | `VOL-005` | 切换画质 | 音量和静音状态保持 | NOT_RUN | NOT_RUN | public playback state test |
 | `VOL-006` | 切换线路 | 音量和静音状态保持 | NOT_RUN | NOT_RUN | public playback state test |
 | `VOL-007` | 断流恢复/重新解析 | 音量和静音状态保持 | NOT_RUN | NOT_RUN | recovery test + playback log |
 | `VOL-008` | 全局静音后切房 | 所有房间实际音量为 0 | NOT_RUN | NOT_RUN | lifecycle test |
-| `VOL-009` | 房间音量设为 0 但未开启全局静音 | 该房间为 0，取消/切房不误恢复成 100 | NOT_RUN | NOT_RUN | room volume test |
+| `VOL-009` | 房间音量设为 0 但未开启全局静音 | 该房间为 0，取消/切房不误恢复成 100 | PASS | NOT_RUN | `test/features/playback/room_volume_provider_test.dart` |
 | `VOL-010` | A→B→C 快速切房 | 只有 C 的最终状态生效 | NOT_RUN | NOT_RUN | lifecycle test |
 
 ## 4. 阶段进度
@@ -66,9 +66,11 @@
 
 ### 阶段 2：音量状态完整回归
 
-- 状态：未开始
-- 目标：完成 `VOL-001` 至 `VOL-010`
-- 当前问题：`BUG-WIN-VOLUME-001` 尚未复现
+- 状态：进行中
+- 纯逻辑子阶段：已完成，`room_volume_provider_test.dart` **10/10 通过**，覆盖 10 个已注册平台
+- 生命周期子阶段：未开始
+- Windows 真实：NOT_RUN
+- 当前问题：`BUG-WIN-VOLUME-001` 尚未通过真实播放器生命周期复现；重点转向 `PlayController._open()` 的 `open`/`_applyRoomVolume` 异步时序
 
 ### 阶段 3：其他公共播放状态
 
