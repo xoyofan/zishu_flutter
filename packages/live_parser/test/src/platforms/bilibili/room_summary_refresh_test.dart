@@ -10,6 +10,7 @@ import '../../../support/fake_bilibili_api.dart';
 Map<String, Object?> _roomInfo({
   required int liveStatus,
   Object? online,
+  Object? attention,
   String uname = 'B站主播',
   String title = 'B站测试房间',
 }) => {
@@ -26,6 +27,7 @@ Map<String, Object?> _roomInfo({
     'area_name': '英雄联盟',
     'area_id': 325,
     'online': ?online,
+    'attention': ?attention,
   },
 };
 
@@ -43,7 +45,11 @@ void main() {
   });
 
   test('在播:online 取格式化热度,元信息来自 get_info,且不请求 play_info', () async {
-    fake.roomInfoResponse = _roomInfo(liveStatus: 1, online: 12345);
+    fake.roomInfoResponse = _roomInfo(
+      liveStatus: 1,
+      online: 12345,
+      attention: 654321,
+    );
 
     final summary = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'bilibili', roomIdOrUrl: '9527'),
@@ -57,6 +63,10 @@ void main() {
     expect(summary.category, '网游');
     expect(summary.online, '1.2万');
     expect(summary.cover, contains('hdslb.com'));
+    // 粉丝数取同响应 attention(web follow/status.ts 的 bilibili 快照);
+    // 勋章/大航海在 web 是额外接口且 vip 列本就为空,这里恒空。
+    expect(summary.followers, '654321');
+    expect(summary.vip, '');
 
     final urls = fake.requests.map((request) => request.url).join('\n');
     expect(urls, contains('get_info'));

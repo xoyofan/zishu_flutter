@@ -152,9 +152,14 @@ Future<void> _pumpFrames(WidgetTester tester, int times) async {
 }
 
 /// 启动真实宿主 → 深链播放页 → 切到侧栏「关注」tab。
+///
+/// [location] 缺省为种子样例房间(douyu/63136);「未关注」场景需传一个
+/// **不在 fixture 种子前 6 条**里的房间(种子会自动成为关注,见
+/// FollowController._seed)。
 Future<({GoRouter router, ProviderContainer container})> _pumpFollowTab(
-  WidgetTester tester,
-) async {
+  WidgetTester tester, {
+  String location = _playLocation,
+}) async {
   tester.view.devicePixelRatio = 1.0;
   tester.view.physicalSize = const Size(1600, 1200);
   addTearDown(tester.view.resetPhysicalSize);
@@ -171,7 +176,7 @@ Future<({GoRouter router, ProviderContainer container})> _pumpFollowTab(
   final element = tester.element(find.byType(Navigator).first);
   final container = ProviderScope.containerOf(element);
   final router = container.read(routerProvider);
-  router.go(_playLocation);
+  router.go(location);
   await _pumpFrames(tester, 3);
 
   // TabBar 切换动画约 300ms,pump 不足时点击会落在滑动中的旧坐标上。
@@ -475,6 +480,66 @@ void main() {
         find.byKey(const Key('play-side-follow-panel')),
         findsOneWidget,
         reason: '切房后侧栏应仍显示关注面板(不再退回聊天 tab)',
+      );
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('侧栏头统计区(接通关注条目刷新结果)', () {
+    /// 侧栏头内的文本 finder(统计文案只应在信息头内断言,避免与关注行
+    /// 的热度徽章等同名文本互相命中)。
+    Finder headerTextOf(String text) => find.descendant(
+      of: find.byKey(const Key('play-side-header')),
+      matching: find.text(text),
+    );
+
+    testWidgets('已关注:关注数/人气/VIP 显示关注条目刷新回填的值', (tester) async {
+      SharedPreferencesAsyncPlatform.instance =
+          InMemorySharedPreferencesAsync.withData(<String, Object>{
+            'zishu.follow.list': jsonEncode([
+              _seedEntry(
+                roomId: '63136',
+                online: '8.9万',
+              )
+                ..['followers'] = '123456'
+                ..['vip'] = '321',
+            ]),
+          });
+
+      final play = await _pumpFollowTab(tester);
+      // 深链房间就是种子房间(douyu/63136);统计值来自关注条目,必须等
+      // 异步恢复落地后再断言。
+      await _awaitFollowRestored(tester, play.container, 1);
+      await _pumpFrames(tester, 2);
+
+      expect(find.byKey(const Key('play-side-header')), findsOneWidget);
+      expect(headerTextOf('关注 123456'), findsOneWidget);
+      expect(headerTextOf('8.9万'), findsOneWidget, reason: '人气取关注条目 online');
+      expect(headerTextOf('321'), findsOneWidget, reason: 'VIP 取关注条目 vip');
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('未关注/无数据:统计回退「—」占位(不伪造)', (tester) async {
+      SharedPreferencesAsyncPlatform.instance =
+          InMemorySharedPreferencesAsync.withData(<String, Object>{
+            'zishu.follow.list': jsonEncode(<Object>[]),
+          });
+
+      // 88888 不在 fixture 种子(kFixtureRooms.take(6))里:空存储时种子会
+      // 落为初始关注,必须避开,才能构造「当前房间未关注」的场景。
+      await _pumpFollowTab(tester, location: '/douyu/play/88888');
+      await _pumpFrames(tester, 2);
+
+      expect(find.byKey(const Key('play-side-header')), findsOneWidget);
+      expect(headerTextOf('关注 —'), findsOneWidget);
+      // 人气/VIP 两个 _StatValue 在无数据时各显示「—」。
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('play-side-header')),
+          matching: find.text('—'),
+        ),
+        findsNWidgets(2),
+        reason: '人气与 VIP 均无数据,显示两个「—」',
       );
       expect(tester.takeException(), isNull);
     });

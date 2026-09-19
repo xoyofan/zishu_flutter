@@ -16,6 +16,10 @@ class FakeSoopApi extends http.BaseClient {
   Object? categoryRoomsResponse;
   Object? recommendResponse;
   Object? searchResponse;
+
+  /// 频道 dashboard(api-channel.sooplive.co.kr)响应;null 时 404
+  /// (refreshRoomSummary 侧按 best-effort 静默为 0,不破坏刷新)。
+  Object? dashboardResponse;
   final List<http.Request> requests = [];
 
   @override
@@ -53,6 +57,13 @@ class FakeSoopApi extends http.BaseClient {
       final body = Uri.splitQueryString(request.body);
       if (body['type'] == 'aid') return _json(aidResponse);
       return _json(detailResponse, status: detailStatus);
+    }
+    if (url.host == 'api-channel.sooplive.co.kr' &&
+        url.path.startsWith('/v1.1/channel/')) {
+      if (dashboardResponse == null) {
+        return http.Response('fake route missing: $url', 404);
+      }
+      return _json(dashboardResponse);
     }
     if (url.path.endsWith('/broad_stream_assign.html')) {
       return _json(assignResponse);

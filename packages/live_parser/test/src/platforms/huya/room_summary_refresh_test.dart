@@ -13,6 +13,7 @@ import '../../../support/fake_huya_api.dart';
 Map<String, Object?> _profile({
   required String liveStatus,
   int totalCount = 123456,
+  int? activityCount,
   bool replay = false,
   bool withStream = true,
 }) => {
@@ -22,6 +23,7 @@ Map<String, Object?> _profile({
       'nick': '虎牙主播',
       'avatar180': 'http://huyaimg.msstatic.com/avatar.jpg',
       'gameId': 1,
+      'activityCount': ?activityCount,
     },
     'liveStatus': liveStatus,
     'realLiveStatus': liveStatus,
@@ -52,7 +54,7 @@ void main() {
   });
 
   test('在播:online 取 totalCount 格式化,元信息来自 profileRoom,且不请求播放页', () async {
-    fake.profileRoomResponse = _profile(liveStatus: 'ON');
+    fake.profileRoomResponse = _profile(liveStatus: 'ON', activityCount: 98765);
 
     final summary = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'huya', roomIdOrUrl: '9527'),
@@ -66,6 +68,13 @@ void main() {
     expect(summary.cid, '1');
     expect(summary.online, '12.3万');
     expect(summary.cover, 'https://cover.huya.com/cover.jpg');
+    // 粉丝数取同响应 activityCount(web follow/status.ts 的 huya 快照)。
+    expect(summary.followers, '98765', reason: 'web formatCount 口径:完整数字');
+    expect(
+      summary.vip,
+      '',
+      reason: '贵宾/超粉走 Tars wup 协议,轻量刷新不复刻,留空不伪造',
+    );
 
     // 只打 mp.huya.com:没有播放页、没有签名。
     expect(

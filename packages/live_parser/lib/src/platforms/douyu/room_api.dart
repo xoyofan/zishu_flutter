@@ -187,3 +187,35 @@ Future<Map<String, dynamic>> fetchDouyuMobileRoomInfo(
     return const {};
   }
 }
+
+/// 主播资料卡(`getAnchorNewCard`,一次纯 HTTP 请求)。
+///
+/// 口径对齐 web `follow/status.ts` 的 `fetchDouyuAnchorCard`:
+/// - `data.roomInfo.fansNum` → 粉丝数;
+/// - `data.functionShow.giftCard.total` → 贵宾数回退(web 真源的贵宾
+///   实时榜走弹幕 WS `oni` 消息,轻量刷新不复刻 WS,只取卡片回退值,
+///   与 web `vipFromCard` 分支一致)。
+///
+/// 失败一律返回空 map:粉丝/贵宾是展示增强,不得让刷新整体失败。
+Future<Map<String, dynamic>> fetchDouyuAnchorCard(
+  ParserHttp http,
+  String rid,
+) async {
+  try {
+    final response = await http.get(
+      Uri.parse(
+        'https://www.douyu.com/wgapi/livenc/liveweb/getAnchorNewCard'
+        '?rid=$rid&client_sys=web',
+      ),
+      headers: {
+        ..._douyuWebHeaders,
+        'Referer': 'https://www.douyu.com/$rid',
+      },
+    );
+    final payload = jsonMapOf(jsonDecode(utf8.decode(response.bodyBytes)));
+    return jsonMapOf(payload['data']);
+  } on Object {
+    // 非 JSON(如上游返回 HTML 风控页)/HTTP 错误一律视为拿不到资料卡。
+    return const {};
+  }
+}

@@ -47,7 +47,11 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver, RoomSummar
   ///
   /// 口径对齐 web `follow/status.ts` 的 huya 快照:
   /// `huyaRoomState` 判在播,`formatOnline(totalCount|userCount)` 作热度;
-  /// `replay` 在本仓契约里归 offline([RoomState] 无 replay),故 online 留空。
+  /// 粉丝数取 `profileInfo.activityCount ?? liveData.activityCount`(同一
+  /// 响应内,零额外请求);`replay` 在本仓契约里归 offline([RoomState] 无
+  /// replay),故 online 留空。贵宾/超粉计数在 web 真源走 Tars wup 二进制
+  /// 协议(`follow/huya-wup.ts`),超出「只打轻量 HTTP 元信息接口」的刷新
+  /// 约定,此处不复刻 —— [RoomSummary.vip] 恒空(数据诚实性:不伪造)。
   @override
   Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
     final http = _client.parserHttp;
@@ -95,6 +99,10 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver, RoomSummar
           ? formatOnlineCount(liveData['totalCount'] ?? liveData['userCount'])
           : '',
       cover: httpsHuyaUrl(jsonText(liveData['cover'] ?? liveData['screenshot'])),
+      // 粉丝数(web formatCount 口径:完整数字,0/缺失留空)。
+      followers: formatExactCount(
+        profileInfo['activityCount'] ?? liveData['activityCount'],
+      ),
     );
   }
 

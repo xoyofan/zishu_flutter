@@ -242,6 +242,8 @@ class RoomSummary {
     required this.online,
     required this.cover,
     this.promoTag,
+    this.followers = '',
+    this.vip = '',
   });
 
   final String site;
@@ -254,6 +256,32 @@ class RoomSummary {
   final String cover;
   final String? promoTag;
 
+  /// 粉丝/关注数文案(已格式化,如「123456」)。
+  ///
+  /// 口径对齐 web 关注快照 `FollowStatus.fans`(SFVideoLive
+  /// `packages/shared/src/types/follow.ts:25`;SideHeader「关注：N」行):
+  /// - douyu:getAnchorNewCard 的 `roomInfo.fansNum`;
+  /// - huya:profileRoom 的 `profileInfo.activityCount ?? liveData.activityCount`;
+  /// - douyin:enter 响应 `owner.follow_info.follower_count`;
+  /// - bilibili:get_info 的 `attention`;
+  /// - soop:channel dashboard 的 `upd.fanCnt`;
+  /// - yy/kuaishou:上游无免登录接口,恒为空(数据诚实性:不伪造)。
+  ///
+  /// 空串 = 平台未提供(展示为「—」);只承载文本,不做数值解析。
+  final String followers;
+
+  /// VIP/贵宾类计数文案(已格式化,如「1.2万」)。
+  ///
+  /// 口径对齐 web 关注快照 `FollowStatus.vip`(follow.ts:30)与
+  /// `ROOM_STAT_COLUMNS` 的 vip 列(douyu/huya「贵宾」、douyin「会员」、
+  /// soop「订阅」;SFVideoLive `platformCatalog.ts:29`):
+  /// - douyu:getAnchorNewCard 的 `functionShow.giftCard.total`
+  ///   (web 真源另有弹幕 WS oni 实时榜,轻量刷新不复刻 WS);
+  /// - soop:channel dashboard 的 `subscription.total`;
+  /// - huya/bilibili/douyin/yy/kuaishou:上游需要额外签名/Tars 协议或
+  ///   真源本身无此字段,恒为空。
+  final String vip;
+
   Map<String, dynamic> toJson() => {
     'site': site,
     'roomId': roomId,
@@ -264,6 +292,8 @@ class RoomSummary {
     'online': online,
     'cover': cover,
     if (promoTag != null) 'promoTag': promoTag,
+    if (followers.isNotEmpty) 'followers': followers,
+    if (vip.isNotEmpty) 'vip': vip,
   };
 
   factory RoomSummary.fromJson(Map<String, dynamic> json) => RoomSummary(
@@ -276,6 +306,8 @@ class RoomSummary {
     online: json['online']?.toString() ?? '',
     cover: json['cover']?.toString() ?? '',
     promoTag: json['promoTag']?.toString(),
+    followers: json['followers']?.toString() ?? '',
+    vip: json['vip']?.toString() ?? '',
   );
 }
 

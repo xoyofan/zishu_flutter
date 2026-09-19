@@ -45,6 +45,15 @@ void main() {
             'nickname': '移动端主播名',
           },
         },
+      }
+      ..anchorCardResponse = {
+        'code': 0,
+        'data': {
+          'roomInfo': {'fansNum': 123456},
+          'functionShow': {
+            'giftCard': {'total': 321},
+          },
+        },
       };
 
     final summary = await resolver.refreshRoomSummary(
@@ -59,11 +68,34 @@ void main() {
     expect(summary.category, '英雄联盟');
     expect(summary.online, '1.2万');
     expect(summary.cover, contains('douyucdn'));
+    // 资料卡:粉丝/贵宾(web fetchDouyuAnchorCard 同源,fansNum/giftCard.total)。
+    expect(summary.followers, '123456', reason: 'web formatCount 口径:完整数字');
+    expect(summary.vip, '321', reason: '贵宾取卡片 giftCard.total(WS oni 不复刻)');
 
     final urls = fake.requests.map((request) => request.url).join('\n');
     expect(urls, isNot(contains('getEncryption')), reason: '刷新不得取白名单密钥');
     expect(urls, isNot(contains('getH5PlayV1')), reason: '刷新不得请求取流接口');
     expect(urls, isNot(contains('hlsH5Preview')), reason: '刷新不得请求预览流');
+  });
+
+  test('资料卡缺失/非 JSON:followers/vip 留空,刷新本身不失败', () async {
+    fake
+      ..betardResponse = _betard(showStatus: 1)
+      ..roomInfoResponse = {
+        'code': 0,
+        'data': {
+          'roomInfo': {'hn': '5千'},
+        },
+      }
+      ..anchorCardResponse = null; // 路由 500 + 非 JSON 文本。
+
+    final summary = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'douyu', roomIdOrUrl: '9527'),
+    );
+
+    expect(summary.online, '5千');
+    expect(summary.followers, '', reason: '统计是展示增强,拿不到就留空');
+    expect(summary.vip, '');
   });
 
   test('离线:即使上游给了热度,online 也必须为空串', () async {

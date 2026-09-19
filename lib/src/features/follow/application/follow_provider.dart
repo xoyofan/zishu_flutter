@@ -314,7 +314,26 @@ class FollowController extends Notifier<List<FollowEntry>> {
     return window;
   }
 
-  /// 刷新结果与本地条目合并:元信息以刷新为准,本地 cid 保留。
+  /// 刷新结果与本地条目合并。字段口径(逐字段核对,勿凭感觉增删):
+  ///
+  /// **以刷新返回为准**(主播元信息会变,刷新就是为了拿最新值):
+  /// - `title`/`anchorName`/`cover`:刷新非空则更新,空回退本地
+  ///   (上游偶发缺字段,不能把已有值冲掉);
+  /// - `category`:刷新非空则更新 —— **主播换分类后必须跟随**,
+  ///   (此前的「不同步」正是合并层没有明确这一口径的地方,现钉死:
+  ///   分类是上游元信息,不是本地标记);
+  /// - `online`:无条件取刷新值,空串即平台明确未开播(在播判据);
+  /// - `followers`/`vip`:刷新非空则更新,空回退本地(统计展示增强,
+  ///   上游没给就保留上次拿到的值)。
+  ///
+  /// **保留本地语义**(本地数据源/跳转上下文,刷新结果不可信):
+  /// - `cid`:本地非空则保留 —— 关注条目的 cid 是「加入关注时所在分类」
+  ///   的跳转上下文;各站刷新接口返回的 cid 口径与 payload 不一致
+  ///   (如 douyin cid=房间号),覆盖会破坏「我的分类」跳转;
+  /// - `site`/`roomId`:身份键,恒取本地。
+  ///
+  /// FollowEntry 层的 `followedAt`/`isSpecial`/`remindOn`/`lastLiveAt`
+  /// 不在 [RoomSummary] 内,由 [refreshStatuses] 的 copyWith 保持不变。
   static RoomSummary _mergeRefreshed(RoomSummary current, RoomSummary fresh) {
     return RoomSummary(
       site: current.site,
@@ -330,6 +349,10 @@ class FollowController extends Notifier<List<FollowEntry>> {
       // online 以刷新为准:空串即平台明确未开播。
       online: fresh.online,
       cover: fresh.cover.trim().isNotEmpty ? fresh.cover : current.cover,
+      followers: fresh.followers.trim().isNotEmpty
+          ? fresh.followers
+          : current.followers,
+      vip: fresh.vip.trim().isNotEmpty ? fresh.vip : current.vip,
     );
   }
 
@@ -359,6 +382,11 @@ class FollowController extends Notifier<List<FollowEntry>> {
             _fromRemote(item, localByKey['${item.site}:${item.id}']),
         ];
         await _persist(syncRemote: false);
+        // 云端契约不带分类/在播/统计元信息(见 [_fromRemote] 的置空),整表
+        // 替换后立即补一轮刷新回填,不等 60s 轮询 —— 否则关注行分类条与
+        // 侧栏头统计要空一个轮询周期。无 refresher(fixture/单测)时该调用
+        // 零网络直接返回 0。
+        unawaited(refreshStatuses());
       } else {
         await _pushRemote(token);
       }
@@ -394,6 +422,8 @@ class FollowController extends Notifier<List<FollowEntry>> {
                     category: item['category']?.toString() ?? '',
                     online: item['online']?.toString() ?? '',
                     cover: item['cover']?.toString() ?? '',
+                    followers: item['followers']?.toString() ?? '',
+                    vip: item['vip']?.toString() ?? '',
                   ),
                   isSpecial: item['isSpecial'] == true,
                   remindOn: item['remindOn'] == true,
@@ -485,8 +515,9 @@ class FollowController extends Notifier<List<FollowEntry>> {
 
   /// 把关注列表序列化为 JSON 字符串写入本地存储;[syncRemote] 时随后整表推云端。
   ///
-  /// 字段契约:{site, roomId, title, uname, cover} + 本地标记(isSpecial/remindOn/
-  /// followedAt),与任务卡 A8 约定的关注落库结构一致。
+  /// 字段契约:{site, roomId, title, uname, cover} + 元信息(cid/category/
+  /// online/followers/vip,刷新回填后随落盘保留)+ 本地标记(isSpecial/
+  /// remindOn/followedAt),与任务卡 A8 约定的关注落库结构一致。
   Future<void> _persist({bool syncRemote = true}) async {
     try {
       final payload = [
@@ -500,6 +531,8 @@ class FollowController extends Notifier<List<FollowEntry>> {
             'cid': entry.room.cid,
             'category': entry.room.category,
             'online': entry.room.online,
+            'followers': entry.room.followers,
+            'vip': entry.room.vip,
             'isSpecial': entry.isSpecial,
             'remindOn': entry.remindOn,
             'followedAt': entry.followedAt.toIso8601String(),

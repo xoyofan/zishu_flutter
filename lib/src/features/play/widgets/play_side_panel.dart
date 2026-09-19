@@ -244,6 +244,7 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
                 site: site,
                 roomId: roomId,
                 payload: payload,
+                followRoom: matched.isNotEmpty ? matched.first.room : null,
                 followed: followed,
                 superFollowed: superFollowed,
                 remindOn: remindOn,
@@ -330,6 +331,7 @@ class _SideHeader extends StatelessWidget {
     required this.site,
     required this.roomId,
     required this.payload,
+    required this.followRoom,
     required this.followed,
     required this.superFollowed,
     required this.remindOn,
@@ -343,6 +345,16 @@ class _SideHeader extends StatelessWidget {
   final String site;
   final String roomId;
   final RoomPayload? payload;
+
+  /// 当前房间的关注条目(null = 未关注)。
+  ///
+  /// 统计区数据源对齐 web `SideHeader.vue` + `useRoomStats.ts`:粉丝/贵宾/
+  /// 人气等统计来自关注状态快照(本仓等价物 = 关注条目随
+  /// `FollowController.refreshStatuses` 回填的 [RoomSummary]);[RoomPayload]
+  /// 不携带统计字段,故未关注(或尚未刷新回填)时该项显示「—」,
+  /// 不伪造数据。
+  final RoomSummary? followRoom;
+
   final bool followed;
   final bool superFollowed;
 
@@ -366,6 +378,12 @@ class _SideHeader extends StatelessWidget {
     final title = payload?.title.trim() ?? '';
     final category = payload?.category.trim() ?? '';
     final isLive = payload?.isLive ?? false;
+    // 统计区(对齐 web SideHeader「关注：N」行 + stats 列):
+    // 未关注/上游未提供 → '—' 占位,不伪造(数据诚实性)。
+    final followRoom = this.followRoom;
+    final followersText = _statText(followRoom?.followers);
+    final audienceText = _statText(followRoom?.online);
+    final vipText = _statText(followRoom?.vip);
 
     // 信息头高度随系统字号缩放:固定 64px 在大字体(1.15x/1.3x)下会把
     // 中间三行元信息挤出容器底部(移动端实测 1px RenderFlex 溢出)。
@@ -416,7 +434,8 @@ class _SideHeader extends StatelessWidget {
                   children: [
                     Flexible(
                       child: Text(
-                        '关注 —',
+                        '关注 $followersText',
+                        key: const Key('play-side-stat-followers'),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 11, height: 1.08),
@@ -442,15 +461,19 @@ class _SideHeader extends StatelessWidget {
                 const SizedBox(height: 4),
                 Row(
                   children: [
+                    // 人气/观众(web stats[0]「观众」列;online 为空 = 离线或
+                    // 尚未刷新回填,显示「—」)。
                     _StatValue(
                       icon: Icons.people_alt_outlined,
-                      value: '—',
+                      value: audienceText,
                       color: context.tokens.statAudience,
                     ),
                     const SizedBox(width: AppSpacing.sm),
+                    // VIP/贵宾(web stats[1] vip 列;douyu/huya 贵宾、
+                    // douyin 会员、soop 订阅;其余平台上游无 → 「—」)。
                     _StatValue(
                       icon: Icons.workspace_premium_outlined,
-                      value: '—',
+                      value: vipText,
                       color: context.tokens.statVip,
                     ),
                     if (category.isNotEmpty) ...[
@@ -498,6 +521,12 @@ class _SideHeader extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 统计文本:空串(未关注/上游未提供)显示「—」占位,不伪造。
+String _statText(String? value) {
+  final text = value?.trim() ?? '';
+  return text.isEmpty ? '—' : text;
 }
 
 /// 当前房间 web 页地址:解析结果自带的 sourceUrl(解析器实际进入的页面,

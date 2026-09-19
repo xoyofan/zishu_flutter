@@ -43,6 +43,10 @@ class FakeDouyuApi extends http.BaseClient {
   /// 房间信息接口(m.douyu.com/api/room/info)响应;null 时返回 404。
   Object? roomInfoResponse;
 
+  /// 主播资料卡(getAnchorNewCard)响应;null 时返回 500
+  /// (refreshRoomSummary 侧按 best-effort 静默为空,不破坏刷新)。
+  Object? anchorCardResponse;
+
   /// mixList 按 directory(如 `0_0`、`2_1`)配置;未配置返回 500。
   /// 传 'fail' 时返回 500 触发回退分支。
   final Map<String, Object?> mixListByDirectory = {};
@@ -118,6 +122,12 @@ class FakeDouyuApi extends http.BaseClient {
             : _json(roomInfoResponse);
       }
       return http.Response('{"rid":${aliasPageRid.isEmpty ? '0' : aliasPageRid},"tt":1}', 200);
+    }
+    if (path.contains('getAnchorNewCard')) {
+      if (anchorCardResponse == null) {
+        return http.Response('fake route missing: $url', 500);
+      }
+      return _json(anchorCardResponse);
     }
     if (path.startsWith('/gapi/rkc/directory/mixList/')) {
       final directory = url.pathSegments.length > 4 ? url.pathSegments[4] : '';

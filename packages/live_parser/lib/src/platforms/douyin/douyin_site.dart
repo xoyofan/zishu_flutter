@@ -26,7 +26,13 @@ class DouyinRoomResolver implements RoomResolver, RoomSummaryRefresher {
   /// 房间页 HTML),**不构造任何播放档位/地址**。
   ///
   /// 口径对齐 web `follow/status.ts` 的 douyin 快照:`status == 4` 为未开播,
-  /// 其余视为在播;热度取 `douyinOnlineRaw`(user_count_str/stats 口径)。
+  /// 其余视为在播;热度取 `douyinOnlineRaw`(user_count_str/stats 口径);
+  /// 粉丝数取 enter 响应内 `owner.follow_info.follower_count`(web
+  /// `fetchDouyinSnapshot` 的首选路径,零额外请求;缺失时 web 会再打
+  /// 用户 follow_info 接口,此处不再追加 —— 拿不到就留空)。
+  /// 「会员」计数在 web 真源走带签名的主播资料卡接口
+  /// (`follow/douyin-extras.ts` 的 `/webcast/user/profile/`),轻量刷新
+  /// 不复刻签名链路,[RoomSummary.vip] 恒空。
   /// 注:`status != 4` 但无流的情况只有拿档位后才知,轻量刷新不为此多打请求,
   /// 由播放侧开流时自会纠偏。
   @override
@@ -36,6 +42,7 @@ class DouyinRoomResolver implements RoomResolver, RoomSummaryRefresher {
     final anchor = jsonText(room['anchor_name']);
     final title = jsonText(room['title']);
     final live = jsonInt(room['status']) != 4;
+    final owner = jsonMapOf(room['owner']);
     return RoomSummary(
       site: kDouyinSiteId,
       roomId: webRid,
@@ -46,6 +53,9 @@ class DouyinRoomResolver implements RoomResolver, RoomSummaryRefresher {
       category: douyinCategoryOf(room),
       online: live ? formatOnlineCount(douyinOnlineRaw(room)) : '',
       cover: douyinCoverOf(room),
+      followers: formatExactCount(
+        jsonMapOf(owner['follow_info'])['follower_count'],
+      ),
     );
   }
 

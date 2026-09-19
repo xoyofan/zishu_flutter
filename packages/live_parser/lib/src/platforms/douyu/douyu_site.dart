@@ -8,6 +8,7 @@ import '../../http/parser_http.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
 import '../../registry/cached_room_resolver.dart';
+import '../../utils/format_online.dart';
 import 'browse.dart';
 import 'danmaku.dart';
 import 'encryption.dart';
@@ -53,12 +54,15 @@ class DouyuRoomResolver implements RoomResolver, RoomSummaryRefresher {
 
   final DouyuClient _client;
 
-  /// 轻量刷新:betard(状态/标题/封面/分类)+ m.douyu 房间信息(热度 `hn`)。
+  /// 轻量刷新:betard(状态/标题/封面/分类)+ m.douyu 房间信息(热度 `hn`)
+  /// + 主播资料卡(粉丝/贵宾,失败静默)。
   ///
-  /// 只打两个房间信息端点 —— **不取白名单密钥、不请求 getH5PlayV1、
-  /// 不做签名**,因此不能在关注列表定时刷新时顺带拉取流地址。口径对齐 web
-  /// `services/streaming-server/src/follow/status.ts` 的 douyu 快照:
-  /// `show_status == 1` 且在播时取 `hn` 作热度文案,离线一律空串。
+  /// 只打三个房间信息端点 —— **不取白名单密钥、不请求 getH5PlayV1、
+  /// 不做签名、不连弹幕 WS**,因此不能在关注列表定时刷新时顺带拉取流地址。
+  /// 口径对齐 web `services/streaming-server/src/follow/status.ts` 的
+  /// douyu 快照:`show_status == 1` 且在播时取 `hn` 作热度文案,离线一律
+  /// 空串;`fansNum`/`giftCard.total` 作粉丝/贵宾文案(web 真源的贵宾
+  /// 实时榜走弹幕 WS oni,此处仅取卡片回退值)。
   @override
   Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
     final parserHttp = _client.parserHttp;
@@ -67,6 +71,14 @@ class DouyuRoomResolver implements RoomResolver, RoomSummaryRefresher {
     // 房间不存在时 fetchBetard 抛 RoomNotFoundException(调用方按条目隔离)。
     final room = await fetchBetard(parserHttp, rid);
     final mobile = await fetchDouyuMobileRoomInfo(parserHttp, rid);
+    final anchorCard = await fetchDouyuAnchorCard(parserHttp, rid);
+    final cardRoomInfo = jsonMapOf(anchorCard['roomInfo']);
+    final cardFans = formatExactCount(
+      cardRoomInfo['fansNum'] ?? anchorCard['fansNum'],
+    );
+    final cardVip = formatExactCount(
+      jsonMapOf(jsonMapOf(anchorCard['functionShow'])['giftCard'])['total'],
+    );
 
     final live = room.showStatus == 1;
     final hn = jsonText(mobile['hn']);
@@ -84,6 +96,8 @@ class DouyuRoomResolver implements RoomResolver, RoomSummaryRefresher {
       // 热度只在在播时有意义;`hn` 缺失/为 0 时留空。
       online: live && hn.isNotEmpty && hn != '0' ? hn : '',
       cover: room.cover,
+      followers: cardFans,
+      vip: cardVip,
     );
   }
 

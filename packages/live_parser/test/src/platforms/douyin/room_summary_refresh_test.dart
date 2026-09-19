@@ -9,6 +9,7 @@ import '../../../support/fake_douyin_api.dart';
 Map<String, Object?> _enter({
   required int status,
   Object? online,
+  Object? followerCount,
   String title = '抖音测试直播间',
   String nickname = '抖音主播',
 }) => {
@@ -25,6 +26,8 @@ Map<String, Object?> _enter({
           'avatar_thumb': {
             'url_list': ['//p3.douyinpic.com/avatar.jpg'],
           },
+          if (followerCount != null)
+            'follow_info': {'follower_count': followerCount},
         },
         'cover': {
           'url_list': ['//p3.douyinpic.com/cover.jpg'],
@@ -48,7 +51,11 @@ void main() {
   });
 
   test('在播:热度格式化、元信息正确,且不请求分区/其他接口', () async {
-    fake.enterResponse = _enter(status: 2, online: 32100);
+    fake.enterResponse = _enter(
+      status: 2,
+      online: 32100,
+      followerCount: 456789,
+    );
 
     final summary = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'douyin', roomIdOrUrl: '123456'),
@@ -62,6 +69,10 @@ void main() {
     expect(summary.cid, '123456', reason: '抖音无二级分类 id,cid 即房间号');
     expect(summary.online, '3.2万');
     expect(summary.cover, contains('douyinpic.com'));
+    // 粉丝数取 enter 响应内 owner.follow_info(web 快照首选路径,零额外请求);
+    // 「会员」计数走带签名的主播资料卡,轻量刷新不复刻,vip 恒空。
+    expect(summary.followers, '456789');
+    expect(summary.vip, '');
 
     final urls = fake.requests.map((request) => request.url).join('\n');
     expect(urls, contains('enter'));

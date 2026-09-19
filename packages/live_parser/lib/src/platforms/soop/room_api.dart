@@ -131,11 +131,49 @@ Future<Map<String, dynamic>> fetchSoopPlayerApi(
   return http.jsonMap(response);
 });
 
+/// 频道 dashboard(`api-channel.sooplive.co.kr`):粉丝数 + 订阅数。
+///
+/// 口径对齐 web `resolve/soop/index.ts` 的 `fetchSoopDashboard`:
+/// `upd.fanCnt` → 粉丝、`subscription.total` → 订阅(展示为 vip 列
+/// 「订阅」)。失败/字段缺失返回 (0, 0):统计是展示增强,不得让刷新失败。
+Future<({int fans, int subscribers})> fetchSoopDashboard(
+  ParserHttp http,
+  String roomId,
+) async {
+  try {
+    final uri = Uri.https(
+      'api-channel.sooplive.co.kr',
+      '/v1.1/channel/$roomId/dashboard',
+    );
+    final response = await http.get(
+      uri,
+      headers: const {
+        'Accept': 'application/json',
+        'Referer': 'https://www.sooplive.com/',
+        'Origin': 'https://www.sooplive.com',
+      },
+    );
+    final data = http.jsonMap(response);
+    final upd = jsonMapOf(data['upd']);
+    final subscription = jsonMapOf(data['subscription']);
+    return (
+      fans: _soopIntOf(upd['fanCnt']),
+      subscribers: _soopIntOf(subscription['total']),
+    );
+  } on Object {
+    return (fans: 0, subscribers: 0);
+  }
+}
+
+int _soopIntOf(Object? value) {
+  final parsed = value is num ? value : num.tryParse('${value ?? ''}'.trim());
+  return parsed == null || parsed < 0 ? 0 : parsed.toInt();
+}
+
 /// 对瞬时传输错误(握手/连接被重置/超时)重试 3 次。
 Future<T> _retrySoop<T>(Future<T> Function() action) async {
   Object? lastError;
-  for (var attempt = 0; attempt < 3; attempt++) {
-    if (attempt > 0) {
+  for (var attempt = 0; attempt < 3; attempt++) {    if (attempt > 0) {
       await Future<void>.delayed(Duration(milliseconds: 150 * attempt));
     }
     try {

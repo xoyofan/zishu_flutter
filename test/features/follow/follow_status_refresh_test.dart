@@ -69,6 +69,9 @@ Map<String, Object> _seedEntry({
   String cid = '',
   String title = '标题',
   String cover = 'https://cdn/cover.jpg',
+  String category = '网游',
+  String followers = '',
+  String vip = '',
 }) => {
   'site': 'douyu',
   'roomId': roomId,
@@ -76,8 +79,10 @@ Map<String, Object> _seedEntry({
   'uname': '主播$roomId',
   'cover': cover,
   'cid': cid,
-  'category': '网游',
+  'category': category,
   'online': online,
+  'followers': followers,
+  'vip': vip,
   'isSpecial': false,
   'remindOn': false,
   'followedAt': '2026-09-01T00:00:00.000Z',
@@ -90,15 +95,20 @@ RoomSummary _fresh({
   String cid = '',
   String title = '新标题',
   String cover = 'https://cdn/new.jpg',
+  String category = '新分类',
+  String followers = '',
+  String vip = '',
 }) => RoomSummary(
   site: 'douyu',
   roomId: roomId,
   title: title,
   anchorName: '主播$roomId',
   cid: cid,
-  category: '新分类',
+  category: category,
   online: online,
   cover: cover,
+  followers: followers,
+  vip: vip,
 );
 
 Future<ProviderContainer> _container({
@@ -163,6 +173,70 @@ void main() {
       final second = entries.firstWhere((e) => e.room.roomId == '1002');
       expect(second.room.online, '', reason: '空串即平台明确未开播');
       expect(second.isLive, isFalse);
+    });
+
+    test('主播换分类:category/统计以刷新为准,cid 与本地标记保留', () async {
+      final fake = FakeRefresher(
+        results: {
+          '1001': _fresh(
+            roomId: '1001',
+            online: '2.2万',
+            followers: '123456',
+            vip: '321',
+          ),
+        },
+      );
+      final container = await _container(
+        seed: [
+          _seedEntry(
+            roomId: '1001',
+            online: '5千',
+            cid: 'cid-local',
+            category: '旧分类',
+            followers: '1',
+            vip: '2',
+          ),
+        ],
+        refresher: fake,
+        overrideRefresher: true,
+      );
+
+      await container.read(followProvider.notifier).refreshStatuses();
+
+      final entry = container.read(followProvider).single;
+      // 分类是上游元信息:主播换分类后必须跟随刷新值,不能留在旧分类。
+      expect(entry.room.category, '新分类');
+      expect(entry.room.online, '2.2万');
+      expect(entry.room.followers, '123456');
+      expect(entry.room.vip, '321');
+      // cid 是「加入关注时所在分类」的跳转上下文,刷新不覆盖。
+      expect(entry.room.cid, 'cid-local');
+    });
+
+    test('刷新未返回统计(空串)时保留本地已有值,不把统计冲成空', () async {
+      final fake = FakeRefresher(
+        results: {
+          '1001': _fresh(roomId: '1001', online: '8千'),
+        },
+      );
+      final container = await _container(
+        seed: [
+          _seedEntry(
+            roomId: '1001',
+            online: '5千',
+            followers: '654321',
+            vip: '99',
+          ),
+        ],
+        refresher: fake,
+        overrideRefresher: true,
+      );
+
+      await container.read(followProvider.notifier).refreshStatuses();
+
+      final entry = container.read(followProvider).single;
+      expect(entry.room.followers, '654321', reason: '上游缺字段不得冲掉旧值');
+      expect(entry.room.vip, '99');
     });
 
     test('单条失败保留原值:不得把在播刷成离线', () async {

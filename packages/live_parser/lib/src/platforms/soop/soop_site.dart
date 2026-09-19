@@ -47,12 +47,14 @@ class SoopRoomResolver implements RoomResolver, RoomSummaryRefresher {
   /// 档位列表封顶(SF MAX_TIERS=4),避免长尾档位放大 UI/缓存。
   static const int _maxTiers = 4;
 
-  /// 轻量刷新:只打一次 `player_live_api(type=live)` 房间信息,**绕开
-  /// `_detailCache` 也不写任何缓存**(刷新就是为了拿最新状态),更不做
-  /// assign/aid 取流。
+  /// 轻量刷新:只打一次 `player_live_api(type=live)` 房间信息(**绕开
+  /// `_detailCache` 也不写任何缓存**(刷新就是为了拿最新状态),再补一次
+  /// channel dashboard(粉丝/订阅,失败静默),更不做 assign/aid 取流。
   ///
   /// 口径对齐 web `follow/status.ts` 的 soop 快照:`RESULT == 1` 为在播,
   /// 热度取 `soopOnlineViewers`(total_view_cnt/pc+mobile 相加口径);
+  /// 粉丝/订阅取 `fetchSoopDashboard`(`upd.fanCnt`/`subscription.total`,
+  /// web formatCount 口径:完整数字)。
   /// 封禁(-2)按「房间不存在」抛异常,其余非在播码一律空串。
   @override
   Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
@@ -62,6 +64,7 @@ class SoopRoomResolver implements RoomResolver, RoomSummaryRefresher {
     if (detail.isBanned) {
       throw ParserHttpException('房间已被封禁: $roomId');
     }
+    final dashboard = await fetchSoopDashboard(_client.parserHttp, roomId);
     return RoomSummary(
       site: kSoopSiteId,
       roomId: detail.roomId.isNotEmpty ? detail.roomId : roomId,
@@ -75,6 +78,9 @@ class SoopRoomResolver implements RoomResolver, RoomSummaryRefresher {
       // (数值字符串,经 formatOnlineCount 展示)。
       online: detail.isLive ? formatOnlineCount(detail.viewers) : '',
       cover: soopCoverUrl(detail.bno),
+      followers: formatExactCount(dashboard.fans),
+      // SOOP 的 vip 列在 web 真源是「订阅」(ROOM_STAT_COLUMNS.soop)。
+      vip: formatExactCount(dashboard.subscribers),
     );
   }
 

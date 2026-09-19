@@ -11,7 +11,12 @@ void main() {
   late SoopRoomResolver resolver;
 
   setUp(() {
-    fake = FakeSoopApi()..detailResponse = soopFixture('detail_live.json');
+    fake = FakeSoopApi()
+      ..detailResponse = soopFixture('detail_live.json')
+      ..dashboardResponse = {
+        'upd': {'fanCnt': 23456},
+        'subscription': {'total': 789},
+      };
     resolver = SoopRoomResolver(SoopClient(httpClient: fake));
   });
 
@@ -28,6 +33,10 @@ void main() {
     expect(summary.cid, 'testbj', reason: 'SOOP 无二级分类 id,cid 即房间号');
     expect(summary.online, '2.3万', reason: 'total_view_cnt=23456 格式化');
     expect(summary.cover, startsWith('https://liveimg.sooplive.co.kr/m/12345678'));
+    // dashboard:粉丝 + 订阅(web fetchSoopDashboard 同源,upd.fanCnt /
+    // subscription.total;SOOP 的 vip 列在 web 真源是「订阅」)。
+    expect(summary.followers, '23456');
+    expect(summary.vip, '789');
 
     final playerApiRequests = fake.requests
         .where((request) => request.url.path == '/afreeca/player_live_api.php')

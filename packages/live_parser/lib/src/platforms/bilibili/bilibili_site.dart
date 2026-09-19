@@ -59,7 +59,11 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
   /// **不请求 `room/play_info`、不做任何取流与签名**。
   ///
   /// 口径对齐 web `follow/status.ts` 的 bilibili 快照:`live_status == 1`
-  /// 为在播,`online` 作热度;轮播(2)/未开播均归 offline,online 留空。
+  /// 为在播,`online` 作热度;粉丝数取同响应的 `attention`(web
+  /// `formatCount(info.attention)` 同口径);轮播(2)/未开播均归
+  /// offline,online 留空。粉丝勋章/大航海在 web 真源是 anchor/guard 两个
+  /// 额外接口(`fetchBilibiliFansMedalCount`/`fetchBilibiliGuardInfo`),
+  /// 且 vip 列本就为空 —— 此处不再加请求,[RoomSummary.vip] 恒空。
   @override
   Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
     final http = _client.parserHttp;
@@ -103,6 +107,7 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
       category: jsonText(info['parent_area_name'] ?? info['area_name']),
       online: live ? formatOnlineCount(info['online']) : '',
       cover: bilibiliCoverFromRoom(info),
+      followers: formatExactCount(info['attention']),
     );
   }
 
