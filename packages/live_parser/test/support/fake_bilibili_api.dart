@@ -13,6 +13,10 @@ class FakeBilibiliApi extends http.BaseClient {
   Object? roomInfoResponse;
   Object? anchorInRoomResponse;
   Object? roomPlayInfoResponse;
+
+  /// 按请求 qn 参数路由的 playInfo 响应(懒取流用例):命中键用对应响应,
+  /// 未命中回退 [roomPlayInfoResponse]。
+  Map<int, Object?>? roomPlayInfoByQn;
   Object? areaListResponse;
   Object? roomListResponse;
   Object? webMainListResponse;
@@ -45,7 +49,7 @@ class FakeBilibiliApi extends http.BaseClient {
     return switch (path) {
       '/room/v1/Room/get_info' => _json(roomInfoResponse),
       '/live_user/v1/UserInfo/get_anchor_in_room' => _json(anchorInRoomResponse),
-      '/xlive/web-room/v2/index/getRoomPlayInfo' => _json(roomPlayInfoResponse),
+      '/xlive/web-room/v2/index/getRoomPlayInfo' => _playInfoFor(request),
       '/room/v1/Area/getList' => _json(areaListResponse),
       '/room/v1/Area/getRoomList' => _json(roomListResponse),
       '/xlive/web-interface/v1/webMain/getList' => _json(webMainListResponse),
@@ -55,6 +59,15 @@ class FakeBilibiliApi extends http.BaseClient {
       '/x/web-interface/wbi/search/type' || '/x/web-interface/search/type' => _json(searchResponse),
       _ => http.Response('fake route missing: ${request.url}', 500),
     };
+  }
+
+  http.Response _playInfoFor(http.Request request) {
+    final byQn = roomPlayInfoByQn;
+    final qn = int.tryParse(request.url.queryParameters['qn'] ?? '');
+    if (byQn != null && qn != null && byQn.containsKey(qn)) {
+      return _json(byQn[qn]);
+    }
+    return _json(roomPlayInfoResponse);
   }
 }
 
