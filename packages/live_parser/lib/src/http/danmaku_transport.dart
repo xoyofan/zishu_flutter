@@ -60,8 +60,7 @@ class IoDanmakuTransport implements DanmakuTransport {
       return _IoDanmakuSocket(socket);
     }
 
-    final raw = await _dial(url);
-    final tap = _RawEventTap(raw, connectTimeout);
+    final (tap, _) = await _dial(url);
     try {
       final handshake = await _upgrade(tap, url, protocols, headers);
       final webSocket = WebSocket.fromUpgradedSocket(
@@ -76,23 +75,31 @@ class IoDanmakuTransport implements DanmakuTransport {
     }
   }
 
-  /// 建立到目标的 RawSocket(直连或经代理 CONNECT 隧道;wss 做 TLS)。
-  Future<RawSocket> _dial(Uri url) async {
+  /// 建立到目标的连接(直连或经代理 CONNECT 隧道;wss 做 TLS)。
+  ///
+  /// 返回 (tap, raw)。**RawSocket 事件流只能 listen 一次**:
+  /// - ws+代理:CONNECT 与后续升级/帧层共用同一个 tap;
+  /// - wss+代理:TLS 交给 [RawSecureSocket.secure] 时把 tap 的 subscription
+  ///   移交出去(其 subscription 参数会替换事件处理器),TLS 后换绑新 tap。
+  Future<(_RawEventTap, RawSocket)> _dial(Uri url) async {
     final isSecure = url.scheme == 'wss' || url.scheme == 'https';
     final port = url.port != 0 ? url.port : (isSecure ? 443 : 80);
 
-    Future<RawSocket> secure(RawSocket raw) {
-      if (!isSecure) return Future.value(raw);
-      return RawSecureSocket.secure(raw, host: url.host).timeout(connectTimeout);
-    }
-
     if (!UpstreamProxy.enabled) {
+      if (isSecure) {
+        final raw = await RawSecureSocket.connect(
+          url.host,
+          port,
+          timeout: connectTimeout,
+        );
+        return (_RawEventTap(raw, connectTimeout), raw);
+      }
       final raw = await RawSocket.connect(
         url.host,
         port,
         timeout: connectTimeout,
       );
-      return secure(raw);
+      return (_RawEventTap(raw, connectTimeout), raw);
     }
 
     final proxyHostPort = UpstreamProxy.hostPort!;
@@ -112,13 +119,23 @@ class IoDanmakuTransport implements DanmakuTransport {
       'Proxy-Connection: keep-alive\r\n'
       '\r\n',
     ));
-    return _waitForHeader(tap).then((response) async {
-      final statusLine = _statusLineOf(response.headerBytes);
-      if (!statusLine.contains(' 200')) {
-        throw HttpException('代理 CONNECT 失败: $statusLine', uri: url);
-      }
-      return secure(raw);
-    });
+    final response = await _waitForHeader(tap);
+    final statusLine = _statusLineOf(response.headerBytes);
+    if (!statusLine.contains(' 200')) {
+      throw HttpException('代理 CONNECT 失败: $statusLine', uri: url);
+    }
+    if (!isSecure) {
+      // ws:隧道已就绪,CONNECT 与升级/帧层继续共用同一个 tap。
+      return (tap, raw);
+    }
+    // TLS 接管 tap 的订阅(secure 的 subscription 参数会替换事件处理器),
+    // 握手完成后事件流换了新对象,换绑新 tap。
+    final secureRaw = await RawSecureSocket.secure(
+      raw,
+      subscription: tap.subscription,
+      host: url.host,
+    ).timeout(connectTimeout);
+    return (_RawEventTap(secureRaw, connectTimeout), secureRaw);
   }
 
   /// 写升级请求(逐字节控制头部大小写)并读响应头;返回 101 与协商子协议。
@@ -224,11 +241,12 @@ String _webSocketKey() {
 /// 连接全程共用本泵:事件持续读进 [buffer],消费方通过回调拿数据。
 class _RawEventTap {
   _RawEventTap(this.raw, this.connectTimeout) {
-    raw.listen(_dispatch);
+    subscription = raw.listen(_dispatch);
     raw.readEventsEnabled = true;
   }
 
   final RawSocket raw;
+  late final StreamSubscription<RawSocketEvent> subscription;
 
   /// 该连接的握手超时(与上层 [IoDanmakuTransport.connectTimeout] 同值)。
   final Duration connectTimeout;

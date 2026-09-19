@@ -7,22 +7,37 @@ import 'package:live_parser/live_parser.dart';
 import 'package:live_parser/src/http/danmaku_transport.dart';
 import 'package:live_parser/src/platforms/soop/danmaku.dart';
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
+  final target = args.isNotEmpty ? args.first : '';
   final client = SoopClient();
   try {
-    final browse = SoopBrowseRepository(client.parserHttp);
-    final rooms = await browse.fetchRooms(
-      const RoomListRequest(site: 'soop', page: 1, limit: 3),
-    );
-    stdout.writeln('在播房间: ${[for (final r in rooms.rooms) r.roomId]}');
-    for (final room in rooms.rooms.take(1)) {
-      stdout.writeln('== 连接 ${room.roomId}「${room.anchorName}」 ==');
+    late final String roomId;
+    late final String anchor;
+    if (target.isNotEmpty) {
+      roomId = target;
+      anchor = '指定房间';
+    } else {
+      final browse = SoopBrowseRepository(client.parserHttp);
+      final rooms = await browse.fetchRooms(
+        const RoomListRequest(site: 'soop', page: 1, limit: 3),
+      );
+      stdout.writeln('在播房间: ${[for (final r in rooms.rooms) r.roomId]}');
+      final room = rooms.rooms.first;
+      roomId = room.roomId;
+      anchor = room.anchorName;
+    }
+    {
+      stdout.writeln('== 连接 $roomId「$anchor」 ==');
+      // 打印上游下发的聊天参数
+      final payload = await fetchSoopPlayerApi(client.parserHttp, roomId);
+      final ch = (payload['CHANNEL'] as Map?) ?? const {};
+      stdout.writeln('聊天参数: CHATNO=${ch['CHATNO']} CHDOMAIN=${ch['CHDOMAIN']} CHPT=${ch['CHPT']}');
       final connector = SoopDanmakuConnector(
         client.parserHttp,
         transport: IoDanmakuTransport(connectTimeout: const Duration(seconds: 5)),
       );
       final session = await connector.connect(
-        DanmakuSessionRequest(site: 'soop', roomId: room.roomId),
+        DanmakuSessionRequest(site: 'soop', roomId: roomId),
       );
       stdout.writeln('握手成功');
       var count = 0;
