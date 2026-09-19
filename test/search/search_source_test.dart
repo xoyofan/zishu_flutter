@@ -39,6 +39,7 @@ class FakeSearchSource implements SearchSource {
     required String site,
     required String keyword,
     int limit = 20,
+    SearchType? type,
   }) async {
     if (_bySite != null) return _bySite[site] ?? const [];
     return _all;
@@ -226,6 +227,7 @@ class _ToggleSource implements SearchSource {
     required String site,
     required String keyword,
     int limit = 20,
+    SearchType? type,
   }) async {
     if (fail) throw StateError('network down');
     return [makeHit('OK')];

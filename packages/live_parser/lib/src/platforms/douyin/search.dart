@@ -30,14 +30,28 @@ class DouyinSearchRepository implements SearchRepository {
       return const SearchResult(site: kDouyinSiteId, hits: []);
     }
 
+    // type 分流对齐 web(search/douyin.ts:searchDouyinAnchors=discover 主播、
+    // searchDouyinRooms=综搜房间,两档互不回退);缺省 null = 主播优先、
+    // 房间补位的既有混合行为(向后兼容)。
+    final type = request.type;
     final hits = <SearchHit>[];
-    try {
-      hits.addAll(await _searchAnchors(keyword, limit));
-    } on Object {
-      // discover 不可用时继续房间搜索。
-    }
-    if (hits.length < limit) {
-      hits.addAll(await _searchRooms(keyword, limit - hits.length));
+    if (type == SearchType.rooms) {
+      hits.addAll(await _searchRooms(keyword, limit));
+    } else if (type == SearchType.anchors) {
+      try {
+        hits.addAll(await _searchAnchors(keyword, limit));
+      } on Object {
+        // 主播档 discover 不可用:返回空,不回退房间(对齐 web 单接口语义)。
+      }
+    } else {
+      try {
+        hits.addAll(await _searchAnchors(keyword, limit));
+      } on Object {
+        // discover 不可用时继续房间搜索。
+      }
+      if (hits.length < limit) {
+        hits.addAll(await _searchRooms(keyword, limit - hits.length));
+      }
     }
     return SearchResult(
       site: kDouyinSiteId,

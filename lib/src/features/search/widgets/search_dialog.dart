@@ -99,7 +99,7 @@ class _SearchDialogFrame extends StatelessWidget {
                 children: [
                   Text(
                     '搜索',
-                    style: AppTypography.title.copyWith(
+                    style: context.textTitle.copyWith(
                       fontSize: 15,
                       color: tokens.textPrimary,
                     ),

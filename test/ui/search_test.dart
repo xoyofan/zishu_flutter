@@ -7,9 +7,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
+import 'package:live_parser/live_parser.dart';
 import 'package:zishu_flutter/src/app/app_router.dart';
 import 'package:zishu_flutter/src/apps/windows/windows_app.dart';
 import 'package:zishu_flutter/src/features/search/application/search_provider.dart';
+import 'package:zishu_flutter/src/features/search/application/search_source_provider.dart';
+import 'package:zishu_flutter/src/features/search/widgets/search_result_tile.dart';
+import 'package:zishu_flutter/src/shared/application/search_source.dart';
 
 void main() {
   /// pump WindowsApp 并返回 router,便于导航到 /search。
@@ -41,6 +45,13 @@ void main() {
     // 渲染结果帧。
     await tester.pump(const Duration(milliseconds: 50));
   }
+
+  /// 读取结果列表第一行命中 id(结果行锚点 search-result-N)。
+  String firstResultId(WidgetTester tester) =>
+      tester
+          .widget<SearchResultTile>(find.byKey(const Key('search-result-0')))
+          .hit
+          .id;
 
   testWidgets('输入「英雄」:防抖后出现搜索结果行锚点', (tester) async {
     await openSearch(tester);
@@ -130,4 +141,72 @@ void main() {
       contains('房间'),
     );
   });
+
+  testWidgets('searchTabs 双档隔离:切档把 type 传到查询层,两档各只出本档结果行', (
+    tester,
+  ) async {
+    final source = _TypeAwareSource();
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [searchSourceProvider.overrideWithValue(source)],
+        child: const WindowsApp(),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.tap(find.byKey(const Key('nav-search')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    // 默认房间档:查询带 type=rooms,结果只有房间行。
+    await typeAndSettle(tester, '英雄');
+    expect(source.types.last, SearchType.rooms, reason: '默认档(房间)查询携带 rooms');
+    expect(firstResultId(tester), 'room-1');
+
+    // 切主播档:以现有关键词按 anchors 重查,房间行被主播行整体替换。
+    await tester.tap(find.byKey(const Key('search-tab-anchor')));
+    await tester.pump(kSearchDebounce + const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(source.types.last, SearchType.anchors, reason: '主播档查询携带 anchors');
+    expect(firstResultId(tester), 'anchor-1', reason: '主播档只渲染主播行');
+    expect(
+      find.byKey(const Key('search-result-1')),
+      findsNothing,
+      reason: '切档后另一档的旧行不得残留',
+    );
+    expect(tester.takeException(), isNull);
+  });
+}
+
+/// 按档位返回不同命中、并记录每次请求 type 的 fake 数据源:
+/// 验证 UI 双档(主播/房间)真正分流到查询层,而非共用同一批混合结果。
+class _TypeAwareSource implements SearchSource {
+  final List<SearchType?> types = [];
+
+  SearchHit _hit(String id) => SearchHit(
+    id: id,
+    anchor: 'a-$id',
+    title: 't-$id',
+    avatar: '',
+    cover: '',
+    state: SearchHitState.live,
+    category: 'c',
+    online: '1',
+  );
+
+  @override
+  Future<List<SearchHit>> search({
+    required String site,
+    required String keyword,
+    int limit = 20,
+    SearchType? type,
+  }) async {
+    types.add(type);
+    return switch (type) {
+      SearchType.anchors => [_hit('anchor-1')],
+      SearchType.rooms => [_hit('room-1')],
+      _ => [_hit('mixed-1')],
+    };
+  }
 }

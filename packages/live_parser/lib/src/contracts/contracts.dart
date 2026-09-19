@@ -26,11 +26,26 @@ class RoomListRequest {
 
 /// 搜索请求。
 class SearchRequest {
-  const SearchRequest({required this.site, required this.query, this.limit = 20});
+  const SearchRequest({
+    required this.site,
+    required this.query,
+    this.limit = 20,
+    this.type,
+  });
 
   final String site;
   final String query;
   final int limit;
+
+  /// 搜索档位:anchors = 仅主播、rooms = 仅房间。
+  ///
+  /// 缺省 `null` = 主播+房间混合 —— 即本契约的历史行为;既有调用方
+  /// 不传该参数时路径与结果完全不变(向后兼容)。站点实现按 web 真源
+  /// (`SFVideoLive services/streaming-server/src/search/*`)对齐:
+  /// 双接口站(douyu/bilibili/douyin/yy)按档位只打对应上游接口,
+  /// huya 房间档走 `v=4` 仅房间分区;单一语义站(twitch/soop/iptv 等
+  /// web 端本就只有一个搜索实现)忽略该字段。
+  final SearchType? type;
 }
 
 /// 房间解析:输入房间号或 URL,输出标准 RoomPayload。

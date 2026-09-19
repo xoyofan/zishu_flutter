@@ -6,15 +6,21 @@ import 'package:live_parser/live_parser.dart';
 
 import 'fixture_sources.dart';
 
-/// 搜索数据源:平台(site)+ 关键词 → 命中列表。
+/// 搜索数据源:平台(site)+ 关键词 + 档位 → 命中列表。
 ///
 /// [site] 为单平台 id(如 `'douyu'` / `'huya'` / `'bilibili'`);`'all'` 表示全平台聚合
 /// (并发拉取 douyu/huya/bilibili,单站失败被隔离,详见 [ParserSearchSource])。
+///
+/// [type] 搜索档位(主播/房间),透传给解析契约 `SearchRequest.type`;
+/// 缺省 `null` = 混合(既有行为)。fixture 数据源自房间卡片、实体本身主播/
+/// 房间双身份,故 [FixtureSearchSource] 忽略该参数 —— 与 web 端本地关注
+/// (`matchLocalFollows`)在两档都展示的口径一致。
 abstract interface class SearchSource {
   Future<List<SearchHit>> search({
     required String site,
     required String keyword,
     int limit = 20,
+    SearchType? type,
   });
 }
 
@@ -36,24 +42,29 @@ class ParserSearchSource implements SearchSource {
     required String site,
     required String keyword,
     int limit = 20,
+    SearchType? type,
   }) async {
     if (site == 'all') {
-      return _searchAll(keyword, limit);
+      return _searchAll(keyword, limit, type);
     }
     final repo = _registry[site]?.search;
     if (repo == null) {
       throw StateError('站点 $site 不支持搜索');
     }
     final result = await repo.search(
-      SearchRequest(site: site, query: keyword, limit: limit),
+      SearchRequest(site: site, query: keyword, limit: limit, type: type),
     );
     return result.hits;
   }
 
   /// 并发聚合三站,单站失败被隔离(该站本轮空缺,其余平台照常展示)。
-  Future<List<SearchHit>> _searchAll(String keyword, int limit) async {
+  Future<List<SearchHit>> _searchAll(
+    String keyword,
+    int limit,
+    SearchType? type,
+  ) async {
     final results = await Future.wait([
-      for (final site in aggregateSites) _searchSite(site, keyword, limit),
+      for (final site in aggregateSites) _searchSite(site, keyword, limit, type),
     ]);
     return results.expand((hits) => hits).toList(growable: false);
   }
@@ -62,12 +73,13 @@ class ParserSearchSource implements SearchSource {
     String site,
     String keyword,
     int limit,
+    SearchType? type,
   ) async {
     final repo = _registry[site]?.search;
     if (repo == null) return const [];
     try {
       final result = await repo.search(
-        SearchRequest(site: site, query: keyword, limit: limit),
+        SearchRequest(site: site, query: keyword, limit: limit, type: type),
       );
       return result.hits;
     } on Object {
@@ -80,7 +92,8 @@ class ParserSearchSource implements SearchSource {
 /// fixture 实现:对 [kFixtureRooms] 做大小写不敏感过滤(开关关闭时行为不变)。
 ///
 /// 逻辑原样搬自旧 search_provider.dart 的 `_filterRooms`,保证开关关闭时
-/// 搜索页表现与今天完全一致。
+/// 搜索页表现与今天完全一致。主播/房间档位不做区分:fixture 实体为房间
+/// 卡片、主播/房间双身份(同 web 端本地关注两档都展示)。
 class FixtureSearchSource implements SearchSource {
   const FixtureSearchSource();
 
@@ -89,6 +102,7 @@ class FixtureSearchSource implements SearchSource {
     required String site,
     required String keyword,
     int limit = 20,
+    SearchType? type,
   }) async {
     final lower = keyword.toLowerCase();
     return [

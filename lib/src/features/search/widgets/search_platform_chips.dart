@@ -78,7 +78,7 @@ class _PlatformChip extends StatelessWidget {
             const SizedBox(width: AppSpacing.xs),
             Text(
               brand.name,
-              style: AppTypography.bodySecondary.copyWith(
+              style: context.textSecondary.copyWith(
                 color: selected ? brand.color : tokens.textSecondary,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
               ),

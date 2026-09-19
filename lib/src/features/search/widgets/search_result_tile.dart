@@ -54,7 +54,7 @@ class SearchResultTile extends StatelessWidget {
                           hit.anchor,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: AppTypography.title.copyWith(
+                          style: context.textTitle.copyWith(
                             fontSize: 14,
                             color: tokens.textPrimary,
                           ),
@@ -69,7 +69,7 @@ class SearchResultTile extends StatelessWidget {
                       const SizedBox(width: AppSpacing.xs),
                       Text(
                         _isLive ? '直播中' : '未开播',
-                        style: AppTypography.caption.copyWith(color: stateColor),
+                        style: context.textCaption.copyWith(color: stateColor),
                       ),
                     ],
                   ),
@@ -80,7 +80,7 @@ class SearchResultTile extends StatelessWidget {
                         hit.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: AppTypography.bodySecondary.copyWith(color: tokens.textSecondary),
+                        style: context.textSecondary.copyWith(color: tokens.textSecondary),
                       ),
                     ),
                   Padding(
@@ -99,7 +99,7 @@ class SearchResultTile extends StatelessWidget {
                             ),
                             child: Text(
                               hit.category,
-                              style: AppTypography.caption.copyWith(color: tokens.textSecondary),
+                              style: context.textCaption.copyWith(color: tokens.textSecondary),
                             ),
                           ),
                           const SizedBox(width: AppSpacing.sm),
@@ -113,7 +113,7 @@ class SearchResultTile extends StatelessWidget {
                           const SizedBox(width: 3),
                           Text(
                             hit.online,
-                            style: AppTypography.caption.copyWith(color: tokens.textSecondary),
+                            style: context.textCaption.copyWith(color: tokens.textSecondary),
                           ),
                         ],
                       ],
@@ -176,7 +176,7 @@ class _Avatar extends StatelessWidget {
       child: Center(
         child: Text(
           hit.anchor.isEmpty ? '?' : hit.anchor.characters.first,
-          style: AppTypography.body.copyWith(color: tokens.textSecondary),
+          style: context.textBody.copyWith(color: tokens.textSecondary),
         ),
       ),
     );
@@ -206,7 +206,7 @@ class _EnterButton extends StatelessWidget {
         ),
         child: Text(
           '进入直播间',
-          style: AppTypography.caption.copyWith(
+          style: context.textCaption.copyWith(
             color: tokens.brand,
             fontWeight: FontWeight.w700,
           ),

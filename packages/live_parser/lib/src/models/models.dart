@@ -317,6 +317,10 @@ class CategoryResult {
 /// 搜索命中的状态。
 enum SearchHitState { live, replay, offline }
 
+/// 搜索档位:主播 / 房间。对齐 web `SearchDialog` 服务端分流的
+/// `type=anchors|rooms`(SFVideoLive `http/routes/resolve.ts:24`)。
+enum SearchType { anchors, rooms }
+
 /// 搜索结果条目(主播或房间)。
 class SearchHit {
   const SearchHit({

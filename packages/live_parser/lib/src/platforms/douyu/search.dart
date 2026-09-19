@@ -50,11 +50,22 @@ class DouyuSearchRepository implements SearchRepository {
     final query = request.query.trim();
     if (query.isEmpty) return const SearchResult(site: kDouyuSiteId, hits: []);
 
-    final results = await Future.wait([
-      searchAnchors(query, request.limit),
-      searchRooms(query, request.limit),
-    ]);
-    final hits = sortSearchHits(query, trimSearchHits([...results[0], ...results[1]], request.limit));
+    // type 分流对齐 web(SFVideoLive search/douyu.ts:searchUser=主播、
+    // searchShow=房间);缺省 null = 两路合并(既有混合行为,向后兼容)。
+    final type = request.type;
+    final List<SearchHit> merged;
+    if (type == SearchType.anchors) {
+      merged = await searchAnchors(query, request.limit);
+    } else if (type == SearchType.rooms) {
+      merged = await searchRooms(query, request.limit);
+    } else {
+      final results = await Future.wait([
+        searchAnchors(query, request.limit),
+        searchRooms(query, request.limit),
+      ]);
+      merged = [...results[0], ...results[1]];
+    }
+    final hits = sortSearchHits(query, trimSearchHits(merged, request.limit));
     return SearchResult(site: kDouyuSiteId, hits: hits);
   }
 

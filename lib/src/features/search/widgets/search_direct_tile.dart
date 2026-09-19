@@ -45,7 +45,7 @@ class SearchDirectTile extends StatelessWidget {
                   children: [
                     Text(
                       _isLink ? '打开链接' : '进入房间 ${target.roomId}',
-                      style: AppTypography.body.copyWith(
+                      style: context.textBody.copyWith(
                         color: tokens.textPrimary,
                         fontWeight: FontWeight.w700,
                       ),
@@ -57,7 +57,7 @@ class SearchDirectTile extends StatelessWidget {
                           target.url!,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: AppTypography.caption.copyWith(color: tokens.textSecondary),
+                          style: context.textCaption.copyWith(color: tokens.textSecondary),
                         ),
                       ),
                   ],

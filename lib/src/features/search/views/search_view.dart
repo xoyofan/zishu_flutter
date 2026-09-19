@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+// SearchController 归 search_provider(搜索页控制器);material 同名类(搜索
+// 匹配面板)本页不用,hide 掉以免 doc 注释引用产生 ambiguous_import。
+import 'package:flutter/material.dart' hide SearchController;
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,10 +16,11 @@ import '../widgets/search_result_tile.dart';
 
 /// 搜索档位:主播 / 房间。对齐 web `SearchDialog.vue` 的 `activeTab`。
 ///
-/// **已知残留差异**:web 的两档走服务端 `type=anchors|rooms` 分流取数
-/// (`api/search.ts:10,19`),flutter 的解析契约 [SearchRequest] 尚无 `type`
-/// 字段,两档共用同一次混合查询。本档位因此只驱动**文案、主操作与直达项**
-/// 的呈现;等解析契约补上 `type` 后再把取数分流接进来。
+/// 档位持久在 `SearchState.type`(provider 层):切档经 [SearchController.setType]
+/// 以现有关键词按新档位重新查询,查询携带 `SearchRequest.type` 走解析侧
+/// `anchors|rooms` 分流 —— 与 web `type=anchors|rooms` 取数同构。主播档因此
+/// 不再混入房间结果行,房间档不再混入主播行;房间号/链接直达卡仍属房间档
+/// (主播档输入房间号无意义,既有口径)。
 enum _SearchTab { anchor, room }
 
 /// 搜索主体:输入框(autofocus)+ 平台 chips + 快捷直达 + 命中列表。
@@ -45,17 +48,12 @@ class _SearchViewState extends ConsumerState<SearchView> {
   final TextEditingController _input = TextEditingController();
   final FocusNode _inputFocus = FocusNode();
 
-  /// 用户显式选过的档位;null 表示按平台能力取默认档。
-  ///
-  /// web 在切换平台时会重置为默认档(`SearchDialog.vue:289 syncDefaultTab`),
-  /// 这里同样在 [SearchState.site] 变化时清空。
-  _SearchTab? _tabOverride;
-
-  /// 当前生效档位:显式选择优先,否则「房间档优先」(对齐 web syncDefaultTab)。
-  _SearchTab _effectiveTab({required bool anchorOk, required bool roomOk}) {
-    final override = _tabOverride;
-    if (override == _SearchTab.room && roomOk) return _SearchTab.room;
-    if (override == _SearchTab.anchor && anchorOk) return _SearchTab.anchor;
+  /// 当前生效档位:由 `SearchState.type`(用户显式选择)推导;该档在本平台
+  /// 不可用时回退默认档(房间优先,同 web `syncDefaultTab`)。现有平台能力
+  /// 矩阵中不存在「仅主播」站,回退只是显示层兜底,不改变查询档位。
+  _SearchTab _resolveTab(SearchType type, {required bool anchorOk, required bool roomOk}) {
+    if (type == SearchType.rooms && roomOk) return _SearchTab.room;
+    if (type == SearchType.anchors && anchorOk) return _SearchTab.anchor;
     if (roomOk) return _SearchTab.room;
     return _SearchTab.anchor;
   }
@@ -138,17 +136,10 @@ class _SearchViewState extends ConsumerState<SearchView> {
     final tokens = context.tokens;
     final search = ref.watch(searchProvider);
 
-    // 切平台后回到该平台的默认档(web `watch(selectedSite)` → syncDefaultTab)。
-    ref.listen(searchProvider.select((s) => s.site), (previous, next) {
-      if (previous != next && mounted) {
-        setState(() => _tabOverride = null);
-      }
-    });
-
     final anchorOk = PlatformBrandCatalog.supportsAnchorSearch(search.site);
     final roomOk = PlatformBrandCatalog.supportsRoomSearch(search.site);
     final supported = anchorOk || roomOk;
-    final tab = _effectiveTab(anchorOk: anchorOk, roomOk: roomOk);
+    final tab = _resolveTab(search.type, anchorOk: anchorOk, roomOk: roomOk);
 
     return CallbackShortcuts(
       bindings: {
@@ -170,7 +161,10 @@ class _SearchViewState extends ConsumerState<SearchView> {
                 tab: tab,
                 anchorEnabled: anchorOk,
                 roomEnabled: roomOk,
-                onChanged: (next) => setState(() => _tabOverride = next),
+                // 切档写回 provider,并以现有关键词按新档位重新查询。
+                onChanged: (next) => ref
+                    .read(searchProvider.notifier)
+                    .setType(next == _SearchTab.room ? SearchType.rooms : SearchType.anchors),
               ),
             )
           else
@@ -183,7 +177,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
               ),
               child: Text(
                 '该平台暂不支持主播/房间搜索',
-                style: AppTypography.bodySecondary.copyWith(
+                style: context.textSecondary.copyWith(
                   color: tokens.textSecondary,
                 ),
               ),
@@ -218,13 +212,13 @@ class _SearchViewState extends ConsumerState<SearchView> {
       onChanged: ref.read(searchProvider.notifier).setQuery,
       onSubmitted: (_) => _submit(),
       cursorColor: tokens.brand,
-      style: AppTypography.body.copyWith(color: tokens.textPrimary),
+      style: context.textBody.copyWith(color: tokens.textPrimary),
       decoration: InputDecoration(
         // 占位文案随档位切换,对齐 web `inputPlaceholder`(SearchDialog.vue:255)。
         hintText: tab == _SearchTab.room
             ? '搜索房间名 / 房间号 / 直播间链接'
             : '搜索主播名',
-        hintStyle: AppTypography.body.copyWith(color: tokens.textSecondary),
+        hintStyle: context.textBody.copyWith(color: tokens.textSecondary),
         prefixIcon: Icon(
           Icons.search_rounded,
           size: 20,
@@ -330,7 +324,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
                   child: Center(
                     child: Text(
                       '搜索中…',
-                      style: AppTypography.bodySecondary.copyWith(
+                      style: context.textSecondary.copyWith(
                         color: tokens.textSecondary,
                       ),
                     ),
@@ -405,7 +399,7 @@ class _SearchTabBar extends StatelessWidget {
           children: [
             Text(
               label,
-              style: AppTypography.body.copyWith(
+              style: context.textBody.copyWith(
                 color: active ? tokens.brand : tokens.textSecondary,
                 fontWeight: active ? FontWeight.w600 : FontWeight.w400,
               ),
@@ -444,7 +438,7 @@ class _EscHint extends StatelessWidget {
       ),
       child: Text(
         isDialog ? 'Esc 关闭' : 'Esc 返回',
-        style: AppTypography.caption.copyWith(color: tokens.textSecondary),
+        style: context.textCaption.copyWith(color: tokens.textSecondary),
       ),
     );
   }
@@ -469,13 +463,13 @@ class _EmptyHint extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
           Text(
             title,
-            style: AppTypography.body.copyWith(color: tokens.textSecondary),
+            style: context.textBody.copyWith(color: tokens.textSecondary),
           ),
           if (subtitle != null) ...[
             const SizedBox(height: AppSpacing.xs),
             Text(
               subtitle!,
-              style: AppTypography.caption.copyWith(
+              style: context.textCaption.copyWith(
                 color: tokens.textSecondary,
               ),
             ),
