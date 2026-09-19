@@ -347,10 +347,16 @@ class _CategoryTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = context.tokens;
     final brandColor = PlatformBrandCatalog.byId(site)?.color ?? tokens.brand;
+    // 收藏判定按跨平台分类 key(与播放页星标同源,见
+    // [isCategoryFavorited]):收藏过任一平台的同名分类即亮。
+    final displayName = displayCategoryName(site, item.name, item.cid);
     final favorited = item.cid.isNotEmpty &&
-        ref.watch(myCategoriesProvider).any(
-              (entry) => entry.site == site && entry.cid == item.cid,
-            );
+        isCategoryFavorited(
+          ref.watch(myCategoriesProvider),
+          site: site,
+          cid: item.cid,
+          name: displayName,
+        );
     return SizedBox(
       width: 88,
       child: InkWell(
@@ -405,13 +411,13 @@ class _CategoryTile extends ConsumerWidget {
                         borderRadius: AppRadius.allPill,
                         onTap: () => ref
                             .read(myCategoriesProvider.notifier)
-                            .toggle(
+                            .toggleForCategory(
                               MyCategoryEntry(
                                 site: site,
                                 cid: item.cid,
                                 // 收藏快照存中文展示名,与导航「我的分类」
                                 // chip 渲染口径一致(twitch/soop 原名不直存)。
-                                name: displayCategoryName(site, item.name, item.cid),
+                                name: displayName,
                               ),
                             ),
                         child: Container(
@@ -439,7 +445,7 @@ class _CategoryTile extends ConsumerWidget {
             const SizedBox(height: AppSpacing.xs),
             Text(
               // 跨平台统一中文分类名:命中映射用 canonical 名,否则回落平台原名。
-              displayCategoryName(site, item.name, item.cid),
+              displayName,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: context.textSecondary.copyWith(

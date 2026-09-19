@@ -3,6 +3,12 @@
 /// 条目以 (site, cid) 唯一,name 仅用于渲染与 `/all/category/:key` 路由匹配;
 /// 收藏只落本机 SharedPreferences(`zishu.myCategories.v2`),不上行 data-server
 /// (关注数据才走云同步)。
+///
+/// **收藏语义按跨平台分类**(对齐 web `useMyCrossCategories` 的 crossKey 口径,
+/// 2026-09-20):「英雄联盟」是一个分类,不区分虎牙/斗鱼各自 cid —— 判定
+/// 「已收藏」优先比较跨平台 key([crossKeyForPlatformCategory]),未命中映射表
+/// 的平台私有分类才退回 (site, cid) 精确比较。存储仍存首次收藏时所在平台的
+/// (site, cid)(展示名/路由快照),不迁移旧数据。
 library;
 
 import 'dart:convert';
@@ -73,9 +79,36 @@ class MyCategoryController extends Notifier<List<MyCategoryEntry>> {
     return const <MyCategoryEntry>[];
   }
 
-  /// 是否已收藏。
+  /// 是否已收藏(精确键,仅浮层渲染等展示场景使用;收藏判定请用
+  /// [isCategoryFavorited] 的跨平台口径)。
   bool contains(String site, String cid) =>
       state.any((entry) => entry.site == site && entry.cid == cid);
+
+  /// 按**分类跨平台口径**收藏/取消(播放页星标/索引 tile 共用):
+  /// 目标分类命中跨平台 key 时,任一平台的同 key 条目都算已收藏,
+  /// 取消时全部移除;新增仍落当前平台的 (site, cid) 快照。
+  /// 未命中映射表的分类退回 (site, cid) 精确匹配,行为同旧口径。
+  /// 已达上限且是新增时返回 false(UI 侧提示)。
+  Future<bool> toggleForCategory(MyCategoryEntry entry) async {
+    if (!entry.isValid) return false;
+    final key = myCategoryCrossKey(entry);
+    final matchedKeys = {
+      for (final item in state)
+        if (key.isNotEmpty
+            ? myCategoryCrossKey(item) == key
+            : (item.site == entry.site && item.cid == entry.cid))
+          item.key,
+    };
+    if (matchedKeys.isNotEmpty) {
+      state = [for (final item in state) if (!matchedKeys.contains(item.key)) item];
+      await _persist();
+      return true;
+    }
+    if (state.length >= maxCount) return false;
+    state = [...state, entry];
+    await _persist();
+    return true;
+  }
 
   /// 收藏/取消收藏;已达上限且是新增时返回 false(UI 侧提示)。
   Future<bool> toggle(MyCategoryEntry entry) async {
@@ -180,6 +213,27 @@ final myCategoriesProvider =
     NotifierProvider<MyCategoryController, List<MyCategoryEntry>>(
   MyCategoryController.new,
 );
+
+/// 条目的跨平台收藏 key(命中映射表才有;空 = 平台私有分类,不参与跨平台)。
+String myCategoryCrossKey(MyCategoryEntry entry) =>
+    crossKeyForPlatformCategory(entry.site, entry.cid, entry.name);
+
+/// 「已收藏」判定单一来源(播放页分类星标/分类索引 tile 共用):
+/// 优先跨平台 key 相等 —— 收藏任一平台的「英雄联盟」,所有平台的英雄联盟
+/// 房间与分类 tile 都算已收藏(对齐 web `useMyCrossCategories` crossKey 口径);
+/// 目标或条目未命中映射表时退回 (site, cid) 精确比较(平台私有分类)。
+bool isCategoryFavorited(
+  List<MyCategoryEntry> entries, {
+  required String site,
+  required String cid,
+  required String name,
+}) {
+  final key = crossKeyForPlatformCategory(site, cid, name);
+  if (key.isNotEmpty) {
+    return entries.any((entry) => myCategoryCrossKey(entry) == key);
+  }
+  return entries.any((entry) => entry.site == site && entry.cid == cid);
+}
 
 /// 是否含中文字符(救援迁移的「好快照」判据)。
 bool _hasCJK(String text) => RegExp(r'[\u4e00-\u9fff]').hasMatch(text);

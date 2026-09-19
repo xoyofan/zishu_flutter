@@ -659,54 +659,59 @@ class _RoomHeader extends StatelessWidget {
             icon: const Icon(Icons.arrow_back_rounded, size: 18),
           ),
           const SizedBox(width: AppSpacing.sm),
-          if (badgeBg != null)
-            Consumer(
-              builder: (context, ref, _) {
-                // 分类徽标(web PlayHeader.vue:82-133):平台图标 + 分类文字 +
-                // 内嵌收藏星标(仅房间带分类上下文时);星标点击切换「我的分类」。
-                final favorited = favoriteCid.isNotEmpty &&
-                    ref.watch(myCategoriesProvider).any(
-                          (entry) =>
-                              entry.site == site && entry.cid == favoriteCid,
-                        );
-                return Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 6,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: badgeBg.withValues(alpha: 0.92),
-                    borderRadius: AppRadius.allSm,
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      PlatformIcon(id: site, size: 12),
-                      const SizedBox(width: 3),
-                      Text(
-                        categoryLabel.isNotEmpty ? categoryLabel : '直播',
-                        style: context.textCaption.copyWith(
-                          color: badgeFg,
-                          fontWeight: FontWeight.w600,
+            if (badgeBg != null)
+              Consumer(
+                builder: (context, ref, _) {
+                  // 分类徽标(web PlayHeader.vue:82-133):平台图标 + 分类文字 +
+                  // 内嵌收藏星标(仅房间带分类上下文时);星标点击切换「我的分类」。
+                  // 已收藏判定按跨平台分类 key(2026-09-20 对齐 web
+                  // useMyCrossCategories):收藏过任一平台的「英雄联盟」,
+                  // 所有平台的英雄联盟房间星标都亮。
+                  final favorited = favoriteCid.isNotEmpty &&
+                      isCategoryFavorited(
+                        ref.watch(myCategoriesProvider),
+                        site: site,
+                        cid: favoriteCid,
+                        name: categoryLabel,
+                      );
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: badgeBg.withValues(alpha: 0.92),
+                      borderRadius: AppRadius.allSm,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        PlatformIcon(id: site, size: 12),
+                        const SizedBox(width: 3),
+                        Text(
+                          categoryLabel.isNotEmpty ? categoryLabel : '直播',
+                          style: context.textCaption.copyWith(
+                            color: badgeFg,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
-                      if (cid.isNotEmpty) ...[
-                        const SizedBox(width: 2),
-                        InkWell(
-                          key: const Key('play-category-favorite'),
-                          onTap: () => ref
-                              .read(myCategoriesProvider.notifier)
-                              .toggle(
-                                MyCategoryEntry(
-                                  site: site,
-                                  // 分类收藏的 cid 必须是**分类号**;soop 的
-                                  // payload.cid 是房间号,真实分类号在 cateNo。
-                                  cid: favoriteCid,
-                                  // 收藏快照存中文展示名(与 web 收藏口径一致),
-                                  // 渲染侧还会再映射一次兜底旧快照。
-                                  name: categoryLabel,
+                        if (cid.isNotEmpty) ...[
+                          const SizedBox(width: 2),
+                          InkWell(
+                            key: const Key('play-category-favorite'),
+                            onTap: () => ref
+                                .read(myCategoriesProvider.notifier)
+                                .toggleForCategory(
+                                  MyCategoryEntry(
+                                    site: site,
+                                    // 分类收藏的 cid 必须是**分类号**;soop 的
+                                    // payload.cid 是房间号,真实分类号在 cateNo。
+                                    cid: favoriteCid,
+                                    // 收藏快照存中文展示名(与 web 收藏口径一致),
+                                    // 渲染侧还会再映射一次兜底旧快照。
+                                    name: categoryLabel,
+                                  ),
                                 ),
-                              ),
                           child: Icon(
                             favorited
                                 ? Icons.star_rounded

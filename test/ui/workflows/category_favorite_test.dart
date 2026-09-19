@@ -192,4 +192,60 @@ void main() {
     expect(ok, isFalse, reason: '已达上限应拒绝新增');
     expect(container.read(myCategoriesProvider), hasLength(MyCategoryController.maxCount));
   });
+
+  testWidgets('播放页跨平台点亮:收藏过虎牙的英雄联盟,斗鱼 LoL 房星标也亮',
+      (tester) async {
+    final container = await _pumpApp(tester);
+    // 用户真实场景(2026-09-20):在虎牙收藏了英雄联盟(huya/1 快照),
+    // 打开斗鱼 LoL 房间(63136,cid '1')星标应点亮 —— 对齐 web crossKey
+    // 口径,收藏是「分类」不是「某平台的分类号」。
+    await container.read(myCategoriesProvider.notifier).toggle(
+          const MyCategoryEntry(site: 'huya', cid: '1', name: '英雄联盟'),
+        );
+    container.read(routerProvider).go('/douyu/play/63136');
+    await _frames(tester, 5);
+
+    final star = find.byKey(const Key('play-category-favorite'));
+    expect(star, findsOneWidget);
+    Icon starIcon() => tester.widget<Icon>(
+          find.descendant(of: star, matching: find.byType(Icon)),
+        );
+    expect(starIcon().icon, Icons.star_rounded,
+        reason: '同跨平台分类在任一平台已收藏即亮');
+    expect(_isFavorited(container, 'douyu', '1'), isFalse,
+        reason: '点亮不要求本平台条目存在');
+
+    // 房间内点星取消 → 同分类全局取消,移除的是虎牙条目。
+    await tester.tap(star);
+    await _frames(tester);
+    expect(_isFavorited(container, 'huya', '1'), isFalse);
+    expect(starIcon().icon, Icons.star_border_rounded);
+
+    // 再点 → 以当前平台 (site, cid) 快照新增。
+    await tester.tap(star);
+    await _frames(tester);
+    expect(_isFavorited(container, 'douyu', '1'), isTrue);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('分类索引跨平台点亮:收藏过虎牙的英雄联盟,斗鱼索引 tile 星标也亮',
+      (tester) async {
+    final container = await _pumpApp(tester);
+    await container.read(myCategoriesProvider.notifier).toggle(
+          const MyCategoryEntry(site: 'huya', cid: '1', name: '英雄联盟'),
+        );
+    container.read(routerProvider).go('/douyu/category');
+    await _frames(tester);
+
+    final star = find.byKey(const Key('category-favorite-1'));
+    expect(star, findsOneWidget);
+    expect(
+      tester.widget<Icon>(
+        find.descendant(of: star, matching: find.byType(Icon)),
+      ).icon,
+      Icons.star_rounded,
+      reason: '同跨平台分类已收藏,斗鱼索引 tile 应亮星',
+    );
+    expect(tester.takeException(), isNull);
+  });
 }
