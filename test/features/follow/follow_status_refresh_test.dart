@@ -66,6 +66,7 @@ class FakeRefresher implements RoomRefresher {
 Map<String, Object> _seedEntry({
   required String roomId,
   required String online,
+  String site = 'douyu',
   String cid = '',
   String title = '标题',
   String cover = 'https://cdn/cover.jpg',
@@ -73,7 +74,7 @@ Map<String, Object> _seedEntry({
   String followers = '',
   String vip = '',
 }) => {
-  'site': 'douyu',
+  'site': site,
   'roomId': roomId,
   'title': title,
   'uname': '主播$roomId',
@@ -92,6 +93,7 @@ Map<String, Object> _seedEntry({
 RoomSummary _fresh({
   required String roomId,
   required String online,
+  String site = 'douyu',
   String cid = '',
   String title = '新标题',
   String cover = 'https://cdn/new.jpg',
@@ -99,7 +101,7 @@ RoomSummary _fresh({
   String followers = '',
   String vip = '',
 }) => RoomSummary(
-  site: 'douyu',
+  site: site,
   roomId: roomId,
   title: title,
   anchorName: '主播$roomId',
@@ -289,6 +291,69 @@ void main() {
       final entries = container.read(followProvider);
       expect(entries.map((e) => e.room.roomId), ['1001']);
       expect(entries.single.room.online, '1万');
+    });
+  });
+
+  group('刷新分类归一(displayCategoryName)', () {
+    test('huya 刷新返回缩写 + 分区 cid:存储归一为中文显示名', () async {
+      // 解析核心刷新只带回原始名/缩写 + 分区 cid(huya lol 的 gid=1);
+      // 合并层负责经 displayCategoryName 归一(真实 cross 表行为)。
+      final fake = FakeRefresher(
+        results: {
+          '1001': _fresh(
+            roomId: '1001',
+            online: '2万',
+            site: 'huya',
+            category: 'lol',
+            cid: '1',
+          ),
+        },
+      );
+      final container = await _container(
+        seed: [
+          _seedEntry(roomId: '1001', online: '1万', site: 'huya', category: 'lol'),
+        ],
+        refresher: fake,
+        overrideRefresher: true,
+      );
+
+      await container.read(followProvider.notifier).refreshStatuses();
+
+      final entry = container.read(followProvider).single;
+      expect(
+        entry.room.category,
+        '英雄联盟',
+        reason: 'cross 表 lol(huya cid=1)→ 英雄联盟',
+      );
+    });
+
+    test('归一未命中:保持刷新原名', () async {
+      final fake = FakeRefresher(
+        results: {
+          '1001': _fresh(
+            roomId: '1001',
+            online: '2万',
+            site: 'huya',
+            category: '小众自研游戏',
+          ),
+        },
+      );
+      final container = await _container(
+        seed: [
+          _seedEntry(roomId: '1001', online: '1万', site: 'huya'),
+        ],
+        refresher: fake,
+        overrideRefresher: true,
+      );
+
+      await container.read(followProvider.notifier).refreshStatuses();
+
+      final entry = container.read(followProvider).single;
+      expect(
+        entry.room.category,
+        '小众自研游戏',
+        reason: '无跨平台映射时保持上游原名,不伪造中文',
+      );
     });
   });
 

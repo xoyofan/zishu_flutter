@@ -20,6 +20,7 @@ import '../../../shared/application/auth_provider.dart';
 import '../../../shared/application/data_server_api.dart';
 import '../../../shared/application/fixture_sources.dart';
 import '../../../shared/application/providers.dart' show roomRefresherProvider;
+import '../../../shared/domain/category_display.dart';
 
 /// 关注列表持久化键(SharedPreferencesAsync,带前缀避免与其它模块冲突)。
 const String _kFollowList = 'zishu.follow.list';
@@ -321,7 +322,10 @@ class FollowController extends Notifier<List<FollowEntry>> {
   ///   (上游偶发缺字段,不能把已有值冲掉);
   /// - `category`:刷新非空则更新 —— **主播换分类后必须跟随**,
   ///   (此前的「不同步」正是合并层没有明确这一口径的地方,现钉死:
-  ///   分类是上游元信息,不是本地标记);
+  ///   分类是上游元信息,不是本地标记)。存储前经
+  ///   [displayCategoryName] 归一为中文显示名:解析核心的刷新只带回
+  ///   原始名/缩写 + 分区 cid(如 huya 'lol'+gid),不负责归一;
+  ///   归一未命中(无跨平台映射)时保持原名;
   /// - `online`:无条件取刷新值,空串即平台明确未开播(在播判据);
   /// - `followers`/`vip`:刷新非空则更新,空回退本地(统计展示增强,
   ///   上游没给就保留上次拿到的值)。
@@ -335,6 +339,7 @@ class FollowController extends Notifier<List<FollowEntry>> {
   /// FollowEntry 层的 `followedAt`/`isSpecial`/`remindOn`/`lastLiveAt`
   /// 不在 [RoomSummary] 内,由 [refreshStatuses] 的 copyWith 保持不变。
   static RoomSummary _mergeRefreshed(RoomSummary current, RoomSummary fresh) {
+    final mergedCid = current.cid.isNotEmpty ? current.cid : fresh.cid;
     return RoomSummary(
       site: current.site,
       roomId: current.roomId,
@@ -342,9 +347,9 @@ class FollowController extends Notifier<List<FollowEntry>> {
       anchorName: fresh.anchorName.trim().isNotEmpty
           ? fresh.anchorName
           : current.anchorName,
-      cid: current.cid.isNotEmpty ? current.cid : fresh.cid,
+      cid: mergedCid,
       category: fresh.category.trim().isNotEmpty
-          ? fresh.category
+          ? displayCategoryName(current.site, fresh.category, mergedCid)
           : current.category,
       // online 以刷新为准:空串即平台明确未开播。
       online: fresh.online,
