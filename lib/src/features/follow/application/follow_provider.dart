@@ -65,6 +65,11 @@ class FollowEntry {
   /// 是否开播:fixture 约定 online 为空即离线。
   bool get isLive => room.online.trim().isNotEmpty;
 
+  /// 是否轮播(录播循环):来自契约 [RoomSummary.roomState],刷新链路
+  /// (bilibili live_status==2 / douyu videoLoop==1 / huya 录播)回填。
+  /// 轮播的 online 同离线一样为空串 —— isLive 与 isReplay 互斥。
+  bool get isReplay => room.roomState == RoomState.replay;
+
   FollowEntry copyWith({
     RoomSummary? room,
     bool? isSpecial,
@@ -327,6 +332,8 @@ class FollowController extends Notifier<List<FollowEntry>> {
   ///   原始名/缩写 + 分区 cid(如 huya 'lol'+gid),不负责归一;
   ///   归一未命中(无跨平台映射)时保持原名;
   /// - `online`:无条件取刷新值,空串即平台明确未开播(在播判据);
+  /// - `roomState`:无条件取刷新值 —— 在播/轮播/离线三态互转都跟随
+  ///   上游(主播停播改轮播、轮播恢复开播都靠它感知);
   /// - `followers`/`vip`:刷新非空则更新,空回退本地(统计展示增强,
   ///   上游没给就保留上次拿到的值)。
   ///
@@ -354,6 +361,8 @@ class FollowController extends Notifier<List<FollowEntry>> {
       // online 以刷新为准:空串即平台明确未开播。
       online: fresh.online,
       cover: fresh.cover.trim().isNotEmpty ? fresh.cover : current.cover,
+      // roomState 以刷新为准:在线/轮播/离线互转跟随上游。
+      roomState: fresh.roomState,
       followers: fresh.followers.trim().isNotEmpty
           ? fresh.followers
           : current.followers,
@@ -427,6 +436,10 @@ class FollowController extends Notifier<List<FollowEntry>> {
                     category: item['category']?.toString() ?? '',
                     online: item['online']?.toString() ?? '',
                     cover: item['cover']?.toString() ?? '',
+                    roomState: RoomState.values.firstWhere(
+                      (state) => state.name == item['roomState'],
+                      orElse: () => RoomState.offline,
+                    ),
                     followers: item['followers']?.toString() ?? '',
                     vip: item['vip']?.toString() ?? '',
                   ),
@@ -521,8 +534,8 @@ class FollowController extends Notifier<List<FollowEntry>> {
   /// 把关注列表序列化为 JSON 字符串写入本地存储;[syncRemote] 时随后整表推云端。
   ///
   /// 字段契约:{site, roomId, title, uname, cover} + 元信息(cid/category/
-  /// online/followers/vip,刷新回填后随落盘保留)+ 本地标记(isSpecial/
-  /// remindOn/followedAt),与任务卡 A8 约定的关注落库结构一致。
+  /// online/roomState/followers/vip,刷新回填后随落盘保留)+ 本地标记
+  /// (isSpecial/remindOn/followedAt),与任务卡 A8 约定的关注落库结构一致。
   Future<void> _persist({bool syncRemote = true}) async {
     try {
       final payload = [
@@ -536,6 +549,7 @@ class FollowController extends Notifier<List<FollowEntry>> {
             'cid': entry.room.cid,
             'category': entry.room.category,
             'online': entry.room.online,
+            'roomState': entry.room.roomState.name,
             'followers': entry.room.followers,
             'vip': entry.room.vip,
             'isSpecial': entry.isSpecial,

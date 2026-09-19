@@ -53,6 +53,7 @@ class FollowEntryTile extends StatelessWidget {
     final room = entry.room;
     final brand = PlatformBrandCatalog.byId(room.site);
     final live = entry.isLive;
+    final replay = entry.isReplay;
     return Container(
       // 测试锚点:条目根节点(follow-entry-{site}-{roomId})。
       key: Key('follow-entry-${room.site}-${room.roomId}'),
@@ -130,7 +131,8 @@ class FollowEntryTile extends StatelessWidget {
                                           room.category,
                                           room.cid,
                                         ),
-                                  offline: !live,
+                                  // 轮播有内容在播,封面不置灰。
+                                  offline: !live && !replay,
                                   width: _thumbWidth,
                                   height: _thumbHeight,
                                 ),
@@ -190,25 +192,42 @@ class FollowEntryTile extends StatelessWidget {
                               Icon(
                                 live
                                     ? Icons.people_alt_rounded
-                                    : Icons.schedule_rounded,
+                                    : (replay
+                                          ? Icons.repeat_rounded
+                                          : Icons.schedule_rounded),
                                 size: 11,
                                 color: live
                                     ? tokens.liveBadge
-                                    : tokens.textSecondary,
+                                    : (replay
+                                          ? kFollowReplayAccent
+                                          : tokens.textSecondary),
                               ),
                               const SizedBox(width: 3),
                               Flexible(
-                                child: Text(
-                                  live ? room.online : '未开播',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: context.textCaption.copyWith(
-                                    fontSize: 10.5,
-                                    color: live
-                                        ? tokens.textPrimary
-                                        : tokens.textSecondary,
-                                  ),
-                                ),
+                                child: live
+                                    // 在播:在线数;轮播:「轮播」小标签;
+                                    // 离线:「未开播」。
+                                    ? Text(
+                                        room.online,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: context.textCaption.copyWith(
+                                          fontSize: 10.5,
+                                          color: tokens.textPrimary,
+                                        ),
+                                      )
+                                    : (replay
+                                          ? const FollowReplayBadge()
+                                          : Text(
+                                              '未开播',
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style:
+                                                  context.textCaption.copyWith(
+                                                fontSize: 10.5,
+                                                color: tokens.textSecondary,
+                                              ),
+                                            )),
                               ),
                             ],
                           ),

@@ -51,6 +51,7 @@ class FollowEntryCard extends StatelessWidget {
     final tokens = context.tokens;
     final room = entry.room;
     final live = entry.isLive;
+    final replay = entry.isReplay;
     return Container(
       // 测试锚点:条目根节点(follow-entry-{site}-{roomId})。
       key: Key('follow-entry-${room.site}-${room.roomId}'),
@@ -116,7 +117,7 @@ class FollowEntryCard extends StatelessWidget {
                         ),
                       ),
                       const Spacer(),
-                      // 统计/操作行:平台圆点 + 在线数,右侧三枚操作。
+                      // 统计/操作行:平台圆点 + 在线数/轮播标,右侧三枚操作。
                       Row(
                         children: [
                           FollowPlatformDot(site: room.site),
@@ -124,27 +125,34 @@ class FollowEntryCard extends StatelessWidget {
                           Icon(
                             live
                                 ? Icons.people_alt_rounded
-                                : Icons.schedule_rounded,
+                                : (replay
+                                      ? Icons.repeat_rounded
+                                      : Icons.schedule_rounded),
                             size: 10,
                             color: live
                                 ? tokens.liveBadge
-                                : tokens.textSecondary,
+                                : (replay
+                                      ? kFollowReplayAccent
+                                      : tokens.textSecondary),
                           ),
                           const SizedBox(width: 2),
                           Flexible(
                             child: Text(
-                              // 离线:有开播记录显示「上次开播」,否则「未开播」
+                              // 在播:在线数;轮播:「轮播」;离线:有开播
+                              // 记录显示「上次开播」,否则「未开播」
                               // (对齐 web offlineLastLiveLabel)。
                               live
                                   ? room.online
-                                  : offlineLastLiveLabel(entry.lastLiveAt),
+                                  : (replay ? '轮播' : offlineLastLiveLabel(entry.lastLiveAt)),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: context.textCaption.copyWith(
                                 fontSize: 10,
                                 color: live
                                     ? tokens.textPrimary
-                                    : tokens.textSecondary,
+                                    : (replay
+                                          ? kFollowReplayAccent
+                                          : tokens.textSecondary),
                               ),
                             ),
                           ),
@@ -188,11 +196,13 @@ class FollowEntryCard extends StatelessWidget {
     );
   }
 
-  /// 16:9 封面:分类(左下)/ 平台(右上)/ ★(左上)/ 在线(右下),离线压暗 + 未开播条。
+  /// 16:9 封面:分类(左下)/ 平台(右上)/ ★(左上)/ 在线·轮播(右下),
+  /// 离线压暗 + 未开播条(轮播不置灰,金黄角标区分)。
   Widget _buildCover(BuildContext context, RoomSummary room) {
     final tokens = context.tokens;
     final brand = PlatformBrandCatalog.byId(room.site);
     final live = entry.isLive;
+    final replay = entry.isReplay;
     return AspectRatio(
       aspectRatio: 16 / 9,
       child: Stack(
@@ -203,7 +213,8 @@ class FollowEntryCard extends StatelessWidget {
             fallbackLabel: room.category.isEmpty
                 ? room.site
                 : displayCategoryName(room.site, room.category, room.cid),
-            offline: !live,
+            // 轮播有内容在播,封面不置灰(web replay 态同在线封面)。
+            offline: !live && !replay,
           ),
           // 左下:分类角标(品牌色底 + 深色字)。
           if (room.category.isNotEmpty)
@@ -255,7 +266,8 @@ class FollowEntryCard extends StatelessWidget {
                       )
                     : const SizedBox.shrink()),
           ),
-          // 右下:在线人数;离线不重复显示(底部已有未开播条)。
+          // 右下:在线人数;轮播改显金黄「轮播」角标;
+          // 离线不重复显示(底部已有未开播条)。
           if (live)
             Positioned(
               right: 0,
@@ -277,9 +289,33 @@ class FollowEntryCard extends StatelessWidget {
                   ],
                 ),
               ),
+            )
+          else if (replay)
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: FollowCoverTag(
+                accent: kFollowReplayAccent,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.repeat_rounded,
+                        size: 10, color: kFollowReplayAccent),
+                    const SizedBox(width: 3),
+                    Text(
+                      '轮播',
+                      style: context.textCaption.copyWith(
+                        fontSize: 10,
+                        color: kFollowReplayAccent,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          // 离线遮罩条:整幅底部压一条暗带,显示「未开播」。
-          if (!live)
+          // 离线遮罩条:整幅底部压一条暗带,显示「未开播」(轮播不压)。
+          if (!live && !replay)
             Positioned(
               left: 0,
               right: 0,

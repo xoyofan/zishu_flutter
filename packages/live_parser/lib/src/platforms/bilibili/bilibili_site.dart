@@ -60,10 +60,12 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
   ///
   /// 口径对齐 web `follow/status.ts` 的 bilibili 快照:`live_status == 1`
   /// 为在播,`online` 作热度;粉丝数取同响应的 `attention`(web
-  /// `formatCount(info.attention)` 同口径);轮播(2)/未开播均归
-  /// offline,online 留空。粉丝勋章/大航海在 web 真源是 anchor/guard 两个
-  /// 额外接口(`fetchBilibiliFansMedalCount`/`fetchBilibiliGuardInfo`),
-  /// 且 vip 列本就为空 —— 此处不再加请求,[RoomSummary.vip] 恒空。
+  /// `formatCount(info.attention)` 同口径)。轮播(`live_status == 2`,
+  /// B 站官方语义)按任务口径(2026-09-19)输出 [RoomState.replay]:
+  /// **online 契约同离线一样为空串**,由 [RoomSummary.roomState] 单独
+  /// 区分。粉丝勋章/大航海在 web 真源是 anchor/guard 两个额外接口
+  /// (`fetchBilibiliFansMedalCount`/`fetchBilibiliGuardInfo`),且 vip 列
+  /// 本就为空 —— 此处不再加请求,[RoomSummary.vip] 恒空。
   @override
   Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
     final http = _client.parserHttp;
@@ -95,7 +97,10 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
       }
     }
 
-    final live = jsonInt(info['live_status']) == 1;
+    // live_status:0 未开播 1 直播 2 轮播(B 站官方语义)。
+    final liveStatus = jsonInt(info['live_status']);
+    final isLive = liveStatus == 1;
+    final isReplay = liveStatus == 2;
     // 二级分类名优先(web pickText(area_name, parent_area_name) 同口径)。
     final refreshAreaName = jsonText(info['area_name']);
     return RoomSummary(
@@ -109,9 +114,12 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
       category: refreshAreaName.isNotEmpty
           ? refreshAreaName
           : jsonText(info['parent_area_name']),
-      online: live ? formatOnlineCount(info['online']) : '',
+      online: isLive ? formatOnlineCount(info['online']) : '',
       cover: bilibiliCoverFromRoom(info),
       followers: formatExactCount(info['attention']),
+      roomState: isLive
+          ? RoomState.live
+          : (isReplay ? RoomState.replay : RoomState.offline),
     );
   }
 
@@ -137,8 +145,12 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
     );
     final infoAvatar = bilibiliAvatarFromRoom(info);
 
-    // live_status:0 未开播 1 直播 2 轮播;契约无 replay,轮播/未播归 offline。
-    final isLive = jsonInt(info['live_status']) == 1;
+    // live_status:0 未开播 1 直播 2 轮播(B 站官方语义);轮播输出
+    // replay(web resolve 层把轮播当未播,是有意收紧 —— 轮播流暂不接入,
+    // 保持 streams 为空,语义先行)。
+    final liveStatus = jsonInt(info['live_status']);
+    final isLive = liveStatus == 1;
+    final isReplay = liveStatus == 2;
 
     // get_anchor_in_room 只在 get_info 缺主播名/头像时兜底(通常不需要),
     // 且与 play 数据并行,不再阻塞在序列前面。
@@ -175,7 +187,7 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
     );
 
     if (!isLive) {
-      return _payload(base, RoomState.offline);
+      return _payload(base, isReplay ? RoomState.replay : RoomState.offline);
     }
 
     final data = await playFuture!;

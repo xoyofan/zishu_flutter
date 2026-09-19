@@ -54,10 +54,10 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver, RoomSummar
   /// 判定录播/下播边界),**不做 anti-code 签名、不构造任何播放地址**。
   ///
   /// 口径对齐 web `follow/status.ts` 的 huya 快照:
-  /// `huyaRoomState` 判在播,`formatOnline(totalCount|userCount)` 作热度;
-  /// 粉丝数取 `profileInfo.activityCount ?? liveData.activityCount`(同一
-  /// 响应内,零额外请求);`replay` 在本仓契约里归 offline([RoomState] 无
-  /// replay),故 online 留空。
+  /// `huyaRoomState` 判三态(在播/轮播/下播),`formatOnline(totalCount|
+  /// userCount)` 作热度;粉丝数取 `profileInfo.activityCount ??
+  /// liveData.activityCount`(同一响应内,零额外请求);轮播输出
+  /// [RoomState.replay],online 契约同离线为空串。
   ///
   /// 贵宾数([RoomSummary.vip],SideHeader「贵宾」行):仅在播时按 web
   /// 真源 `follow/huya-wup.ts` 走 Tars wup 协议 `liveui/getVipBarList`
@@ -147,6 +147,12 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver, RoomSummar
         profileInfo['activityCount'] ?? liveData['activityCount'],
       ),
       vip: vip,
+      // 三态透传:huyaRoomState 的 replay(录播循环)不再折进 offline。
+      roomState: switch (state) {
+        HuyaRoomState.live => RoomState.live,
+        HuyaRoomState.replay => RoomState.replay,
+        HuyaRoomState.offline => RoomState.offline,
+      },
     );
   }
 

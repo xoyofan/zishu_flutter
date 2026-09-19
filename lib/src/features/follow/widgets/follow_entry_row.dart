@@ -44,6 +44,7 @@ class FollowEntryRow extends StatelessWidget {
     final tokens = context.tokens;
     final room = entry.room;
     final live = entry.isLive;
+    final replay = entry.isReplay;
     final brand = PlatformBrandCatalog.byId(room.site);
     final selectedBg = (brand?.color ?? tokens.brand).withValues(alpha: 0.14);
 
@@ -99,21 +100,38 @@ class FollowEntryRow extends StatelessWidget {
                 fontWeight: FontWeight.w600,
               ),
               const SizedBox(width: 6),
-              // 在线人数:开播为人形图标 + 数字,离线为时钟 + 「未开播」。
+              // 在线人数:开播为人形图标 + 数字,轮播为循环图标 + 「轮播」
+              // 小标签,离线为时钟 + 「未开播」。
               Icon(
-                live ? Icons.people_alt_rounded : Icons.schedule_rounded,
+                live
+                    ? Icons.people_alt_rounded
+                    : (replay ? Icons.repeat_rounded : Icons.schedule_rounded),
                 size: 11,
-                color: live ? tokens.liveBadge : tokens.textSecondary,
+                color: live
+                    ? tokens.liveBadge
+                    : (replay ? kFollowReplayAccent : tokens.textSecondary),
               ),
               const SizedBox(width: 2),
-              Text(
-                live ? room.online : '未开播',
-                style: context.textCaption.copyWith(
-                  fontSize: 11,
-                  color: live ? tokens.textPrimary : tokens.textSecondary,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+              if (live)
+                Text(
+                  room.online,
+                  style: context.textCaption.copyWith(
+                    fontSize: 11,
+                    color: tokens.textPrimary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
+                )
+              else if (replay)
+                const FollowReplayBadge()
+              else
+                Text(
+                  '未开播',
+                  style: context.textCaption.copyWith(
+                    fontSize: 11,
+                    color: tokens.textSecondary,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                  ),
                 ),
-              ),
             ],
           ),
         ),

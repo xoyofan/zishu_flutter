@@ -60,8 +60,9 @@ class DouyuRoomResolver implements RoomResolver, RoomSummaryRefresher {
   /// 只打三个房间信息端点 —— **不取白名单密钥、不请求 getH5PlayV1、
   /// 不做签名、不连弹幕 WS**,因此不能在关注列表定时刷新时顺带拉取流地址。
   /// 口径对齐 web `services/streaming-server/src/follow/status.ts` 的
-  /// douyu 快照:`show_status == 1` 且在播时取 `hn` 作热度文案,离线一律
-  /// 空串;`fansNum`/`giftCard.total` 作粉丝/贵宾文案(web 真源的贵宾
+  /// douyu 快照(`douyuState`):`show_status == 1` 且实时在播时取 `hn`
+  /// 作热度文案,轮播(`videoLoop == 1`,输出 [RoomState.replay])与离线
+  /// 一律空串;`fansNum`/`giftCard.total` 作粉丝/贵宾文案(web 真源的贵宾
   /// 实时榜走弹幕 WS oni,此处仅取卡片回退值)。
   @override
   Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
@@ -81,6 +82,10 @@ class DouyuRoomResolver implements RoomResolver, RoomSummaryRefresher {
     );
 
     final live = room.showStatus == 1;
+    // 口径对齐 web `douyuState`(SFVideoLive follow/status.ts:126):
+    // show_status==1 才有内容;videoLoop==1 是录播循环(轮播)→ replay,
+    // 非 live。轮播不是实时直播:online 契约同离线为空串。
+    final replay = live && room.videoLoop == 1;
     final hn = jsonText(mobile['hn']);
     final mobileTitle = jsonText(mobile['roomName']);
     final mobileAnchor = jsonText(mobile['nickname']);
@@ -96,11 +101,14 @@ class DouyuRoomResolver implements RoomResolver, RoomSummaryRefresher {
       anchorName: mobileAnchor.isNotEmpty ? mobileAnchor : room.nickname,
       cid: room.cateId,
       category: mobileCategory.isNotEmpty ? mobileCategory : room.cateName,
-      // 热度只在在播时有意义;`hn` 缺失/为 0 时留空。
-      online: live && hn.isNotEmpty && hn != '0' ? hn : '',
+      // 热度只在实时在播时有意义;`hn` 缺失/为 0 时留空,轮播归空串。
+      online: live && !replay && hn.isNotEmpty && hn != '0' ? hn : '',
       cover: room.cover,
       followers: cardFans,
       vip: cardVip,
+      roomState: replay
+          ? RoomState.replay
+          : (live ? RoomState.live : RoomState.offline),
     );
   }
 

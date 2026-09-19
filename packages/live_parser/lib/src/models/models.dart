@@ -7,7 +7,14 @@ library;
 import 'dart:convert';
 
 /// 房间在线状态。
-enum RoomState { live, offline, notFound }
+///
+/// `replay` 为平台「轮播/录播循环」态:B 站 `live_status==2`、斗鱼
+/// betard `videoLoop==1`、虎牙 `huyaRoomState` replay 分支(均对齐
+/// SFVideoLive `follow/status.ts` 的三态快照口径)。轮播**不是实时
+/// 直播**:宿主在播判据仍是「online 非空」,replay 的 [RoomSummary.online]
+/// 契约同离线一样为空串(见 [RoomSummary.roomState])。
+/// 枚举按 name 序列化,`replay` 追加在末尾不影响旧 JSON 的读写。
+enum RoomState { live, offline, notFound, replay }
 
 /// 一条可播放线路。
 class StreamLine {
@@ -137,6 +144,9 @@ class RoomPayload {
 
   bool get isLive => roomState == RoomState.live;
 
+  /// 轮播/录播循环态(非实时直播;streams 通常为空)。
+  bool get isReplay => roomState == RoomState.replay;
+
   /// 默认播放地址:首选画质的首选线路。
   String get playUrl => streams.isEmpty ? '' : (streams.first.preferredLine?.url ?? '');
 
@@ -244,6 +254,7 @@ class RoomSummary {
     this.promoTag,
     this.followers = '',
     this.vip = '',
+    this.roomState = RoomState.offline,
   });
 
   final String site;
@@ -285,6 +296,23 @@ class RoomSummary {
   ///   真源本身无此字段,恒为空。
   final String vip;
 
+  /// 房间三态(在播/离线/轮播),`refresher` 与列表共同承载 replay 语义。
+  ///
+  /// 口径对齐 web 关注快照 `FollowState = live|replay|offline`
+  /// (SFVideoLive `follow/status.ts:42`):
+  /// - `live` ⇔ [online] 非空(既有在播判据,不变);
+  /// - `replay` = 轮播/录播循环:**[online] 契约同离线一样为空串**,
+  ///   宿主以 [roomState] 单独区分(「我的关注」页据此排序与打标);
+  /// - 默认 [RoomState.offline]:旧 JSON(无 `roomState` 键)与未适配
+  ///   replay 判定的站点自然回落,行为不变。
+  final RoomState roomState;
+
+  /// 在播(与 [online] 非空一致;轮播/离线均为 false)。
+  bool get isLive => roomState == RoomState.live;
+
+  /// 轮播/录播循环态。
+  bool get isReplay => roomState == RoomState.replay;
+
   Map<String, dynamic> toJson() => {
     'site': site,
     'roomId': roomId,
@@ -294,6 +322,7 @@ class RoomSummary {
     'category': category,
     'online': online,
     'cover': cover,
+    'roomState': roomState.name,
     if (promoTag != null) 'promoTag': promoTag,
     if (followers.isNotEmpty) 'followers': followers,
     if (vip.isNotEmpty) 'vip': vip,
@@ -308,6 +337,10 @@ class RoomSummary {
     category: json['category']?.toString() ?? '',
     online: json['online']?.toString() ?? '',
     cover: json['cover']?.toString() ?? '',
+    roomState: RoomState.values.firstWhere(
+      (state) => state.name == json['roomState'],
+      orElse: () => RoomState.offline,
+    ),
     promoTag: json['promoTag']?.toString(),
     followers: json['followers']?.toString() ?? '',
     vip: json['vip']?.toString() ?? '',

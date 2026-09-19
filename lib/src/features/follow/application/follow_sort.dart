@@ -17,14 +17,18 @@ enum FollowSort {
   final String label;
 }
 
-/// 排序档位:**超关(0) → 开播(1) → 未开播(2)**。
+/// 排序档位:**超关在播(0) → 普通在播(1) → 轮播(2) → 离线(3)**。
 ///
-/// 用户口径是「按超关、关注、没直播的排列」:超关是用户亲手标记的「最在意」,
-/// 即便当期没开播也置顶 —— 他关心的是人,不是这一场直播。其余按是否开播分档,
-/// 未开播沉底。
+/// 用户口径(2026-09-19):「超关 关注 轮播 没直播的顺序排」—— 在播段里
+/// 超关置顶(用户亲手标记的「最在意」),轮播(录播循环,不是实时直播)
+/// 排在全部在播之后、离线之前,且不分超关(对齐 web `followSortTier` 的
+/// replay=2 档,SFVideoLive `followDisplay.ts:92`);没直播的沉底。
+/// 播放页侧栏只显在播([isPlayFollowVisible]),轮播/离线档自然为空 ——
+/// 两页共用同一 [followSortRank],顺序口径单一来源。
 int followSortRank(FollowEntry entry) {
-  if (entry.isSpecial) return 0;
-  return entry.isLive ? 1 : 2;
+  if (entry.isLive) return entry.isSpecial ? 0 : 1;
+  if (entry.isReplay) return 2;
+  return 3;
 }
 
 /// 按 [sort] 就地排序。
@@ -48,10 +52,11 @@ void sortFollowEntries(List<FollowEntry> items, FollowSort sort) {
 
 /// 播放页侧栏的可见性口径:**只显示在播**。
 ///
-/// 用户口径(2026-09-19):「侧边栏关注里不用显示没开播的」。这是对 web
-/// 真源 `isPlayFollowVisible`(`followDisplay.ts:235`,在播 ∨ 离线超关)的
-/// **有意偏离** —— 该口径曾在 2026-09-18 对齐落地(离线超关保留),随后被
-/// 用户口径覆盖;空态文案同步去掉「离线超关会保留」的半句。
+/// 用户口径(2026-09-19):「侧边栏只显示直播的而已」—— 轮播与离线都
+/// 只出现在「我的关注」页(排序共用 [followSortRank] 四档)。这是对 web
+/// 真源 `isPlayFollowVisible`(`followDisplay.ts:235`,在播 ∨ 重播 ∨
+/// 离线超关)的**有意偏离**:该口径曾在 2026-09-18 对齐落地(离线超关
+/// 保留),随后被用户口径覆盖;空态文案同步去掉「离线超关会保留」的半句。
 ///
 /// 与 [visibleFollowEntries] 的 `liveOnly` 目前语义相同,但侧栏仍走
 /// [playSidebarFollowEntries] 专用入口:口径再变时只改一处。
@@ -59,8 +64,8 @@ bool isPlayFollowVisible(FollowEntry entry) => entry.isLive;
 
 /// 播放页侧栏的关注列表:平台筛选 + 侧栏可见性 + 统一排序。
 ///
-/// 排序走 [sortFollowEntries] 同一档位(超关 → 在播;只显在播后未开播档
-/// 自然为空),保证侧栏与「我的关注」页在播条目的相对顺序一致。
+/// 排序走 [sortFollowEntries] 同一档位(超关在播 → 普通在播;只显在播后
+/// 轮播/离线档自然为空),保证侧栏与「我的关注」页在播条目的相对顺序一致。
 List<FollowEntry> playSidebarFollowEntries(
   Iterable<FollowEntry> entries, {
   String site = 'all',

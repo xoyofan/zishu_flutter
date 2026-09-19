@@ -87,6 +87,9 @@ abstract interface class RoomRecoveryResolver implements RoomResolver {
 /// * 只打各站最轻的房间信息接口,请求里不得出现取流 / 签名相关调用;
 /// * 离线(含平台「未开播」)时 [RoomSummary.online] 必须为空串 —— 宿主以
 ///   「online 非空」当作在播判据,填占位文案会把离线房间刷成在播;
+///   轮播([RoomState.replay],如 bilibili live_status==2 / douyu
+///   videoLoop==1 / huya 录播循环)同样**必须留空 online**,由
+///   [RoomSummary.roomState] 单独承载 replay 语义;
 /// * 房间不存在或上游报错直接抛异常(不得返回伪造的 RoomSummary);
 /// * 不做结果缓存:刷新本身就是为了拿最新状态。
 ///
