@@ -24,9 +24,24 @@ import 'app_shell.dart';
 
 /// 路由语义与 SFVideoLive 对齐(implementation-plan 6.3)。
 /// route 参数只存 site/id/cid,不传大型对象。
+
+/// 启动路由:exe 命令行 `--route <path>` 指定初始路由,供真机自动化验证
+/// 直达目标页面(普通启动无此参数,行为不变)。Flutter 桌面下命令行参数经
+/// `main(List<String> args)` 注入,由 [configure] 在启动最早期登记。
+class StartupRoute {
+  static String value = '/all';
+
+  static void configure(List<String> args) {
+    final i = args.indexOf('--route');
+    if (i >= 0 && i + 1 < args.length && args[i + 1].startsWith('/')) {
+      value = args[i + 1];
+    }
+  }
+}
+
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
-    initialLocation: '/all',
+    initialLocation: StartupRoute.value,
     // 未知路由兜底:参考实现有独立 404 入口,桌面端至少不能白屏。
     errorBuilder: (context, state) => _RouteFallback(uri: state.uri.toString()),
     routes: [

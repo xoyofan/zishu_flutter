@@ -3,13 +3,17 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 
+import 'src/app/app_router.dart';
 import 'src/apps/windows/windows_app.dart';
 import 'src/platforms/common/playback/window_presentation.dart';
 
 /// 默认产品入口：全新的 Windows UI。
-Future<void> main() async {
+/// 命令行参数(Flutter 桌面经 main args 注入,如 `--route /soop/category`)
+/// 供真机自动化验证直达目标页面。
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
   MediaKit.ensureInitialized();
+  StartupRoute.configure(args);
   // window_manager 必须先初始化:播放页的全屏(setFullScreen)与画中画都走它。
   // 未初始化时插件不监听窗口事件,isFullScreen() 的边界与状态同步都没有保障。
   // 非桌面平台(Web / Android)没有对应原生实现,静默跳过——那些平台的窗口呈现
