@@ -734,3 +734,10 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 - **切房保持 tab**:新增全局 KeepAlive `playSidePanelPrefsProvider`(tabIndex/followGrid/followSite),TabBar.onTap 与面板变更写回,DefaultTabController.initialIndex 恢复 —— 顶部(壳层常驻)/左侧(舞台随路由)/右侧(active 态全局)三块解耦,右侧点条目 pushReplacement 后不退回聊天。离开播放页后偏好也保留(会话级)。
 - 测试 +2(四列内容/单行紧凑、切房后关注面板仍挂载);坑:builder 化后分页计数改 delegate.childCount(separated 时代的 (n+1)/2 换算已废)。
 - golden:play_style_follow 36700→37693B(两行文字→四列单行+分类条)。
+
+## 2026-09-19 侧栏筛选图标化 + 去面板标题(bd140be)
+
+**结论**:三条补充口径同轮落地 —— ①平台筛选 chips 改为与顶栏同款平台图标格子(PlatformIcon,30x30,选中态 surfaceRaised 底+品牌色描边+柔光);②Wrap 自动折行不再横向滚动(可 2 行);③关注/推荐面板顶部去掉「我的关注」「相关推荐」标题(_PanelTitle 删除),视图切换按钮挪进筛选行对齐 web follow-tab-toolbar。
+- 测试:danmaku_test 标题断言改「面板挂载+标题不存在」;默认列表用例的视图形态断言改按卡面锚点 —— 平台图标 all 的四象限色块内部也有 2x2 GridView,按类型断言会误中。
+- golden:play_style_follow 37693->43970B(图标格子+分类色条)、play_style_recommend 40240->39663B(标题行移除)。
+- 门禁:analyze 0;全量 507 passed / 0 failed;parser 301/10skip。
