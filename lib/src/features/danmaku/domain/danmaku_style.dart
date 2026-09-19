@@ -115,6 +115,12 @@ abstract final class DanmakuStyle {
     return painter.maxIntrinsicWidth;
   }
 
+  ///
+  /// 同时兼容两种 span 形态:
+  /// - 单段纯正文([buildSpan] 当前口径:根 span 自带 `text`,无 children);
+  /// - 旧两段富文本(根 span 无 text,`children` 里是用户名 + 正文)。
+  /// 忽略根 `text` 会导致单段弹幕整条空白(ParagraphBuilder 零字符),
+  /// 因此先写入根 span 自身 text,再递归写入 children。
   static ui.Paragraph _buildParagraph(
     TextSpan span, {
     required bool stroke,
@@ -127,32 +133,39 @@ abstract final class DanmakuStyle {
         maxLines: 1,
       ),
     );
-    for (final child in span.children ?? const <InlineSpan>[]) {
-      final childSpan = child as TextSpan;
-      final base = childSpan.style ?? const TextStyle();
-      if (stroke) {
-        builder.pushStyle(
-          ui.TextStyle(
-            fontSize: base.fontSize,
-            fontWeight: base.fontWeight,
-            foreground: Paint()
-              ..style = PaintingStyle.stroke
-              ..strokeWidth = 2
-              ..color = strokeColor,
-          ),
-        );
-      } else {
-        builder.pushStyle(
-          ui.TextStyle(
-            fontSize: base.fontSize,
-            fontWeight: base.fontWeight,
-            color: base.color,
-          ),
-        );
+
+    void addSpanText(TextSpan node) {
+      final base = node.style ?? const TextStyle();
+      if (node.text != null && node.text!.isNotEmpty) {
+        if (stroke) {
+          builder.pushStyle(
+            ui.TextStyle(
+              fontSize: base.fontSize,
+              fontWeight: base.fontWeight,
+              foreground: Paint()
+                ..style = PaintingStyle.stroke
+                ..strokeWidth = 2
+                ..color = strokeColor,
+            ),
+          );
+        } else {
+          builder.pushStyle(
+            ui.TextStyle(
+              fontSize: base.fontSize,
+              fontWeight: base.fontWeight,
+              color: base.color,
+            ),
+          );
+        }
+        builder.addText(node.text!);
+        builder.pop();
       }
-      builder.addText(childSpan.text ?? '');
-      builder.pop();
+      for (final child in node.children ?? const <InlineSpan>[]) {
+        addSpanText(child as TextSpan);
+      }
     }
+
+    addSpanText(span);
     return builder.build();
   }
 }

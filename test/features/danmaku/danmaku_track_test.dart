@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:live_parser/live_parser.dart' show DanmakuMessage, DanmakuMessageType;
@@ -68,6 +70,50 @@ void main() {
     test('空用户名同样只输出正文', () {
       final span = DanmakuStyle.buildSpan(msg(userName: '', text: '仅正文'));
       expect(span.text, '仅正文');
+    });
+  });
+
+  group('DanmakuStyle 段落布局(飘屏空白回归防护)', () {
+    test('单段纯正文经 _buildParagraph 布局后 maxIntrinsicWidth > 0', () {
+      // 回归:buildSpan 改为单段(根 span 持 text、无 children)后,
+      // _buildParagraph 若仍只遍历 children,ParagraphBuilder 零字符,
+      // 飘屏整条空白。measureWidth 必须测出实际宽度。
+      final span = DanmakuStyle.buildSpan(msg(text: '这条弹幕必须有宽度'));
+      expect(span.text, isNotEmpty);
+      expect(DanmakuStyle.measureWidth(span), greaterThan(0));
+    });
+
+    test('自定义字号(A3 注入)下单段 span 仍可测量出宽度', () {
+      final span = DanmakuStyle.buildSpan(msg(text: '大字号弹幕'), fontSize: 28);
+      expect(DanmakuStyle.measureWidth(span), greaterThan(0));
+    });
+
+    test('旧两段结构(带 children)仍兼容:嵌套正文计入宽度', () {
+      // 兼容历史富文本形态:根 span 无 text,children 为昵称 + 正文。
+      final body = DanmakuStyle.buildSpan(msg(text: '正文部分'));
+      final legacy = TextSpan(
+        children: [
+          TextSpan(
+            text: '昵称:',
+            style: body.style,
+          ),
+          body,
+        ],
+      );
+      expect(legacy.text, isNull);
+      final legacyWidth = DanmakuStyle.measureWidth(legacy);
+      expect(legacyWidth, greaterThan(DanmakuStyle.measureWidth(body)),
+          reason: '昵称段宽度应叠加在正文之上');
+    });
+
+    test('paintRichText 对单段 span 做描边 + 填充两遍绘制不抛异常', () {
+      final span = DanmakuStyle.buildSpan(msg(text: '描边填充'));
+      final recorder = ui.PictureRecorder();
+      final canvas = ui.Canvas(recorder);
+      DanmakuStyle.paintRichText(canvas, span, offset: ui.Offset.zero);
+      final picture = recorder.endRecording();
+      expect(picture, isNotNull);
+      picture.dispose();
     });
   });
 
