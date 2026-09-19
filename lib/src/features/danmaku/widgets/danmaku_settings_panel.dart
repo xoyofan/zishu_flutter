@@ -1,8 +1,10 @@
-/// 弹幕细粒度设置面板(A3)。
+/// 弹幕细粒度设置面板(A3),形态对齐 web `OverlayDanmakuSettingsPanel.vue`:
+/// 标题行「飘屏弹幕」(amber)+「显示」开关 + 透明度/字号/速度三列滑杆行 +
+/// 「区域」下拉(4 档)。
 ///
-/// 仅承载「透明度 / 字号 / 速度 / 显示区域」四项细粒度调节,总开关沿用
-/// `settings_provider` 的 `danmakuEnabled`(本面板不重复做开关)。所有控件
-/// 都读写 [danmakuSettingsProvider],无死控件(`onChanged` 全部落到 notifier)。
+/// 总开关沿用 `settings_provider` 的 `danmakuEnabled`(本面板只做透传读写,
+/// 与侧栏设置页/控制条按钮共享同一份状态)。细粒度四项读写
+/// [danmakuSettingsProvider],无死控件(`onChanged` 全部落到 notifier)。
 ///
 /// 文案禁用全角冒号(用空格 / 半角分隔),避免与侧栏弹幕条目定位约定冲突。
 library;
@@ -10,22 +12,28 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/presentation/zishu_tokens.dart';
+import '../../follow/application/settings_provider.dart';
 import '../application/danmaku_settings_provider.dart';
 import '../domain/danmaku_settings.dart';
 
-/// 显示区域档位的可读标签(按 [DanmakuSettings.kDisplayAreaRatios] 顺序)。
+/// 行首 label 固定宽(px),对齐 web `2.4rem` ≈ 38px。
+const double _kLabelWidth = 38;
+
+/// 显示区域档位的可读标签(按 [DanmakuSettings.kDisplayAreaRatios] 顺序,
+/// 对齐 web el-select:全屏 / 3/4 / 半屏 / 1/4)。
 const List<String> _kDisplayAreaLabels = <String>[
   '全屏',
   '3/4 屏',
-  '1/2 屏',
+  '半屏',
   '1/4 屏',
-  '1/8 屏',
 ];
 
 /// 弹幕设置面板。
 ///
 /// 作为独立控件存在,由 lead 统一挂接到侧栏设置 tab / 弹幕设置入口;
-/// 自身不依赖总开关,只消费 [danmakuSettingsProvider]。
+/// 总开关消费 `settingsProvider.danmakuEnabled`,细粒度消费
+/// [danmakuSettingsProvider]。
 class DanmakuSettingsPanel extends ConsumerWidget {
   const DanmakuSettingsPanel({super.key});
 
@@ -33,12 +41,56 @@ class DanmakuSettingsPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(danmakuSettingsProvider);
     final controller = ref.read(danmakuSettingsProvider.notifier);
+    // 「显示」= 全局弹幕总开关(与侧栏设置页/控制条弹幕按钮同一份持久化状态)。
+    final danmakuEnabled = ref.watch(
+      settingsProvider.select((s) => s.danmakuEnabled),
+    );
+    final settingsController = ref.read(settingsProvider.notifier);
+
+    final labelStyle = context.textSecondary;
 
     return ListView(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       children: <Widget>[
+        // 标题行:12px w600 amber,底部分隔线(web .overlay-settings__title)。
+        Container(
+          padding: const EdgeInsets.only(bottom: 6),
+          margin: const EdgeInsets.only(bottom: 6),
+          decoration: BoxDecoration(
+            border: Border(
+              bottom: BorderSide(color: context.tokens.border),
+            ),
+          ),
+          child: Text(
+            '飘屏弹幕',
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: context.tokens.brand,
+            ),
+          ),
+        ),
+        // 「显示」开关行(web .overlay-settings__row--toggle)。
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: <Widget>[
+              SizedBox(
+                width: _kLabelWidth,
+                child: Text('显示', style: labelStyle),
+              ),
+              SizedBox(
+                height: 32,
+                child: Switch(
+                  value: danmakuEnabled,
+                  onChanged: settingsController.setDanmakuEnabled,
+                ),
+              ),
+            ],
+          ),
+        ),
         _SliderRow(
-          label: '不透明度',
+          label: '透明度',
           valueLabel: '${settings.opacity}%',
           value: settings.opacity.toDouble(),
           min: DanmakuSettings.kOpacityMin.toDouble(),
@@ -48,7 +100,8 @@ class DanmakuSettingsPanel extends ConsumerWidget {
         ),
         _SliderRow(
           label: '字号',
-          valueLabel: '${settings.fontSize}px',
+          // 对齐 web:值无单位(「20」而非「20px」)。
+          valueLabel: '${settings.fontSize}',
           value: settings.fontSize.toDouble(),
           min: DanmakuSettings.kFontSizeMin.toDouble(),
           max: DanmakuSettings.kFontSizeMax.toDouble(),
@@ -65,34 +118,48 @@ class DanmakuSettingsPanel extends ConsumerWidget {
           divisions: DanmakuSettings.kSpeedMax - DanmakuSettings.kSpeedMin,
           onChanged: (v) => controller.setSpeed(v.round()),
         ),
-        const SizedBox(height: 8),
-        const _SectionLabel('显示区域'),
-        const SizedBox(height: 8),
-        SegmentedButton<double>(
-          key: const Key('danmaku-display-area'),
-          // 多选关闭:单选模式,选中即生效。
-          multiSelectionEnabled: false,
-          emptySelectionAllowed: false,
-          selected: <double>{settings.displayAreaRatio},
-          onSelectionChanged: (selected) {
-            if (selected.isNotEmpty) {
-              controller.setDisplayAreaRatio(selected.single);
-            }
-          },
-          segments: <ButtonSegment<double>>[
-            for (var i = 0; i < DanmakuSettings.kDisplayAreaRatios.length; i++)
-              ButtonSegment<double>(
-                value: DanmakuSettings.kDisplayAreaRatios[i],
-                label: Text(_kDisplayAreaLabels[i]),
+        // 显示区域:下拉单选(web el-select,4 档)。
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(
+            children: <Widget>[
+              SizedBox(
+                width: _kLabelWidth,
+                child: Text('区域', style: labelStyle),
               ),
-          ],
+              Expanded(
+                child: DropdownButton<double>(
+                  key: const Key('danmaku-display-area'),
+                  value: settings.displayAreaRatio,
+                  isExpanded: true,
+                  isDense: true,
+                  items: <DropdownMenuItem<double>>[
+                    for (var i = 0;
+                        i < DanmakuSettings.kDisplayAreaRatios.length;
+                        i++)
+                      DropdownMenuItem<double>(
+                        value: DanmakuSettings.kDisplayAreaRatios[i],
+                        child: Text(
+                          _kDisplayAreaLabels[i],
+                          style: labelStyle,
+                        ),
+                      ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) controller.setDisplayAreaRatio(v);
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
   }
 }
 
-/// 单个滑杆行:左侧文案 + 右侧实时数值 + 下方滑杆。
+/// 单个滑杆行:单行三列(label 固定宽 + Expanded 滑杆 + amber 值右对齐),
+/// 对齐 web `.overlay-settings__row` 的 `2.4rem minmax(0,1fr) auto` 网格。
 class _SliderRow extends StatelessWidget {
   const _SliderRow({
     required this.label,
@@ -115,43 +182,36 @@ class _SliderRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
         children: <Widget>[
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: <Widget>[
-              Text(label, style: Theme.of(context).textTheme.bodyMedium),
-              Text(
-                valueLabel,
-                style: Theme.of(context).textTheme.bodySmall
-                    ?.copyWith(color: Theme.of(context).colorScheme.outline),
-              ),
-            ],
+          SizedBox(
+            width: _kLabelWidth,
+            child: Text(
+              label,
+              style: context.textSecondary,
+            ),
           ),
-          Slider(
-            value: value,
-            min: min,
-            max: max,
-            divisions: divisions,
-            label: valueLabel,
-            onChanged: onChanged,
+          Expanded(
+            child: Slider(
+              value: value,
+              min: min,
+              max: max,
+              divisions: divisions,
+              label: valueLabel,
+              onChanged: onChanged,
+            ),
+          ),
+          Text(
+            valueLabel,
+            style: TextStyle(
+              fontSize: 12,
+              color: context.tokens.brand,
+              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
+            ),
           ),
         ],
       ),
     );
-  }
-}
-
-/// 区块标题(避免与滑杆数值混淆)。
-class _SectionLabel extends StatelessWidget {
-  const _SectionLabel(this.text);
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Text(text, style: Theme.of(context).textTheme.titleSmall);
   }
 }

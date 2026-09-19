@@ -66,14 +66,18 @@ void main() {
       expect(s.displayAreaRatio, 0.5);
     });
 
-    test('显示区域档位顺序为 全屏→1/8 屏', () {
+    test('显示区域档位顺序为 全屏→1/4 屏(4 档,对齐 web el-select)', () {
       expect(DanmakuSettings.kDisplayAreaRatios, <double>[
         1.0,
         0.75,
         0.5,
         0.25,
-        0.125,
       ]);
+    });
+
+    test('旧持久化值(1/8 屏 0.125)吸附到最近档', () {
+      expect(DanmakuSettings.nearestDisplayAreaRatio(0.125), 0.25);
+      expect(DanmakuSettings.nearestDisplayAreaRatio(2.0), 1.0);
     });
   });
 
@@ -215,22 +219,22 @@ void main() {
       );
     }
 
-    testWidgets('默认状态下滑杆与分段按钮反映出厂值', (tester) async {
+    testWidgets('默认状态下滑杆与显示区域下拉反映出厂值', (tester) async {
       final container = await pumpPanel(tester);
       final settings = container.read(danmakuSettingsProvider);
       expect(settings.opacity, 100);
       expect(settings.fontSize, 20);
-      expect(settings.speed, 7);
+      expect(settings.speed, 5, reason: '默认速度对齐 web(speed=5)');
       expect(settings.displayAreaRatio, 1.0);
 
-      // 首个滑杆(不透明度)= 100。
+      // 首个滑杆(透明度)= 100。
       final opacitySlider = tester.widget<Slider>(find.byType(Slider).first);
       expect(opacitySlider.value, 100);
-      // 显示区域分段选中全屏(1.0)。
-      final seg = tester.widget<SegmentedButton<double>>(
+      // 显示区域下拉选中全屏(1.0)。
+      final dropdown = tester.widget<DropdownButton<double>>(
         find.byKey(const Key('danmaku-display-area')),
       );
-      expect(seg.selected, <double>{1.0});
+      expect(dropdown.value, 1.0);
       expect(tester.takeException(), isNull);
     });
 
@@ -252,21 +256,24 @@ void main() {
       expect(tester.widget<Slider>(slider).value, opacity.toDouble());
     });
 
-    testWidgets('点击显示区域分段(1/2 屏) → provider.displayAreaRatio = 0.5', (
+    testWidgets('选择显示区域下拉(半屏) → provider.displayAreaRatio = 0.5', (
       tester,
     ) async {
       final container = await pumpPanel(tester);
-      await tester.tap(find.text('1/2 屏'));
+      // DropdownButton 需先展开菜单再点选项。
+      await tester.tap(find.byKey(const Key('danmaku-display-area')));
+      await _pumpFrames(tester);
+      await tester.tap(find.text('半屏').last);
       await _pumpFrames(tester);
       expect(
         container.read(danmakuSettingsProvider).displayAreaRatio,
         0.5,
-        reason: '分段按钮应直接写入对应比例',
+        reason: '下拉选择应直接写入对应比例',
       );
-      final seg = tester.widget<SegmentedButton<double>>(
+      final dropdown = tester.widget<DropdownButton<double>>(
         find.byKey(const Key('danmaku-display-area')),
       );
-      expect(seg.selected, <double>{0.5});
+      expect(dropdown.value, 0.5);
     });
 
     testWidgets('provider 改值后面板滑杆同步(provider → UI 双向)', (tester) async {

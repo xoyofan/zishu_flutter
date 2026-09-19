@@ -13,8 +13,8 @@ library;
 /// - [fontSize]:弹幕字号(px,固定值不随画布缩放),12~36;
 /// - [speed]:滚动速度档 1~10(1 最慢、10 最快),经 [danmakuDurationForSpeed]
 ///   映射为单条弹幕滚动总时长(速度越快时长越短);
-/// - [displayAreaRatio]:弹幕可占画布高度比例,取 [kDanmakuDisplayAreaRatios]
-///   之一(1.0 = 全屏,0.125 = 仅顶部 1/8 屏)。
+/// - [displayAreaRatio]:弹幕可占画布高度比例,取 [kDisplayAreaRatios]
+///   之一(1.0 = 全屏,0.25 = 仅顶部 1/4 屏)。
 class DanmakuSettings {
   const DanmakuSettings({
     this.opacity = kOpacityDefault,
@@ -55,23 +55,22 @@ class DanmakuSettings {
 
   /// 出厂默认速度档。
   ///
-  /// 取 7:经 [danmakuDurationForSpeed] 映射约 7.3s,是 1~10 整数档里最接近
-  /// 现行为 8s 的一档(overlay 本身仍保留 durationSeconds=8 的入参默认值,
-  /// 仅当接线传入 speedFactor 时才走此映射)。
-  static const int kSpeedDefault = 7;
+  /// 对齐 web `useDanmaku.ts` 的 `DEFAULT_OVERLAY.speed = 5`。
+  static const int kSpeedDefault = 5;
 
   /// 出厂默认显示区域:全屏(弹幕可占满画布高度)。
   static const double kDisplayAreaDefault = 1.0;
 
-  /// 可选显示区域比例档位(降序:全屏 → 1/8 屏)。
+  /// 可选显示区域比例档位(降序:全屏 → 1/4 屏)。
   ///
   /// 语义 = 弹幕可占画布高度比例,overlay 据此裁剪可用轨道高度。
+  /// 对齐 web `OverlayDanmakuSettingsPanel.vue` 的 el-select 档位
+  /// (全屏 1 / 3/4 0.75 / 半屏 0.5 / 1/4 0.25),不含 1/8 屏。
   static const List<double> kDisplayAreaRatios = <double>[
     1.0, // 全屏
     0.75, // 3/4 屏
     0.5, // 1/2 屏
     0.25, // 1/4 屏
-    0.125, // 1/8 屏
   ];
 
   final int opacity;
@@ -96,6 +95,10 @@ class DanmakuSettings {
   ///
   /// 用于本地存储读盘后的归一:脏值(如速度 99)被夹到 [kSpeedMax],缺失值
   /// 用默认值,保证 state 永远处于合法区间,UI 不会收到非法滑杆位置。
+  ///
+  /// [displayAreaRatio] 特殊:不做边界截断而是**吸附到最近档位**——旧版本
+  /// 持久化过已下线的 1/8 屏(0.125),读盘后归一到最近的 1/4 屏(0.25),
+  /// 其余越界值同理吸附(如 2.0 → 1.0),保证 state 恒为合法档。
   static DanmakuSettings clamp({
     int? opacity,
     int? fontSize,
@@ -109,11 +112,25 @@ class DanmakuSettings {
         kFontSizeMax,
       ),
       speed: (speed ?? kSpeedDefault).clamp(kSpeedMin, kSpeedMax),
-      displayAreaRatio: (displayAreaRatio ?? kDisplayAreaDefault).clamp(
-        kDisplayAreaRatios.last,
-        kDisplayAreaRatios.first,
-      ),
+      displayAreaRatio: displayAreaRatio == null
+          ? kDisplayAreaDefault
+          : nearestDisplayAreaRatio(displayAreaRatio),
     );
+  }
+
+  /// 吸附到 [kDisplayAreaRatios] 中距离 [ratio] 最近的档位(平局取更小档,
+  /// 即更保守的显示区域)。
+  static double nearestDisplayAreaRatio(double ratio) {
+    var best = kDisplayAreaRatios.first;
+    var bestDistance = (ratio - best).abs();
+    for (final candidate in kDisplayAreaRatios.skip(1)) {
+      final distance = (ratio - candidate).abs();
+      if (distance < bestDistance) {
+        best = candidate;
+        bestDistance = distance;
+      }
+    }
+    return best;
   }
 
   @override

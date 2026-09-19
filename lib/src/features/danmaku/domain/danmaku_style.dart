@@ -34,10 +34,14 @@ abstract final class DanmakuStyle {
   static const double userNameScale = 0.9;
 
   /// 行高(默认字号下单行占位高度,单位 px)。
-  static const double lineHeight = fontSize * 1.4;
+  ///
+  /// 公式对齐 web `DanmakuOverlay.vue` 的 `trackHeightFor`:
+  /// `fontSize * 1.52 + 6`(20px → 36.4)。web 侧做了 `Math.ceil`,
+  /// 这里保留 double 精度做轨道间距,视觉一致且不损失小屏精度。
+  static const double lineHeight = fontSize * 1.52 + 6;
 
   /// 给定字号下的行高(px)。A3 字号设置生效时据此换算轨道间距。
-  static double lineHeightOf(double fontSize) => fontSize * 1.4;
+  static double lineHeightOf(double fontSize) => fontSize * 1.52 + 6;
 
   /// 颜色归一:
   /// - `color == 0`(含越界值)→ [defaultTextColor];

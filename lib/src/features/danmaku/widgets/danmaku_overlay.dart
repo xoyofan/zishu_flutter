@@ -28,7 +28,7 @@ class DanmakuOverlay extends StatefulWidget {
     this.enabled = true,
     this.durationSeconds = 8.0,
     this.maxVisible = 200,
-    this.topPadding = 8,
+    this.topPadding = 0,
     this.opacity = 1.0,
     this.fontSize = DanmakuStyle.fontSize,
     this.speedFactor,
@@ -50,7 +50,9 @@ class DanmakuOverlay extends StatefulWidget {
   /// 同屏最大弹幕数(超出丢弃最旧的,防止长时间挂机内存无界增长)。
   final int maxVisible;
 
-  /// 弹幕区距顶部留白(px),避免遮挡视频顶部信息。
+  /// 弹幕区距顶部留白(px)。
+  ///
+  /// 默认 0:对齐 web `.danmaku-canvas { top: 0 }`,轨道从画布顶开始。
   final double topPadding;
 
   /// 叠加层整体不透明度 0~1(1 = 不透明)。作用于 painter(全局 alpha)。

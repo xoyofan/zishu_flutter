@@ -99,7 +99,11 @@ class DanmakuSettingsController extends Notifier<DanmakuSettings> {
     }
   }
 
-  /// 设置显示区域比例(取 [DanmakuSettings.kDisplayAreaRatios] 之一)并持久化。
+  /// 设置显示区域比例并持久化。
+  ///
+  /// 传入值经 [DanmakuSettings.clamp] 吸附到
+  /// [DanmakuSettings.kDisplayAreaRatios] 最近档;旧版本持久化过的已下线档位
+  /// (1/8 屏 0.125)读盘/写入时都会归一到最近的 1/4 屏(0.25)。
   Future<void> setDisplayAreaRatio(double ratio) async {
     state = DanmakuSettings.clamp(
       opacity: state.opacity,
