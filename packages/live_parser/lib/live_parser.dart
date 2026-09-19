@@ -29,6 +29,7 @@ export 'src/platforms/soop/normalize.dart';
 export 'src/platforms/soop/room_api.dart';
 export 'src/platforms/soop/search.dart';
 export 'src/platforms/soop/soop_site.dart';
+export 'src/platforms/soop/zh_categories.dart';
 export 'src/platforms/youtube/browse.dart';
 export 'src/platforms/youtube/danmaku.dart';
 export 'src/platforms/youtube/dlp.dart';

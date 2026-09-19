@@ -129,6 +129,22 @@ void main() {
       expect(payload.streams, isEmpty);
     });
 
+    test('分类名按 CATE 反查中文表,覆盖未本地化的韩文 CATEGORY_TAGS', () {
+      // 详情接口 CATEGORY_TAGS 不随 Accept-Language 本地化(实测仍韩文),
+      // 依赖分类树(zh_CN)预热的 cid→中文 表按 CATE 覆盖。缓存是进程级
+      // 单例:本用例声明在「在播」用例之后,先注册不会污染其断言。
+      rememberSoopZhCategory('00040066', '绝地求生');
+      final raw = soopFixture('detail_live.json') as Map<String, dynamic>;
+      (raw['CHANNEL'] as Map<String, dynamic>)['CATEGORY_TAGS'] = [
+        '배틀그라운드',
+      ];
+
+      final detail = parseSoopRoomDetail(raw, 'testbj');
+
+      expect(detail.cateNo, '00040066');
+      expect(detail.category, '绝地求生');
+    });
+
     test('取流失败不伪报在播', () async {
       fake.assignResponse = const {'view_url': ''};
 

@@ -8,15 +8,30 @@
     "RMD": "https://gs_cdn.sooplive.co.kr/full",
     "CDN": "gs_cdn",
     "VIEWPRESET": [
-      { "name": "auto", "bps": 0 },
-      { "name": "original", "bps": 8000000 },
-      { "name": "HD", "bps": 3000000 },
-      { "name": "SD", "bps": 1000000 }
+      {
+        "name": "auto",
+        "bps": 0
+      },
+      {
+        "name": "original",
+        "bps": 8000000
+      },
+      {
+        "name": "HD",
+        "bps": 3000000
+      },
+      {
+        "name": "SD",
+        "bps": 1000000
+      }
     ],
     "CHATNO": "12345",
     "CHDOMAIN": "chat.sooplive.co.kr",
     "CHPT": "8088",
-    "CATEGORY_TAGS": ["英雄联盟"],
-    "total_view_cnt": "23456"
+    "CATEGORY_TAGS": [
+      "英雄联盟"
+    ],
+    "total_view_cnt": "23456",
+    "CATE": "00040066"
   }
 }

@@ -10,6 +10,7 @@ import '../../http/parser_http.dart';
 import '../../models/models.dart';
 import '../../utils/header_sanitizer.dart';
 import '../douyu/json_utils.dart';
+import 'zh_categories.dart';
 
 /// SOOP 媒体流(HLS)请求头:CDN 以 Referer/Origin 做防盗链,
 /// 与解析请求头(SoopClient.defaultHeaders / player_live_api)同源。
@@ -57,6 +58,7 @@ class SoopRoomDetail {
     required this.nick,
     required this.title,
     required this.category,
+    required this.cateNo,
     required this.bno,
     required this.rmd,
     required this.cdn,
@@ -72,6 +74,10 @@ class SoopRoomDetail {
   final String nick;
   final String title;
   final String category;
+
+  /// 分类号(CHANNEL `CATE`,如 `00040066`);用于反查 [soopZhCategoryName]
+  /// 中文分类表。空串表示上游未下发。
+  final String cateNo;
   final String bno;
   final String rmd;
   final String cdn;
@@ -193,12 +199,20 @@ SoopRoomDetail parseSoopRoomDetail(
   final channel = jsonMapOf(payload['CHANNEL']);
   final tags = jsonListOf(channel['CATEGORY_TAGS']);
   final roomId = jsonText(channel['BJID']).trim();
+  // 详情接口的 CATEGORY_TAGS 不随 Accept-Language 本地化(实测仍韩文),
+  // 与房间列表同口径:按 CATE 分类号反查 zh_CN 分类表的中文名(web
+  // soop.ts:57-65 zhName 覆盖同构),未命中回退原名 + remap 归一。
+  final cateNo = jsonText(channel['CATE']).trim();
+  final rawName = tags.isEmpty ? '' : jsonText(tags.first);
+  final category =
+      soopZhCategoryName(cateNo) ?? remapCategoryName('soop', rawName);
   return SoopRoomDetail(
     resultCode: jsonInt(channel['RESULT']),
     roomId: roomId.isEmpty ? fallbackRoomId : roomId,
     nick: jsonText(channel['BJNICK']),
     title: jsonText(channel['TITLE']),
-    category: tags.isEmpty ? '' : remapCategoryName('soop', jsonText(tags.first)),
+    category: category,
+    cateNo: cateNo,
     bno: jsonText(channel['BNO']),
     rmd: jsonText(channel['RMD']),
     cdn: jsonText(channel['CDN']),

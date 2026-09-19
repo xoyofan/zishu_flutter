@@ -4,7 +4,10 @@
     "BJID": "testbj",
     "BJNICK": "测试主播",
     "TITLE": "SOOP 测试直播间",
-    "CATEGORY_TAGS": ["英雄联盟"],
-    "total_view_cnt": "0"
+    "CATEGORY_TAGS": [
+      "英雄联盟"
+    ],
+    "total_view_cnt": "0",
+    "CATE": "00040066"
   }
 }
