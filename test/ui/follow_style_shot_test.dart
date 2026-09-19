@@ -124,21 +124,7 @@ void main() {
     );
   });
 
-  testWidgets('关注页 紧凑密度', (tester) async {
-    suppressRenderFlexOverflow();
-    mockPathProvider();
-    final router = await pumpShell(tester);
-    router.go('/follow');
-    await pumpFrames(tester, 8);
-    await tester.tap(find.byKey(const Key('follow-density-tile')));
-    await pumpFrames(tester, 8);
-    await expectLater(
-      find.byType(Scaffold).first,
-      matchesGoldenFile('follow_style_tile.png'),
-    );
-  });
-
-  testWidgets('关注页 单行密度(宽屏多列)', (tester) async {
+  testWidgets('关注页 列表密度(宽屏多列平铺)', (tester) async {
     suppressRenderFlexOverflow();
     mockPathProvider();
     final router = await pumpShell(tester);

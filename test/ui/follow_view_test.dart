@@ -22,7 +22,6 @@ import 'package:zishu_flutter/src/features/follow/views/follow_view.dart';
 import 'package:zishu_flutter/src/features/follow/widgets/follow_common.dart';
 import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_card.dart';
 import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_row.dart';
-import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_tile.dart';
 import 'package:zishu_flutter/src/features/follow/widgets/follow_room_list.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
@@ -160,7 +159,7 @@ void main() {
     expect(segment.selected, {FollowDensity.card});
   });
 
-  testWidgets('点击 follow-density-row:列表切换为单行密度', (tester) async {
+  testWidgets('点击 follow-density-row:切换为列表密度', (tester) async {
     suppressRenderFlexOverflow();
     await pumpFollowApp(tester);
 
@@ -316,24 +315,13 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('紧凑/单行密度:行内「轮播」小标签', (tester) async {
+    testWidgets('列表密度:行内「轮播」小标签', (tester) async {
       suppressRenderFlexOverflow();
       await pumpWithReplaySeed(tester);
 
       const replayKey = Key('follow-entry-douyu-70002');
 
-      // 紧凑(tile)。
-      await tester.tap(find.byKey(const Key('follow-density-tile')));
-      await tester.pump(const Duration(milliseconds: 50));
-      await tester.pump(const Duration(milliseconds: 50));
-      expect(find.byType(FollowEntryTile), findsNWidgets(2));
-      expect(
-        find.descendant(of: find.byKey(replayKey), matching: find.text('轮播')),
-        findsOneWidget,
-        reason: '紧凑行内显一枚「轮播」小标签',
-      );
-
-      // 单行(row)。
+      // 列表(row)档:两档视图只有 卡片/列表,无「紧凑」。
       await tester.tap(find.byKey(const Key('follow-density-row')));
       await tester.pump(const Duration(milliseconds: 50));
       await tester.pump(const Duration(milliseconds: 50));
@@ -343,6 +331,25 @@ void main() {
         findsOneWidget,
         reason: '单行行内显一枚「轮播」小标签',
       );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('视图切换只有 卡片/列表 两档,无「紧凑」段', (tester) async {
+      suppressRenderFlexOverflow();
+      await pumpFollowApp(tester);
+
+      expect(find.byKey(const Key('follow-density-card')), findsOneWidget);
+      expect(find.byKey(const Key('follow-density-row')), findsOneWidget);
+      expect(find.byKey(const Key('follow-density-tile')), findsNothing);
+      // SegmentedButton 选中态可切到 row 再切回 card,来回无异常。
+      await tester.tap(find.byKey(const Key('follow-density-row')));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.byKey(const Key('follow-density-card')));
+      await tester.pump(const Duration(milliseconds: 50));
+      final segment = tester.widget<SegmentedButton<FollowDensity>>(
+        find.byType(SegmentedButton<FollowDensity>),
+      );
+      expect(segment.selected, {FollowDensity.card});
       expect(tester.takeException(), isNull);
     });
   });

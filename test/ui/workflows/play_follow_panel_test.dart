@@ -203,25 +203,28 @@ Finder _row(String site, String roomId) => find.ancestor(
   matching: find.byType(FollowEntryRow),
 );
 
-/// 面板内的**垂直** ListView(关注列表)。面板里还有平台筛选 chips 的水平
-/// ListView(_SidePlatformChips),必须按滚动方向过滤,否则 finder 误中。
-Finder _verticalListsInPanel() => find.descendant(
+/// 面板内的**垂直**关注列表。列表档是垂直 GridView(300–400px 自适应
+/// 多列,窄侧栏单列),卡片档是垂直 ListView —— 都按 ScrollView 读。
+Finder _followList() => find.descendant(
   of: find.byKey(const Key('play-side-follow-panel')),
   matching: find.byWidgetPredicate(
-    (w) => w is ListView && w.scrollDirection == Axis.vertical,
+    (w) => w is ScrollView && w.scrollDirection == Axis.vertical,
   ),
-);
-
-/// 面板内的紧凑列表(PlayRoomList 用 ListView.separated)。
-Finder _followList() => _verticalListsInPanel().first;
+).first;
 
 /// 列表当前**窗口**条目数:读 builder delegate 声明的 childCount
-/// (行自带底边框后是普通 ListView.builder,childCount 即条目数;
-/// 不能用 estimatedChildCount —— 那是按可视区估算的,GridView 才是精确值)。
+/// (行自带底边框;GridView/ListView 的 builder delegate 都是精确 childCount,
+/// 不能用 estimatedChildCount —— 那是按可视区估算的)。
 int _listChildCount(WidgetTester tester) {
-  final delegate =
-      tester.widget<ListView>(_followList()).childrenDelegate
-          as SliverChildBuilderDelegate;
+  final widget = tester.widget<Widget>(_followList());
+  final SliverChildBuilderDelegate delegate;
+  if (widget is GridView) {
+    delegate = widget.childrenDelegate as SliverChildBuilderDelegate;
+  } else if (widget is ListView) {
+    delegate = widget.childrenDelegate as SliverChildBuilderDelegate;
+  } else {
+    throw StateError('意外的关注列表组件:${widget.runtimeType}');
+  }
   return delegate.childCount ?? -1;
 }
 
@@ -445,9 +448,9 @@ void main() {
       await _pumpFrames(tester, 3);
       expect(_card('douyu', '6001'), findsOneWidget, reason: '切换后是封面网格');
       expect(
-        _verticalListsInPanel(),
+        _row('douyu', '6001'),
         findsNothing,
-        reason: '网格视图下不应残留列表',
+        reason: '网格视图下不应残留列表行',
       );
 
       await tester.tap(find.byKey(const Key('play-side-follow-view-toggle')));

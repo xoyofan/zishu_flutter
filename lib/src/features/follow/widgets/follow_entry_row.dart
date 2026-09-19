@@ -32,6 +32,10 @@ class FollowEntryRow extends StatelessWidget {
     this.onAnchorTap,
   });
 
+  /// 行高(web `--ffc-row-height: 1.4rem` 的既有 Flutter 取值),
+  /// `FollowRoomList` 列表档按它推导单元格纵横比。
+  static const double rowHeight = 26;
+
   final FollowEntry entry;
   final bool selectMode;
   final bool selected;
@@ -66,7 +70,7 @@ class FollowEntryRow extends StatelessWidget {
         onTap: onTap,
         onLongPress: onLongPress,
         child: Container(
-          height: 26,
+          height: rowHeight,
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
           decoration: BoxDecoration(
             border: Border(

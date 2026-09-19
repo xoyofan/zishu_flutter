@@ -1,12 +1,15 @@
 /// 关注列表**共享组件**(仿 web `FollowRoomViews.vue` 的调度器)。
 ///
-/// 「我的关注」页与播放页侧栏「关注」面板都渲染同一个 `FollowRoomList`:
-/// 按 [density] 在卡片网格 / 紧凑 tile 列表 / 四列单行列表之间切换,内部统一
-/// 复用 [FollowEntryCard] / [FollowEntryTile] / [FollowEntryRow]。排序/筛选在
-/// `follow_sort.dart`,本组件只负责把给定条目按给定密度铺开。
+/// 「我的关注」页与播放页侧栏「关注」面板都渲染同一个 `FollowRoomList`,
+/// 只有两档视图(用户口径 2026-09-20:对齐 web,页面不提供「紧凑」):
+/// - [FollowDensity.card] 卡片:封面卡网格(侧栏 compact 态固定 2 列、隐藏
+///   操作/统计行;页面按宽度自适应分列)。
+/// - [FollowDensity.row] 列表:每个主播一行的小四列表格,行有**最大宽度
+///   400px** —— 窄容器(侧栏)只放得下一列,看起来就是每主播一行;宽容器
+///   (「我的关注」页)按 300–400px/列 自适应横向平铺多列,与 web
+///   `FollowRoomRowView` 的 `multiColumn = pageMode` 行为一致。
 ///
-/// [compact] 为侧栏窄列态:卡片隐藏统计/操作行、用固定 [cardColumns] 与更小
-/// 元信息高;页面保持完整卡片。两者是**同一组件的不同配置**,不再各养一套视图。
+/// 排序/筛选在 `follow_sort.dart`,本组件只负责把给定条目按给定档位铺开。
 library;
 
 import 'dart:math' as math;
@@ -16,14 +19,12 @@ import 'package:flutter/material.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../application/follow_provider.dart';
 import 'follow_entry_card.dart';
-import 'follow_entry_tile.dart';
 import 'follow_entry_row.dart';
 
-/// 列表密度:卡片网格 / 紧凑 Tile / 四列单行。
+/// 视图档位:卡片网格 / 单行列。
 enum FollowDensity {
   card('卡片'),
-  tile('紧凑'),
-  row('单行');
+  row('列表');
 
   const FollowDensity(this.label);
 
@@ -86,6 +87,12 @@ class FollowRoomList extends StatelessWidget {
   /// 页面卡片自动分列时的最小列宽(对齐 Vue `minmax(240px, 1fr)`)。
   static const double _cardMaxExtent = 240;
 
+  /// 列表档列宽约束(web `FollowRoomRowView--multi-col`):
+  /// 列宽下限 300px、单行上限 400px、列距 0.28rem(16px 根字号 ≈ 4.5px)。
+  static const double _rowColFloor = 300;
+  static const double _rowColMax = 400;
+  static const double _rowColGap = 4.5;
+
   /// 卡片元信息区高度预算:页面 92(含统计/操作行),侧栏 compact 46。
   /// compact 只留「主播名 + 标题」两行 + 内层 padding(10),净高约 44,
   /// 取 46 留出字体浮点余量,避免窄列下的底部 RenderFlex 溢出。
@@ -98,8 +105,7 @@ class FollowRoomList extends StatelessWidget {
   Widget build(BuildContext context) {
     return switch (density) {
       FollowDensity.card => _buildGrid(context),
-      FollowDensity.tile => _buildList(paddingBottom: true),
-      FollowDensity.row => _buildList(),
+      FollowDensity.row => _buildRowGrid(),
     };
   }
 
@@ -142,48 +148,81 @@ class FollowRoomList extends StatelessWidget {
     );
   }
 
-  /// 单列列表:tile 密度条目间留空隙,row 密度靠行自带底边框分隔。
-  Widget _buildList({bool paddingBottom = false}) {
-    return ListView.builder(
-      padding: padding,
-      shrinkWrap: shrinkWrap,
-      controller: controller,
-      physics: shrinkWrap
-          ? const NeverScrollableScrollPhysics()
-          : null,
-      itemCount: entries.length,
-      itemBuilder: (context, index) {
-        final item = _item(context, entries[index]);
-        return paddingBottom
-            ? Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-                child: item,
-              )
-            : item;
+  /// 列表档:单行小表格自适应多列平铺。列数按「每列不小于
+  /// [_rowColFloor]、不超过 [_rowColMax]」推导(逐字移植 web
+  /// `computeResponsiveColCount`),行本体在列内再限宽 [_rowColMax]、
+  /// 靠左放置(对齐 web `justify-self: stretch` + `max-width`)。
+  Widget _buildRowGrid() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final width = math.max(0.0, constraints.maxWidth - padding.horizontal);
+        final columns = _responsiveColCount(
+          width,
+          floor: _rowColFloor,
+          max: _rowColMax,
+          gap: _rowColGap,
+        );
+        final cellWidth = math.max(
+          1.0,
+          (width - _rowColGap * (columns - 1)) / columns,
+        );
+        return GridView.builder(
+          padding: padding,
+          shrinkWrap: shrinkWrap,
+          controller: controller,
+          physics: shrinkWrap
+              ? const NeverScrollableScrollPhysics()
+              : null,
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: 0,
+            crossAxisSpacing: _rowColGap,
+            childAspectRatio: cellWidth / FollowEntryRow.rowHeight,
+          ),
+          itemCount: entries.length,
+          itemBuilder: (context, index) => Align(
+            alignment: Alignment.centerLeft,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: _rowColMax),
+              child: _item(context, entries[index]),
+            ),
+          ),
+        );
       },
     );
   }
 
-  /// 按当前密度实例化条目组件;批量选择态透传给条目。
+  /// 「列宽不小于 floor、不超过 max」的列数计算(web
+  /// `computeResponsiveColCount` 直译):先按下限取列数,再上调到列宽
+  /// ≤ max,最后回落保证列宽 ≥ floor。
+  static int _responsiveColCount(
+    double inner, {
+    required double floor,
+    required double max,
+    required double gap,
+  }) {
+    if (inner <= 0) return 1;
+    var cols = math.max(1, ((inner + gap) / (floor + gap)).floor());
+    while (cols < 64) {
+      final share = (inner - (cols - 1) * gap) / cols;
+      if (share <= max) break;
+      cols += 1;
+    }
+    while (cols > 1) {
+      final share = (inner - (cols - 1) * gap) / cols;
+      if (share >= floor) break;
+      cols -= 1;
+    }
+    return cols;
+  }
+
+  /// 按当前档位实例化条目组件;批量选择态透传给条目。
   Widget _item(BuildContext context, FollowEntry entry) {
     final selected = selectedKeys.contains(entry.key);
     return switch (density) {
       FollowDensity.card => FollowEntryCard(
           entry: entry,
           compact: compact,
-          selectMode: selectMode,
-          selected: selected,
-          onTap: () => onTap(entry),
-          onLongPress:
-              onLongPress == null ? null : () => onLongPress!(entry),
-          onToggleSelect: () => onToggleSelect?.call(entry.key),
-          onToggleSpecial: () => onToggleSpecial?.call(entry),
-          onToggleRemind: () => onToggleRemind?.call(entry),
-          onRemove: () => onRemove?.call(entry),
-          onAnchorTap: () => onAnchorTap?.call(entry),
-        ),
-      FollowDensity.tile => FollowEntryTile(
-          entry: entry,
           selectMode: selectMode,
           selected: selected,
           onTap: () => onTap(entry),

@@ -24,12 +24,11 @@ import '../../follow/application/settings_provider.dart';
 import '../../../platforms/common/open_external_url.dart';
 import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
-import '../../../shared/presentation/platform_brands.dart';
-import '../../../shared/presentation/widgets/platform_icon.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import 'chat_badge_image.dart';
 import 'play_meta_bar.dart';
 import 'play_recommend_panel.dart';
+import '../../follow/widgets/follow_platform_filter.dart';
 import '../../follow/widgets/follow_room_list.dart';
 
 /// 播放页侧栏的 UI 状态(会话级,跨切房保持)。
@@ -2212,13 +2211,23 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
               ),
             ),
             Expanded(
-              child: _SidePlatformChips(
-                value: _siteFilter,
-                onChanged: (site) => setState(() {
-                  _siteFilter = site;
-                  // 换平台等于换列表:分页窗口回到首屏(否则一换平台就直接铺满 48×n)。
-                  _visibleCount = _kFollowPageSize;
-                }),
+              child: Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                // 与「我的关注」页共用同一 [FollowPlatformFilter](web 两处
+                // 同为 FollowPlatformFilter.vue):侧栏紧凑 + 6 列等宽,
+                // chips 放不下自动换到第二排。
+                child: FollowPlatformFilter(
+                  value: _siteFilter,
+                  onChanged: (site) => setState(() {
+                    _siteFilter = site;
+                    // 换平台等于换列表:分页窗口回到首屏(否则一换平台就直接铺满 48×n)。
+                    _visibleCount = _kFollowPageSize;
+                  }),
+                  compact: true,
+                  columns: 6,
+                  chipKey: (id) => Key('play-side-follow-site-$id'),
+                ),
               ),
             ),
           ],
@@ -2233,7 +2242,9 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
               : NotificationListener<ScrollNotification>(
                   onNotification: _onScroll,
                   // 与「我的关注」页共用同一 [FollowRoomList]:侧栏走 compact
-                  // (卡片隐藏操作/统计、固定 2 列),两档 = 封面卡 / 四列单行。
+                  // (卡片隐藏操作/统计、固定 2 列),两档 = 封面卡 / 列表。
+                  // 列表是每主播一行的单行表格,侧栏窄列下左右 padding 再
+                  // 收一档(用户口径 2026-09-20)。
                   child: FollowRoomList(
                     entries: windowed,
                     density: _grid
@@ -2241,10 +2252,10 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
                         : FollowDensity.row,
                     compact: true,
                     cardColumns: 2,
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.sm,
+                    padding: EdgeInsets.fromLTRB(
+                      _grid ? AppSpacing.sm : AppSpacing.xs,
                       0,
-                      AppSpacing.sm,
+                      _grid ? AppSpacing.sm : AppSpacing.xs,
                       AppSpacing.sm,
                     ),
                     onTap: (entry) => _goRoom(entry.room),
@@ -2282,68 +2293,6 @@ class _FollowMoreHint extends StatelessWidget {
         '向下滚动加载更多…',
         textAlign: TextAlign.center,
         style: context.textCaption,
-      ),
-    );
-  }
-}
-
-/// 侧栏平台筛选:平台图标格子(与顶栏平台 tab 同款 [PlatformIcon]),
-/// Wrap 自动折行(用户口径 2026-09-19:「chips 不用文字,用平台图标;
-/// 可以 2 行显示,不必非要一行」)。
-///
-/// 选中态对齐顶栏:图标底色提亮 + 品牌色描边 + 品牌色柔光。
-class _SidePlatformChips extends StatelessWidget {
-  const _SidePlatformChips({required this.value, required this.onChanged});
-
-  final String value;
-  final ValueChanged<String> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = context.tokens;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-      child: Wrap(
-        spacing: 5,
-        runSpacing: 4,
-        children: [
-          for (final brand in PlatformBrandCatalog.navigationPlatforms)
-            Tooltip(
-              message: brand.id == 'all' ? '全平台' : brand.name,
-              child: InkWell(
-                key: Key('play-side-follow-site-${brand.id}'),
-                borderRadius: AppRadius.allSm,
-                onTap: () => onChanged(brand.id),
-                child: AnimatedContainer(
-                  duration: AppMotion.fast,
-                  width: 30,
-                  height: 30,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: value == brand.id
-                        ? tokens.surfaceRaised
-                        : Colors.transparent,
-                    border: Border.all(
-                      color: value == brand.id
-                          ? brand.color
-                          : Colors.transparent,
-                    ),
-                    borderRadius: AppRadius.allSm,
-                    boxShadow: value == brand.id
-                        ? [
-                            BoxShadow(
-                              color: brand.color.withValues(alpha: 0.22),
-                              blurRadius: 8,
-                              offset: const Offset(0, 2),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: PlatformIcon(id: brand.id, size: 24),
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }

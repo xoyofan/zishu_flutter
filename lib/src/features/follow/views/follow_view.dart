@@ -1,6 +1,7 @@
-/// 我的关注页(U7):平台筛选 + 排序 + 三种密度 + 批量管理。
-/// 对齐 SFVideoLive FollowView 的信息结构(Flutter 重写):
-/// 业务状态收敛在 FollowController,本页只持有筛选/密度/选择等视图状态。
+/// 我的关注页(U7):平台筛选 + 排序 + 两档视图 + 批量管理。
+/// 对齐 SFVideoLive FollowView 的信息结构(Flutter 重写;用户口径
+/// 2026-09-20:只保留 卡片/列表 两档,不提供「紧凑」):
+/// 业务状态收敛在 FollowController,本页只持有筛选/视图/选择等视图状态。
 /// 列表铺陈交给共享组件 [FollowRoomList](与播放页侧栏「关注」同一套视图)。
 library;
 
@@ -254,7 +255,7 @@ class _FollowViewState extends ConsumerState<FollowView> {
     );
   }
 
-  /// 筛选行:平台 chips + 排序下拉 + 密度切换。
+  /// 筛选行:平台 chips + 排序下拉 + 视图切换(卡片/列表)。
   Widget _buildToolbar() {
     final tokens = context.tokens;
     return Padding(
@@ -295,7 +296,7 @@ class _FollowViewState extends ConsumerState<FollowView> {
           SegmentedButton<FollowDensity>(
             segments: [
               // ButtonSegment 本身无 key 参数,锚点落在各段的 label 上,
-              // 点击 label 与点击整段等价(follow-density-card/tile/row)。
+              // 点击 label 与点击整段等价(follow-density-card/row)。
               for (final density in FollowDensity.values)
                 ButtonSegment(
                   value: density,
@@ -338,7 +339,6 @@ class _FollowViewState extends ConsumerState<FollowView> {
 
   IconData _densityIcon(FollowDensity density) => switch (density) {
         FollowDensity.card => Icons.grid_view_rounded,
-        FollowDensity.tile => Icons.view_agenda_outlined,
         FollowDensity.row => Icons.format_list_bulleted_rounded,
       };
 
