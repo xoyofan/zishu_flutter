@@ -780,3 +780,27 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 ### 方法论升级(用户建议):从 SFVideo 提交历史挖功能演进
 - SFVideo 361 commits:近期 ~40 个为桌面原生化(Tauri+Rust crates/live-parser+libmpv),**对齐基准应以 crates/live-parser 为最新真源**(streaming-server 是旧 web 端)。
 - 候选对齐清单(记录,待裁决):起播 FLV 优选(斗鱼首帧 2.3s→1.0s)、进房单清晰度档解析、HLS 回放缓冲上限 60s、分类缓存空壳分组校验(虎牙分类不显示根因)、soop opcode 白名单、YY 弹幕禁用标记、twitch emote 解析、房间卡 tags、抖音 Cookie 设置入口、分类面板列数规格表(aff7424 系列)、xhs cursor 翻页。
+
+## 2026-09-19 侧栏统计真数据 + 关注行分类同步 + 分类预热(6d920cf/4d5b6be/2053a54)
+
+**结论**:用户报告两条数据缺口修复 + 分类预热落地。门禁全量 **540 passed / 0 failed**(533+7)、parser **325/10skip**、analyze 双 0。
+
+### ① 侧栏统计真数据(6d920cf,子代理)
+- 契约:RoomSummary 增 followers/vip(格式化文本,空=上游没有);各站 refresher 按真源提取 —— douyu 资料卡 fansNum+贵宾 total(新增 best-effort 接口)、huya activityCount、bilibili attention、douyin follow_info、soop fanCnt+订阅 total;huya/douyin 的 vip 走二进制/签名链路不复刻留空,yy/kuaishou 上游无免登录接口留空(数据诚实性:不伪造)。
+- UI:侧栏头「关注 N / 人气 N / VIP N」从当前房间关注条目刷新回填值取数,未关注/未回填回退「—」。
+
+### ② 关注行分类同步
+- 根因:refreshStatuses 合并语义未更新 category(主播换分类后关注行留旧值);且 pullRemote 整表替换后要空等一个 60s 轮询周期才有统计/分类。
+- 修复:合并口径钉死(category/统计以刷新为准非空更新,cid/身份键/本地标记保留);pullRemote 后立即回填一次刷新。
+- 关注行分类条(PlayRoomRow 第一列)随数据链路自动跟随,UI 结构未动。
+
+### ③ 分类预热(4d5b6be)
+- 启动 2s 后串行逐站预热全部浏览平台分类索引进 provider/进程缓存(browseWarmupSites = supportsBrowse 集合),hover 平台分类浮层即时命中;失败静默(hover 自然重试);WindowsApp dispose 取消 Timer(测试环境不留 pending timer —— 初版曾致 89 用例「Timer is still pending」连坐,已修)。
+- 映射(remap 175 组 + cross-categories 328 条)为编译期内嵌常量,启动即在内存,无需预热。
+
+### 控制条右组贴右根治(2053a54,接上轮)
+- 几何测试实测全屏按钮距右缘 230px:根因 Expanded+Spacer+两个 Flexible 四分弹性,loose 孩子未满份额的空白散落。改 Stack 双 Align(左组 centerLeft/右组 centerRight)物理贴边;窄条(compact<560)隐藏 PiP/网页全屏/睡眠/线路名收缩,360 压线可容。
+- 几何锚点测试钉住(全屏距右缘<24、左右组间>300)。
+
+### 门禁
+- 全量 **540 passed / 0 failed**;parser 325/10skip;analyze 双 0;golden 8 张重生成(侧栏统计渲染变化,定性无意外);latency 单跑 5/5(整批并行抖动已知噪声)。
