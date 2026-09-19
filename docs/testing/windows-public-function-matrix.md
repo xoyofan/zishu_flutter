@@ -64,11 +64,7 @@
 - Windows 真实：NOT_RUN
 - 当前风险：统一替身已能模拟异步 `open` 和底层音量重置，但生产编排竞态尚未进入阶段 2 验证
 
-### 阶段 2：音量状态完整回归
-
-- 状态：已完成（自动化）
-- 纯逻辑子阶段：`room_volume_provider_test.dart` **10/10 通过**，覆盖 10 个已注册平台
-- 生命周期子阶段：`play_controller_volume_lifecycle_test.dart` **6/6 通过**；相关播放选择测试合计阶段验证 **33/33 通过**
+- UI workflow 子阶段：`play_volume_workflow_test.dart` **3/3 通过**；覆盖 snapshot slider、拖动持久化、mute/unmute
 - Windows 真实：NOT_RUN
 - 已修复：`BUG-WIN-VOLUME-001` 的 open 完成后音量回退问题
 - 剩余风险：仍需 Windows release 真实播放验证 UI slider、`PlayerSnapshot` 和 media-kit 实际音量的一致性

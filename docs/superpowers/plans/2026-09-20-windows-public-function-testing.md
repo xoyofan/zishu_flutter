@@ -113,15 +113,15 @@
 - Modify: `lib/src/features/play/widgets/player_controls.dart`（仅当失败测试证明 UI 接线有问题）
 - Modify: `docs/testing/windows-public-function-matrix.md`
 
-- [ ] 测试音量 slider 初始值来自当前 snapshot。
-- [ ] 测试拖动 slider 后 UI、`LivePlayer` 和房间设置写入一致。
-- [ ] 测试 mute/unmute 恢复之前的有效音量。
-- [ ] 测试切房后 slider 不显示旧房间值。
-- [ ] 测试控制条淡出后不可误触音量控件。
-- [ ] 先观察失败，再修改生产代码；若现有实现通过则只增加测试和文档。
-- [ ] 运行本文件及 `test/ui/workflows/play_controls_test.dart`。
-- [ ] 提交：`test(ui): cover playback volume workflow`。
-- [ ] 推送：`git push origin master`。
+- [x] 测试音量 slider 初始值来自当前 snapshot。
+- [x] 测试拖动 slider 后 UI、`LivePlayer` 和房间设置写入一致。
+- [x] 测试 mute/unmute 恢复之前的有效音量。
+- [x] 测试切房后 slider 不显示旧房间值。
+- [x] 测试控制条淡出后不可误触音量控件。
+- [x] 先观察失败，再修改生产代码；若现有实现通过则只增加测试和文档。
+- [x] 运行本文件及 `test/ui/workflows/play_controls_test.dart`。
+- [x] 提交：`test(ui): cover playback volume workflow`。
+- [x] 推送：`git push origin master`。
 
 ## 阶段 3：其他公共播放状态
 
