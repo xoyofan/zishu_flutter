@@ -7,6 +7,8 @@ import 'package:window_manager/window_manager.dart';
 import '../../app/app_back_shortcuts.dart';
 import '../../app/app_router.dart';
 import '../../app/app_theme.dart';
+import '../../features/browse/application/browse_provider.dart';
+import '../../features/browse/application/category_warmup.dart';
 import '../../features/follow/application/settings_provider.dart';
 import '../../platforms/common/playback/window_presentation.dart';
 
@@ -23,6 +25,9 @@ class WindowsApp extends ConsumerStatefulWidget {
 }
 
 class _WindowsAppState extends ConsumerState<WindowsApp> with WindowListener {
+  /// 分类预热延迟触发器:dispose 时取消,避免测试环境留下 pending timer。
+  Timer? _warmupTimer;
+
   @override
   void initState() {
     super.initState();
@@ -32,11 +37,24 @@ class _WindowsAppState extends ConsumerState<WindowsApp> with WindowListener {
     // 主窗口几何恢复已上移到 main() 的 runApp 之前(见 main.dart 注释):
     // 恢复必须发生在「首帧就绪回调 Show 窗口」之前,否则隐藏期后的 resize
     // 会造成打开白屏;此处只保留几何采集(落盘)的窗口事件转发。
+    // 分类预热(用户口径 2026-09-19:各平台分类与映射初始打开时异步预热
+    // 进内存,hover 平台分类浮层时立即显示):延迟 2s —— 让首页首屏数据
+    // 先行,再串行逐站拉分类索引进缓存;失败静默(hover 时自然重试)。
+    _warmupTimer = Timer(const Duration(seconds: 2), () {
+      if (!mounted) return;
+      unawaited(
+        warmupBrowseCategories(
+          (site) => ref.read(browseCategoriesProvider(site).future),
+          browseWarmupSites(),
+        ),
+      );
+    });
   }
 
   @override
   void dispose() {
     windowManager.removeListener(this);
+    _warmupTimer?.cancel();
     super.dispose();
   }
 
