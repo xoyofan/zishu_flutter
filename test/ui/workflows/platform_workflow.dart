@@ -223,7 +223,9 @@ int countAnchorsByPrefix(WidgetTester tester, String prefix) =>
 /// W2 categoryRenders:打开 [site] 分类页,断言左侧 category-group-* 锚点 >0,
 /// 点击首个分组后右侧 category-item-* 锚点 >0。
 Future<void> expectCategoryRenders(WidgetTester tester, String site) async {
-  _routerOf(tester).go(_categoryLocation(site));
+  // 用户口径 2026-09-19:分组 tabs/子分类网格只在「裸分类索引」路由渲染;
+  // 带 cid 的路由直达房间列表。本 helper 验证的是索引形态。
+  _routerOf(tester).go('/$site/category');
   await _pumpFrames(tester, 2, where: 'categoryRenders/$site');
 
   final groups = anchorKeysWithPrefix(tester, 'category-group-');
@@ -246,21 +248,16 @@ Future<void> expectCategoryRoomsCorrect(
   WidgetTester tester,
   String site,
 ) async {
+  // 带 cid 进入直达房间列表(不再有「点首个子分类」步骤,房间区按路由
+  // cid 直接拉取,fixture 立即落地)。
   _routerOf(tester).go(_categoryLocation(site));
   await _pumpFrames(tester, 2, where: 'categoryRooms/$site');
-
-  final items = anchorKeysWithPrefix(tester, 'category-item-');
-  expect(items, isNotEmpty, reason: '$site 分类页缺少 category-item-* 锚点');
-
-  // 点首个子分类,房间区按 (site, cid) 拉取房间(fixture 立即落地)。
-  await tester.tap(find.byKey(Key(items.first)));
-  await _pumpFrames(tester, 3, where: 'categoryRooms/$site/tapItem');
 
   final cards = anchorKeysWithPrefix(tester, 'room-card-');
   expect(
     cards.length,
     greaterThanOrEqualTo(1),
-    reason: '$site 首个子分类下应出现至少 1 张房间卡片',
+    reason: '$site 分类房间页应出现至少 1 张房间卡片',
   );
 
   // 标题/主播字段非空:读 RoomCard 实现,不依赖封面图片加载。

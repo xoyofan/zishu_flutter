@@ -98,7 +98,9 @@ void main() {
 
   testWidgets('分类页:点 tile 收藏星 → 写入「我的分类」,再点移除', (tester) async {
     final container = await _pumpApp(tester);
-    container.read(routerProvider).go('/douyu/category/1');
+    // 用户口径 2026-09-19:子分类网格在「裸分类索引」路由渲染(带 cid 直达
+    // 房间列表)。tile '1' 属第一组,裸路由默认展示第一组。
+    container.read(routerProvider).go('/douyu/category');
     await _frames(tester);
 
     final star = find.byKey(const Key('category-favorite-1'));
@@ -124,8 +126,10 @@ void main() {
 
   testWidgets('分类页:点收藏星不会顺带切换选中的子分类', (tester) async {
     final container = await _pumpApp(tester);
-    // 路由带 cid=1 → tile '1' 为选中态(选中档描边宽 2,未选中宽 1)。
-    container.read(routerProvider).go('/douyu/category/1');
+    // 裸索引路由 + 先点 tile '1' 提供选中态(选中档描边宽 2,未选中宽 1)。
+    container.read(routerProvider).go('/douyu/category');
+    await _frames(tester);
+    await tester.tap(find.byKey(const Key('category-item-1')));
     await _frames(tester);
 
     double borderWidthOf(String cid) {
@@ -142,7 +146,7 @@ void main() {
           .width;
     }
 
-    expect(borderWidthOf('1'), 2, reason: '路由 cid=1 应处于选中态');
+    expect(borderWidthOf('1'), 2, reason: '点选后 tile 1 应处于选中态');
 
     // 点另一个 tile 的收藏星:只收藏,不改变选中档。
     await tester.tap(find.byKey(const Key('category-favorite-8')));

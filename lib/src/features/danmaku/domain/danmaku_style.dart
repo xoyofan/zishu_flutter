@@ -66,10 +66,8 @@ abstract final class DanmakuStyle {
     return HSLColor.fromAHSL(1, hash.toDouble(), 0.6, 0.72).toColor();
   }
 
-  /// 构建「用户名 + 正文」两段式 [TextSpan] 富文本。
-  ///
-  /// 结构固定为 `[userName, text]`,空用户名时只保留正文段,便于
-  /// `CustomPainter` 用 [TextPainter] 一次性布局。
+  /// 构建飘屏正文 [TextSpan](纯正文,用户口径 2026-09-19:「飘屏弹幕不用
+  /// 显示昵称」,对齐 web DanmakuOverlay 只画正文的语义)。
   ///
   /// [fontSize] 可选,A3 由 [DanmakuOverlay] 注入(默认 [DanmakuStyle.fontSize],
   /// 与历史一致)。
@@ -78,32 +76,15 @@ abstract final class DanmakuStyle {
     double fontSize = DanmakuStyle.fontSize,
   }) {
     final bodyColor = resolveColor(message.color);
-    final children = <TextSpan>[];
-    if (message.userName.isNotEmpty) {
-      children.add(
-        TextSpan(
-          text: '${message.userName}：',
-          style: TextStyle(
-            color: resolveUserNameColor(message),
-            fontSize: fontSize * userNameScale,
-            fontWeight: FontWeight.w600,
-            height: 1.0,
-          ),
-        ),
-      );
-    }
-    children.add(
-      TextSpan(
-        text: message.text,
-        style: TextStyle(
-          color: bodyColor,
-          fontSize: fontSize,
-          fontWeight: FontWeight.w500,
-          height: 1.0,
-        ),
+    return TextSpan(
+      text: message.text,
+      style: TextStyle(
+        color: bodyColor,
+        fontSize: fontSize,
+        fontWeight: FontWeight.w500,
+        height: 1.0,
       ),
     );
-    return TextSpan(children: children);
   }
 
   /// 用 [ui.ParagraphBuilder] 按顺序绘制富文本 + 描边。

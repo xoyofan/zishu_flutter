@@ -66,11 +66,12 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('/douyu/category:分组 tab 锚点 >0,点击分组后子分类 tile 出现',
+  testWidgets('分类索引页(裸 /douyu/category):分组 tab 锚点 >0,点击分组后子分类 tile 出现',
       (tester) async {
     final router = await pumpApp(tester);
-    // 路由表为 /:site/category/:cid,样例子分类 cid '1' 属于第一组「网游竞技」。
-    router.go('/douyu/category/1');
+    // 用户口径 2026-09-19:带 cid 的路由直达房间列表;只有裸分类路由
+    // (索引形态)才渲染分组 tabs + 子分类网格。
+    router.go('/douyu/category');
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -91,7 +92,7 @@ void main() {
 
   testWidgets('点击子分类 tile:选中态切换且不抛异常', (tester) async {
     final router = await pumpApp(tester);
-    router.go('/douyu/category/1');
+    router.go('/douyu/category');
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
 

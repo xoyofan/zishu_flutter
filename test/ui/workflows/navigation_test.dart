@@ -254,11 +254,14 @@ void main() {
     expect(find.byKey(const Key('room-card-douyu-63136')), findsOneWidget);
     expect(tester.takeException(), isNull);
 
-    // 7. /douyu/category/1 分类页:分组 tab + 子分类 tile + 该分类房间。
+    // 7. /douyu/category/1 分类房间页(用户口径 2026-09-19:带 cid 直达
+    //    房间列表,无分组 tabs/子分类网格;房间 fixture 含 63136)。
     await goAndStabilize(tester, router, '/douyu/category/1');
     expectTopNavAnchors('/douyu/category/1');
-    expect(find.byKey(const Key('category-group-1')), findsOneWidget);
-    expect(find.byKey(const Key('category-item-1')), findsOneWidget);
+    expect(find.byKey(const Key('category-group-1')), findsNothing,
+        reason: '带 cid 进入不再渲染分组 tabs');
+    expect(find.byKey(const Key('category-item-1')), findsNothing,
+        reason: '带 cid 进入不再渲染子分类网格');
     expect(find.byKey(const Key('room-card-douyu-63136')), findsOneWidget);
     expect(tester.takeException(), isNull);
 

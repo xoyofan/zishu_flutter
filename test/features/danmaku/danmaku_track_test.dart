@@ -57,20 +57,17 @@ void main() {
 
   group('DanmakuStyle 富文本构建', () {
     test('用户名 + 正文两段,样式不同', () {
+      // 用户口径 2026-09-19:飘屏只画正文,不显示昵称(对齐 web
+      // DanmakuOverlay 语义),buildSpan 输出单段纯正文。
       final span = DanmakuStyle.buildSpan(msg(userName: '阿星', text: '你好'));
-      expect(span.children, hasLength(2));
-      final user = span.children![0] as TextSpan;
-      final body = span.children![1] as TextSpan;
-      expect(user.text, '阿星：');
-      expect(body.text, '你好');
-      expect(user.style!.fontWeight, FontWeight.w600);
-      expect(user.style!.color, isNot(body.style!.color));
+      expect(span.text, '你好', reason: '飘屏不应包含昵称前缀');
+      expect(span.children, isNull);
+      expect(span.style, isNotNull);
     });
 
-    test('空用户名时只保留正文段', () {
+    test('空用户名同样只输出正文', () {
       final span = DanmakuStyle.buildSpan(msg(userName: '', text: '仅正文'));
-      expect(span.children, hasLength(1));
-      expect((span.children!.single as TextSpan).text, '仅正文');
+      expect(span.text, '仅正文');
     });
   });
 

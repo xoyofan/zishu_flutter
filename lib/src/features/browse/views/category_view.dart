@@ -82,15 +82,32 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
 
   /// 分组 tabs + 右侧(子分类网格 + 房间网格)的主内容。
   ///
-  /// 桌面/平板(>=768)左侧同样常驻目录栏 [BrowseSidebar] —— 对齐参考实现:
-  /// `CategoryIndexView.vue` / `CategoryRoomsView.vue` 都包在 `AppLayout` 里,
-  /// 而 `AppLayout.usesDrawerLayout` 含 category-index / category-rooms,即
-  /// 分类页与首页共用同一条抽屉栏。此前本仓只在 HomeView 挂侧栏,分类页缺。
+  /// 用户口径(2026-09-19):**带具体分类上下文进入**(顶栏 hover 分类、
+  /// 「我的分类」、侧栏分类点击 —— 路由带 cid/key 且能命中)时,只显示该
+  /// 分类下的房间列表:不要分组 tabs、不要顶部子分类网格,侧栏目录也隐藏
+  /// (对齐 web `CategoryRoomsView.vue`:选定分类 = 纯房间页)。
+  /// 裸 `/site/category`(无分类上下文,分类索引入口)保持原三栏浏览形态
+  /// (对齐 web `CategoryIndexView.vue`)。
   Widget _content(BuildContext context, CategoryResult result) {
     final tokens = context.tokens;
     final group = _pickGroup(result.groups);
     final item = _pickItem(group);
     final isPhone = MediaQuery.sizeOf(context).width < AppBreakpoints.phone;
+    // 路由带具体分类且能解析命中 → 纯房间列表形态。
+    final hasConcreteCategory = (widget.cid != null && widget.cid!.isNotEmpty) ||
+        (widget.categoryKey != null && widget.categoryKey!.isNotEmpty && item != null);
+    if (hasConcreteCategory && item != null) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!isPhone) BrowseSidebar(site: widget.site),
+          if (!isPhone) Container(width: 1, color: tokens.border),
+          Expanded(
+            child: _RoomSection(site: widget.site, cid: item.cid, isAll: widget.site == 'all'),
+          ),
+        ],
+      );
+    }
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
