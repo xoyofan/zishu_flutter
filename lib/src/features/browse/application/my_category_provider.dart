@@ -54,7 +54,12 @@ class MyCategoryController extends Notifier<List<MyCategoryEntry>> {
   /// 含逗号别名曾被错拆、twitch 英文名中文化),旧快照里的 name 可能是
   /// 英文原名或错拆名。对齐 web c4f8ba4「改表即升缓存版本」流程,升版让
   /// 旧键整体作废、用户按新表重新收藏;不迁移旧数据以避免错名残留。
-  static const String storeKey = 'zishu.myCategories.v2';
+  ///
+  /// v3(2026-09-19):soop 播放页收藏曾把 payload.cid(房间号)当分类号
+  /// 存入,且分类中文化修复前的快照是韩文原名 —— cid/name 双错,展示层
+  /// 的 (site,cid) 反查救不回。根源已修(RoomPayload.cateNo + 收藏改用),
+  /// 按先例升版作废旧收藏,用户在中文分类树/播放页重新收藏即可。
+  static const String storeKey = 'zishu.myCategories.v3';
 
   /// 上限:对齐 SFVideoLive `MAX_MY_CROSS_CATEGORIES`。
   static const int maxCount = 12;

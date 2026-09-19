@@ -526,6 +526,7 @@ class _PlayViewState extends ConsumerState<PlayView> {
             title: play?.payload?.title ?? (async.hasError ? '房间解析失败' : '加载中…'),
             site: widget.site,
             cid: play?.payload?.cid ?? '',
+            cateNo: play?.payload?.cateNo ?? '',
             category: play?.payload?.category ?? '',
             brandColor: brand?.color ?? context.tokens.brand,
             sidePanelVisible: _sidePanelVisible,
@@ -593,6 +594,7 @@ class _RoomHeader extends StatelessWidget {
     required this.title,
     required this.site,
     required this.cid,
+    this.cateNo = '',
     required this.category,
     required this.brandColor,
     required this.sidePanelVisible,
@@ -607,6 +609,9 @@ class _RoomHeader extends StatelessWidget {
 
   /// 当前房间分类 id;为空表示拿不到分类上下文 → 不显示收藏星。
   final String cid;
+
+  /// 平台分类号(soop 等 cid 另作他用的站点非空);收藏分类优先用它。
+  final String cateNo;
   final String category;
   final Color brandColor;
   final bool sidePanelVisible;
@@ -690,7 +695,9 @@ class _RoomHeader extends StatelessWidget {
                               .toggle(
                                 MyCategoryEntry(
                                   site: site,
-                                  cid: cid,
+                                  // 分类收藏的 cid 必须是**分类号**;soop 的
+                                  // payload.cid 是房间号,真实分类号在 cateNo。
+                                  cid: cateNo.isNotEmpty ? cateNo : cid,
                                   // 收藏快照存中文展示名(与 web 收藏口径一致),
                                   // 渲染侧还会再映射一次兜底旧快照。
                                   name: categoryLabel,
