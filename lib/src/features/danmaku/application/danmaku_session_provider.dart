@@ -30,16 +30,11 @@ const int kChatFeedMax = 200;
 
 /// 自动重试次数上限(不含首次连接):连续失败耗尽预算后保持「未连接」态,
 /// 等待侧栏「重新连接弹幕」手动刷新,不做无限重试风暴。
-const int kDanmakuConnectMaxRetries = 3;
 
 /// 连接失败自动重试的基准退避延时:第 n 次重试等待 base * 2^(n-1)
 /// (默认 800ms → 1.6s → 3.2s)。真机背景:douyu 对快速重连有限流,
 /// 「切房回来首连被拒、稍后手动刷新才成功」——有限次退避既能穿过限流窗口,
 /// 又不会对服务器形成重连风暴。单测 override 为 Duration.zero 确定性驱动。
-final danmakuRetryBaseDelayProvider = Provider<Duration>(
-  (ref) => const Duration(milliseconds: 800),
-);
-
 /// 站点注册表来源:默认真实注册表,但**仅在 `--dart-define=ZISHU_REAL_PARSER=true`
 /// 时启用**——与 `roomSourceProvider`/`browseSourceProvider` 同源同语义。
 ///
@@ -120,10 +115,8 @@ class DanmakuSessionController extends Notifier<DanmakuChatState> {
   StreamSubscription<DanmakuSessionState>? _stateSub;
 
   /// 当前自动重试轮次的退避等待 Timer(未在等待时为 null)。
-  Timer? _retryTimer;
 
   /// 已连续失败的自动重试预算计数:连接成功或手动 reconnect 时重置。
-  int _failedAttempts = 0;
 
   @override
   DanmakuChatState build() {
@@ -134,8 +127,6 @@ class DanmakuSessionController extends Notifier<DanmakuChatState> {
     // 切房/销毁时同步失效当前代际并异步释放会话(close 异步,fire-and-forget)。
     ref.onDispose(() {
       _generation += 1;
-      _retryTimer?.cancel();
-      _retryTimer = null;
       unawaited(_releaseSession());
     });
 
@@ -191,10 +182,12 @@ class DanmakuSessionController extends Notifier<DanmakuChatState> {
         DanmakuSessionRequest(site: site, roomId: roomId),
       );
     } catch (_) {
-      // 连接失败:保持「连接中」进入退避重试流程(预算耗尽由
-      // [_scheduleRetry] 落回「未连接」);fence 失效则忽略。
+      // 连接失败:直接落「未连接」,由侧栏「刷新」手动重连(用户口径
+      // 2026-09-20 去掉自动重连 —— twitch 等实例不可达时反复重连是噪音)。
       if (myGeneration == _generation) {
-        _scheduleRetry(myGeneration, site, roomId, connector);
+        state = state.copyWith(
+          connection: DanmakuSessionState.disconnected,
+        );
       }
       return;
     }
@@ -205,12 +198,6 @@ class DanmakuSessionController extends Notifier<DanmakuChatState> {
       return;
     }
 
-    // 连接成功:重置自动重试预算并撤销待发的退避 Timer
-    // (下一轮异常断开从零重新计 [kDanmakuConnectMaxRetries] 次)。
-    _failedAttempts = 0;
-    _retryTimer?.cancel();
-    _retryTimer = null;
-
     _session = session;
     _messageSub = session.messages.listen(
       (message) => _onMessage(myGeneration, message),
@@ -220,8 +207,11 @@ class DanmakuSessionController extends Notifier<DanmakuChatState> {
       if (connectionState == DanmakuSessionState.disconnected) {
         // 异常断开(服务端掐流/网络掉线;各站连接器自身不重连,
         // 见 live_parser danmaku onDone/onError → disconnected):
-        // 转入有限次退避重试,等待期保持「连接中」,预算耗尽落回「未连接」。
-        _scheduleRetry(myGeneration, site, roomId, connector);
+        // 直接落「未连接」,交侧栏「刷新」手动重连(用户口径 2026-09-20
+        // 去掉自动重连,twitch 等不可达实例反复重连是噪音)。
+        state = state.copyWith(
+          connection: DanmakuSessionState.disconnected,
+        );
         return;
       }
       state = state.copyWith(connection: connectionState);
@@ -229,42 +219,6 @@ class DanmakuSessionController extends Notifier<DanmakuChatState> {
 
     // 会话已建立即视为已连接(部分 connector 不回发 connected 状态)。
     state = state.copyWith(connection: DanmakuSessionState.connected);
-  }
-
-  /// 连接失败/异常断开后的有限次指数退避重试。
-  ///
-  /// - 代际 fence:排程或触发时已切房/销毁/手动重连(代际自增)则放弃;
-  /// - 预算:连续失败 [kDanmakuConnectMaxRetries] 次后放弃并保持「未连接」,
-  ///   交还用户手动刷新;连接成功重置(见 [_connect]);
-  /// - 退避:第 n 次等待 base * 2^(n-1)([danmakuRetryBaseDelayProvider])。
-  void _scheduleRetry(
-    int myGeneration,
-    String site,
-    String roomId,
-    DanmakuConnector connector,
-  ) {
-    if (myGeneration != _generation) return;
-    if (_failedAttempts >= kDanmakuConnectMaxRetries) {
-      state = state.copyWith(connection: DanmakuSessionState.disconnected);
-      return;
-    }
-    // 退避等待期间保持「连接中」:自动重试仍在流程内,不闪「未连接」。
-    state = state.copyWith(connection: DanmakuSessionState.connecting);
-    final delay =
-        ref.read(danmakuRetryBaseDelayProvider) * (1 << _failedAttempts);
-    _failedAttempts += 1;
-    _retryTimer?.cancel();
-    _retryTimer = Timer(delay, () {
-      _retryTimer = null;
-      // 等待期间已切房/销毁/手动重连:放弃本轮自动重试。
-      if (myGeneration != _generation) return;
-      unawaited(
-        Future<void>.microtask(() async {
-          await _releaseSession();
-          await _connect(myGeneration, site, roomId, connector);
-        }),
-      );
-    });
   }
 
   void _onMessage(int generation, DanmakuMessage message) {
@@ -285,9 +239,6 @@ class DanmakuSessionController extends Notifier<DanmakuChatState> {
     final connector = ref.read(danmakuRegistryProvider)[site]?.danmaku;
     if (connector == null || !connector.capabilities.danmaku) return;
 
-    _retryTimer?.cancel();
-    _retryTimer = null;
-    _failedAttempts = 0;
     final myGeneration = ++_generation;
     state = state.copyWith(connection: DanmakuSessionState.connecting);
     unawaited(

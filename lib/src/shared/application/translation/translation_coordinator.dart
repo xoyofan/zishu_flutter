@@ -85,6 +85,17 @@ abstract interface class TranslationEngine {
   Future<String?> translate(String text);
 }
 
+/// 可选批量能力:一次请求翻译多条文本(用户口径 2026-09-20:批量几个
+/// 一起请求再拆分对应,显著降低请求数)。返回与 [texts] 等长的结果列表,
+/// 元素 null = 该条失败;返回 null 本身 = 引擎不支持/本批失败,调用方
+/// 回退逐条。
+abstract interface class TranslationBatchEngine implements TranslationEngine {
+  Future<List<String?>?> translateBatch(List<String> texts);
+}
+
+/// 单次批量请求的最大条数(多行合并一次 gtx 请求)。
+const int kTranslationBatchSize = 12;
+
 /// 引擎取数函数:GET [uri] 并解析 JSON 响应体(注入便于单测)。
 typedef TranslationFetcher = Future<Object?> Function(Uri uri);
 
@@ -113,7 +124,7 @@ String? _stringField(Object? data, String key) {
 /// (内置志愿者实例 2026-09-20 实测集体失效:Cloudflare 盾/上游错误/下线),
 /// 故作为首选引擎;志愿者实例降级为后备。
 /// 响应形如 `[[["译文","原文",...],...],...]`,取全部分句拼接。
-class GoogleWebEngine implements TranslationEngine {
+class GoogleWebEngine implements TranslationEngine, TranslationBatchEngine {
   GoogleWebEngine({required this.fetcher});
 
   final TranslationFetcher fetcher;
@@ -139,6 +150,33 @@ class GoogleWebEngine implements TranslationEngine {
     }
     final translated = buffer.toString();
     return translated.isEmpty ? null : translated;
+  }
+
+  /// 批量:多行合并为一次 gtx 请求(Google 按行分段返回,行数可一一对应);
+  /// 合并体超长/行数不齐时返回 null,调用方回退逐条。
+  @override
+  Future<List<String?>?> translateBatch(List<String> texts) async {
+    if (texts.isEmpty) return const [];
+    if (texts.any((t) => t.length > kTranslationMaxChars)) return null;
+    final joined = texts.join('\n');
+    if (joined.length > kTranslationMaxChars) return null;
+    final uri = Uri.parse(
+      '$_base/translate_a/single'
+      '?client=gtx&sl=auto&tl=zh-CN&dt=t&q=${Uri.encodeComponent(joined)}',
+    );
+    final data = await fetcher(uri);
+    if (data is! List || data.isEmpty) return null;
+    final sentences = data.first;
+    if (sentences is! List) return null;
+    final buffer = StringBuffer();
+    for (final sentence in sentences) {
+      if (sentence is List && sentence.isNotEmpty && sentence.first is String) {
+        buffer.write(sentence.first);
+      }
+    }
+    final lines = buffer.toString().split('\n');
+    if (lines.length != texts.length) return null;
+    return [for (final line in lines) line.trim().isEmpty ? null : line.trim()];
   }
 }
 
@@ -234,7 +272,9 @@ class TranslationCoordinator {
     this.maxConcurrent = 2,
     this.minInterval = const Duration(milliseconds: 300),
     this.requestTimeout = const Duration(seconds: 6),
-    this.maxQueue = 64,
+    // 批量翻译(8 条/请求)后吞吐提升,队列上限同步放大:洪峰弹幕
+    // 少丢一轮(超过仍丢最旧回原文,保延迟)。
+    this.maxQueue = 256,
     this.cacheCapacity = 1024,
     this.failureTtl = const Duration(minutes: 2),
   });
@@ -289,7 +329,9 @@ class TranslationCoordinator {
     _queue.add(
       _PendingTranslation(key: trimmed, display: text, completer: completer),
     );
-    _pump();
+    // 聚合同一事件循环内的入队(用户口径 2026-09-20 批量翻译):零延迟
+    // Timer 让同批弹幕/标题攒成一个批量请求;已有排程时不重复。
+    _schedulePump();
     return future;
   }
 
@@ -355,6 +397,16 @@ class TranslationCoordinator {
     return hit;
   }
 
+  /// 聚合排程:零延迟 Timer 聚合同批入队后一次批量派发;已有排程不重复。
+  /// dispose 时随 _slotTimer 一并取消,无残留。
+  void _schedulePump() {
+    if (_slotTimer != null || _disposed) return;
+    _slotTimer = Timer(Duration.zero, () {
+      _slotTimer = null;
+      _pump();
+    });
+  }
+
   /// 派发循环:能立即派发的当场发;未到节流槽则排一次性 Timer 到点续跑。
   ///
   /// 不用「循环内 await delay」——那种长挂 await 在测试结束校验里是
@@ -365,10 +417,15 @@ class TranslationCoordinator {
       final now = DateTime.now();
       final wait = _nextSlot.difference(now);
       if (wait <= Duration.zero) {
-        final job = _queue.removeAt(0);
+        // 批量派发(用户口径 2026-09-20):一次请求翻译多条再拆分对应,
+        // 显著降低请求数。一个批占用一个节流槽/一个并发名额。
+        final batch = <_PendingTranslation>[];
+        while (_queue.isNotEmpty && batch.length < kTranslationBatchSize) {
+          batch.add(_queue.removeAt(0));
+        }
         _active++;
         _nextSlot = now.add(minInterval);
-        unawaited(_run(job));
+        unawaited(_runBatch(batch));
         continue;
       }
       _slotTimer = Timer(wait, () {
@@ -397,6 +454,61 @@ class TranslationCoordinator {
       if (!job.completer.isCompleted) job.completer.complete(result);
       _pump();
     }
+  }
+
+  /// 批量执行:优先走引擎批量能力(GoogleWeb 多行合并一次请求);
+  /// 引擎不支持/整批失败 → 逐条回退([_run]);个别条目失败记负缓存。
+  /// 每条独立缓存,completer 逐条完成。
+  Future<void> _runBatch(List<_PendingTranslation> batch) async {
+    if (batch.length == 1) {
+      _active--;
+      await _run(batch.single);
+      _pump();
+      return;
+    }
+    final results = List<String?>.filled(batch.length, null);
+    try {
+      for (final engine in engines) {
+        if (engine is! TranslationBatchEngine) continue;
+        final out = await engine
+            .translateBatch(batch.map((job) => job.key).toList())
+            .timeout(requestTimeout);
+        if (out != null && out.length == batch.length) {
+          for (var i = 0; i < out.length; i++) {
+            results[i] = out[i];
+          }
+          break;
+        }
+      }
+    } catch (_) {
+      // 批量失败:保持 null,下方逐条回退。
+    }
+    for (var i = 0; i < batch.length; i++) {
+      final job = batch[i];
+      final translated = results[i];
+      var result = job.display;
+      if (translated != null && translated.trim().isNotEmpty) {
+        result = translated;
+        _cachePut(job.key, translated);
+      } else {
+        // 该条批量失败:逐条重试一次(与旧行为等价),仍失败记负缓存。
+        try {
+          final single = await _translateViaEngines(job.key)
+              .timeout(requestTimeout);
+          if (single != null) {
+            result = single;
+            _cachePut(job.key, single);
+          } else {
+            _failures[job.key] = DateTime.now().add(failureTtl);
+          }
+        } catch (_) {
+          _failures[job.key] = DateTime.now().add(failureTtl);
+        }
+      }
+      if (!job.completer.isCompleted) job.completer.complete(result);
+    }
+    _active--;
+    _pump();
   }
 
   Future<String?> _translateViaEngines(String text) async {

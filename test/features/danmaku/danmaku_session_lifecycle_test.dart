@@ -110,8 +110,6 @@ ProviderContainer _container(_FakeConnector connector) {
   return ProviderContainer(
     overrides: [
       danmakuRegistryProvider.overrideWithValue(_registryFor(connector)),
-      // 退避基准延时归零:用例内确定性驱动重试,不吃真实等待。
-      danmakuRetryBaseDelayProvider.overrideWithValue(Duration.zero),
     ],
   );
 }
@@ -119,13 +117,6 @@ ProviderContainer _container(_FakeConnector connector) {
 Future<void> _flush() async {
   await Future<void>.delayed(Duration.zero);
   await Future<void>.delayed(Duration.zero);
-}
-
-/// 重试驱动:多轮事件循环,让零延时退避 Timer 与连接微任务完整走完。
-Future<void> _pumpRetries() async {
-  for (var i = 0; i < 12; i++) {
-    await Future<void>.delayed(Duration.zero);
-  }
 }
 
 void main() {
@@ -276,8 +267,8 @@ void main() {
     subB.close();
   });
 
-  test('连接失败后按指数退避自动重试,重试成功恢复收流', () async {
-    final connector = _FakeConnector(failBeforeSuccess: 2);
+  test('连接失败:直接落未连接(用户口径去掉自动重连),手动刷新可重来', () async {
+    final connector = _FakeConnector(failBeforeSuccess: 1);
     final container = _container(connector);
     addTearDown(container.dispose);
 
@@ -289,56 +280,23 @@ void main() {
       fireImmediately: true,
     );
 
-    // 首连失败 + 2 次自动重试,第 3 次 connect(注入)成功。
-    await _pumpRetries();
-    expect(connector.attempts, 3, reason: '失败后必须自动重试而不是停在未连接');
-
-    final session = connector.completeNext();
+    // 首连失败:不得自动重试,保持「未连接」等待手动刷新。
     await _flush();
-    session.push('恢复后消息');
-    await _flush();
+    expect(connector.attempts, 1, reason: '失败后不得自动重试');
+    expect(states.last.connection, DanmakuSessionState.disconnected);
 
-    expect(states.last.connection, DanmakuSessionState.connected);
-    expect(states.last.messages.single.text, '恢复后消息');
-    sub.close();
-  });
-
-  test('连接持续失败:重试耗尽保持未连接不风暴,手动刷新可重来', () async {
-    final connector = _FakeConnector(failBeforeSuccess: 99);
-    final container = _container(connector);
-    addTearDown(container.dispose);
-
-    final provider = danmakuSessionProvider((site: 'douyu', roomId: '100'));
-    final states = <DanmakuChatState>[];
-    final sub = container.listen(
-      provider,
-      (_, next) => states.add(next),
-      fireImmediately: true,
-    );
-
-    // 首连 + 3 次自动重试 = 4 次 attempt;之后不得继续增长(无重试风暴)。
-    await _pumpRetries();
-    expect(connector.attempts, 4);
-    await _pumpRetries();
-    expect(connector.attempts, 4, reason: '重试耗尽后不得继续自动重试');
-    expect(
-      states.last.connection,
-      DanmakuSessionState.disconnected,
-      reason: '耗尽后保持「未连接」等待手动刷新',
-    );
-
-    // 手动刷新:重置重试预算,本次放行成功。
+    // 手动刷新:重新发起连接,本次放行成功。
     connector.failBeforeSuccess = 0;
     container.read(provider.notifier).reconnect();
     await _flush();
-    expect(connector.attempts, 5);
+    expect(connector.attempts, 2);
     connector.completeNext();
     await _flush();
     expect(states.last.connection, DanmakuSessionState.connected);
     sub.close();
   });
 
-  test('会话异常断开后自动退避重试并恢复收流', () async {
+  test('会话异常断开:直接落未连接,手动刷新可重连', () async {
     final connector = _FakeConnector();
     final container = _container(connector);
     addTearDown(container.dispose);
@@ -359,20 +317,28 @@ void main() {
 
     // 服务端掐流:states 推 disconnected(douyu 连接器自身不重连)。
     first.statesController.add(DanmakuSessionState.disconnected);
-    await _pumpRetries();
-    expect(connector.requests, hasLength(2), reason: '异常断开后应自动重试');
+    await _flush();
+    expect(connector.requests, hasLength(1), reason: '异常断开后不得自动重连');
+    expect(
+      states.last.connection,
+      DanmakuSessionState.disconnected,
+      reason: '断开后保持「未连接」等待手动刷新',
+    );
 
+    // 手动刷新:重新发起连接并恢复收流。
+    container.read(provider.notifier).reconnect();
+    await _flush();
+    expect(connector.requests, hasLength(2));
     final second = connector.completeNext();
     await _flush();
-    expect(first.closeCount, 1, reason: '重试前旧会话必须被释放');
-    second.push('断开后消息');
+    expect(first.closeCount, 1, reason: '重连前旧会话必须被释放');
+    second.push('重连后消息');
     await _flush();
     expect(states.last.connection, DanmakuSessionState.connected);
-    expect(
-      states.last.messages.map((message) => message.text).toList(),
-      ['断开前消息', '断开后消息'],
-      reason: '自动重试不清空历史弹幕',
-    );
+    expect(states.last.messages.map((message) => message.text).toList(), [
+      '断开前消息',
+      '重连后消息',
+    ], reason: '手动重连不清空历史弹幕');
     sub.close();
   });
 
