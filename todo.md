@@ -895,3 +895,10 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 ### 2026-09-20 晚追加:简化与模块化复用分析
 - [x] 全库扫描落盘 `docs/refactor-analysis.md`:巨文件拆分(app_shell 2686/play_side_panel 2684/play_view 1204/player_controls 1004)、重复模式 7 项(统计取数×2/万格式化×2/重试按钮×5/滑杆行×3/SliderTheme×3/下拉×5/pill)、遗留清理(_MiniSwitch 并入 CompactSwitch 含补漏 2 处调用、AppColors.brand 与 AppControls.switchScale 死常量删除)。
 - [ ] P1:统计取数与万格式化统一(主播卡/侧栏头行为不一致风险);P2:play_side_panel 拆分;P3:其余提取。
+
+### 2026-09-20 深夜追加:翻译功能排查与修复(用户确认标题翻译已生效)
+- [x] 根因一(已修):翻译 fetcher 用独立 Dio 直连公共翻译实例,未走上游代理 → 全部超时回退原文。修复:fetcher 改为代理感知 HttpClient(复用 UpstreamProxy,与解析/弹幕同款)。
+- [x] 根因二(已修):内置四个公共实例集体失效实测(garudalinux=CF 盾、lunar.icu=上游错、simplytranslate.org=Not Found、jae.fi=空)。修复:新增 GoogleWebEngine(translate.googleapis.com client=gtx,免 key 走代理,稳定)置为首选引擎,志愿者实例降为后备;单测覆盖响应解析。
+- [x] 真机验证:SOOP 分类页标题大量中文化生效;部分未译为批量入队队列丢弃回退原文(设计行为)。
+- [ ] 飘屏/聊天弹幕正文翻译未生效(translateBody 已注入但真机韩文未译;聊天行 translatedTextProvider 消费在翻译轨道计划中)——下轮排查 danmaku_overlay 调用链与队列时序。
+- [ ] 可选:翻译服务离线部署指引(Lingva/SimplyTranslate/LibreTranslate 均开源可 Docker 自建,设置页 endpoint 填自建地址)。

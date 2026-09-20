@@ -109,6 +109,39 @@ String? _stringField(Object? data, String key) {
   return null;
 }
 
+/// Google 网页翻译公开端点(client=gtx):无需 key,经上游代理可达且稳定
+/// (内置志愿者实例 2026-09-20 实测集体失效:Cloudflare 盾/上游错误/下线),
+/// 故作为首选引擎;志愿者实例降级为后备。
+/// 响应形如 `[[["译文","原文",...],...],...]`,取全部分句拼接。
+class GoogleWebEngine implements TranslationEngine {
+  GoogleWebEngine({required this.fetcher});
+
+  final TranslationFetcher fetcher;
+
+  static const _base = 'https://translate.googleapis.com';
+
+  @override
+  Future<String?> translate(String text) async {
+    if (text.length > kTranslationMaxChars) return null;
+    final uri = Uri.parse(
+      '$_base/translate_a/single'
+      '?client=gtx&sl=auto&tl=zh-CN&dt=t&q=${Uri.encodeComponent(text)}',
+    );
+    final data = await fetcher(uri);
+    if (data is! List || data.isEmpty) return null;
+    final sentences = data.first;
+    if (sentences is! List) return null;
+    final buffer = StringBuffer();
+    for (final sentence in sentences) {
+      if (sentence is List && sentence.isNotEmpty && sentence.first is String) {
+        buffer.write(sentence.first);
+      }
+    }
+    final translated = buffer.toString();
+    return translated.isEmpty ? null : translated;
+  }
+}
+
 /// Lingva 引擎:`GET {base}/api/v1/auto/zh/{text}` → `{"translation": ...}`。
 class LingvaEngine implements TranslationEngine {
   LingvaEngine({required this.bases, required this.fetcher});
@@ -254,11 +287,7 @@ class TranslationCoordinator {
     _inflight[trimmed] = future;
     unawaited(future.whenComplete(() => _inflight.remove(trimmed)));
     _queue.add(
-      _PendingTranslation(
-        key: trimmed,
-        display: text,
-        completer: completer,
-      ),
+      _PendingTranslation(key: trimmed, display: text, completer: completer),
     );
     _pump();
     return future;
@@ -353,9 +382,8 @@ class TranslationCoordinator {
   Future<void> _run(_PendingTranslation job) async {
     var result = job.display;
     try {
-      final translated = await _translateViaEngines(
-        job.key,
-      ).timeout(requestTimeout);
+      final translated = await _translateViaEngines(job.key)
+          .timeout(requestTimeout);
       if (translated != null) {
         result = translated;
         _cachePut(job.key, translated);
