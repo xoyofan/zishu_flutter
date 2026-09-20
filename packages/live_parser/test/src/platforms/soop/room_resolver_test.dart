@@ -32,6 +32,12 @@ void main() {
       expect(payload.title, 'SOOP 测试直播间');
       expect(payload.category, '英雄联盟');
       expect(payload.cover, startsWith('https://liveimg.sooplive.co.kr/m/12345678'));
+      // 头像是 station LOGO 桌面形态(不带 /m/ 段):2026-09 探针实测
+      // 旧 /m/{id}.jpg 形态 30/30 全 404,导致播放页头像整站回退占位。
+      expect(
+        payload.avatar,
+        'https://stimg.sooplive.co.kr/LOGO/te/testbj/testbj.jpg',
+      );
       expect(payload.availableQualities.map((q) => q.name).toList(), [
         '原画',
         '高清',

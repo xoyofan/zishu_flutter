@@ -25,6 +25,11 @@ class FakeSoopApi extends http.BaseClient {
   /// 频道 dashboard(api-channel.sooplive.co.kr)响应;null 时 404
   /// (refreshRoomSummary 侧按 best-effort 静默为 0,不破坏刷新)。
   Object? dashboardResponse;
+
+  /// 按次出队的 dashboard 响应(优先于 [dashboardResponse],耗尽后回落)。
+  /// 元素可为 JSON payload,也可为 [http.Response](直接返回,用于构造
+  /// 非 2xx 响应,验证 fetchSoopDashboard 的瞬时失败重试)。
+  final ListQueue<Object?> dashboardResponseQueue = ListQueue<Object?>();
   final List<http.Request> requests = [];
 
   @override
@@ -70,6 +75,10 @@ class FakeSoopApi extends http.BaseClient {
     }
     if (url.host == 'api-channel.sooplive.co.kr' &&
         url.path.startsWith('/v1.1/channel/')) {
+      if (dashboardResponseQueue.isNotEmpty) {
+        final queued = dashboardResponseQueue.removeFirst();
+        return queued is http.Response ? queued : _json(queued);
+      }
       if (dashboardResponse == null) {
         return http.Response('fake route missing: $url', 404);
       }

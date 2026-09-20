@@ -25,6 +25,13 @@ const int kSoopResultOffline = 0;
 const int kSoopResultBanned = -2;
 const int kSoopResultNeedLogin = -6;
 
+/// 在播但取不到观看数时的兜底热度文案。
+///
+/// 宿主契约以「online 非空」为在播判据(见 [RoomState] 注释),空串会把
+/// 在播房间刷成离线;上游 `player_live_api` 已不下发观看数字段(CTUSER 是
+/// 占位值),分类列表也未命中时只能如实标注在播而不编造数字。
+const String kSoopLiveOnlineFallback = '直播中';
+
 /// 一个 SOOP 清晰度档位。
 class SoopQuality {
   const SoopQuality({
@@ -62,7 +69,6 @@ class SoopRoomDetail {
     required this.bno,
     required this.rmd,
     required this.cdn,
-    required this.viewers,
     required this.qualities,
     required this.chatNo,
     required this.chatDomain,
@@ -82,8 +88,6 @@ class SoopRoomDetail {
   final String rmd;
   final String cdn;
 
-  /// 在线人数(数值字符串,展示时再走 [formatOnlineCount])。
-  final String viewers;
   final List<SoopQuality> qualities;
 
   final String chatNo;
@@ -137,35 +141,84 @@ Future<Map<String, dynamic>> fetchSoopPlayerApi(
   return http.jsonMap(response);
 });
 
+/// 分类列表 API 取房间真实观看数(web `fetchSoopCategoryViewers` 同源)。
+///
+/// `player_live_api` 已不下发观看数字段(CTUSER 是占位值),真实 `view_cnt`
+/// 只在分类列表里:按 `szCateNo` 取在播列表前 200 条,按 `user_id` 匹配。
+/// 未命中/任何失败返回 0 —— 观看数只是热度展示,**不得影响在播判定**
+/// (在播只认 [kSoopResultLive])。
+Future<int> fetchSoopCategoryViewers(
+  ParserHttp http,
+  String roomId,
+  String cateNo,
+) async {
+  final id = roomId.trim();
+  final cate = cateNo.trim();
+  if (id.isEmpty || cate.isEmpty) return 0;
+  try {
+    final response = await http.get(
+      Uri.https('sch.sooplive.co.kr', '/api.php', {
+        'm': 'categoryContentsList',
+        'szType': 'live',
+        'nPageNo': '1',
+        'nListCnt': '200',
+        'szPlatform': 'pc',
+        'szOrder': 'view_cnt_desc',
+        'szCateNo': cate,
+      }),
+      headers: const {
+        'Accept': '*/*',
+        'Accept-Language': 'zh-CN,zh;q=0.9',
+      },
+    );
+    final list = jsonListOf(jsonMapOf(jsonMapOf(http.jsonMap(response))['data'])['list']);
+    for (final raw in list) {
+      final item = jsonMapOf(raw);
+      if (jsonText(item['user_id']).trim() != id) continue;
+      return _soopIntOf(item['view_cnt']);
+    }
+    return 0;
+  } on Object {
+    return 0;
+  }
+}
+
 /// 频道 dashboard(`api-channel.sooplive.co.kr`):粉丝数 + 订阅数。
 ///
 /// 口径对齐 web `resolve/soop/index.ts` 的 `fetchSoopDashboard`:
 /// `upd.fanCnt` → 粉丝、`subscription.total` → 订阅(展示为 vip 列
 /// 「订阅」)。失败/字段缺失返回 (0, 0):统计是展示增强,不得让刷新失败。
+///
+/// 上游偶发瞬时失败(传输错误/非 2xx;2026-09 探针实测:同一房间单独
+/// 连打全 200,但紧跟 player_live_api 的高频请求序列下会偶发失败,一次
+/// 失败就把播放页主播卡刷成空粉丝/空订阅),因此对幂等 GET 做两次尝试的
+/// 轻量重试;两次都失败仍按展示增强口径静默为 0(UI 显示「—」,不伪造)。
 Future<({int fans, int subscribers})> fetchSoopDashboard(
   ParserHttp http,
   String roomId,
 ) async {
   try {
-    final uri = Uri.https(
-      'api-channel.sooplive.co.kr',
-      '/v1.1/channel/$roomId/dashboard',
-    );
-    final response = await http.get(
-      uri,
-      headers: const {
-        'Accept': 'application/json',
-        'Referer': 'https://www.sooplive.com/',
-        'Origin': 'https://www.sooplive.com',
-      },
-    );
-    final data = http.jsonMap(response);
-    final upd = jsonMapOf(data['upd']);
-    final subscription = jsonMapOf(data['subscription']);
-    return (
-      fans: _soopIntOf(upd['fanCnt']),
-      subscribers: _soopIntOf(subscription['total']),
-    );
+    return await _retrySoop(() async {
+      final uri = Uri.https(
+        'api-channel.sooplive.co.kr',
+        '/v1.1/channel/$roomId/dashboard',
+      );
+      final response = await http.get(
+        uri,
+        headers: const {
+          'Accept': 'application/json',
+          'Referer': 'https://www.sooplive.com/',
+          'Origin': 'https://www.sooplive.com',
+        },
+      );
+      final data = http.jsonMap(response);
+      final upd = jsonMapOf(data['upd']);
+      final subscription = jsonMapOf(data['subscription']);
+      return (
+        fans: _soopIntOf(upd['fanCnt']),
+        subscribers: _soopIntOf(subscription['total']),
+      );
+    }, attempts: 2);
   } on Object {
     return (fans: 0, subscribers: 0);
   }
@@ -176,10 +229,15 @@ int _soopIntOf(Object? value) {
   return parsed == null || parsed < 0 ? 0 : parsed.toInt();
 }
 
-/// 对瞬时传输错误(握手/连接被重置/超时)重试 3 次。
-Future<T> _retrySoop<T>(Future<T> Function() action) async {
+/// 对瞬时错误(传输失败/非 2xx/JSON 解析失败)重试,默认 3 次;
+/// [attempts] 供幂等轻量接口下调,控制最坏耗时。
+Future<T> _retrySoop<T>(
+  Future<T> Function() action, {
+  int attempts = 3,
+}) async {
   Object? lastError;
-  for (var attempt = 0; attempt < 3; attempt++) {    if (attempt > 0) {
+  for (var attempt = 0; attempt < attempts; attempt++) {
+    if (attempt > 0) {
       await Future<void>.delayed(Duration(milliseconds: 150 * attempt));
     }
     try {
@@ -216,7 +274,6 @@ SoopRoomDetail parseSoopRoomDetail(
     bno: jsonText(channel['BNO']),
     rmd: jsonText(channel['RMD']),
     cdn: jsonText(channel['CDN']),
-    viewers: soopOnlineViewers(channel),
     qualities: parseSoopQualities(channel['VIEWPRESET']),
     chatNo: jsonText(channel['CHATNO']),
     chatDomain: jsonText(channel['CHDOMAIN']),

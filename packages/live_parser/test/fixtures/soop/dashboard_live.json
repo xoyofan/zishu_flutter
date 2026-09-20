@@ -1,0 +1,49 @@
+{
+  "subscription": { "total": "235", "tier1": "204", "tier2": "31" },
+  "rank": [
+    {
+      "rankType": "adballoon",
+      "rankName": "廣告氣球禮物",
+      "totalRank": 6,
+      "totalRankLast": 8
+    },
+    {
+      "rankType": "game",
+      "rankName": "遊戲",
+      "totalRank": 4,
+      "totalRankLast": 1
+    }
+  ],
+  "link": [
+    {
+      "type": 3,
+      "url": "https://www.youtube.com/channel/example",
+      "image": "",
+      "linkName": "YouTube"
+    }
+  ],
+  "station": {
+    "stationNo": 18003616,
+    "userNick": "테스트방송",
+    "broadStart": "2026-09-20 18:01:42",
+    "firstBroadDate": "2017-05-30 16:38:51",
+    "totalBroadTime": 94230459,
+    "joinTime": "2017-04-03 22:29:41"
+  },
+  "upd": {
+    "userId": "testbj",
+    "aspCode": 0,
+    "fanCnt": 434898,
+    "today0VisitCnt": 37355,
+    "today1VisitCnt": 119,
+    "totalVisitCnt": "39920598",
+    "today0OkCnt": 4225,
+    "today1OkCnt": 64,
+    "today0FavCnt": 168,
+    "today1FavCnt": 0,
+    "totalOkCnt": "6659418",
+    "totalViewCnt": "1194790069"
+  },
+  "fanclubCnt": 1234,
+  "supporterCnt": 56
+}

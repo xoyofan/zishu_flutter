@@ -51,14 +51,21 @@ class SoopRoomResolver implements RoomResolver, RoomSummaryRefresher {
   static const int _maxTiers = 4;
 
   /// 轻量刷新:只打一次 `player_live_api(type=live)` 房间信息(**绕开
-  /// `_detailCache` 也不写任何缓存**(刷新就是为了拿最新状态),再补一次
-  /// channel dashboard(粉丝/订阅,失败静默),更不做 assign/aid 取流。
+  /// `_detailCache` 也不写任何缓存**(刷新就是为了拿最新状态)),在播再并行
+  /// 补 dashboard(粉丝/订阅)与分类列表观看数,不做 assign/aid 取流。
   ///
-  /// 口径对齐 web `follow/status.ts` 的 soop 快照:`RESULT == 1` 为在播,
-  /// 热度取 `soopOnlineViewers`(total_view_cnt/pc+mobile 相加口径);
-  /// 粉丝/订阅取 `fetchSoopDashboard`(`upd.fanCnt`/`subscription.total`,
-  /// web formatCount 口径:完整数字)。
-  /// 封禁(-2)按「房间不存在」抛异常,其余非在播码一律空串。
+  /// 口径对齐 web `follow/status.ts` 的 soop 快照:
+  /// - **在播只认 `RESULT == 1`**;观看数只在在播补(离线房间无观看数
+  ///   语义,空串在播判据);
+  /// - 观看数取自分类列表 API(`fetchSoopCategoryViewers`,`player_live_api`
+  ///   已不下发观看数字段,CTUSER 是占位值),未命中/失败回退
+  ///   [kSoopLiveOnlineFallback] —— 宿主以「online 非空」为在播判据,
+  ///   空串会把在播房间刷成离线(2026-09 关注页 soop 全离线的根因);
+  /// - 粉丝/订阅取 `fetchSoopDashboard`(`upd.fanCnt`/`subscription.total`,
+  ///   web formatCount 口径:完整数字);与开播状态无关,离线/受限(-6)
+  ///   也补 dashboard(播放页主播卡对离线房间同样展示;dashboard 失败
+  ///   静默为空,不伪造)。
+  /// 封禁(-2)按「房间不存在」抛异常。
   @override
   Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
     final roomId = normalizeSoopRoomId(request.roomIdOrUrl);
@@ -67,7 +74,34 @@ class SoopRoomResolver implements RoomResolver, RoomSummaryRefresher {
     if (detail.isBanned) {
       throw ParserHttpException('房间已被封禁: $roomId');
     }
-    final dashboard = await fetchSoopDashboard(_client.parserHttp, roomId);
+    if (!detail.isLive) {
+      // 离线/受限也补 dashboard:粉丝/订阅与开播状态无关(2026-09 探针实测
+      // 离线房间 dashboard 照常 200 且 upd.fanCnt / subscription.total 齐全),
+      // 播放页主播卡对离线房间同样要展示;只把 online 留空(在播判据),
+      // 也不补分类列表观看数(离线房间无观看数语义)。
+      final dashboard = await fetchSoopDashboard(_client.parserHttp, roomId);
+      return RoomSummary(
+        site: kSoopSiteId,
+        roomId: detail.roomId.isNotEmpty ? detail.roomId : roomId,
+        title: detail.title.isNotEmpty ? detail.title : detail.nick,
+        anchorName: detail.nick,
+        // 与 resolveRoom 同口径:SOOP 无二级分类 id,cid 即房间号。
+        cid: roomId,
+        category: detail.category,
+        online: '',
+        cover: soopCoverUrl(detail.bno),
+        followers: formatExactCount(dashboard.fans),
+        // SOOP 的 vip 列在 web 真源是「订阅」(ROOM_STAT_COLUMNS.soop)。
+        vip: formatExactCount(dashboard.subscribers),
+        roomState: RoomState.offline,
+      );
+    }
+    final results = await Future.wait<Object?>([
+      fetchSoopDashboard(_client.parserHttp, roomId),
+      fetchSoopCategoryViewers(_client.parserHttp, roomId, detail.cateNo),
+    ]);
+    final dashboard = results[0] as ({int fans, int subscribers});
+    final viewers = results[1] as int;
     return RoomSummary(
       site: kSoopSiteId,
       roomId: detail.roomId.isNotEmpty ? detail.roomId : roomId,
@@ -76,14 +110,16 @@ class SoopRoomResolver implements RoomResolver, RoomSummaryRefresher {
       // 与 resolveRoom 同口径:SOOP 无二级分类 id,cid 即房间号。
       cid: roomId,
       category: detail.category,
-      // 离线/受限(-6)/观看数字段缺失一律空串;`player_live_api` 的
-      // CTUSER 是占位值,这里只认 soopOnlineViewers 的有效口径
-      // (数值字符串,经 formatOnlineCount 展示)。
-      online: detail.isLive ? formatOnlineCount(detail.viewers) : '',
+      // 在播:观看数缺失时给兜底文案而非空串(宿主在播判据);
+      // 有真实观看数时经 formatOnlineCount 展示。
+      online: viewers > 0
+          ? formatOnlineCount(viewers)
+          : kSoopLiveOnlineFallback,
       cover: soopCoverUrl(detail.bno),
       followers: formatExactCount(dashboard.fans),
       // SOOP 的 vip 列在 web 真源是「订阅」(ROOM_STAT_COLUMNS.soop)。
       vip: formatExactCount(dashboard.subscribers),
+      roomState: RoomState.live,
     );
   }
 

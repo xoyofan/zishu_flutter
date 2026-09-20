@@ -60,11 +60,17 @@ String httpsSoopUrl(Object? raw) {
   return value;
 }
 
-/// 房间详情头像(静态图,缺失时上游 404,由 UI 兜底)。
+/// 房间详情头像(station LOGO 桌面形态,缺失时上游 404,由 UI 兜底)。
+///
+/// 形态 `LOGO/{前两位}/{id}/{id}.jpg` **不带 `/m/` 段**:2026-09 探针实测
+/// 30/30 真实房间 `LOGO/{bucket}/{id}/m/{id}.jpg` 全量 404(桌面 jpg 已迁出
+/// `/m/` 段;`/m/` 仅剩移动端 webp 形态,见 [soopMobileAvatarUrl]),
+/// 而不带 `/m/` 的 jpg 30/30 全部 200 —— 旧形态会让播放页头像整站兜底成
+/// 首字母占位。
 String soopAvatarUrl(String roomId) {
   if (roomId.length < 2) return '';
   final bucket = roomId.substring(0, 2);
-  return 'https://stimg.sooplive.co.kr/LOGO/$bucket/$roomId/m/$roomId.jpg';
+  return 'https://stimg.sooplive.co.kr/LOGO/$bucket/$roomId/$roomId.jpg';
 }
 
 /// 搜索/列表头像(m 站规格)。
