@@ -30,6 +30,7 @@ import '../application/play_provider.dart';
 import '../application/play_screen_provider.dart';
 import '../application/sleep_timer_provider.dart';
 import '../../follow/application/settings_provider.dart';
+import '../widgets/caption_overlay.dart';
 import '../widgets/pip_surface.dart';
 import '../widgets/play_immersive_side_sheet.dart';
 import '../widgets/play_side_panel.dart';
@@ -327,6 +328,9 @@ class _PlayViewState extends ConsumerState<PlayView> {
     final danmakuEnabled = ref.watch(
       settingsProvider.select((settings) => settings.danmakuEnabled),
     );
+    final speechCaptionEnabled = ref.watch(
+      settingsProvider.select((settings) => settings.speechCaptionEnabled),
+    );
     // 舞台弹幕叠加层显隐:控制条按钮/后续快捷键切换(不进设置持久化)。
     final showDanmaku = play?.showDanmaku ?? true;
     // 睡眠定时:app 级 provider(不随播放页 autoDispose),这里只读剩余时间
@@ -421,6 +425,15 @@ class _PlayViewState extends ConsumerState<PlayView> {
               roomId: widget.roomId,
               visible: showDanmaku && danmakuEnabled,
             ),
+            // 语音字幕条:控制栏上方一点,不随控制栏淡出(字幕常显语义);
+            // 由全局「译」开关驱动,内部自管模型下载/引擎加载状态。
+            if (!screen.pip)
+              Positioned(
+                left: 24,
+                right: 24,
+                bottom: 68,
+                child: CaptionOverlay(site: widget.site, roomId: widget.roomId),
+              ),
             // 睡眠定时剩余时间:舞台右上角常驻徒标,不进控制条随时间变化的
             // 可见性(控制条淡出后仍需可见)。
             if (sleepTimer.active)
@@ -467,12 +480,18 @@ class _PlayViewState extends ConsumerState<PlayView> {
                               roomId: widget.roomId,
                               showDanmaku: showDanmaku,
                               danmakuEnabled: danmakuEnabled,
+                              speechCaptionEnabled: speechCaptionEnabled,
                               screenMode: screen.mode,
                               onDanmakuToggle: () => ref
                                   .read(
                                     playControllerProvider(_params).notifier,
                                   )
                                   .toggleDanmaku(),
+                              onCaptionToggle: () => ref
+                                  .read(settingsProvider.notifier)
+                                  .setSpeechCaptionEnabled(
+                                    !speechCaptionEnabled,
+                                  ),
                               onToggleWidescreen: _toggleWidescreen,
                               onToggleFullscreen: _toggleFullscreen,
                               onTogglePip: _togglePip,

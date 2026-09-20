@@ -97,6 +97,7 @@ class SettingsState {
     this.chatThrottleMode = ChatThrottleMode.unlimited,
     this.translationEnabled = defaultTranslationEnabled,
     this.translationEndpoint = '',
+    this.speechCaptionEnabled = defaultSpeechCaptionEnabled,
     this.hydrated = false,
   });
 
@@ -153,6 +154,13 @@ class SettingsState {
   /// 自定义翻译实例地址(Lingva 或 SimplyTranslate 基地址);
   /// 空串 = 使用内置公共实例列表。
   final String translationEndpoint;
+
+  /// 语音识别中文字幕总开关(控制栏「译」方块):本地识别英语/韩语并译中
+  /// 文显示在播放页底部。默认开(用户口径);模型未就绪时首次开启会先下载。
+  final bool speechCaptionEnabled;
+
+  /// 语音字幕开关出厂默认(用户口径:默认开)。
+  static const bool defaultSpeechCaptionEnabled = true;
 
   /// 线路格式偏好(auto/hls/flv)。
   final PreferredLineFormat preferredLineFormat;
@@ -258,6 +266,7 @@ class SettingsState {
     ChatThrottleMode? chatThrottleMode,
     bool? translationEnabled,
     String? translationEndpoint,
+    bool? speechCaptionEnabled,
     bool? hydrated,
   }) {
     return SettingsState(
@@ -278,6 +287,7 @@ class SettingsState {
       chatThrottleMode: chatThrottleMode ?? this.chatThrottleMode,
       translationEnabled: translationEnabled ?? this.translationEnabled,
       translationEndpoint: translationEndpoint ?? this.translationEndpoint,
+      speechCaptionEnabled: speechCaptionEnabled ?? this.speechCaptionEnabled,
       hydrated: hydrated ?? this.hydrated,
     );
   }
@@ -305,6 +315,8 @@ class SettingsController extends Notifier<SettingsState> {
   static const String _kTranslationEnabled = 'zishu.settings.translationEnabled';
   static const String _kTranslationEndpoint =
       'zishu.settings.translationEndpoint';
+  static const String _kSpeechCaptionEnabled =
+      'zishu.settings.speechCaptionEnabled';
 
   /// 每房间独立音量表,存 JSON `Map<String, double>`。
   static const String _kRoomVolumes = 'zishu.settings.roomVolumes';
@@ -384,9 +396,10 @@ class SettingsController extends Notifier<SettingsState> {
             : ChatThrottleMode.fromValue(chatThrottleModeRaw),
         preferredLineFormat: PreferredLineFormat.fromValue(format),
         serverUrl: server != null && server.isNotEmpty ? server : null,
-        translationEnabled: translation,
-        translationEndpoint: translationEndpoint,
-        hydrated: true,
+      translationEnabled: translation,
+      translationEndpoint: translationEndpoint,
+      speechCaptionEnabled: await prefs.getBool(_kSpeechCaptionEnabled),
+      hydrated: true,
       );
     } catch (_) {
       // 平台存储不可用等异常:静默保留默认值,页面不崩溃。
@@ -463,6 +476,14 @@ class SettingsController extends Notifier<SettingsState> {
     state = state.copyWith(danmakuEnabled: enabled);
     try {
       await SharedPreferencesAsync().setBool(_kDanmakuEnabled, enabled);
+    } catch (_) {}
+  }
+
+  /// 设置语音字幕开关并持久化(控制栏「译」方块)。
+  Future<void> setSpeechCaptionEnabled(bool enabled) async {
+    state = state.copyWith(speechCaptionEnabled: enabled);
+    try {
+      await SharedPreferencesAsync().setBool(_kSpeechCaptionEnabled, enabled);
     } catch (_) {}
   }
 

@@ -14,6 +14,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart' show StreamLine;
+import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:zishu_flutter/src/app/app_router.dart';
 import 'package:zishu_flutter/src/apps/windows/windows_app.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
@@ -94,6 +96,12 @@ void main() {
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
+    // 字幕开关预置关闭:golden 只锁定既有样式,字幕「模型准备中」胶囊
+    // (VM 下异步进入下载态)不参与比对。
+    SharedPreferencesAsyncPlatform.instance =
+        InMemorySharedPreferencesAsync.withData({
+      'zishu.settings.speechCaptionEnabled': false,
+    });
     await tester.pumpWidget(
       ProviderScope(
         overrides: [playerProvider.overrideWithValue(_FakeLivePlayer())],

@@ -43,8 +43,10 @@ class PlayerControlsBar extends ConsumerStatefulWidget {
     required this.roomId,
     required this.showDanmaku,
     required this.danmakuEnabled,
+    required this.speechCaptionEnabled,
     required this.screenMode,
     required this.onDanmakuToggle,
+    required this.onCaptionToggle,
     required this.onToggleWidescreen,
     required this.onToggleFullscreen,
     required this.onTogglePip,
@@ -59,11 +61,17 @@ class PlayerControlsBar extends ConsumerStatefulWidget {
   /// 设置项「弹幕」总开关:决定控制条上这枚按钮是否可见。
   final bool danmakuEnabled;
 
+  /// 语音字幕「译」开关(全局设置项,默认开)。
+  final bool speechCaptionEnabled;
+
   /// 当前呈现态(控制条图标/tooltip 据此切换)。
   final PlayScreenMode screenMode;
 
   /// 切换舞台弹幕显示。
   final VoidCallback onDanmakuToggle;
+
+  /// 切换语音字幕开关。
+  final VoidCallback onCaptionToggle;
 
   /// 切换网页全屏(视频区占满窗口,但不请求系统窗口全屏)。
   final VoidCallback onToggleWidescreen;
@@ -209,6 +217,19 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
                     onToggleShow: widget.onDanmakuToggle,
                   ),
                 ],
+                IconButton(
+                  // 测试锚点:语音字幕开关(SFVideo「弹」方块同款形态,
+                  // 字为「译」+ √ 角标;全局设置持久化,默认开)。
+                  key: const Key('play-toggle-caption'),
+                  tooltip: widget.speechCaptionEnabled ? '关闭语音字幕' : '开启语音字幕',
+                  onPressed: widget.onCaptionToggle,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(
+                    minWidth: 32,
+                    minHeight: 32,
+                  ),
+                  icon: _TranslateMark(active: widget.speechCaptionEnabled),
+                ),
               ],
             ),
           ),
@@ -664,6 +685,72 @@ class _DanmakuMark extends StatelessWidget {
               Icons.settings_rounded,
               size: 9,
               color: active ? context.tokens.accent : AppOnVideo.textMuted,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// 「译」字方块(语音字幕开关;形态复刻 [_DanmakuMark]):正方形 + 2px
+/// 描边 + 圆角,内含「译」字;激活(开)时右下 √ 角标、描边与文字转 amber。
+class _TranslateMark extends StatelessWidget {
+  const _TranslateMark({required this.active});
+
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = active ? context.tokens.accent : AppOnVideo.textMuted;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        Container(
+          width: 20,
+          height: 20,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            border: Border.all(color: color, width: 2),
+            borderRadius: BorderRadius.circular(5),
+          ),
+          child: Text(
+            '译',
+            style: TextStyle(
+              fontSize: 13,
+              height: 1,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ),
+        if (active)
+          Positioned(
+            right: -3,
+            bottom: -3,
+            child: Container(
+              width: 11,
+              height: 11,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: const Color(0xF2121212),
+                borderRadius: BorderRadius.circular(3),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x59000000),
+                    blurRadius: 0,
+                    spreadRadius: 1,
+                  ),
+                ],
+              ),
+              child: Text(
+                '√',
+                style: TextStyle(
+                  fontSize: 8,
+                  height: 1,
+                  fontWeight: FontWeight.w800,
+                  color: context.tokens.accent,
+                ),
+              ),
             ),
           ),
       ],

@@ -309,8 +309,10 @@ void main() {
                   roomId: '63136',
                   showDanmaku: true,
                   danmakuEnabled: true,
+                  speechCaptionEnabled: false,
                   screenMode: PlayScreenMode.normal,
                   onDanmakuToggle: () {},
+                  onCaptionToggle: () {},
                   onToggleWidescreen: () {},
                   onToggleFullscreen: () {},
                   onTogglePip: () {},
@@ -585,6 +587,38 @@ void main() {
       _player.calls,
       contains('stop'),
       reason: '离开播放页应停止全局播放器,避免直播在后台继续出声/出画',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('captionToggle:「译」按钮切换语音字幕全局开关并持久化', (tester) async {
+    final play = await _pumpPlay(tester);
+    await _awaitSettingsHydrated(tester, play.container);
+
+    // 默认开(用户口径):按钮可见且处于激活描边态。
+    final toggle = find.byKey(const Key('play-toggle-caption'));
+    expect(toggle, findsOneWidget, reason: '控制条应有「译」字幕开关按钮');
+    expect(
+      _settingsOf(play.container).speechCaptionEnabled,
+      isTrue,
+      reason: '语音字幕默认应开启',
+    );
+
+    // 点击关闭:settings 落 false。
+    await tester.tap(toggle);
+    await _pumpFrames(tester, 2);
+    expect(
+      _settingsOf(play.container).speechCaptionEnabled,
+      isFalse,
+      reason: '点击「译」按钮应切换全局字幕开关',
+    );
+
+    // 再点恢复开启。
+    await tester.tap(find.byKey(const Key('play-toggle-caption')));
+    await _pumpFrames(tester, 2);
+    expect(
+      _settingsOf(play.container).speechCaptionEnabled,
+      isTrue,
     );
     expect(tester.takeException(), isNull);
   });
