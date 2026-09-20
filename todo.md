@@ -809,3 +809,35 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 
 ### 门禁
 - 全量 **540 passed / 0 failed**;parser 325/10skip;analyze 双 0;golden 8 张重生成(侧栏统计渲染变化,定性无意外);latency 单跑 5/5(整批并行抖动已知噪声)。
+
+## 2026-09-20 Windows release 真实 smoke(阶段 4 收尾)+ 阶段 5 收口门禁(完成)
+
+**结论**:release(`ZISHU_REAL_PARSER=true`, 725a1a2)真机 smoke 完成——9 平台 browse+进房+播放全过(iptv 按用户口径跳过);VOL/MUTE/QUALITY/LINE/FULLSCREEN/PIP/FOLLOW/THEME/RETURN 真实通过;DANMAKU 6 平台收流通过但 twitch BLOCKED / huya FAIL;发现 BUG-WIN-VOLUME-002(新房间音量继承)等 10 项登记。阶段 5 全量门禁全绿:goldens 7、app-test **644**、analyze 双 0、parser-test **378/10skip**。矩阵文档 `docs/testing/windows-public-function-matrix.md` 已回填全部「Windows 真实」列;证据 `tool/windows-public-smoke/rel-smoke-20260920/`(gitignore)。
+
+### 本轮完成项
+- [x] 真实 smoke 执行:`tool/_smoke.py`(临时驱动,真实鼠标/键盘/拖动 + PrintWindow 存证),schtasks 拉起 release exe。
+- [x] douyu 全流程:弹幕(连接+滚动+飘屏)/画质(原画→蓝光4M)/线路(7→13 FLV)/关注 toggle+超关联动/音量 36.8 隔离恢复/返回。
+- [x] VOL 链真机证据:A(36.8)→B(twitch 86.8)→回 A 恢复;落盘 `roomVolumes` 三条独立。
+- [x] twitch:720p60→480p、单线路 HLS、静音、全屏进出(Esc)、PiP 进出+画质记忆保持。
+- [x] bilibili/douyin/kuaishou/soop/youtube:播放+弹幕收流(soop 韩文 24+条+飘屏;youtube 多语言)。
+- [x] yy:播放 PASS,弹幕诚实呈现「暂不支持」N/A 态。
+- [x] THEME:深↔浅全页即时切换。
+
+### 用户口径(2026-09-20,本轮)
+- 「IPTV不用管」——iptv 播放验证跳过,矩阵真实列记 N/A。
+- 「很多平台的关注VIP等没解析 还有徽章平台等级等」——PARSER-GAP-001(房间详情字段;侧栏统计 6d920cf 已接部分字段,播放页主播卡未消费,修复时优先接线)。
+- 「这种表情没解析」——PARSER-GAP-002(弹幕表情 `[贊]`/`:crossed_flags:` 文本占位,未渲染图片)。
+- 「同一个人发言第二行文字应该从最左边开始」——UI-BUG-001(聊天折行顶格)。
+- 「没有金色,滑动条按钮等应该改成当前的紫薯 紫色」——UI-BUG-002(删金色循环文案;控件强调色统一紫霄紫)。
+
+### 待修清单(下轮,按用户口径优先)
+- [ ] UI-BUG-002 控件强调色→紫色 + 删「金色」文案
+- [ ] UI-BUG-001 聊天弹幕折行第二行顶格
+- [ ] BUG-WIN-VOLUME-002 无记忆新房间音量应默认 100(先补失败单测再修)
+- [ ] PARSER-GAP-001 播放页主播卡接线已解析字段(followers/vip,6d920cf 契约)+补缺口平台
+- [ ] PARSER-GAP-002 弹幕表情图片渲染(segments 契约已就绪)
+- [ ] BUG-WIN-DANMAKU-002 douyu 切房返回弹幕自动重连
+- [ ] BUG-WIN-DANMAKU-003 huya 已连接零消息(注册/心跳/订阅包排查)
+- [ ] BUG-WIN-DANMAKU-004 twitch 弹幕连接失败(出口+connector 复验)
+- [ ] OBS-WIN-PLAY-001 youtube HOY 频道流拉不动(观察)
+- [ ] OBS-WIN-OVERLAY-001 飘屏多轨重叠(低优先)
