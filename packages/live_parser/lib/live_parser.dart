@@ -35,6 +35,7 @@ export 'src/platforms/twitch/playlist_filter.dart';
 export 'src/platforms/youtube/browse.dart';
 export 'src/platforms/youtube/danmaku.dart';
 export 'src/platforms/youtube/dlp.dart';
+export 'src/platforms/youtube/emoji_shortcodes.dart';
 export 'src/platforms/youtube/normalize.dart';
 export 'src/platforms/youtube/room_api.dart';
 export 'src/platforms/youtube/youtube_site.dart';

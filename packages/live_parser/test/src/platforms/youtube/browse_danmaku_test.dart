@@ -105,6 +105,88 @@ void main() {
     await stateSub.cancel();
   });
 
+  test('弹幕:emoji run 短代码归一,emojiId Unicode 优先,未知名保留', () async {
+    final connector = YoutubeDanmakuConnector(
+      ParserHttp(client: fake),
+      fetcher: (continuation) async {
+        expect(continuation, 'TOKEN-1');
+        return {
+          'continuationContents': {
+            'liveChatContinuation': {
+              'actions': [
+                {
+                  'addChatItemAction': {
+                    'item': {
+                      'liveChatTextMessageRenderer': {
+                        'id': 'e1',
+                        'authorName': {'simpleText': '观众乙'},
+                        'message': {
+                          'runs': [
+                            {'text': '来了'},
+                            // 真机证据形态(2026-09-20):emojiId 为短代码 →
+                            // shortcut 过映射表(:crossed_flags: → 🎌)。
+                            {
+                              'emoji': {
+                                'emojiId': ':crossed_flags:',
+                                'shortcuts': [':crossed_flags:'],
+                              },
+                            },
+                            {
+                              'emoji': {
+                                'emojiId': ':grinning_face_with_sweat:',
+                                'shortcuts': [':grinning_face_with_sweat:'],
+                              },
+                            },
+                            // emojiId 已是 Unicode → 直接采用,不查表。
+                            {
+                              'emoji': {
+                                'emojiId': '🔥',
+                                'shortcuts': [':fire:'],
+                              },
+                            },
+                            // 表外未知名 → 原文保留(数据诚实)。
+                            {
+                              'emoji': {
+                                'shortcuts': [':totally_unknown_code:'],
+                              },
+                            },
+                          ],
+                        },
+                        'timestampUsec': '1700000000000000',
+                      },
+                    },
+                  },
+                },
+              ],
+              'continuations': [
+                {
+                  'timedContinuationData': {
+                    'continuation': 'TOKEN-2',
+                    'timeoutMs': 2000,
+                  },
+                },
+              ],
+            },
+          },
+        };
+      },
+      minimumPollDelay: Duration.zero,
+    );
+
+    final session = await connector.connect(
+      const DanmakuSessionRequest(site: 'youtube', roomId: 'dQw4w9WgXcQ'),
+    );
+    final messages = <DanmakuMessage>[];
+    final sub = session.messages.listen(messages.add);
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+
+    expect(messages, hasLength(1));
+    expect(messages.single.text, '来了🎌😅🔥:totally_unknown_code:');
+
+    await session.close();
+    await sub.cancel();
+  });
+
   test('未开播(无 conversationBar)抛错', () async {
     fake.watchHtml = '<html><body>no chat</body></html>';
     final connector = YoutubeDanmakuConnector(ParserHttp(client: fake));

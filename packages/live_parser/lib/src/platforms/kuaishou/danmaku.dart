@@ -270,6 +270,11 @@ class KuaishouDanmakuSession implements DanmakuSession {
 }
 
 /// 解析 feed 响应:result!=1 视为失败;仅取 comment 类型。
+///
+/// 表情说明(2026-09-20 调研):m 站 `wap/live/feed` 的 comment 只携带纯文本
+/// `content`,表情以 `[贊]`/`[笑哭]` 名称记号内联在文本里,协议不携带表情
+/// ID/URL;快手表情包「名称 → 图片」映射在其客户端资源内,无公开 URL 规则,
+/// 抓包前不做 image segment 伪造(数据诚实),UI 按纯文本渲染记号原文。
 KuaishouFeedBatch parseKuaishouFeed(Object? raw, {String roomId = ''}) {
   dynamic payload = raw;
   for (var depth = 0; depth < 3 && payload is String; depth++) {

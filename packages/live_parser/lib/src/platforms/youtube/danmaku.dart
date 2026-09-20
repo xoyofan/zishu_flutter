@@ -9,6 +9,7 @@ import '../../contracts/contracts.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
 import '../douyu/json_utils.dart';
+import 'emoji_shortcodes.dart';
 import 'normalize.dart';
 import 'room_api.dart';
 
@@ -332,6 +333,11 @@ class YoutubeDanmakuSession implements DanmakuSession {
   }
 }
 
+/// runs → 纯文本。emoji run(协议表情)不显示原始短代码占位:
+/// - `emojiId` 已是 Unicode(标准 emoji 多数形态)→ 直接采用;
+/// - 否则取首个 shortcut 过 `replaceYoutubeEmojiShortcodes` 短代码映射表
+///   (含 CLDR 短名补充;未知名保留原文,数据诚实不伪造);
+/// - 文本段(用户逐字输入)不过映射表,避免把「1:100:2」这类字面量误改。
 String _runsToText(Object? runs) {
   final buffer = StringBuffer();
   for (final raw in jsonListOf(runs)) {
@@ -342,8 +348,15 @@ String _runsToText(Object? runs) {
       continue;
     }
     final emoji = jsonMapOf(run['emoji']);
+    final emojiId = jsonText(emoji['emojiId']);
+    if (emojiId.isNotEmpty && !emojiId.startsWith(':')) {
+      buffer.write(emojiId);
+      continue;
+    }
     final shortcuts = jsonListOf(emoji['shortcuts']);
-    if (shortcuts.isNotEmpty) buffer.write(shortcuts.first);
+    if (shortcuts.isNotEmpty) {
+      buffer.write(replaceYoutubeEmojiShortcodes(jsonText(shortcuts.first)));
+    }
   }
   return buffer.toString();
 }
