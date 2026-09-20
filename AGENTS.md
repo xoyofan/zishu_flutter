@@ -29,3 +29,12 @@
 - GitHub 侧操作**优先使用 github MCP**（统一网关 `http://127.0.0.1:8800/mcp/github`，工具前缀 `mcp__github__`）：查询提交/远程状态、PR、issue，以及小规模文件提交（`push_files` / `create_or_update_file`）。
 - 本地大批量提交仍用 `git commit`；若 `git push` 缺少已存凭据，用 MCP 网关 `gateway.env.cmd` 中的 `GITHUB_PERSONAL_ACCESS_TOKEN` 做一次性凭据（临时 remote URL 或一次性 credential helper），**禁止把 token 写入仓库文件、`.git/config` 持久化或任何输出**。
 - 不同轨道分开提交：UI 轨（`lib/src/**`、`test/ui/**`、看板）与解析轨（`packages/live_parser/**`）各自独立提交，不混在一个 commit 里。
+
+## 提交说明与发版约定
+- **提交说明（commit message）、tag 说明与 Release 更新说明一律使用简体中文**；代码、命令、路径、专有技术名词保持英文。
+- 发新包（发版）标准流程，全部验证通过后执行：
+  1. `pubspec.yaml` 的 `version` 与本次 tag 对齐（如 `1.0.2-beta`）；
+  2. 跑全量门禁：`flutter analyze` + `flutter test` + `packages/live_parser` 测试 + `flutter build windows --release -t lib/main.dart --dart-define=ZISHU_REAL_PARSER=true`；
+  3. 推送 `master`；
+  4. 打 annotated tag 并推送：`git tag -a v1.0.2-beta -m "<中文更新说明>"` + `git push origin v1.0.2-beta`——tag message 即 GitHub Release body，`v*` tag push 自动触发 `.github/workflows/release-windows.yml` 构建 `zishu_flutter-<tag>-win64.zip` 并挂到 Release（`beta` 自动标 prerelease）；
+  5. 用 GitHub API（走 `127.0.0.1:7897` 代理）确认 Actions 构建成功、zip 资产已挂。
