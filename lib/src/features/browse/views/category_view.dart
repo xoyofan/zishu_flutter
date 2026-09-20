@@ -7,6 +7,7 @@ import 'package:live_parser/live_parser.dart';
 import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
+import '../../../shared/presentation/widgets/retry_button.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../application/browse_provider.dart';
 import '../application/my_category_provider.dart';
@@ -556,12 +557,7 @@ class _ErrorRetry extends StatelessWidget {
           const SizedBox(height: AppSpacing.md),
           Text(message, style: context.textSecondary),
           const SizedBox(height: AppSpacing.lg),
-          TextButton.icon(
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh_rounded),
-            label: const Text('重试'),
-            style: TextButton.styleFrom(foregroundColor: tokens.accent),
-          ),
+          RetryButton(onRetry: onRetry),
         ],
       ),
     );

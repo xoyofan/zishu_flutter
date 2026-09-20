@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
+import '../../../shared/presentation/widgets/translated_text.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 
 /// 离线置灰滤镜(灰度矩阵,数值非颜色)。
@@ -241,8 +242,10 @@ class FollowAnchorName extends StatelessWidget {
     } else {
       color = live ? tokens.textPrimary : tokens.textSecondary;
     }
-    return Text(
+    return TranslatedText(
       name,
+      // 主播名中文化(韩/日名翻,英文/中文名原样):原文先显示,译文到达替换。
+      translateName: true,
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       textAlign: textAlign,

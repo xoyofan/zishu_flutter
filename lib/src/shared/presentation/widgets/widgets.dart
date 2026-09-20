@@ -6,5 +6,8 @@ export 'empty_view.dart';
 export 'error_view.dart';
 export 'platform_badge.dart';
 export 'platform_icon.dart';
+export 'retry_button.dart';
 export 'section_header.dart';
+export 'settings_slider_row.dart';
 export 'state_dot.dart';
+export 'translated_text.dart';

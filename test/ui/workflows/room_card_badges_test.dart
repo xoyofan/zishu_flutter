@@ -305,27 +305,29 @@ void main() {
     // 侧栏口径只显在播后,离线卡的角标/遮罩逻辑不再经面板触达;
     // 直 pump PlayRoomGrid 钉住渲染契约,防口径回摆时丢行为。
     await tester.pumpWidget(
-      MaterialApp(
-        theme: ZishuTheme.dark(),
-        home: Scaffold(
-          body: SizedBox(
-            width: 320,
-            child: PlayRoomGrid(
-              rooms: const [
-                RoomSummary(
-                  site: 'douyu',
-                  roomId: '9002',
-                  title: '离线超关',
-                  anchorName: '测试主播',
-                  cid: '1',
-                  category: '英雄联盟',
-                  online: '',
-                  cover: '',
-                ),
-              ],
-              superKeys: const {'douyu:9002'},
-              // 与侧栏关注面板同前缀:卡面键 = play-follow-room-douyu-9002。
-              keyPrefix: 'play-follow-room-',
+      ProviderScope(
+        child: MaterialApp(
+          theme: ZishuTheme.dark(),
+          home: Scaffold(
+            body: SizedBox(
+              width: 320,
+              child: PlayRoomGrid(
+                rooms: const [
+                  RoomSummary(
+                    site: 'douyu',
+                    roomId: '9002',
+                    title: '离线超关',
+                    anchorName: '测试主播',
+                    cid: '1',
+                    category: '英雄联盟',
+                    online: '',
+                    cover: '',
+                  ),
+                ],
+                superKeys: const {'douyu:9002'},
+                // 与侧栏关注面板同前缀:卡面键 = play-follow-room-douyu-9002。
+                keyPrefix: 'play-follow-room-',
+              ),
             ),
           ),
         ),
@@ -418,10 +420,12 @@ void main() {
   group('首页网格卡离线遮罩(对齐 web .room-card__offline)', () {
     /// 组件级宿主:不走全 app(首页 fixture 全是在播房,塞离线房会改变
     /// 网格内容波及大量布局/hover 用例)。深浅主题各验一遍遮罩可读性。
-    Widget host(RoomSummary room) => MaterialApp(
-      theme: ZishuTheme.dark(),
-      home: Scaffold(
-        body: SizedBox(width: 320, child: RoomCard(room: room)),
+    Widget host(RoomSummary room) => ProviderScope(
+      child: MaterialApp(
+        theme: ZishuTheme.dark(),
+        home: Scaffold(
+          body: SizedBox(width: 320, child: RoomCard(room: room)),
+        ),
       ),
     );
 

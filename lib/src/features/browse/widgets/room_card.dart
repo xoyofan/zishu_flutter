@@ -4,6 +4,7 @@ import 'package:live_parser/live_parser.dart';
 
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/widgets/cover_badges.dart';
+import '../../../shared/presentation/widgets/translated_text.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../../follow/widgets/follow_common.dart';
 
@@ -94,7 +95,8 @@ class _RoomCardMeta extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          // 标题自动中文化(原文先显示,译文到达替换;关翻译/失败回原文)。
+          TranslatedText(
             title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,

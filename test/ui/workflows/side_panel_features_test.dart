@@ -32,6 +32,7 @@ import 'package:zishu_flutter/src/app/app_router.dart';
 import 'package:zishu_flutter/src/app/app_theme.dart';
 import 'package:zishu_flutter/src/features/danmaku/application/danmaku_session_provider.dart';
 import 'package:zishu_flutter/src/features/danmaku/application/danmaku_settings_provider.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:zishu_flutter/src/features/danmaku/domain/danmaku_settings.dart';
 import 'package:zishu_flutter/src/features/danmaku/widgets/danmaku_overlay.dart';
 import 'package:zishu_flutter/src/features/follow/application/follow_provider.dart';
@@ -41,6 +42,8 @@ import 'package:zishu_flutter/src/features/play/widgets/play_side_panel.dart'
     show roomExternalUrl;
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 import 'package:zishu_flutter/src/shared/application/fixture_sources.dart';
+import 'package:zishu_flutter/src/shared/application/translation/translation_coordinator.dart';
+import 'package:zishu_flutter/src/shared/application/translation/translation_provider.dart';
 
 /// 深链播放页:A8 用一个不在关注种子里的房间,避免初始即「已关注」。
 const String _playLocationA8 = '/douyu/play/606118';
@@ -197,6 +200,7 @@ Future<({GoRouter router, ProviderContainer container})> _pumpPlay(
   WidgetTester tester, {
   String location = _playLocation,
   DanmakuConnector? danmakuConnector,
+  List<Override> extraOverrides = const [],
 }) async {
   tester.view.devicePixelRatio = 1.0;
   tester.view.physicalSize = const Size(1600, 1200);
@@ -212,6 +216,7 @@ Future<({GoRouter router, ProviderContainer container})> _pumpPlay(
           danmakuRegistryProvider.overrideWithValue(
             _buildDanmakuRegistry(danmakuConnector),
           ),
+        ...extraOverrides,
       ],
       child: const _TestApp(),
     ),
@@ -625,13 +630,56 @@ void main() {
       for (var i = 0; i < 5; i++) {
         session.push(_chat('直通水友$i', '直通消息$i'));
       }
-      // 只推 1 帧(50ms,远小于最小限速间隔 1s):5 条应全部直通出现,
-      // 顺序保持推送顺序(web ingestChatBatch 限速关分支直通 pushChatDisplay)。
-      await _pumpFrames(tester, 1);
+      // 推送后仅用帧级推进(3×50ms,远小于最小限速间隔 1s):5 条应全部
+      // 直通出现,顺序保持推送顺序(web ingestChatBatch 限速关分支直通
+      // pushChatDisplay)。多 pump 2 帧是因为中文化口径(2026-09-20)改为
+      // 「译文就绪才放行」,放行落在微任务,渲染需要下一帧。
+      await _pumpFrames(tester, 3);
       expect(_visibleChatTexts(tester), hasLength(5),
           reason: '全量模式新消息应直通显示,不进积压队列');
       expect(_visibleChatTexts(tester).first.startsWith('直通水友0：'), isTrue);
       expect(_visibleChatTexts(tester).last.startsWith('直通水友4：'), isTrue);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('聊天中文化:译文就绪才放行显示(双队列出口翻译)', (tester) async {
+      final connector = _FakeDanmakuConnector();
+      final play = await _pumpPlay(
+        tester,
+        danmakuConnector: connector,
+        extraOverrides: [
+          // fake 引擎:任何文本 → 固定译文,验证「显示队列里是终稿译文」。
+          translationCoordinatorProvider.overrideWith(
+            (ref) => TranslationCoordinator(
+              engines: [_ScriptedTranslationEngine('你好世界(译)')],
+            ),
+          ),
+        ],
+      );
+      final container = play.container;
+      await _awaitSettingsHydrated(tester, container);
+      for (var i = 0; i < 10 && connector.session == null; i++) {
+        await _pumpFrames(tester, 1);
+      }
+
+      final session = connector.session!;
+      session.emitConnected();
+      // 外文消息:译文未就绪前不得以原文出现;放行后显示译文。
+      session.push(_chat('foreign fan', 'Hello world'));
+      await _pumpFrames(tester, 3);
+
+      final texts = _visibleChatTexts(tester);
+      expect(texts, isNotEmpty, reason: '译文就绪后应放行显示');
+      expect(
+        texts.last,
+        contains('你好世界(译)'),
+        reason: '显示队列出口应是译文终稿',
+      );
+      expect(
+        texts.last,
+        isNot(contains('Hello world')),
+        reason: '外文原文不应原样进入显示队列',
+      );
       expect(tester.takeException(), isNull);
     });
 
@@ -891,4 +939,14 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
+}
+
+/// 脚本化翻译引擎:所有文本返回同一固定译文(验证显示队列出口口径)。
+class _ScriptedTranslationEngine implements TranslationEngine {
+  _ScriptedTranslationEngine(this.translation);
+
+  final String translation;
+
+  @override
+  Future<String?> translate(String text) async => translation;
 }

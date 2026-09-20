@@ -187,10 +187,12 @@ void main() {
 
   group('离线卡文案', () {
     /// 组件级宿主:直接 pump FollowEntryCard。
-    Widget host(FollowEntry entry) => MaterialApp(
-      theme: ZishuTheme.dark(),
-      home: Scaffold(
-        body: SizedBox(width: 220, child: FollowEntryCard(entry: entry)),
+    Widget host(FollowEntry entry) => ProviderScope(
+      child: MaterialApp(
+        theme: ZishuTheme.dark(),
+        home: Scaffold(
+          body: SizedBox(width: 220, child: FollowEntryCard(entry: entry)),
+        ),
       ),
     );
 

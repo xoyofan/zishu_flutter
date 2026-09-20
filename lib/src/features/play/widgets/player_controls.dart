@@ -32,6 +32,7 @@ import '../application/play_provider.dart';
 import '../../danmaku/application/danmaku_settings_provider.dart';
 import '../../danmaku/domain/danmaku_settings.dart';
 import '../../../shared/presentation/widgets/compact_switch.dart';
+import '../../../shared/presentation/widgets/settings_slider_row.dart';
 import '../application/room_volume_provider.dart';
 import '../application/sleep_timer_provider.dart';
 
@@ -234,6 +235,10 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
                   const SizedBox(width: AppSpacing.xs),
                   SizedBox(
                     width: 96,
+                    // 真差异保留(2026-09-20 实测):局部 overlay 10 vs 全局 9
+                    // 不止悬停光环——M3 Slider 的 track 左右 inset =
+                    // max(overlayRadius, thumbRadius),删除局部覆盖会让
+                    // track/thumb 几何整体漂移 1px,打破 play_style golden。
                     child: SliderTheme(
                       data: SliderTheme.of(context).copyWith(
                         trackHeight: 3,
@@ -738,7 +743,9 @@ class _DanmakuSettingsButtonState
                 onChanged: (_) => widget.onToggleShow(),
               ),
             ),
-            _settingsSlider(
+            SettingsSliderRow(
+              // popover 恒定暗底(0xF2121212):标签用 AppOnVideo 亮色。
+              onVideo: true,
               label: '透明度',
               value: settings.opacity.toDouble(),
               min: DanmakuSettings.kOpacityMin.toDouble(),
@@ -750,7 +757,8 @@ class _DanmakuSettingsButtonState
                   .read(danmakuSettingsProvider.notifier)
                   .setOpacity(v.round()),
             ),
-            _settingsSlider(
+            SettingsSliderRow(
+              onVideo: true,
               label: '字号',
               value: settings.fontSize.toDouble(),
               min: DanmakuSettings.kFontSizeMin.toDouble(),
@@ -762,7 +770,8 @@ class _DanmakuSettingsButtonState
                   .read(danmakuSettingsProvider.notifier)
                   .setFontSize(v.round()),
             ),
-            _settingsSlider(
+            SettingsSliderRow(
+              onVideo: true,
               label: '速度',
               value: settings.speed.toDouble(),
               min: DanmakuSettings.kSpeedMin.toDouble(),
@@ -929,76 +938,6 @@ class _DanmakuSettingsButtonState
           ),
         ),
       ],
-    ),
-  );
-
-  Widget _settingsSlider({
-    required String label,
-    required double value,
-    required double min,
-    required double max,
-    required int divisions,
-    required String display,
-    required ValueChanged<double> onChanged,
-  }) => SizedBox(
-    width: 216,
-    child: Row(
-      children: [
-        SizedBox(
-          width: 38,
-          child: Text(
-            label,
-            style: const TextStyle(fontSize: 11, color: AppOnVideo.textMuted),
-          ),
-        ),
-        Expanded(
-          // 用户口径(2026-09-20):滑杆压进紧凑行高并走全局控件规格
-          //(默认 M3 触摸目标 ~48px 会把每行撑到两倍)。
-          child: SizedBox(
-            height: AppControls.sliderRowHeight,
-            child: SliderTheme(
-              data: SliderTheme.of(context).copyWith(
-                trackHeight: AppControls.sliderTrackHeight,
-                thumbShape: RoundSliderThumbShape(
-                  enabledThumbRadius: AppControls.sliderThumbRadius,
-                ),
-                overlayShape: RoundSliderOverlayShape(
-                  overlayRadius: AppControls.sliderThumbRadius + 3,
-                ),
-              ),
-              child: Slider(
-                value: value,
-                min: min,
-                max: max,
-                divisions: divisions,
-                activeColor: context.tokens.accent,
-                onChanged: onChanged,
-              ),
-            ),
-          ),
-        ),
-        SizedBox(
-          width: 30,
-          child: Text(
-            display,
-            textAlign: TextAlign.end,
-            style: TextStyle(
-              fontSize: 10.5,
-              fontFeatures: const [FontFeature.tabularFigures()],
-              color: context.tokens.accent,
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-
-  Widget valueBadge(String text) => Text(
-    text,
-    style: TextStyle(
-      fontSize: 10.5,
-      fontFeatures: const [FontFeature.tabularFigures()],
-      color: context.tokens.accent,
     ),
   );
 }

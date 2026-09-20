@@ -15,6 +15,9 @@ import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/category_colors.dart';
 import '../../../shared/presentation/widgets/platform_icon.dart';
+import '../../../shared/presentation/widgets/retry_button.dart';
+import '../../../shared/presentation/widgets/translated_text.dart';
+import '../../../shared/application/translation/translation_provider.dart';
 import '../../browse/application/my_category_provider.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
@@ -757,7 +760,8 @@ class _RoomHeader extends StatelessWidget {
           Expanded(
             child: Center(
               // 仅标题(web 不在标题里拼分类:分类已由左侧徽标承载)。
-              child: Text(
+              // 标题自动中文化:原文先显示,译文到达替换。
+              child: TranslatedText(
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -855,6 +859,11 @@ class _DanmakuLayerState extends ConsumerState<_DanmakuLayer> {
     // 总开关仍由 [widget.visible](danmakuEnabled)控制(enabled=visible)。
     // 此前只传 messages/enabled,设置面板的滑杆全是死控件 —— 改这里即接通。
     final settings = ref.watch(danmakuSettingsProvider);
+    // 飘屏正文中文化:开启时原文先上屏,译文返回原位替换(条目已离场则
+    // 丢弃)。关闭时传 null,overlay 零额外开销。
+    final translateOn = ref.watch(
+      settingsProvider.select((s) => s.translationEnabled),
+    );
     return DanmakuOverlay(
       messages: _controller.stream,
       enabled: widget.visible,
@@ -862,6 +871,11 @@ class _DanmakuLayerState extends ConsumerState<_DanmakuLayer> {
       fontSize: settings.fontSize.toDouble(),
       speedFactor: settings.speed,
       displayAreaRatio: settings.displayAreaRatio,
+      translateBody: translateOn
+          ? (text, segments) => ref
+                .read(translationCoordinatorProvider)
+                .translateBody(text: text, segments: segments)
+          : null,
     );
   }
 }
@@ -946,7 +960,10 @@ class _VideoStageState extends ConsumerState<_VideoStage> {
           ? _StagePlaceholder(
               icon: Icons.error_outline_rounded,
               text: '房间解析失败，请重试',
-              action: _RetryButton(onRetry: widget.onRetry),
+              action: RetryButton(
+                onRetry: widget.onRetry,
+                variant: RetryButtonVariant.outlined,
+              ),
             )
           : const _StagePlaceholder(
               icon: Icons.play_circle_fill_rounded,
@@ -1139,28 +1156,8 @@ class _ErrorCard extends StatelessWidget {
             Text(progress, style: context.textCaption),
           ],
           const SizedBox(height: AppSpacing.md),
-          _RetryButton(onRetry: onRetry),
+          RetryButton(onRetry: onRetry, variant: RetryButtonVariant.outlined),
         ],
-      ),
-    );
-  }
-}
-
-class _RetryButton extends StatelessWidget {
-  const _RetryButton({required this.onRetry});
-
-  final VoidCallback onRetry;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = context.tokens;
-    return OutlinedButton.icon(
-      onPressed: onRetry,
-      icon: const Icon(Icons.refresh_rounded, size: 16),
-      label: const Text('重试'),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: tokens.accent,
-        side: BorderSide(color: tokens.accent.withValues(alpha: 0.6)),
       ),
     );
   }

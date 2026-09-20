@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
+import '../../../shared/presentation/widgets/translated_text.dart';
 import '../application/anchor_provider.dart';
 import 'badge_chips.dart';
 import 'network_cover.dart';
@@ -86,7 +87,7 @@ class AnchorLiveCard extends StatelessWidget {
                 Row(
                   children: [
                     Expanded(
-                      child: Text(
+                      child: TranslatedText(
                         room.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

@@ -5,6 +5,7 @@ import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
+import '../../../shared/presentation/widgets/translated_text.dart';
 import '../application/timeline_provider.dart';
 import 'badge_chips.dart';
 import 'network_cover.dart';
@@ -128,7 +129,7 @@ class _EntryCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
+                    TranslatedText(
                       room.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

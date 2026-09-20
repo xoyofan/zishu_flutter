@@ -211,11 +211,27 @@ void main() {
     expect(find.text('设置'), findsOneWidget);
     expect(find.text('深色'), findsWidgets); // 主题下拉当前值(至少下拉内一处)。
     expect(find.text('超清'), findsOneWidget); // 画质下拉当前值。
-    expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
+    expect(
+      tester
+          .widget<Switch>(find.byKey(const Key('settings-danmaku-toggle')))
+          .value,
+      isTrue,
+    );
+    expect(
+      tester
+          .widget<Switch>(find.byKey(const Key('settings-translation-toggle')))
+          .value,
+      isTrue,
+      reason: '翻译开关出厂默认为开',
+    );
 
-    // 服务器组已移除:UI 不再出现地址录入(字段保留在 state 层)。
+    // 服务器组已移除:UI 不再出现地址录入(字段保留在 state 层);
+    // 翻译组的自定义实例地址输入(2026-09-20 新增)是页面唯一的 TextField。
     expect(find.text('streaming-server 地址'), findsNothing);
-    expect(find.byType(TextField), findsNothing);
+    expect(
+      find.byKey(const Key('settings-translation-endpoint')),
+      findsOneWidget,
+    );
   });
 
   testWidgets('主题模式切到深色:provider 状态更新且下拉控件反映', (tester) async {
@@ -237,13 +253,14 @@ void main() {
     await _pumpSettings(tester);
     expect(_readSettings(tester).danmakuEnabled, isTrue);
 
-    await tester.ensureVisible(find.byType(Switch));
-    await tester.tap(find.byType(Switch));
+    final danmakuSwitch = find.byKey(const Key('settings-danmaku-toggle'));
+    await tester.ensureVisible(danmakuSwitch);
+    await tester.tap(danmakuSwitch);
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(_readSettings(tester).danmakuEnabled, isFalse);
-    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+    expect(tester.widget<Switch>(danmakuSwitch).value, isFalse);
   });
 
   testWidgets('改默认画质:provider 状态更新且下拉控件反映', (tester) async {
@@ -274,8 +291,9 @@ void main() {
       find.byType(DropdownButton<String>),
       '蓝光8M',
     );
-    await tester.ensureVisible(find.byType(Switch));
-    await tester.tap(find.byType(Switch));
+    final danmakuSwitch = find.byKey(const Key('settings-danmaku-toggle'));
+    await tester.ensureVisible(danmakuSwitch);
+    await tester.tap(danmakuSwitch);
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
 
@@ -297,7 +315,12 @@ void main() {
     // 界面控件反映恢复后的值。
     expect(find.text('深色'), findsOneWidget);
     expect(find.text('蓝光8M'), findsOneWidget);
-    expect(tester.widget<Switch>(find.byType(Switch)).value, isFalse);
+    expect(
+      tester
+          .widget<Switch>(find.byKey(const Key('settings-danmaku-toggle')))
+          .value,
+      isFalse,
+    );
   });
 
   testWidgets('按平台默认画质:平台覆盖优先于全平台默认,清除后回落', (tester) async {

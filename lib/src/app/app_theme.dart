@@ -38,6 +38,18 @@ abstract final class ZishuTheme {
         error: tokens.error,
         outline: tokens.border,
       ),
+      // 面板内滑杆全局规格(用户口径 2026-09-20,取 AppControls):轨道 3 /
+      // 圆点 6。各面板不再局部包裹同规格 SliderTheme,只保留真差异
+      // (如侧栏弹幕设置的 7px 圆点、控制条主滑杆的宽度布局)。
+      sliderTheme: base.sliderTheme.copyWith(
+        trackHeight: AppControls.sliderTrackHeight,
+        thumbShape: const RoundSliderThumbShape(
+          enabledThumbRadius: AppControls.sliderThumbRadius,
+        ),
+        overlayShape: const RoundSliderOverlayShape(
+          overlayRadius: AppControls.sliderThumbRadius + 3,
+        ),
+      ),
       dividerColor: tokens.border,
       textTheme: base.textTheme.apply(
         bodyColor: tokens.textPrimary,

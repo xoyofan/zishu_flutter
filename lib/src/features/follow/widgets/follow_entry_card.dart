@@ -13,6 +13,7 @@ import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
+import '../../../shared/presentation/widgets/translated_text.dart';
 import '../application/follow_provider.dart';
 import 'follow_common.dart';
 
@@ -116,7 +117,7 @@ class FollowEntryCard extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Text(
+                      TranslatedText(
                         room.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,

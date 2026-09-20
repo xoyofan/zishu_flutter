@@ -95,6 +95,8 @@ class SettingsState {
     this.chatLineSpacing = defaultChatLineSpacing,
     this.chatSpeed = defaultChatSpeed,
     this.chatThrottleMode = ChatThrottleMode.unlimited,
+    this.translationEnabled = defaultTranslationEnabled,
+    this.translationEndpoint = '',
     this.hydrated = false,
   });
 
@@ -142,6 +144,15 @@ class SettingsState {
 
   /// 侧栏聊天节流模式(全量直通 / 每N秒一条,对齐 web chatSettings.speedLimit)。
   final ChatThrottleMode chatThrottleMode;
+
+  /// 内容中文化翻译总开关:开启时首页/播放页标题与弹幕正文经公共翻译
+  /// 实例译为中文(失败/已是中文显示原文)。默认开(产品诉求即「转中文
+  /// 后显示」);公网依赖失败只回退原文,不影响播放主链路。
+  final bool translationEnabled;
+
+  /// 自定义翻译实例地址(Lingva 或 SimplyTranslate 基地址);
+  /// 空串 = 使用内置公共实例列表。
+  final String translationEndpoint;
 
   /// 线路格式偏好(auto/hls/flv)。
   final PreferredLineFormat preferredLineFormat;
@@ -226,6 +237,9 @@ class SettingsState {
   /// 侧栏聊天节流速度出厂默认(秒/条)。
   static const int defaultChatSpeed = 5;
 
+  /// 内容翻译开关出厂默认(开:产品诉求即「转为中文后显示」)。
+  static const bool defaultTranslationEnabled = true;
+
   SettingsState copyWith({
     ThemeModeChoice? themeMode,
     String? defaultQuality,
@@ -242,6 +256,8 @@ class SettingsState {
     int? chatLineSpacing,
     int? chatSpeed,
     ChatThrottleMode? chatThrottleMode,
+    bool? translationEnabled,
+    String? translationEndpoint,
     bool? hydrated,
   }) {
     return SettingsState(
@@ -260,6 +276,8 @@ class SettingsState {
       chatLineSpacing: chatLineSpacing ?? this.chatLineSpacing,
       chatSpeed: chatSpeed ?? this.chatSpeed,
       chatThrottleMode: chatThrottleMode ?? this.chatThrottleMode,
+      translationEnabled: translationEnabled ?? this.translationEnabled,
+      translationEndpoint: translationEndpoint ?? this.translationEndpoint,
       hydrated: hydrated ?? this.hydrated,
     );
   }
@@ -284,6 +302,9 @@ class SettingsController extends Notifier<SettingsState> {
   static const String _kPreferredLineFormat =
       'zishu.settings.preferredLineFormat';
   static const String _kServerUrl = 'zishu.settings.serverUrl';
+  static const String _kTranslationEnabled = 'zishu.settings.translationEnabled';
+  static const String _kTranslationEndpoint =
+      'zishu.settings.translationEndpoint';
 
   /// 每房间独立音量表,存 JSON `Map<String, double>`。
   static const String _kRoomVolumes = 'zishu.settings.roomVolumes';
@@ -324,6 +345,8 @@ class SettingsController extends Notifier<SettingsState> {
       final chatThrottleModeRaw = await prefs.getString(_kChatThrottleMode);
       final format = await prefs.getString(_kPreferredLineFormat);
       final server = await prefs.getString(_kServerUrl);
+      final translation = await prefs.getBool(_kTranslationEnabled);
+      final translationEndpoint = await prefs.getString(_kTranslationEndpoint);
       final roomVolumesRaw = await prefs.getString(_kRoomVolumes);
       final globalMuted = await prefs.getBool(_kGlobalMuted);
       final defaultVolume = await prefs.getDouble(_kDefaultVolume);
@@ -361,6 +384,8 @@ class SettingsController extends Notifier<SettingsState> {
             : ChatThrottleMode.fromValue(chatThrottleModeRaw),
         preferredLineFormat: PreferredLineFormat.fromValue(format),
         serverUrl: server != null && server.isNotEmpty ? server : null,
+        translationEnabled: translation,
+        translationEndpoint: translationEndpoint,
         hydrated: true,
       );
     } catch (_) {
@@ -519,6 +544,23 @@ class SettingsController extends Notifier<SettingsState> {
     state = state.copyWith(serverUrl: trimmed);
     try {
       await SharedPreferencesAsync().setString(_kServerUrl, trimmed);
+    } catch (_) {}
+  }
+
+  /// 设置内容中文化翻译开关并持久化。
+  Future<void> setTranslationEnabled(bool enabled) async {
+    state = state.copyWith(translationEnabled: enabled);
+    try {
+      await SharedPreferencesAsync().setBool(_kTranslationEnabled, enabled);
+    } catch (_) {}
+  }
+
+  /// 设置自定义翻译实例地址并持久化;空串 = 回到内置公共实例。
+  Future<void> setTranslationEndpoint(String url) async {
+    final trimmed = url.trim();
+    state = state.copyWith(translationEndpoint: trimmed);
+    try {
+      await SharedPreferencesAsync().setString(_kTranslationEndpoint, trimmed);
     } catch (_) {}
   }
 

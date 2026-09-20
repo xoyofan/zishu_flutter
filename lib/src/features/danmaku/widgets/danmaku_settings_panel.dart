@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../shared/presentation/zishu_tokens.dart';
+import '../../../shared/presentation/widgets/settings_slider_row.dart';
 import '../../follow/application/settings_provider.dart';
 import '../application/danmaku_settings_provider.dart';
 import '../domain/danmaku_settings.dart';
@@ -82,34 +83,49 @@ class DanmakuSettingsPanel extends ConsumerWidget {
             ],
           ),
         ),
-        _SliderRow(
-          label: '透明度',
-          valueLabel: '${settings.opacity}%',
-          value: settings.opacity.toDouble(),
-          min: DanmakuSettings.kOpacityMin.toDouble(),
-          max: DanmakuSettings.kOpacityMax.toDouble(),
-          divisions: DanmakuSettings.kOpacityMax - DanmakuSettings.kOpacityMin,
-          onChanged: (v) => controller.setOpacity(v.round()),
+        // 滑杆行统一走 shared SettingsSliderRow(行高 20/标签 11/值列右对齐);
+        // width: null = 不限宽,随侧栏面板拉伸(对齐原 _SliderRow 行为),
+        // vertical: 2 保持面板既有行距节奏。
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: SettingsSliderRow(
+            width: null,
+            label: '透明度',
+            display: '${settings.opacity}%',
+            value: settings.opacity.toDouble(),
+            min: DanmakuSettings.kOpacityMin.toDouble(),
+            max: DanmakuSettings.kOpacityMax.toDouble(),
+            divisions: DanmakuSettings.kOpacityMax - DanmakuSettings.kOpacityMin,
+            onChanged: (v) => controller.setOpacity(v.round()),
+          ),
         ),
-        _SliderRow(
-          label: '字号',
-          // 对齐 web:值无单位(「20」而非「20px」)。
-          valueLabel: '${settings.fontSize}',
-          value: settings.fontSize.toDouble(),
-          min: DanmakuSettings.kFontSizeMin.toDouble(),
-          max: DanmakuSettings.kFontSizeMax.toDouble(),
-          divisions:
-              DanmakuSettings.kFontSizeMax - DanmakuSettings.kFontSizeMin,
-          onChanged: (v) => controller.setFontSize(v.round()),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: SettingsSliderRow(
+            width: null,
+            label: '字号',
+            // 对齐 web:值无单位(「20」而非「20px」)。
+            display: '${settings.fontSize}',
+            value: settings.fontSize.toDouble(),
+            min: DanmakuSettings.kFontSizeMin.toDouble(),
+            max: DanmakuSettings.kFontSizeMax.toDouble(),
+            divisions:
+                DanmakuSettings.kFontSizeMax - DanmakuSettings.kFontSizeMin,
+            onChanged: (v) => controller.setFontSize(v.round()),
+          ),
         ),
-        _SliderRow(
-          label: '速度',
-          valueLabel: '${settings.speed}',
-          value: settings.speed.toDouble(),
-          min: DanmakuSettings.kSpeedMin.toDouble(),
-          max: DanmakuSettings.kSpeedMax.toDouble(),
-          divisions: DanmakuSettings.kSpeedMax - DanmakuSettings.kSpeedMin,
-          onChanged: (v) => controller.setSpeed(v.round()),
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: SettingsSliderRow(
+            width: null,
+            label: '速度',
+            display: '${settings.speed}',
+            value: settings.speed.toDouble(),
+            min: DanmakuSettings.kSpeedMin.toDouble(),
+            max: DanmakuSettings.kSpeedMax.toDouble(),
+            divisions: DanmakuSettings.kSpeedMax - DanmakuSettings.kSpeedMin,
+            onChanged: (v) => controller.setSpeed(v.round()),
+          ),
         ),
         // 显示区域:下拉单选(web el-select,4 档)。
         Padding(
@@ -146,61 +162,6 @@ class DanmakuSettingsPanel extends ConsumerWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// 单个滑杆行:单行三列(label 固定宽 + Expanded 滑杆 + amber 值右对齐),
-/// 对齐 web `.overlay-settings__row` 的 `2.4rem minmax(0,1fr) auto` 网格。
-class _SliderRow extends StatelessWidget {
-  const _SliderRow({
-    required this.label,
-    required this.valueLabel,
-    required this.value,
-    required this.min,
-    required this.max,
-    required this.divisions,
-    required this.onChanged,
-  });
-
-  final String label;
-  final String valueLabel;
-  final double value;
-  final double min;
-  final double max;
-  final int divisions;
-  final ValueChanged<double> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        children: <Widget>[
-          SizedBox(
-            width: _kLabelWidth,
-            child: Text(label, style: context.textSecondary),
-          ),
-          Expanded(
-            child: Slider(
-              value: value,
-              min: min,
-              max: max,
-              divisions: divisions,
-              label: valueLabel,
-              onChanged: onChanged,
-            ),
-          ),
-          Text(
-            valueLabel,
-            style: TextStyle(
-              fontSize: 12,
-              color: context.tokens.accent,
-              fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }

@@ -13,6 +13,7 @@ import 'package:live_parser/live_parser.dart';
 import 'package:zishu_flutter/src/features/follow/application/follow_provider.dart';
 import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_row.dart';
 import 'package:zishu_flutter/src/features/follow/widgets/follow_room_list.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 FollowEntry _entry(String roomId) => FollowEntry(
       room: RoomSummary(
@@ -35,13 +36,15 @@ Future<void> _pump(WidgetTester tester, {required double width}) async {
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  await tester.pumpWidget(MaterialApp(
-    home: Scaffold(
-      body: FollowRoomList(
-        entries: [for (var i = 1; i <= 4; i++) _entry('$i')],
-        density: FollowDensity.row,
-        padding: EdgeInsets.zero,
-        onTap: (_) {},
+  await tester.pumpWidget(ProviderScope(
+    child: MaterialApp(
+      home: Scaffold(
+        body: FollowRoomList(
+          entries: [for (var i = 1; i <= 4; i++) _entry('$i')],
+          density: FollowDensity.row,
+          padding: EdgeInsets.zero,
+          onTap: (_) {},
+        ),
       ),
     ),
   ));

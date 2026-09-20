@@ -21,6 +21,7 @@ import 'package:live_parser/live_parser.dart';
 import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/widgets/cover_badges.dart';
+import '../../../shared/presentation/widgets/translated_text.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../../follow/widgets/follow_common.dart';
 
@@ -225,7 +226,7 @@ class PlayRoomCard extends StatelessWidget {
                       fontSize: 11,
                     ),
                     const SizedBox(height: 1),
-                    Text(
+                    TranslatedText(
                       room.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,

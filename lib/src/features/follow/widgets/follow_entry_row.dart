@@ -14,6 +14,7 @@ import '../../../shared/presentation/category_colors.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
+import '../../../shared/presentation/widgets/translated_text.dart';
 import '../application/follow_provider.dart';
 import 'follow_common.dart';
 
@@ -141,7 +142,7 @@ class FollowEntryRow extends StatelessWidget {
               const SizedBox(width: 4),
               // 标题:弹性列,单行省略。
               Expanded(
-                child: Text(
+                child: TranslatedText(
                   room.title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,

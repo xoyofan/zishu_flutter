@@ -11,6 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:live_parser/live_parser.dart' show RoomSummary;
 import 'package:zishu_flutter/src/app/app_theme.dart';
 import 'package:zishu_flutter/src/features/browse/widgets/room_card.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 RoomSummary _room({
   required String id,
@@ -33,17 +34,19 @@ RoomSummary _room({
 
 Future<void> _pumpCards(WidgetTester tester, List<Widget> cards) async {
   await tester.pumpWidget(
-    MaterialApp(
-      theme: ZishuTheme.dark(),
-      home: Scaffold(
-        body: Align(
-          alignment: Alignment.topLeft,
-          child: SizedBox(
-            width: 900,
-            child: Wrap(
-              children: [
-                for (final card in cards) SizedBox(width: 180, child: card),
-              ],
+    ProviderScope(
+      child: MaterialApp(
+        theme: ZishuTheme.dark(),
+        home: Scaffold(
+          body: Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(
+              width: 900,
+              child: Wrap(
+                children: [
+                  for (final card in cards) SizedBox(width: 180, child: card),
+                ],
+              ),
             ),
           ),
         ),

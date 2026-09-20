@@ -146,11 +146,36 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                     label: '弹幕显示',
                     hint: '播放时在画面上方叠加弹幕',
                     trailing: Switch(
+                      key: const Key('settings-danmaku-toggle'),
                       value: settings.danmakuEnabled,
                       onChanged: (value) => ref
                           .read(settingsProvider.notifier)
                           .setDanmakuEnabled(value),
                     ),
+                  ),
+                ],
+              ),
+              _SettingsGroup(
+                title: '翻译',
+                children: [
+                  _SettingsRow(
+                    label: '翻译为中文',
+                    hint: '首页/播放页标题与弹幕自动译为中文;走公共翻译服务,'
+                        '失败或已是中文时显示原文',
+                    trailing: Switch(
+                      key: const Key('settings-translation-toggle'),
+                      value: settings.translationEnabled,
+                      onChanged: (value) => ref
+                          .read(settingsProvider.notifier)
+                          .setTranslationEnabled(value),
+                    ),
+                  ),
+                  _TranslationEndpointRow(
+                    endpoint: settings.translationEndpoint,
+                    enabled: settings.translationEnabled,
+                    onSave: (url) => ref
+                        .read(settingsProvider.notifier)
+                        .setTranslationEndpoint(url),
                   ),
                 ],
               ),
@@ -341,6 +366,101 @@ class _StyledDropdown<T> extends StatelessWidget {
         onChanged: (value) {
           if (value != null) onChanged(value);
         },
+      ),
+    );
+  }
+}
+
+/// 自定义翻译实例地址行:提交即保存;留空提交 = 回到内置公共实例。
+///
+/// 外部值变化(恢复持久化/他处保存)且输入框未聚焦时回填,避免打断输入。
+class _TranslationEndpointRow extends ConsumerStatefulWidget {
+  const _TranslationEndpointRow({
+    required this.endpoint,
+    required this.enabled,
+    required this.onSave,
+  });
+
+  final String endpoint;
+  final bool enabled;
+  final ValueChanged<String> onSave;
+
+  @override
+  ConsumerState<_TranslationEndpointRow> createState() =>
+      _TranslationEndpointRowState();
+}
+
+class _TranslationEndpointRowState
+    extends ConsumerState<_TranslationEndpointRow> {
+  late final TextEditingController _controller = TextEditingController(
+    text: widget.endpoint,
+  );
+  final FocusNode _focus = FocusNode();
+
+  @override
+  void didUpdateWidget(covariant _TranslationEndpointRow oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.endpoint != oldWidget.endpoint &&
+        widget.endpoint != _controller.text &&
+        !_focus.hasFocus) {
+      _controller.text = widget.endpoint;
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focus.dispose();
+    super.dispose();
+  }
+
+  void _commit() {
+    _focus.unfocus();
+    widget.onSave(_controller.text);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    return _SettingsRow(
+      label: '自定义翻译服务',
+      hint: '可填自建 Lingva / SimplyTranslate 实例地址,留空用内置公共实例',
+      trailing: SizedBox(
+        width: 240,
+        child: TextField(
+          key: const Key('settings-translation-endpoint'),
+          controller: _controller,
+          focusNode: _focus,
+          enabled: widget.enabled,
+          onSubmitted: (_) => _commit(),
+          onTapOutside: (_) => _commit(),
+          style: context.textBody,
+          decoration: InputDecoration(
+            isDense: true,
+            hintText: 'https://…',
+            hintStyle: context.textSecondary,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.md,
+              vertical: 8,
+            ),
+            filled: true,
+            fillColor: tokens.surfaceRaised,
+            border: OutlineInputBorder(
+              borderRadius: AppRadius.allSm,
+              borderSide: BorderSide(color: tokens.border),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: AppRadius.allSm,
+              borderSide: BorderSide(color: tokens.border),
+            ),
+            suffixIcon: IconButton(
+              key: const Key('settings-translation-endpoint-save'),
+              tooltip: '保存',
+              onPressed: _commit,
+              icon: Icon(Icons.check_rounded, size: 16, color: tokens.textSecondary),
+            ),
+          ),
+        ),
       ),
     );
   }

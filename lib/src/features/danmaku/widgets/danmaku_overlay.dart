@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show listEquals;
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart' show Ticker;
 import 'dart:ui' as ui;
-import 'package:live_parser/live_parser.dart' show DanmakuMessage;
+import 'package:live_parser/live_parser.dart'
+    show DanmakuMessage, DanmakuSegment;
 
 import '../domain/danmaku_settings.dart';
 import '../domain/danmaku_style.dart';
@@ -34,6 +37,7 @@ class DanmakuOverlay extends StatefulWidget {
     this.fontSize = DanmakuStyle.fontSize,
     this.speedFactor,
     this.displayAreaRatio = 1.0,
+    this.translateBody,
   });
 
   /// 弹幕消息流。可为 `null`(无数据源时渲染空画布)。
@@ -69,6 +73,18 @@ class DanmakuOverlay extends StatefulWidget {
   /// 弹幕可占画布高度比例(取 [DanmakuSettings.kDisplayAreaRatios] 之一),
   /// 用于裁剪可用轨道高度。1.0 = 全屏(与历史行为一致)。
   final double displayAreaRatio;
+
+  /// 正文中文化钩子(可选):传 null 时零开销、行为与历史一致。
+  ///
+  /// 新弹幕以原文上屏,随后异步调用 [translateBody](入参:整条正文 + 富
+  /// 文本段),返回「文本段已译、表情段保留」的段列表;译文返回且该条
+  /// 仍在屏内时,原位替换绘制文本。滚动速度与轨道分配按**原文宽度**锁定,
+  /// 替换不改变该条的位置与速度(避免中途跳位)。
+  final Future<List<DanmakuSegment>> Function(
+    String text,
+    List<DanmakuSegment> segments,
+  )?
+  translateBody;
 
   /// 速度档 → 滚动总时长(秒)。供 [speedFactor] 与单测共用。
   static double durationForSpeed(int speed) => danmakuDurationForSpeed(speed);
@@ -144,18 +160,57 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
         _allocator!.tryAllocate(_clock, widthRatio) ??
         _allocator!.allocateReusingEarliest(_clock, widthRatio);
 
+    final item = _LiveDanmaku(
+      message: message,
+      span: span,
+      textWidth: textWidth,
+      lane: lane,
+      totalSeconds: _duration,
+    );
     setState(() {
-      _items.add(
-        _LiveDanmaku(
-          span: span,
-          textWidth: textWidth,
-          lane: lane,
-          totalSeconds: _duration,
-        ),
-      );
+      _items.add(item);
       if (_items.length > widget.maxVisible) {
         _items.removeRange(0, _items.length - widget.maxVisible);
       }
+    });
+    // 译文中文化:原文已上屏,译文到达后原位替换(条目离场则静默丢弃)。
+    if (widget.translateBody != null) {
+      unawaited(_translateItem(item));
+    }
+  }
+
+  Future<void> _translateItem(_LiveDanmaku item) async {
+    final message = item.message;
+    List<DanmakuSegment> translated;
+    try {
+      translated = await widget.translateBody!(message.text, message.segments);
+    } catch (_) {
+      return;
+    }
+    if (!mounted || item.translationApplied) return;
+    // 无变化(关闭/已是中文/失败回原文):segment 列表值相等则跳过替换。
+    if (message.segments.isEmpty
+        ? translated.isEmpty
+        : listEquals(translated, message.segments)) {
+      return;
+    }
+    final newText = [for (final segment in translated) segment.text].join();
+    final translatedMessage = DanmakuMessage(
+      type: message.type,
+      userName: message.userName,
+      userId: message.userId,
+      text: newText,
+      color: message.color,
+      segments: translated,
+    );
+    final span = DanmakuStyle.buildSpan(
+      translatedMessage,
+      fontSize: widget.fontSize,
+    );
+    final width = DanmakuStyle.measureWidth(span);
+    if (!mounted || !_items.contains(item) || item.translationApplied) return;
+    setState(() {
+      item.applyTranslation(span, width);
     });
   }
 
@@ -232,14 +287,27 @@ class _DanmakuOverlayState extends State<DanmakuOverlay>
 /// 一条正在飞行的弹幕的运行态。
 class _LiveDanmaku {
   _LiveDanmaku({
-    required this.span,
-    required this.textWidth,
+    required this.message,
+    required this._span,
+    required this._textWidth,
     required this.lane,
     required this.totalSeconds,
-  });
+  }) : cullWidth = _textWidth;
 
-  final TextSpan span;
-  final double textWidth;
+  /// 来源消息:译文替换时据此重建绘制内容(速度/轨道按原文锁定)。
+  final DanmakuMessage message;
+
+  TextSpan _span;
+
+  /// 原文宽度:滚动速度/轨道分配基准,译文替换**不改动**(防中途跳位)。
+  final double _textWidth;
+
+  /// 视口裁剪宽度 = max(原文, 译文):译文更长时离场判定按长边算。
+  double cullWidth;
+
+  /// 译文是否已替换(只替换一次;迟到译文对已替换条目静默丢弃)。
+  bool translationApplied = false;
+
   final int lane;
 
   /// 滚动总时长(秒),决定像素速度 = (canvasWidth + textWidth)/totalSeconds。
@@ -247,6 +315,19 @@ class _LiveDanmaku {
 
   /// 已飞行时间(秒)。
   double elapsedSeconds = 0;
+
+  TextSpan get span => _span;
+
+  double get textWidth => _textWidth;
+
+  /// 译文替换:更新绘制 span、放宽裁剪宽度、使缓存的段落失效。
+  void applyTranslation(TextSpan translatedSpan, double translatedWidth) {
+    _span = translatedSpan;
+    cullWidth = math.max(cullWidth, translatedWidth);
+    translationApplied = true;
+    _strokeParagraph = null;
+    _fillParagraph = null;
+  }
 
   /// 缓存布局好的(描边, 填充)段落:文本不随帧变化,布局一次逐帧
   /// drawParagraph —— 消除「每帧每条两遍文本布局」的掉帧主因。
@@ -299,8 +380,8 @@ class _DanmakuPainter extends CustomPainter {
     canvas.save();
     for (final item in items) {
       final dx = item.left(size.width);
-      // 视口裁剪:完全在左/右边界外的弹幕不绘制。
-      if (dx > size.width || dx + item.textWidth < 0) continue;
+      // 视口裁剪:完全在左/右边界外的弹幕不绘制(译文变长按长边判定)。
+      if (dx > size.width || dx + item.cullWidth < 0) continue;
       final dy = topPadding + item.lane * DanmakuStyle.lineHeightOf(fontSize);
       final (strokeParagraph, fillParagraph) = item.paragraphs(fontSize);
       canvas.drawParagraph(strokeParagraph, Offset(dx, dy));

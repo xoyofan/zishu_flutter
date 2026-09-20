@@ -4,6 +4,7 @@ import 'package:live_parser/live_parser.dart';
 
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
+import '../../../shared/presentation/widgets/translated_text.dart';
 
 /// 单条搜索命中:方形头像 + 昵称/状态点 + 标题 + 分类 chip + 在线人数,
 /// 直播中行尾部带「进入直播间」按钮;头像点击进入主播主页。
@@ -79,7 +80,7 @@ class SearchResultTile extends StatelessWidget {
                   if (hit.title.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
-                      child: Text(
+                      child: TranslatedText(
                         hit.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
