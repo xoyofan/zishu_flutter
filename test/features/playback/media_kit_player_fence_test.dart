@@ -284,6 +284,38 @@ void main() {
     });
   });
 
+  group('A7 播放/暂停快照同步(用户口径 2026-09-20 播放暂停判断错)', () {
+    test('pause 后快照 playing 立即为 false,不等底层事件回流', () async {
+      // 复现真机:控制条点暂停,画面停了但播放/暂停图标不切换 ——
+      // 底层(media-kit 假体与真机一致)暂停时不再回流 playing 事件,
+      // 快照停留在 true。pause 必须主动发布快照。
+      fake.emitPlaying(true);
+      await pumpEventQueue();
+      expect(snapshots.last.playing, isTrue);
+
+      await player.pause();
+      await pumpEventQueue();
+      expect(
+        snapshots.last.playing,
+        isFalse,
+        reason: 'pause 后快照 playing 必须立即为 false,不得等待底层回流',
+      );
+    });
+
+    test('play 后快照 playing 立即为 true,恢复播放图标同源', () async {
+      fake.emitPlaying(false);
+      await pumpEventQueue();
+
+      await player.play();
+      await pumpEventQueue();
+      expect(
+        snapshots.last.playing,
+        isTrue,
+        reason: 'play 后快照 playing 必须立即为 true,不得等待底层回流',
+      );
+    });
+  });
+
   group('A6 音量快照同步(BUG-WIN-VOLUME-002)', () {
     test('setVolume 立即归一到快照,不等底层事件回流', () async {
       // 复现真机:房 A 拖到 36.8,底层已回流,快照停在 36.8。

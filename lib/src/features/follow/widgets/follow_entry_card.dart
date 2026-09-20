@@ -97,8 +97,11 @@ class FollowEntryCard extends StatelessWidget {
                         child: Row(
                           children: [
                             if (entry.isSpecial) ...[
-                              Icon(Icons.star_rounded,
-                                  size: 12, color: tokens.brand),
+                              Icon(
+                                Icons.star_rounded,
+                                size: 12,
+                                color: tokens.brand,
+                              ),
                               const SizedBox(width: 2),
                             ],
                             Flexible(
@@ -127,72 +130,74 @@ class FollowEntryCard extends StatelessWidget {
                         // 统计/操作行:平台圆点 + 在线数/轮播标,右侧三枚操作。
                         // 侧栏 compact 态隐藏(对齐 web show-stats=false)。
                         Row(
-                        children: [
-                          FollowPlatformDot(site: room.site),
-                          const SizedBox(width: 4),
-                          Icon(
-                            live
-                                ? Icons.people_alt_rounded
-                                : (replay
-                                      ? Icons.repeat_rounded
-                                      : Icons.schedule_rounded),
-                            size: 10,
-                            color: live
-                                ? tokens.liveBadge
-                                : (replay
-                                      ? kFollowReplayAccent
-                                      : tokens.textSecondary),
-                          ),
-                          const SizedBox(width: 2),
-                          Flexible(
-                            child: Text(
-                              // 在播:在线数;轮播:「轮播」;离线:有开播
-                              // 记录显示「上次开播」,否则「未开播」
-                              // (对齐 web offlineLastLiveLabel)。
+                          children: [
+                            FollowPlatformDot(site: room.site),
+                            const SizedBox(width: 4),
+                            Icon(
                               live
-                                  ? room.online
-                                  : (replay ? '轮播' : offlineLastLiveLabel(entry.lastLiveAt)),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: context.textCaption.copyWith(
-                                fontSize: 10,
-                                color: live
-                                    ? tokens.textPrimary
+                                  ? Icons.people_alt_rounded
+                                  : (replay
+                                        ? Icons.repeat_rounded
+                                        : Icons.schedule_rounded),
+                              size: 10,
+                              color: live
+                                  ? tokens.liveBadge
+                                  : (replay
+                                        ? kFollowReplayAccent
+                                        : tokens.textSecondary),
+                            ),
+                            const SizedBox(width: 2),
+                            Flexible(
+                              child: Text(
+                                // 在播:在线数;轮播:「轮播」;离线:有开播
+                                // 记录显示「上次开播」,否则「未开播」
+                                // (对齐 web offlineLastLiveLabel)。
+                                live
+                                    ? room.online
                                     : (replay
-                                          ? kFollowReplayAccent
-                                          : tokens.textSecondary),
+                                          ? '轮播'
+                                          : offlineLastLiveLabel(
+                                              entry.lastLiveAt,
+                                            )),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: context.textCaption.copyWith(
+                                  fontSize: 10,
+                                  color: live
+                                      ? tokens.textPrimary
+                                      : (replay
+                                            ? kFollowReplayAccent
+                                            : tokens.textSecondary),
+                                ),
                               ),
                             ),
-                          ),
-                          if (!selectMode) ...[
-                            const Spacer(),
-                            FollowIconAction(
-                              icon: entry.isSpecial
-                                  ? Icons.star_rounded
-                                  : Icons.star_border_rounded,
-                              tooltip:
-                                  entry.isSpecial ? '取消特别关注' : '设为特别关注',
-                              active: entry.isSpecial,
-                              onPressed: onToggleSpecial,
-                            ),
-                            FollowIconAction(
-                              icon: entry.remindOn
-                                  ? Icons.notifications_active_rounded
-                                  : Icons.notifications_none_rounded,
-                              tooltip:
-                                  entry.remindOn ? '关闭开播提醒' : '开启开播提醒',
-                              active: entry.remindOn,
-                              onPressed: onToggleRemind,
-                            ),
-                            FollowIconAction(
-                              icon: Icons.delete_outline_rounded,
-                              tooltip: '移除关注',
-                              danger: true,
-                              onPressed: onRemove,
-                            ),
+                            if (!selectMode) ...[
+                              const Spacer(),
+                              FollowIconAction(
+                                icon: entry.isSpecial
+                                    ? Icons.star_rounded
+                                    : Icons.star_border_rounded,
+                                tooltip: entry.isSpecial ? '取消特别关注' : '设为特别关注',
+                                active: entry.isSpecial,
+                                onPressed: onToggleSpecial,
+                              ),
+                              FollowIconAction(
+                                icon: entry.remindOn
+                                    ? Icons.notifications_active_rounded
+                                    : Icons.notifications_none_rounded,
+                                tooltip: entry.remindOn ? '关闭开播提醒' : '开启开播提醒',
+                                active: entry.remindOn,
+                                onPressed: onToggleRemind,
+                              ),
+                              FollowIconAction(
+                                icon: Icons.delete_outline_rounded,
+                                tooltip: '移除关注',
+                                danger: true,
+                                onPressed: onRemove,
+                              ),
+                            ],
                           ],
-                        ],
-                      ),
+                        ),
                       ],
                     ],
                   ),
@@ -264,16 +269,19 @@ class FollowEntryCard extends StatelessWidget {
             left: 0,
             top: 0,
             child: selectMode
-                ? _SelectBox(selected: selected, onChanged: (_) => onToggleSelect?.call())
+                ? _SelectBox(
+                    selected: selected,
+                    onChanged: (_) => onToggleSelect?.call(),
+                  )
                 : (entry.isSpecial
-                    ? FollowCoverTag(
-                        child: Icon(
-                          Icons.star_rounded,
-                          size: 12,
-                          color: tokens.brand,
-                        ),
-                      )
-                    : const SizedBox.shrink()),
+                      ? FollowCoverTag(
+                          child: Icon(
+                            Icons.star_rounded,
+                            size: 12,
+                            color: tokens.brand,
+                          ),
+                        )
+                      : const SizedBox.shrink()),
           ),
           // 右下:在线人数;轮播改显金黄「轮播」角标;
           // 离线不重复显示(底部已有未开播条)。
@@ -285,8 +293,11 @@ class FollowEntryCard extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.people_alt_rounded,
-                        size: 10, color: tokens.liveBadge),
+                    Icon(
+                      Icons.people_alt_rounded,
+                      size: 10,
+                      color: tokens.liveBadge,
+                    ),
                     const SizedBox(width: 3),
                     Text(
                       room.online,
@@ -308,8 +319,11 @@ class FollowEntryCard extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.repeat_rounded,
-                        size: 10, color: kFollowReplayAccent),
+                    Icon(
+                      Icons.repeat_rounded,
+                      size: 10,
+                      color: kFollowReplayAccent,
+                    ),
                     const SizedBox(width: 3),
                     Text(
                       '轮播',

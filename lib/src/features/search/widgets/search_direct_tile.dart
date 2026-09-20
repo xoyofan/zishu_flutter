@@ -6,7 +6,11 @@ import '../application/search_provider.dart';
 
 /// 快捷直达高亮项:纯数字显示「进入房间 N」,douyu 链接显示「打开链接」。
 class SearchDirectTile extends StatelessWidget {
-  const SearchDirectTile({super.key, required this.target, required this.onTap});
+  const SearchDirectTile({
+    super.key,
+    required this.target,
+    required this.onTap,
+  });
 
   final DirectTarget target;
   final VoidCallback onTap;
@@ -57,13 +61,19 @@ class SearchDirectTile extends StatelessWidget {
                           target.url!,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: context.textCaption.copyWith(color: tokens.textSecondary),
+                          style: context.textCaption.copyWith(
+                            color: tokens.textSecondary,
+                          ),
                         ),
                       ),
                   ],
                 ),
               ),
-              Icon(Icons.arrow_forward_ios_rounded, size: 12, color: tokens.accent),
+              Icon(
+                Icons.arrow_forward_ios_rounded,
+                size: 12,
+                color: tokens.accent,
+              ),
             ],
           ),
         ),

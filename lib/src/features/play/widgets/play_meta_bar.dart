@@ -25,6 +25,7 @@ import 'package:live_parser/live_parser.dart' show RoomPayload, RoomSummary;
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../../follow/application/follow_provider.dart';
+import '../application/room_stats_provider.dart';
 
 class PlayMetaBar extends ConsumerWidget {
   const PlayMetaBar({
@@ -62,15 +63,21 @@ class PlayMetaBar extends ConsumerWidget {
         ? payload!.anchorName.trim()
         : '主播信息';
     final isLive = payload?.isLive ?? false;
-    // 统计区数据源:与桌面侧栏信息头同源 —— followProvider 中当前房间关注
-    // 条目的 [RoomSummary](followers/online 由 refreshStatuses 按真源回填)。
-    // 未关注/上游未提供的字段显示「—」,不伪造、不发起新的网络请求。
+    // 统计区数据源(用户口径 2026-09-20 huya 等平台统计不能只服务已关注
+    // 房间):已关注房间取关注条目的 [RoomSummary](refreshStatuses 按真源
+    // 回填);未关注/未回填时兜底调 [roomStatsProvider](同一条解析真源,
+    // 对任意房间可查)。上游未提供的字段仍显示「—」,不伪造。
     final site = payload?.site ?? '';
     final roomId = payload?.roomId ?? '';
     final matched = ref
         .watch(followProvider)
         .where((entry) => entry.key == '$site:$roomId');
-    final RoomSummary? summary = matched.isNotEmpty ? matched.first.room : null;
+    final RoomSummary? followedSummary = matched.isNotEmpty
+        ? matched.first.room
+        : null;
+    final RoomSummary? summary =
+        followedSummary ??
+        ref.watch(roomStatsProvider((site: site, roomId: roomId))).value;
     final followersText = _statText(summary?.followers);
     final audienceText = _statText(summary?.online);
     // 高度由内容撑开(web 竖屏堆叠基准 head-h 2.75rem ≈ 44,但 flutter 字体
@@ -100,73 +107,75 @@ class PlayMetaBar extends ConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  anchor,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13,
-                    height: 1.05,
-                    fontWeight: FontWeight.w600,
-                    color: isLive ? tokens.liveBadge : tokens.textPrimary,
+                children: [
+                  Text(
+                    anchor,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      height: 1.05,
+                      fontWeight: FontWeight.w600,
+                      color: isLive ? tokens.liveBadge : tokens.textPrimary,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    _MetaStat(
-                      key: const Key('play-meta-stat-followers'),
-                      icon: Icons.favorite_border_rounded,
-                      iconColor: context.tokens.playFollowText,
-                      label: '关注',
-                      // 关注条目快照的 followers(关注/人气同源回填)。
-                      value: followersText,
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    _MetaStat(
-                      key: const Key('play-meta-stat-started'),
-                      icon: Icons.schedule_rounded,
-                      iconColor: isLive ? tokens.liveBadge : tokens.textSecondary,
-                      label: '开播',
-                      value: _startedText(isLive),
-                    ),
-                  ],
-                ),
-                Row(
-                  children: [
-                    _MetaStat(
-                      key: const Key('play-meta-stat-audience'),
-                      icon: Icons.people_alt_outlined,
-                      iconColor: context.tokens.statAudience,
-                      label: '人气',
-                      // 关注条目快照的 online(在线人数文案,回填自真源)。
-                      value: audienceText,
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    _MetaStat(
-                      key: const Key('play-meta-stat-danmaku'),
-                      icon: Icons.chat_bubble_outline_rounded,
-                      iconColor: tokens.textSecondary,
-                      label: '弹幕',
-                      // 解析层暂无弹幕数(会话内已收条数不是平台弹幕总数,不冒充)。
-                      value: '—',
-                    ),
-                  ],
-                ),
-              ],
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      _MetaStat(
+                        key: const Key('play-meta-stat-followers'),
+                        icon: Icons.favorite_border_rounded,
+                        iconColor: context.tokens.playFollowText,
+                        label: '关注',
+                        // 关注条目快照的 followers(关注/人气同源回填)。
+                        value: followersText,
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      _MetaStat(
+                        key: const Key('play-meta-stat-started'),
+                        icon: Icons.schedule_rounded,
+                        iconColor: isLive
+                            ? tokens.liveBadge
+                            : tokens.textSecondary,
+                        label: '开播',
+                        value: _startedText(isLive),
+                      ),
+                    ],
+                  ),
+                  Row(
+                    children: [
+                      _MetaStat(
+                        key: const Key('play-meta-stat-audience'),
+                        icon: Icons.people_alt_outlined,
+                        iconColor: context.tokens.statAudience,
+                        label: '人气',
+                        // 关注条目快照的 online(在线人数文案,回填自真源)。
+                        value: audienceText,
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      _MetaStat(
+                        key: const Key('play-meta-stat-danmaku'),
+                        icon: Icons.chat_bubble_outline_rounded,
+                        iconColor: tokens.textSecondary,
+                        label: '弹幕',
+                        // 解析层暂无弹幕数(会话内已收条数不是平台弹幕总数,不冒充)。
+                        value: '—',
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(width: AppSpacing.xs),
-          SizedBox(
-            width: _kActionsWidth,
-            child: _MetaActions(
-              followed: followed,
-              superFollowed: superFollowed,
-              onToggleFollow: onToggleFollow,
-              onToggleSuperFollow: onToggleSuperFollow,
+            const SizedBox(width: AppSpacing.xs),
+            SizedBox(
+              width: _kActionsWidth,
+              child: _MetaActions(
+                followed: followed,
+                superFollowed: superFollowed,
+                onToggleFollow: onToggleFollow,
+                onToggleSuperFollow: onToggleSuperFollow,
+              ),
             ),
-          ),
           ],
         ),
       ),
@@ -216,9 +225,7 @@ class _MetaAvatar extends StatelessWidget {
       height: double.infinity,
       // 左贴边出血 + 圆角 `0 0 2px 0`(web SideHeader.vue:326-350)。
       decoration: BoxDecoration(
-        borderRadius: const BorderRadius.only(
-          bottomRight: Radius.circular(2),
-        ),
+        borderRadius: const BorderRadius.only(bottomRight: Radius.circular(2)),
         color: tokens.surfaceRaised,
         border: Border.all(
           color: live ? tokens.liveBadge : tokens.border,
@@ -340,7 +347,9 @@ class _MetaActions extends StatelessWidget {
         Expanded(
           child: _MetaActionButton(
             key: const Key('play-side-super-follow'),
-            icon: superFollowed ? Icons.star_rounded : Icons.star_border_rounded,
+            icon: superFollowed
+                ? Icons.star_rounded
+                : Icons.star_border_rounded,
             label: superFollowed ? '已超关' : '超关',
             foreground: superFollowed
                 ? context.tokens.playSuperTextActive

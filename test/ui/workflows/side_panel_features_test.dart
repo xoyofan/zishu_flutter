@@ -807,14 +807,18 @@ void main() {
             of: find.byKey(const Key('play-side-notify')),
             matching: find.byType(InkWell),
           ));
-      IconData? notifyIcon() => tester.widget<Icon>(find.descendant(
-            of: find.byKey(const Key('play-side-notify')),
-            matching: find.byType(Icon),
-          )).icon;
+      // 用户口径(2026-09-20):提醒入口显示为文字,激活态为「直播提醒中」。
+      String? notifyLabel() {
+        final texts = tester.widgetList<Text>(find.descendant(
+          of: find.byKey(const Key('play-side-notify')),
+          matching: find.byType(Text),
+        ));
+        return texts.isEmpty ? null : texts.first.data;
+      }
 
       // 未关注:无提醒目标,按钮禁用(bell-off 态);点按不产生关注条目。
       expect(notifyInkWell().onTap, isNull);
-      expect(notifyIcon(), Icons.notifications_off_rounded);
+      expect(notifyLabel(), '直播提醒');
       await tester.tap(find.byKey(const Key('play-side-notify')),
           warnIfMissed: false);
       await _pumpFrames(tester, 2);
@@ -825,7 +829,7 @@ void main() {
       await tester.tap(find.byKey(const Key('play-side-follow-btn')));
       await _pumpFrames(tester, 2);
       expect(notifyInkWell().onTap, isNotNull);
-      expect(notifyIcon(), Icons.notifications_off_rounded);
+      expect(notifyLabel(), '直播提醒');
 
       // 点亮:remindOn 翻 true + bell 态,且写盘。
       await tester.tap(find.byKey(const Key('play-side-notify')));
@@ -837,7 +841,7 @@ void main() {
             .remindOn,
         isTrue,
       );
-      expect(notifyIcon(), Icons.notifications_rounded);
+      expect(notifyLabel(), '直播提醒中');
       final rawOn = await SharedPreferencesAsync().getString('zishu.follow.list');
       final storedOn = (jsonDecode(rawOn!) as List)
           .firstWhere((e) => e['roomId'] == '606118') as Map;
@@ -853,7 +857,7 @@ void main() {
             .remindOn,
         isFalse,
       );
-      expect(notifyIcon(), Icons.notifications_off_rounded);
+      expect(notifyLabel(), '直播提醒');
       expect(tester.takeException(), isNull);
     });
   });

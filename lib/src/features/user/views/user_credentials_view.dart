@@ -38,10 +38,7 @@ class UserCredentialsView extends ConsumerWidget {
             children: [
               Text('用户', style: context.textTitle.copyWith(fontSize: 18)),
               const SizedBox(height: AppSpacing.lg),
-              const _Group(
-                title: '账号',
-                children: [_AccountRow()],
-              ),
+              const _Group(title: '账号', children: [_AccountRow()]),
               _Group(
                 title: '平台登录态',
                 children: [
@@ -83,8 +80,7 @@ class _AccountRow extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = context.tokens;
     final auth = ref.watch(authProvider);
-    final username =
-        auth.session?.username.trim().isNotEmpty == true
+    final username = auth.session?.username.trim().isNotEmpty == true
         ? auth.session!.username.trim()
         : '';
     final authenticated = auth.phase == AuthPhase.authenticated;
@@ -135,7 +131,8 @@ class _SiteCredentialTile extends ConsumerStatefulWidget {
   final PlatformBrand brand;
 
   @override
-  ConsumerState<_SiteCredentialTile> createState() => _SiteCredentialTileState();
+  ConsumerState<_SiteCredentialTile> createState() =>
+      _SiteCredentialTileState();
 }
 
 class _SiteCredentialTileState extends ConsumerState<_SiteCredentialTile> {

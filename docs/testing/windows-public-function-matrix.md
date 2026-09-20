@@ -229,6 +229,13 @@
 - 初判：最可能是测试负载挤占解码/渲染（负载释放后待确认）；若正常负载下稳定复现，需排查 mpv 暂停/停顿/EOF 事件是否被围栏丢弃（参照 volume 快照修法）
 - Windows 证据：`check-stuck.png`（冻结帧+弹幕滚动+状态矛盾）
 
+### OBS-WIN-VIDEO-001
+
+- 状态：已登记（2026-09-20 用户报告，多次复现），待排查
+- 现象：进入房间后播放状态为「播放中」但画面黑屏（舞台飘屏弹幕与聊天正常渲染）；**点暂停再点播放后画面立即显示**（kick 强制 mpv 重出一帧即恢复）
+- 方向：media-kit VideoController 纹理首帧未送 UI（GPU/驱动时序类）；候选修复 = 播放中但 videoInfo 长期缺失时自动 pause/play kick 一次
+- Windows 证据：`verify-popover-compact2.png`（黑屏+飘屏/弹幕正常）
+
 ### OBS-WIN-OVERLAY-001
 
 - 状态：观察项（低优先）

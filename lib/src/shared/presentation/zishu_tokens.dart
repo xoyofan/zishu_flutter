@@ -266,7 +266,10 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
       playFollowBgActive: mix(playFollowBgActive, other.playFollowBgActive),
       playFollowBorder: mix(playFollowBorder, other.playFollowBorder),
       playFollowText: mix(playFollowText, other.playFollowText),
-      playFollowTextActive: mix(playFollowTextActive, other.playFollowTextActive),
+      playFollowTextActive: mix(
+        playFollowTextActive,
+        other.playFollowTextActive,
+      ),
       playSuperBg: mix(playSuperBg, other.playSuperBg),
       playSuperBgHover: mix(playSuperBgHover, other.playSuperBgHover),
       playSuperBgActive: mix(playSuperBgActive, other.playSuperBgActive),
@@ -279,7 +282,8 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
 
 /// `context.tokens.brand` 形式的快捷读取。
 extension ZishuTokensContext on BuildContext {
-  ZishuTokens get tokens => Theme.of(this).extension<ZishuTokens>() ?? ZishuTokens.dark;
+  ZishuTokens get tokens =>
+      Theme.of(this).extension<ZishuTokens>() ?? ZishuTokens.dark;
 }
 
 /// 排版 × 主题色:`AppTypography` 提供字号/字重/行高,tokens 提供颜色。

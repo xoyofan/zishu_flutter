@@ -393,15 +393,27 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('danmakuSettings:控制条按 pure_live 布局不再有飘屏设置入口', (tester) async {
+  testWidgets('danmakuSettings:控制条提供飘屏弹幕设置入口(SFVideo 复刻)', (
+    tester,
+  ) async {
     final play = await _pumpPlay(tester);
     await _awaitSettingsHydrated(tester, play.container);
 
-    // 用户口径 2026-09-19:控制条沿用 pure_live 布局(播放/静音/音量靠左,
-    // Spacer 后画质/线路/弹幕/PiP/刷新/网页全屏/全屏靠右聚拢),不设
-    // 「飘屏弹幕设置」入口 —— 该入口保留在侧栏设置 tab(与侧栏同一对话框)。
-    expect(find.byKey(const Key('play-danmaku-settings')), findsNothing);
+    // 用户口径 2026-09-20:控制条左组复刻 SFVideo 的 ctrl-danmaku-group —
+    // 「弹」开关 + 「弹」设置(飘屏弹幕参数 popover);与侧栏设置 tab 的
+    // 聊天弹幕设置互不相干。
+    expect(find.byKey(const Key('play-danmaku-settings')), findsOneWidget);
     expect(find.byKey(const Key('play-toggle-danmaku')), findsOneWidget);
+
+    // 点击入口:飘屏弹幕设置面板展开(SFVideo OverlayDanmakuSettingsPanel
+    // 复刻:标题 + 显示/透明度/字号/速度/区域)。
+    await tester.tap(find.byKey(const Key('play-danmaku-settings')));
+    // 控制条的自动隐藏计时器周期性触发,不能用 pumpAndSettle(永不确定)。
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.text('飘屏弹幕'), findsOneWidget);
+    expect(find.text('透明度'), findsOneWidget);
+    expect(find.text('区域'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

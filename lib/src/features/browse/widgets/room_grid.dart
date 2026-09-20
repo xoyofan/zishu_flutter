@@ -86,7 +86,8 @@ class _RoomGridState extends State<RoomGrid> {
         //     (category 页 91.5px 窄格实测)。
         final available = width - widget.padding.horizontal;
         final cardWidth =
-            (available - AppSpacing.gridCrossAxisSpacing * (columns - 1)) / columns;
+            (available - AppSpacing.gridCrossAxisSpacing * (columns - 1)) /
+            columns;
         return GridView.builder(
           controller: _controller,
           padding: widget.padding,

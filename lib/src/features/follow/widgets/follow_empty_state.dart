@@ -19,7 +19,11 @@ class FollowEmptyState extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.favorite_border_rounded, size: 44, color: tokens.textSecondary),
+          Icon(
+            Icons.favorite_border_rounded,
+            size: 44,
+            color: tokens.textSecondary,
+          ),
           const SizedBox(height: AppSpacing.md),
           Text('暂无关注', style: context.textTitle),
           const SizedBox(height: AppSpacing.xs),

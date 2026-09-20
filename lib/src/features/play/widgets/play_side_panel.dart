@@ -19,6 +19,7 @@ import 'package:live_parser/live_parser.dart';
 
 import '../../danmaku/application/danmaku_session_provider.dart';
 import '../../follow/application/follow_provider.dart';
+import '../application/room_stats_provider.dart';
 import '../../follow/application/follow_sort.dart';
 import '../../follow/application/settings_provider.dart';
 import '../../../platforms/common/open_external_url.dart';
@@ -58,29 +59,24 @@ class PlaySidePanelPrefs {
     int? tabIndex,
     bool? followGrid,
     String? followSite,
-  }) =>
-      PlaySidePanelPrefs(
-        tabIndex: tabIndex ?? this.tabIndex,
-        followGrid: followGrid ?? this.followGrid,
-        followSite: followSite ?? this.followSite,
-      );
+  }) => PlaySidePanelPrefs(
+    tabIndex: tabIndex ?? this.tabIndex,
+    followGrid: followGrid ?? this.followGrid,
+    followSite: followSite ?? this.followSite,
+  );
 }
 
 /// 全局(非 autoDispose):离开播放页也保留,下次进房延续上次的 tab/视图。
 final playSidePanelPrefsProvider =
     NotifierProvider<PlaySidePanelPrefsController, PlaySidePanelPrefs>(
-  PlaySidePanelPrefsController.new,
-);
+      PlaySidePanelPrefsController.new,
+    );
 
 class PlaySidePanelPrefsController extends Notifier<PlaySidePanelPrefs> {
   @override
   PlaySidePanelPrefs build() => const PlaySidePanelPrefs();
 
-  void update({
-    int? tabIndex,
-    bool? followGrid,
-    String? followSite,
-  }) {
+  void update({int? tabIndex, bool? followGrid, String? followSite}) {
     state = state.copyWith(
       tabIndex: tabIndex,
       followGrid: followGrid,
@@ -327,7 +323,7 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
 }
 
 /// SFVideo 侧栏信息头:头像 + 主播元信息 + 统计 + 关注操作。
-class _SideHeader extends StatelessWidget {
+class _SideHeader extends ConsumerWidget {
   const _SideHeader({
     required this.site,
     required this.roomId,
@@ -370,7 +366,7 @@ class _SideHeader extends StatelessWidget {
   final ValueChanged<String> onOpenExternal;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tokens = context.tokens;
     final anchor = payload?.anchorName.trim().isNotEmpty == true
         ? payload!.anchorName
@@ -379,12 +375,17 @@ class _SideHeader extends StatelessWidget {
     final title = payload?.title.trim() ?? '';
     final category = payload?.category.trim() ?? '';
     final isLive = payload?.isLive ?? false;
-    // 统计区(对齐 web SideHeader「关注：N」行 + stats 列):
-    // 未关注/上游未提供 → '—' 占位,不伪造(数据诚实性)。
+    // 统计区(对齐 web SideHeader「关注：N」行 + stats 列):已关注房间
+    // 取关注条目回填;未关注/未回填时兜底调 roomStatsProvider(同一条解析
+    // 真源,任意房间可查 —— 用户口径 2026-09-20 huya 等平台统计不能只服务
+    // 已关注房间)。上游未提供 → '—' 占位,不伪造(数据诚实性)。
     final followRoom = this.followRoom;
-    final followersText = _statText(followRoom?.followers);
-    final audienceText = _statText(followRoom?.online);
-    final vipText = _statText(followRoom?.vip);
+    final RoomSummary? stats =
+        followRoom ??
+        ref.watch(roomStatsProvider((site: site, roomId: roomId))).value;
+    final followersText = _formatFollowersText(stats?.followers);
+    final audienceText = _statText(stats?.online);
+    final vipText = _statText(stats?.vip);
 
     // 信息头高度随系统字号缩放:固定 64px 在大字体(1.15x/1.3x)下会把
     // 中间三行元信息挤出容器底部(移动端实测 1px RenderFlex 溢出)。
@@ -401,92 +402,104 @@ class _SideHeader extends StatelessWidget {
         children: [
           // 头像贴边出血:占满头高(无上下内边距、左侧贴边),对齐 web
           // `--room-aside-avatar-size = head-h + 2*pad-y`。
-          _SideAvatar(
-            avatar: avatar,
-            label: anchor,
-            live: isLive,
-            followed: followed,
-            remindOn: remindOn,
-            externalUrl: externalUrl,
-            onToggleRemind: onToggleRemind,
-            onOpenExternal: onOpenExternal,
-          ),
+          _SideAvatar(avatar: avatar, label: anchor, live: isLive),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 5),
               child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  anchor,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 14,
-                    height: 1.08,
-                    fontWeight: FontWeight.w600,
-                    color: isLive ? tokens.liveBadge : tokens.textPrimary,
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    anchor,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.08,
+                      fontWeight: FontWeight.w600,
+                      color: isLive ? tokens.liveBadge : tokens.textPrimary,
+                    ),
                   ),
-                ),
-                // 分类显示在主播名后面那一行(用户口径 2026-09-19);
-                // 关注数与人气/VIP 合并到同一统计行,控制头高不溢出。
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        formatCategoryHeaderLabel(
-                          payload?.site,
-                          category,
-                          payload?.cid,
+                  // 分类显示在主播名后面那一行(用户口径 2026-09-19);
+                  // 关注数与人气/VIP 合并到同一统计行,控制头高不溢出。
+                  const SizedBox(height: 2),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          formatCategoryHeaderLabel(
+                            payload?.site,
+                            category,
+                            payload?.cid,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 10, height: 1.15),
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 10, height: 1.15),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 3),
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        '关注 $followersText',
-                        key: const Key('play-side-stat-followers'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 11, height: 1.08),
+                      // 开播提醒 + 外链(用户口径 2026-09-20:从头像悬浮挪到
+                      // 第二排分类名后,不再遮头像;显示改为文字)。
+                      const SizedBox(width: 4),
+                      _SideTextAction(
+                        key: const Key('play-side-notify'),
+                        label: remindOn ? '直播提醒中' : '直播提醒',
+                        tooltip: followed
+                            ? (remindOn ? '已开启开播/下播提醒，点击关闭' : '开启开播/下播提醒')
+                            : '关注后可开启开播提醒',
+                        onPressed: followed ? onToggleRemind : null,
+                        active: remindOn,
                       ),
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    // 人气/观众(web stats[0]「观众」列;online 为空 = 离线或
-                    // 尚未刷新回填,显示「—」)。
-                    _StatValue(
-                      icon: Icons.people_alt_outlined,
-                      value: audienceText,
-                      color: context.tokens.statAudience,
-                    ),
-                    const SizedBox(width: AppSpacing.sm),
-                    // VIP/贵宾(web stats[1] vip 列;douyu/huya 贵宾、
-                    // douyin 会员、soop 订阅;其余平台上游无 → 「—」)。
-                    _StatValue(
-                      icon: Icons.workspace_premium_outlined,
-                      value: vipText,
-                      color: context.tokens.statVip,
-                    ),
-                  ],
-                ),
-                if (title.isNotEmpty && title != anchor)
-                  Semantics(
-                    label: '房间标题 $title',
-                    child: const SizedBox.shrink(),
+                      const SizedBox(width: 3),
+                      _SideTextAction(
+                        key: const Key('play-side-external'),
+                        label: '跳转',
+                        tooltip: '打开直播间页面',
+                        onPressed: externalUrl == null
+                            ? null
+                            : () => onOpenExternal(externalUrl!),
+                      ),
+                    ],
                   ),
-              ],
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          '关注 $followersText',
+                          key: const Key('play-side-stat-followers'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 11, height: 1.08),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      // 人气/观众(web stats[0]「观众」列;online 为空 = 离线或
+                      // 尚未刷新回填,显示「—」)。
+                      _StatValue(
+                        icon: Icons.people_alt_outlined,
+                        value: audienceText,
+                        color: context.tokens.statAudience,
+                      ),
+                      const SizedBox(width: AppSpacing.sm),
+                      // VIP/贵宾(web stats[1] vip 列;douyu/huya 贵宾、
+                      // douyin 会员、soop 订阅;其余平台上游无 → 「—」)。
+                      _StatValue(
+                        icon: Icons.workspace_premium_outlined,
+                        value: vipText,
+                        color: context.tokens.statVip,
+                      ),
+                    ],
+                  ),
+                  if (title.isNotEmpty && title != anchor)
+                    Semantics(
+                      label: '房间标题 $title',
+                      child: const SizedBox.shrink(),
+                    ),
+                ],
+              ),
             ),
-          ),
           ),
           const SizedBox(width: AppSpacing.xs),
           Padding(
@@ -514,6 +527,22 @@ String _statText(String? value) {
   return text.isEmpty ? '—' : text;
 }
 
+/// 关注数显示格式(用户口径 2026-09-20):纯数字 ≥1万 显示「X.X万」
+/// (≥100万 收敛为整数万);已带单位或非数字文本原样返回,不伪造。
+String _formatFollowersText(String? raw) {
+  final text = (raw?.trim() ?? '').replaceAll(',', '');
+  if (text.isEmpty) return '—';
+  final value = int.tryParse(text);
+  if (value == null) return text;
+  if (value >= 10000) {
+    final wan = value / 10000;
+    return wan >= 100
+        ? '${wan.toStringAsFixed(0)}万'
+        : '${wan.toStringAsFixed(1)}万';
+  }
+  return text;
+}
+
 /// 当前房间 web 页地址:解析结果自带的 sourceUrl(解析器实际进入的页面,
 /// 最稳)优先;没有则按平台拼 —— 对齐 web `platformCatalog.ts`
 /// `PLATFORM_EXTERNAL_URLS`(douyu/huya/bilibili);douyin 等无稳定 web
@@ -537,28 +566,11 @@ class _SideAvatar extends StatelessWidget {
     required this.avatar,
     required this.label,
     required this.live,
-    required this.followed,
-    required this.remindOn,
-    required this.externalUrl,
-    required this.onToggleRemind,
-    required this.onOpenExternal,
   });
 
   final String avatar;
   final String label;
   final bool live;
-
-  /// 当前房间是否已关注(决定提醒按钮可用性,web `v-if="roomIsFollowed"`
-  /// 的 flutter 占位等价:不隐藏、禁用)。
-  final bool followed;
-
-  /// 开播提醒开关(web `liveNotifyEnabled`)。
-  final bool remindOn;
-
-  /// 当前房间 web 页地址(null = 无稳定外链)。
-  final String? externalUrl;
-  final VoidCallback onToggleRemind;
-  final ValueChanged<String> onOpenExternal;
 
   @override
   Widget build(BuildContext context) {
@@ -612,89 +624,65 @@ class _SideAvatar extends StatelessWidget {
                     ),
             ),
           ),
-          Positioned(
-            right: -4,
-            top: -4,
-            child: _HeaderIconButton(
-              key: const Key('play-side-notify'),
-              // web bell/bell-off 两态(SideHeader.vue:27):关=bell-off
-              // 中性色;开=bell + 品牌紫激活色(语义=开播/下播提醒开关)。
-              icon: remindOn
-                  ? Icons.notifications_rounded
-                  : Icons.notifications_off_rounded,
-              tooltip: followed
-                  ? (remindOn ? '已开启开播/下播提醒，点击关闭' : '开启开播/下播提醒')
-                  : '关注后可开启开播提醒',
-              // 未关注 = 无可提醒目标,禁用(web 直接隐藏,flutter 留占位)。
-              onPressed: followed ? onToggleRemind : null,
-              activeColor: remindOn ? context.tokens.accent : null,
-            ),
-          ),
-          Positioned(
-            right: -4,
-            bottom: -4,
-            child: _HeaderIconButton(
-              key: const Key('play-side-external'),
-              icon: Icons.open_in_new_rounded,
-              tooltip: '打开直播间页面',
-              onPressed: externalUrl == null
-                  ? null
-                  : () => onOpenExternal(externalUrl!),
-              accent: const Color(0xFF60A5FA),
-            ),
-          ),
         ],
       ),
     );
   }
 }
 
-class _HeaderIconButton extends StatelessWidget {
-  const _HeaderIconButton({
+/// 侧栏头第二排的小文字按钮(用户口径 2026-09-20:开播提醒/跳转显示为
+/// 文字而非 icon)。描边 pill;[active] 时走品牌紫强调。
+class _SideTextAction extends StatelessWidget {
+  const _SideTextAction({
     super.key,
-    required this.icon,
+    required this.label,
     required this.tooltip,
     required this.onPressed,
-    this.accent,
-    this.activeColor,
+    this.active = false,
   });
 
-  final IconData icon;
+  final String label;
   final String tooltip;
 
   /// null = 禁用(未关注无可提醒目标 / 无稳定 web url)。
   final VoidCallback? onPressed;
-
-  /// 图标强调色(如外链蓝 #60a5fa,web `.room-aside-link-btn`)。
-  final Color? accent;
-
-  /// 激活态色(品牌紫 tokens.accent,用户口径 2026-09-20 控件强调一律
-  /// 品牌紫):图标取该色,底色取该色 22% 混底。
-  final Color? activeColor;
+  final bool active;
 
   @override
   Widget build(BuildContext context) {
-    final active = activeColor;
+    final tokens = context.tokens;
+    final enabled = onPressed != null;
+    final fg = !enabled
+        ? tokens.textSecondary.withValues(alpha: 0.55)
+        : active
+        ? tokens.accent
+        : tokens.textSecondary;
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: active != null
-            ? Color.alphaBlend(
-                active.withValues(alpha: 0.22),
-                context.tokens.surfaceRaised,
-              )
-            : context.tokens.surfaceRaised,
-        shape: const CircleBorder(),
+        color: active && enabled
+            ? tokens.accent.withValues(alpha: 0.14)
+            : Colors.transparent,
+        shape: StadiumBorder(
+          side: BorderSide(
+            color: active && enabled
+                ? tokens.accent.withValues(alpha: 0.55)
+                : tokens.border,
+          ),
+        ),
         child: InkWell(
-          customBorder: const CircleBorder(),
+          customBorder: const StadiumBorder(),
           onTap: onPressed,
-          child: SizedBox(
-            width: 19,
-            height: 19,
-            child: Icon(
-              icon,
-              size: 11,
-              color: active ?? accent ?? context.tokens.textSecondary,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+            child: Text(
+              label,
+              style: TextStyle(
+                fontSize: 9.5,
+                height: 1.2,
+                fontWeight: FontWeight.w600,
+                color: fg,
+              ),
             ),
           ),
         ),
@@ -1171,18 +1159,18 @@ class _ChatTabState extends ConsumerState<_ChatTab>
           curve: Curves.easeOut,
         )
         .then((_) {
-      // ListView.builder 惰性构建:尾部行未 realize 时 maxScrollExtent 可能
-      // 滞后(只统计已构建行),动画目标偏短、落点差一至数行。落定后按最新
-      // extent 校正一次,保证「回到底部」真的到底。被打断时该回调不来或被
-      // pinned 守卫挡下,均无害。
-      if (!mounted || !_scrollController.hasClients || !_pinnedToBottom) {
-        return;
-      }
-      final position = _scrollController.position;
-      if (position.pixels < position.maxScrollExtent - 0.5) {
-        _scrollController.jumpTo(position.maxScrollExtent);
-      }
-    });
+          // ListView.builder 惰性构建:尾部行未 realize 时 maxScrollExtent 可能
+          // 滞后(只统计已构建行),动画目标偏短、落点差一至数行。落定后按最新
+          // extent 校正一次,保证「回到底部」真的到底。被打断时该回调不来或被
+          // pinned 守卫挡下,均无害。
+          if (!mounted || !_scrollController.hasClients || !_pinnedToBottom) {
+            return;
+          }
+          final position = _scrollController.position;
+          if (position.pixels < position.maxScrollExtent - 0.5) {
+            _scrollController.jumpTo(position.maxScrollExtent);
+          }
+        });
   }
 
   /// 新显示内容到达后:贴底时自动跟随滚底(首帧也在内 —— 默认锚底,
@@ -1525,7 +1513,9 @@ class _ChatRow extends StatelessWidget {
           // 徽章顺序对齐 web SideChatTab.vue:38-44 —— 平台用户等级 pill 在前、
           // 粉丝牌在后(用户口径 2026-09-19:「平台等级应该在粉丝等级前显示」)。
           if (data.userLevel > 0)
-            _inlineBadge(_UserLevelBadge(site: data.site, level: data.userLevel)),
+            _inlineBadge(
+              _UserLevelBadge(site: data.site, level: data.userLevel),
+            ),
           if (fanBadge != null &&
               _FanBadge.visibleFor(site: data.site, name: data.fanName))
             _inlineBadge(
@@ -1895,7 +1885,11 @@ class _FanBadgeState extends State<_FanBadge> {
                       letterSpacing: 0.01,
                       shadows: const [
                         Shadow(blurRadius: 2, color: Color(0x73000000)),
-                        Shadow(offset: Offset(0, 1), blurRadius: 1, color: Color(0x59000000)),
+                        Shadow(
+                          offset: Offset(0, 1),
+                          blurRadius: 1,
+                          color: Color(0x59000000),
+                        ),
                       ],
                     ),
                   ),
@@ -2021,9 +2015,7 @@ class _UserLevelBadgeState extends State<_UserLevelBadge> {
                   height: 1,
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
-                  shadows: [
-                    Shadow(blurRadius: 2, color: Color(0x8c000000)),
-                  ],
+                  shadows: [Shadow(blurRadius: 2, color: Color(0x8c000000))],
                 ),
               ),
             ),
@@ -2155,9 +2147,8 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
       ref.read(playSidePanelPrefsProvider.notifier).update(followGrid: value);
 
   String get _siteFilter => ref.watch(playSidePanelPrefsProvider).followSite;
-  set _siteFilter(String value) => ref
-      .read(playSidePanelPrefsProvider.notifier)
-      .update(followSite: value);
+  set _siteFilter(String value) =>
+      ref.read(playSidePanelPrefsProvider.notifier).update(followSite: value);
 
   /// 已展示条数(分页窗口)。对齐 web `PLAY_FOLLOW_PAGE_SIZE = 48`:
   /// 首屏只放 48 条,滚到底再放一页,底部提示「向下滚动加载更多…」。
@@ -2219,18 +2210,18 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
                 key: const Key('play-side-follow-view-toggle'),
                 onPressed: () => setState(() => _grid = !_grid),
                 padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
+                constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
                 icon: Icon(
-                  _grid ? Icons.list_rounded : Icons.grid_view_rounded,
-                  size: 15,
+                  // 卡片态显示「列表」入口、列表态显示「网格」入口(点击即切)。
+                  _grid ? Icons.view_list_rounded : Icons.grid_view_rounded,
+                  size: 18,
                   color: _grid ? tokens.textSecondary : tokens.accent,
                 ),
               ),
             ),
             Expanded(
               child: Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
                 // 与「我的关注」页共用同一 [FollowPlatformFilter](web 两处
                 // 同为 FollowPlatformFilter.vue):侧栏紧凑 + 6 列等宽,
                 // chips 放不下自动换到第二排。
@@ -2264,9 +2255,7 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
                   // 收一档(用户口径 2026-09-20)。
                   child: FollowRoomList(
                     entries: windowed,
-                    density: _grid
-                        ? FollowDensity.card
-                        : FollowDensity.row,
+                    density: _grid ? FollowDensity.card : FollowDensity.row,
                     compact: true,
                     cardColumns: 2,
                     padding: EdgeInsets.fromLTRB(
@@ -2361,8 +2350,7 @@ class _SettingsPanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = context.tokens;
     final settings = ref.watch(settingsProvider);
-    final throttled =
-        settings.chatThrottleMode == ChatThrottleMode.perNSeconds;
+    final throttled = settings.chatThrottleMode == ChatThrottleMode.perNSeconds;
     return ListView(
       key: const Key('play-side-settings-panel'),
       padding: const EdgeInsets.all(AppSpacing.sm),
@@ -2573,10 +2561,7 @@ class _SettingSliderRow extends StatelessWidget {
       children: [
         // 对齐 web label 列 3.25rem ≈ 52。
         SizedBox(width: 52, child: Text(label, style: context.textCaption)),
-        if (leading != null) ...[
-          leading!,
-          const SizedBox(width: 4),
-        ],
+        if (leading != null) ...[leading!, const SizedBox(width: 4)],
         Expanded(
           child: SliderTheme(
             data: SliderTheme.of(context).copyWith(
@@ -2616,11 +2601,7 @@ class _SettingSliderRow extends StatelessWidget {
 /// 保留 Material Switch 的 value/onChanged/Semantics(toggled) 语义,
 /// 只是视觉收敛为侧栏密度尺寸。
 class _MiniSwitch extends StatelessWidget {
-  const _MiniSwitch({
-    super.key,
-    required this.value,
-    required this.onChanged,
-  });
+  const _MiniSwitch({super.key, required this.value, required this.onChanged});
 
   final bool value;
   final ValueChanged<bool> onChanged;
@@ -2694,11 +2675,7 @@ class _PanelHint extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              text,
-              textAlign: TextAlign.center,
-              style: context.textCaption,
-            ),
+            Text(text, textAlign: TextAlign.center, style: context.textCaption),
           ],
         ),
       ),

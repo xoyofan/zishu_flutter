@@ -555,7 +555,8 @@ void main() {
       await _pumpFrames(tester, 2);
 
       expect(find.byKey(const Key('play-side-header')), findsOneWidget);
-      expect(headerTextOf('关注 123456'), findsOneWidget);
+      // 用户口径(2026-09-20):关注数 ≥1万 显示「X.X万」。
+      expect(headerTextOf('关注 12.3万'), findsOneWidget);
       expect(headerTextOf('8.9万'), findsOneWidget, reason: '人气取关注条目 online');
       expect(headerTextOf('321'), findsOneWidget, reason: 'VIP 取关注条目 vip');
       expect(tester.takeException(), isNull);

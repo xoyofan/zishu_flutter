@@ -201,6 +201,29 @@ abstract final class AppBreakpoints {
 /// `DirectoryDrawer.vue` 的 CSS 变量与布局值(1rem = 16px)。
 ///
 /// 未取整到 4pt 栅格:与参考实现逐像素复刻优先。
+/// 视频 popover/弹出面板内的小型控件规格(用户口径 2026-09-20:
+/// 尺寸全局统一,对齐 SFVideo web `--ctrl-*` 与 el-switch/el-slider 的
+/// 紧凑视觉)。视频控制条、飘屏弹幕设置等面板一律取此处,不得散落。
+abstract final class AppControls {
+  /// 面板内滑杆轨道高。
+  static const double sliderTrackHeight = 3;
+
+  /// 面板内滑杆圆点半径。
+  static const double sliderThumbRadius = 6;
+
+  /// 面板内滑杆行高(含触摸余量的最小盒)。
+  static const double sliderRowHeight = 20;
+
+  /// Material Switch 的视觉缩放(24px 视觉 → ~18px,对齐 el-switch)。
+  static const double switchScale = 0.72;
+
+  /// 面板内小字号(标签/数值)。
+  static const double labelFontSize = 11;
+
+  /// 面板行间距。
+  static const double rowGap = 2;
+}
+
 abstract final class AppDirectoryDrawer {
   /// 展开态宽度(`--directory-drawer-width: 220px`)。
   static const double width = 220;

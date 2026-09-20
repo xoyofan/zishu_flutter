@@ -94,8 +94,11 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
     final item = _pickItem(group);
     final isPhone = MediaQuery.sizeOf(context).width < AppBreakpoints.phone;
     // 路由带具体分类且能解析命中 → 纯房间列表形态。
-    final hasConcreteCategory = (widget.cid != null && widget.cid!.isNotEmpty) ||
-        (widget.categoryKey != null && widget.categoryKey!.isNotEmpty && item != null);
+    final hasConcreteCategory =
+        (widget.cid != null && widget.cid!.isNotEmpty) ||
+        (widget.categoryKey != null &&
+            widget.categoryKey!.isNotEmpty &&
+            item != null);
     if (hasConcreteCategory && item != null) {
       return Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -103,7 +106,11 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
           if (!isPhone) BrowseSidebar(site: widget.site),
           if (!isPhone) Container(width: 1, color: tokens.border),
           Expanded(
-            child: _RoomSection(site: widget.site, cid: item.cid, isAll: widget.site == 'all'),
+            child: _RoomSection(
+              site: widget.site,
+              cid: item.cid,
+              isAll: widget.site == 'all',
+            ),
           ),
         ],
       );
@@ -127,7 +134,9 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
                     setState(() => _selectedGroupId = target.id),
               ),
               Container(width: 1, color: tokens.border),
-              Expanded(child: _CategoryGrid(site: widget.site, group: group)),
+              Expanded(
+                child: _CategoryGrid(site: widget.site, group: group),
+              ),
             ],
           ),
         ),
@@ -350,7 +359,8 @@ class _CategoryTile extends ConsumerWidget {
     // 收藏判定按跨平台分类 key(与播放页星标同源,见
     // [isCategoryFavorited]):收藏过任一平台的同名分类即亮。
     final displayName = displayCategoryName(site, item.name, item.cid);
-    final favorited = item.cid.isNotEmpty &&
+    final favorited =
+        item.cid.isNotEmpty &&
         isCategoryFavorited(
           ref.watch(myCategoriesProvider),
           site: site,

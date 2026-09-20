@@ -51,7 +51,11 @@ class _SearchViewState extends ConsumerState<SearchView> {
   /// 当前生效档位:由 `SearchState.type`(用户显式选择)推导;该档在本平台
   /// 不可用时回退默认档(房间优先,同 web `syncDefaultTab`)。现有平台能力
   /// 矩阵中不存在「仅主播」站,回退只是显示层兜底,不改变查询档位。
-  _SearchTab _resolveTab(SearchType type, {required bool anchorOk, required bool roomOk}) {
+  _SearchTab _resolveTab(
+    SearchType type, {
+    required bool anchorOk,
+    required bool roomOk,
+  }) {
     if (type == SearchType.rooms && roomOk) return _SearchTab.room;
     if (type == SearchType.anchors && anchorOk) return _SearchTab.anchor;
     if (roomOk) return _SearchTab.room;
@@ -164,7 +168,11 @@ class _SearchViewState extends ConsumerState<SearchView> {
                 // 切档写回 provider,并以现有关键词按新档位重新查询。
                 onChanged: (next) => ref
                     .read(searchProvider.notifier)
-                    .setType(next == _SearchTab.room ? SearchType.rooms : SearchType.anchors),
+                    .setType(
+                      next == _SearchTab.room
+                          ? SearchType.rooms
+                          : SearchType.anchors,
+                    ),
               ),
             )
           else
@@ -215,9 +223,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
       style: context.textBody.copyWith(color: tokens.textPrimary),
       decoration: InputDecoration(
         // 占位文案随档位切换,对齐 web `inputPlaceholder`(SearchDialog.vue:255)。
-        hintText: tab == _SearchTab.room
-            ? '搜索房间名 / 房间号 / 直播间链接'
-            : '搜索主播名',
+        hintText: tab == _SearchTab.room ? '搜索房间名 / 房间号 / 直播间链接' : '搜索主播名',
         hintStyle: context.textBody.copyWith(color: tokens.textSecondary),
         prefixIcon: Icon(
           Icons.search_rounded,
@@ -375,7 +381,12 @@ class _SearchTabBar extends StatelessWidget {
     return Row(
       children: [
         if (anchorEnabled)
-          _tab(context, _SearchTab.anchor, '主播', const Key('search-tab-anchor')),
+          _tab(
+            context,
+            _SearchTab.anchor,
+            '主播',
+            const Key('search-tab-anchor'),
+          ),
         if (roomEnabled)
           _tab(context, _SearchTab.room, '房间', const Key('search-tab-room')),
       ],
@@ -469,9 +480,7 @@ class _EmptyHint extends StatelessWidget {
             const SizedBox(height: AppSpacing.xs),
             Text(
               subtitle!,
-              style: context.textCaption.copyWith(
-                color: tokens.textSecondary,
-              ),
+              style: context.textCaption.copyWith(color: tokens.textSecondary),
             ),
           ],
         ],

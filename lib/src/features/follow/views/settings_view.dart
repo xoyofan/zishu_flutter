@@ -283,9 +283,7 @@ class _SettingsRow extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: context.textBody.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: context.textBody.copyWith(fontWeight: FontWeight.w600),
                 ),
                 if (hint != null) ...[
                   const SizedBox(height: 2),

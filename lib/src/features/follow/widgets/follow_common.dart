@@ -123,7 +123,9 @@ class FollowPlatformDot extends StatelessWidget {
       height: 8,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: PlatformBrandCatalog.byId(site)?.color ?? context.tokens.textSecondary,
+        color:
+            PlatformBrandCatalog.byId(site)?.color ??
+            context.tokens.textSecondary,
       ),
     );
   }
@@ -166,7 +168,10 @@ class FollowCategoryTag extends StatelessWidget {
     // 跨平台统一中文分类名:命中映射用 canonical 名,否则回落平台原名。
     final display = displayCategoryName(site, label, cid);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: 2),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.sm,
+        vertical: 2,
+      ),
       decoration: BoxDecoration(
         color: context.tokens.surfaceRaised,
         borderRadius: AppRadius.allSm,
@@ -186,11 +191,7 @@ class FollowCategoryTag extends StatelessWidget {
 /// 参考实现的封面角标一律**紧贴所在角、直角无圆角**;调用方用
 /// [Positioned] 以 0 偏移贴边,本组件只负责底色与内边距。
 class FollowCoverTag extends StatelessWidget {
-  const FollowCoverTag({
-    super.key,
-    required this.child,
-    this.accent,
-  });
+  const FollowCoverTag({super.key, required this.child, this.accent});
 
   final Widget child;
 
@@ -281,8 +282,8 @@ class FollowIconAction extends StatelessWidget {
     final Color color = danger
         ? tokens.error
         : active
-            ? tokens.accent
-            : tokens.textSecondary;
+        ? tokens.accent
+        : tokens.textSecondary;
     return IconButton(
       tooltip: tooltip,
       onPressed: onPressed,

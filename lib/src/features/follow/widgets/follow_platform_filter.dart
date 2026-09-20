@@ -49,8 +49,7 @@ class FollowPlatformFilter extends StatelessWidget {
           if (!maxWidth.isFinite) {
             return _buildWrap(context, cellWidth: null, cellHeight: null);
           }
-          final cellWidth =
-              (maxWidth - gap * (columns! - 1)) / columns!;
+          final cellWidth = (maxWidth - gap * (columns! - 1)) / columns!;
           // 紧凑 chip:字号 11 * 1.25 + 上下 2 padding ≈ 18,取 24 留呼吸。
           return _buildWrap(
             context,
@@ -82,9 +81,7 @@ class FollowPlatformFilter extends StatelessWidget {
               height: cellHeight,
               child: _PlatformChip(
                 label: brand.id == 'all' ? '全平台' : brand.name,
-                accent: brand.id == 'all'
-                    ? context.tokens.accent
-                    : brand.color,
+                accent: brand.id == 'all' ? context.tokens.accent : brand.color,
                 showDot: brand.id != 'all',
                 selected: value == brand.id,
                 compact: compact,
@@ -96,8 +93,7 @@ class FollowPlatformFilter extends StatelessWidget {
           else
             _PlatformChip(
               label: brand.id == 'all' ? '全平台' : brand.name,
-              accent:
-                  brand.id == 'all' ? context.tokens.accent : brand.color,
+              accent: brand.id == 'all' ? context.tokens.accent : brand.color,
               showDot: brand.id != 'all',
               selected: value == brand.id,
               compact: compact,
@@ -163,8 +159,10 @@ class _PlatformChip extends StatelessWidget {
               Container(
                 width: 8,
                 height: 8,
-                decoration:
-                    BoxDecoration(color: accent, shape: BoxShape.circle),
+                decoration: BoxDecoration(
+                  color: accent,
+                  shape: BoxShape.circle,
+                ),
               ),
               const SizedBox(width: 5),
             ],
@@ -176,11 +174,8 @@ class _PlatformChip extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: context.textBody.copyWith(
                     fontSize: compact ? 10 : 12,
-                    fontWeight:
-                        selected ? FontWeight.w700 : FontWeight.w400,
-                    color: selected
-                        ? tokens.textPrimary
-                        : tokens.textSecondary,
+                    fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+                    color: selected ? tokens.textPrimary : tokens.textSecondary,
                   ),
                 ),
               )
@@ -192,8 +187,7 @@ class _PlatformChip extends StatelessWidget {
                 style: context.textBody.copyWith(
                   fontSize: compact ? 10 : 12,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
-                  color:
-                      selected ? tokens.textPrimary : tokens.textSecondary,
+                  color: selected ? tokens.textPrimary : tokens.textSecondary,
                 ),
               ),
           ],

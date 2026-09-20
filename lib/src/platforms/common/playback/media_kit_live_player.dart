@@ -165,7 +165,8 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   ];
 
   /// 恢复重解析的节流策略:避免"重试→恢复→重试"高速空转。
-  static const PlaybackRecoveryPolicy _recoveryPolicy = PlaybackRecoveryPolicy();
+  static const PlaybackRecoveryPolicy _recoveryPolicy =
+      PlaybackRecoveryPolicy();
 
   /// 宿主注入的恢复回调:自动重连耗尽时用它换一份**重新解析**的地址。
   /// 为 null 表示宿主不支持(如 fixture 源),此时直接走放弃分支。
@@ -202,7 +203,10 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
 
   void _wire() {
     final events = _player.stream;
-    void bind<T>(Stream<T> source, PlayerSnapshot Function(PlayerSnapshot, T) patch) {
+    void bind<T>(
+      Stream<T> source,
+      PlayerSnapshot Function(PlayerSnapshot, T) patch,
+    ) {
       _subscriptions.add(
         source.listen((value) {
           // 围栏:open 在途期间的事件可能是旧源残留(completed/error),
@@ -384,7 +388,9 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       holdSince: _adHoldSince,
     )) {
       _adHoldSince ??= now;
-      PlaybackLog.write('ad_stall_hold', {'host': _hostOf(_currentLines.first)});
+      PlaybackLog.write('ad_stall_hold', {
+        'host': _hostOf(_currentLines.first),
+      });
       _stallTimer = Timer(_adHoldPolicy.recheckInterval, _reopenIfStalled);
       return;
     }
@@ -404,13 +410,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       'host': _hostOf(_currentLines.first),
     });
     _cancelHealthTimer();
-    unawaited(
-      open(
-        _currentLines.first,
-        _currentLines.skip(1).toList(),
-        false,
-      ),
-    );
+    unawaited(open(_currentLines.first, _currentLines.skip(1).toList(), false));
   }
 
   /// 自动重连耗尽后的最后一步:向宿主请求**重新解析**后的线路。
@@ -421,7 +421,8 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   Future<void> _recoverOrGiveUp() async {
     final handler = _lineRecovery;
     final now = DateTime.now();
-    final canAttempt = handler != null &&
+    final canAttempt =
+        handler != null &&
         !_disposed &&
         _recoveryPolicy.canRecover(now: now, lastRecoverAt: _lastRecoverAt);
     if (canAttempt) {
@@ -446,7 +447,9 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
         await open(fresh.first, fresh.skip(1).toList());
         return;
       }
-      PlaybackLog.write('recover_fail', {'reason': failReason ?? 'empty_lines'});
+      PlaybackLog.write('recover_fail', {
+        'reason': failReason ?? 'empty_lines',
+      });
     } else {
       PlaybackLog.write('recover_skip', {
         'reason': handler == null ? 'no_handler' : 'throttled_or_disposed',
@@ -614,9 +617,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
             : PlayerErrorKind.native;
         _lastErrorKind = kind;
         _eventsFenced = false;
-        _emit(
-          (s) => s.copyWith(error: playerErrorHint(kind), errorKind: kind),
-        );
+        _emit((s) => s.copyWith(error: playerErrorHint(kind), errorKind: kind));
         return;
       }
       // open 途中被更新的 open/stop 顶掉:作废,不写快照、不动计时器。
@@ -636,10 +637,20 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   }
 
   @override
-  Future<void> play() => _enqueueLifecycle(() => _player.play());
+  Future<void> play() => _enqueueLifecycle(() async {
+    await _player.play();
+    // 用户口径(2026-09-20 播放/暂停判断错):UI 反馈不等底层 playing 事件
+    // 回流 —— media-kit 暂停后不一定再吐 playing 事件,回流也可能被时序
+    // 吞掉,控制条图标会停在旧态。主动发布快照;底层事件晚到时值相同,
+    // 经 _emit 去重不抖动。
+    _emit((snapshot) => snapshot.copyWith(playing: true));
+  });
 
   @override
-  Future<void> pause() => _enqueueLifecycle(() => _player.pause());
+  Future<void> pause() => _enqueueLifecycle(() async {
+    await _player.pause();
+    _emit((snapshot) => snapshot.copyWith(playing: false));
+  });
 
   @override
   Future<void> stop() {
@@ -666,9 +677,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       _lastErrorKind = PlayerErrorKind.native;
       await _player.stop();
       // 卸载媒体后回到空闲快照:清播放/缓冲/错误,保留音量与静音语义。
-      _emit(
-        (_) => PlayerSnapshot(volume: _latest.volume, muted: _muted),
-      );
+      _emit((_) => PlayerSnapshot(volume: _latest.volume, muted: _muted));
     });
   }
 
@@ -702,9 +711,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       // 防止底层恢复回流丢失时 slider 停在静音的 0。
       final restored = _volumeBeforeMute <= 0 ? 100.0 : _volumeBeforeMute;
       await _player.setVolume(restored);
-      _emit(
-        (snapshot) => snapshot.copyWith(volume: restored, muted: muted),
-      );
+      _emit((snapshot) => snapshot.copyWith(volume: restored, muted: muted));
     }
   }
 
@@ -717,7 +724,9 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
 
   @override
   Future<void> enterPictureInPicture({double? aspectRatio}) =>
-      _windowPresentation.enterPip(aspectRatio: aspectRatio ?? _videoAspectRatio);
+      _windowPresentation.enterPip(
+        aspectRatio: aspectRatio ?? _videoAspectRatio,
+      );
 
   @override
   Future<void> exitPictureInPicture() => _windowPresentation.exitPip();
@@ -727,7 +736,10 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     // 仅 Windows 需要桌面包壳;其余平台(含单测 VM 之外的非桌面宿主)透传。
     // `DragToResizeArea` 自身传递性依赖 dart:io,只允许出现在平台层。
     if (!Platform.isWindows) return child;
-    return DragToResizeArea(resizeEdgeColor: const Color(0x00000000), child: child);
+    return DragToResizeArea(
+      resizeEdgeColor: const Color(0x00000000),
+      child: child,
+    );
   }
 
   /// 当前视频宽高比(PiP 小窗据此定尺寸);未出画面时返回 null,由 PiP 侧退回 16:9。

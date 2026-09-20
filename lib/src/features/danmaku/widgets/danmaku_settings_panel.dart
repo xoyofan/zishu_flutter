@@ -22,12 +22,7 @@ const double _kLabelWidth = 38;
 
 /// 显示区域档位的可读标签(按 [DanmakuSettings.kDisplayAreaRatios] 顺序,
 /// 对齐 web el-select:全屏 / 3/4 / 半屏 / 1/4)。
-const List<String> _kDisplayAreaLabels = <String>[
-  '全屏',
-  '3/4 屏',
-  '半屏',
-  '1/4 屏',
-];
+const List<String> _kDisplayAreaLabels = <String>['全屏', '3/4 屏', '半屏', '1/4 屏'];
 
 /// 弹幕设置面板。
 ///
@@ -57,9 +52,7 @@ class DanmakuSettingsPanel extends ConsumerWidget {
           padding: const EdgeInsets.only(bottom: 6),
           margin: const EdgeInsets.only(bottom: 6),
           decoration: BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: context.tokens.border),
-            ),
+            border: Border(bottom: BorderSide(color: context.tokens.border)),
           ),
           child: Text(
             '飘屏弹幕',
@@ -134,15 +127,14 @@ class DanmakuSettingsPanel extends ConsumerWidget {
                   isExpanded: true,
                   isDense: true,
                   items: <DropdownMenuItem<double>>[
-                    for (var i = 0;
-                        i < DanmakuSettings.kDisplayAreaRatios.length;
-                        i++)
+                    for (
+                      var i = 0;
+                      i < DanmakuSettings.kDisplayAreaRatios.length;
+                      i++
+                    )
                       DropdownMenuItem<double>(
                         value: DanmakuSettings.kDisplayAreaRatios[i],
-                        child: Text(
-                          _kDisplayAreaLabels[i],
-                          style: labelStyle,
-                        ),
+                        child: Text(_kDisplayAreaLabels[i], style: labelStyle),
                       ),
                   ],
                   onChanged: (v) {
@@ -187,10 +179,7 @@ class _SliderRow extends StatelessWidget {
         children: <Widget>[
           SizedBox(
             width: _kLabelWidth,
-            child: Text(
-              label,
-              style: context.textSecondary,
-            ),
+            child: Text(label, style: context.textSecondary),
           ),
           Expanded(
             child: Slider(

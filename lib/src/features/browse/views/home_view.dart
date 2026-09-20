@@ -38,14 +38,14 @@ class _HomeViewState extends ConsumerState<HomeView> {
     // 房间网格主体(下拉刷新 + 滚动加载 + 空态/错误)。
     final body = switch (roomsAsync) {
       AsyncValue(:final value?) => _body(
-          context,
-          rooms: value.rooms,
-          hasMore: value.hasMore,
-        ),
+        context,
+        rooms: value.rooms,
+        hasMore: value.hasMore,
+      ),
       AsyncValue(:final error?) => _ErrorRetry(
-          message: '房间列表加载失败：$error',
-          onRetry: controller.refresh,
-        ),
+        message: '房间列表加载失败：$error',
+        onRetry: controller.refresh,
+      ),
       _ => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
     };
 
@@ -81,12 +81,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
               color: context.tokens.textSecondary,
             ),
             const SizedBox(height: AppSpacing.md),
-            Center(
-              child: Text(
-                '暂无直播间,下拉刷新试试',
-                style: context.textSecondary,
-              ),
-            ),
+            Center(child: Text('暂无直播间,下拉刷新试试', style: context.textSecondary)),
           ],
         ),
       );
@@ -119,7 +114,11 @@ class _ErrorRetry extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.error_outline_rounded, size: 40, color: context.tokens.error),
+          Icon(
+            Icons.error_outline_rounded,
+            size: 40,
+            color: context.tokens.error,
+          ),
           const SizedBox(height: AppSpacing.md),
           Text(message, style: context.textSecondary),
           const SizedBox(height: AppSpacing.lg),

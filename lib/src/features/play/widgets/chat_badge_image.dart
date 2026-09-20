@@ -60,7 +60,8 @@ String badgeAssetPath({
 
 /// B 站粉丝牌官方边框图(web `bilibiliMedalFrameStaticUrl`;无协议渐变色时
 /// 作底图、团名/等级文字叠层)。
-String bilibiliMedalFrameAssetPath() => 'assets/badges/bilibili/medal-frame.png';
+String bilibiliMedalFrameAssetPath() =>
+    'assets/badges/bilibili/medal-frame.png';
 
 /// `assets/badges/{dir}/{level}.png`,档位越界返回 ''。
 String _numberedPath(String dir, int level, int max) {
@@ -117,8 +118,7 @@ class ChatBadgeImage extends StatefulWidget {
   final VoidCallback? onFail;
 
   /// 解析后的资产路径('' = 无本地图);暴露给调用方/测试判定图片分支。
-  String get assetPath =>
-      badgeAssetPath(site: site, kind: kind, level: level);
+  String get assetPath => badgeAssetPath(site: site, kind: kind, level: level);
 
   @override
   State<ChatBadgeImage> createState() => _ChatBadgeImageState();
@@ -173,7 +173,7 @@ class _ChatBadgeImageState extends State<ChatBadgeImage> {
   /// 按 kind 的默认 fit:两类素材均为官方整牌(内容含自身描边),contain
   /// 完整呈现;后续若有方形纯图标素材可在分支里改 cover。
   BoxFit _defaultFit(ChatBadgeKind kind) => switch (kind) {
-        ChatBadgeKind.fans => BoxFit.contain,
-        ChatBadgeKind.userLevel => BoxFit.contain,
-      };
+    ChatBadgeKind.fans => BoxFit.contain,
+    ChatBadgeKind.userLevel => BoxFit.contain,
+  };
 }

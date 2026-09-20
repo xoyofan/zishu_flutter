@@ -869,3 +869,20 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 - 超关星:侧栏行/卡片 isSpecial 星(follow_entry_card:101/273、follow_entry_row:124)
 - 徽章/平台回退:badge_chips、timeline_tile、play_view:531、category_view:349
 - replay 金黄描边(#f5dc70,web follow-item--replay 对齐)
+
+## 2026-09-20 播放页控制条重排 + 侧栏头细节(用户口径,完成)
+
+**结论**:控制条按 SFVideo 复刻重排+侧栏头 5 项细节+开关滑杆全局统一。全量 **658 全绿**,analyze 0。真机复验:暂停切换(图标+状态行同步「已暂停」)、侧栏文字按钮、关注 605 万格式化、分类徽标增大、折行顶格、弹字方块组全部生效。
+
+### 本轮完成项
+- [x] 控制条重排(用户口径):左组=播放/暂停→刷新→睡眠定时→弹幕开关「弹」→飘屏弹幕设置「弹」;右组=音量组靠右(静音+滑杆)→画质→线路→PiP→网页全屏→全屏(两个独立按钮,用户确认不合并不循环)。
+- [x] 「弹」字方块双钮复刻 SFVideo ctrl-danmaku-mark(方块+√/齿轮角标),激活色对齐品牌紫(用户口径覆盖 SFVideo amber);飘屏设置 popover 复刻 OverlayDanmakuSettingsPanel(显示/透明度/字号/速度/区域),侧栏设置 tab 的聊天弹幕设置保留不动(互不相干,用户确认)。
+- [x] 开关/滑杆全局统一(用户口径):新增 AppControls 控件规格 token(slider 轨道 3/圆点 6/行高 20/switch 缩放/字 11);全局 CompactSwitch(30×16,自 _MiniSwitch 提升)替换设置页/弹幕面板/popover 的 Material 大 Switch;全局 sliderTheme 紧凑规格。
+- [x] 侧栏头 5 项:分类徽标字号 11→12.5 且行内居中;关注数 ≥1 万显示「X.X万」(_formatFollowersText);开播提醒/跳转移到第二排分类名后并改文字按钮(「直播提醒/直播提醒中/跳转」);视图切换 icon 换 view_list/grid_view 且 18px 减 padding;列表行文字左 padding 4→1。
+- [x] 统计兜底(用户口径「huya 等关注 VIP 没解析」第二层):roomStatsProvider 对当前房间直接调解析侧 refreshRoom(与关注行同一条真源,无需关注状态);主播卡+侧栏头在关注条目缺失时兜底取数。已关注房间上一轮已通(6049418→605万 真机确认)。
+- [x] 播放/暂停判断错修复:A7 用例(TDD 先红)+play()/pause() 主动发布 playing 快照(不等 mpv 回流);真机确认暂停后图标与状态行同步「已暂停」。
+
+### 待办(下轮)
+- [ ] BUG-WIN-VIDEO-001:进房黑屏(播放中但画面黑,暂停→播放 kick 恢复,多次复现)——排查 VideoController 纹理首帧,候选:videoInfo 缺失时自动 kick 一次。
+- [ ] 播放恢复几秒后自动停(用户报告一次,OBS-WIN-PLAY-002 相关,需复现+日志时间点)。
+- [ ] BUG-WIN-DANMAKU-003 huya 弹幕零消息;004 twitch 弹幕连接;PARSER-GAP-002 kuaishou 表情抓包/twitch emote;飘屏多轨重叠。

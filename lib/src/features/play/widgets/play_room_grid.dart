@@ -133,7 +133,11 @@ class PlayRoomCard extends StatelessWidget {
                     cover: room.cover,
                     fallbackLabel: room.category.isEmpty
                         ? room.site
-                        : displayCategoryName(room.site, room.category, room.cid),
+                        : displayCategoryName(
+                            room.site,
+                            room.category,
+                            room.cid,
+                          ),
                     offline: !_live,
                   ),
                   // 左上:平台徽章(web `.platform-cover-badge` 贴左上)。
@@ -208,7 +212,8 @@ class PlayRoomCard extends StatelessWidget {
             ),
             Expanded(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(4, 3, 4, 2),
+                // 用户口径(2026-09-20):列表模式文字左侧 padding 收窄,行内容更贴分类条纹。
+                padding: const EdgeInsets.fromLTRB(1, 3, 3, 2),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
@@ -239,4 +244,3 @@ class PlayRoomCard extends StatelessWidget {
     );
   }
 }
-

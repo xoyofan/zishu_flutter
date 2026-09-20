@@ -54,9 +54,8 @@ class _FollowViewState extends ConsumerState<FollowView> {
           .read(followProvider.notifier)
           .refreshStatuses();
       if (mounted && refreshed == 0) {
-        ScaffoldMessenger.maybeOf(context)?.showSnackBar(
-          const SnackBar(content: Text('状态刷新失败,请稍后再试')),
-        );
+        ScaffoldMessenger.maybeOf(context)
+            ?.showSnackBar(const SnackBar(content: Text('状态刷新失败,请稍后再试')));
       }
     }
     if (!mounted) return;
@@ -125,7 +124,9 @@ class _FollowViewState extends ConsumerState<FollowView> {
         content: Text('已移除「${entry.room.anchorName}」的关注'),
         action: SnackBarAction(
           label: '撤销',
-          onPressed: () => ref.read(followProvider.notifier).addFromRoom(
+          onPressed: () => ref
+              .read(followProvider.notifier)
+              .addFromRoom(
                 entry.room,
                 isSpecial: entry.isSpecial,
                 remindOn: entry.remindOn,
@@ -173,10 +174,7 @@ class _FollowViewState extends ConsumerState<FollowView> {
       ),
       child: Row(
         children: [
-          Text(
-            '我的关注',
-            style: context.textTitle.copyWith(fontSize: 18),
-          ),
+          Text('我的关注', style: context.textTitle.copyWith(fontSize: 18)),
           const Spacer(),
           Flexible(
             child: Wrap(
@@ -195,15 +193,21 @@ class _FollowViewState extends ConsumerState<FollowView> {
                   IconButton(
                     tooltip: '刷新封面与状态',
                     onPressed: _refresh,
-                    icon: Icon(Icons.refresh_rounded,
-                        size: 20, color: tokens.textSecondary),
+                    icon: Icon(
+                      Icons.refresh_rounded,
+                      size: 20,
+                      color: tokens.textSecondary,
+                    ),
                   ),
                 if (_batchMode) ...[
                   TextButton(
                     onPressed: _exitBatch,
-                    child: Text('取消',
-                        style:
-                            context.textBody.copyWith(color: tokens.textSecondary)),
+                    child: Text(
+                      '取消',
+                      style: context.textBody.copyWith(
+                        color: tokens.textSecondary,
+                      ),
+                    ),
                   ),
                   TextButton(
                     onPressed: () => _toggleSelectAll(items),
@@ -214,38 +218,55 @@ class _FollowViewState extends ConsumerState<FollowView> {
                   ),
                   TextButton.icon(
                     onPressed: _selectedKeys.isEmpty ? null : _deleteSelected,
-                    icon: Icon(Icons.delete_outline_rounded,
-                        size: 16, color: tokens.error),
+                    icon: Icon(
+                      Icons.delete_outline_rounded,
+                      size: 16,
+                      color: tokens.error,
+                    ),
                     label: Text(
                       '删除所选 (${_selectedKeys.length})',
                       style: context.textBody.copyWith(color: tokens.error),
                     ),
                   ),
                   TextButton.icon(
-                    onPressed:
-                        _selectedKeys.isEmpty ? null : () => _setRemindSelected(true),
-                    icon: Icon(Icons.notifications_active_rounded,
-                        size: 16, color: tokens.accent),
+                    onPressed: _selectedKeys.isEmpty
+                        ? null
+                        : () => _setRemindSelected(true),
+                    icon: Icon(
+                      Icons.notifications_active_rounded,
+                      size: 16,
+                      color: tokens.accent,
+                    ),
                     label: Text(
                       '开提醒 (${_selectedKeys.length})',
                       style: context.textBody.copyWith(color: tokens.accent),
                     ),
                   ),
                   TextButton(
-                    onPressed:
-                        _selectedKeys.isEmpty ? null : () => _setRemindSelected(false),
-                    child: Text('关提醒',
-                        style:
-                            context.textBody.copyWith(color: tokens.textSecondary)),
+                    onPressed: _selectedKeys.isEmpty
+                        ? null
+                        : () => _setRemindSelected(false),
+                    child: Text(
+                      '关提醒',
+                      style: context.textBody.copyWith(
+                        color: tokens.textSecondary,
+                      ),
+                    ),
                   ),
                 ] else
                   TextButton.icon(
                     onPressed: () => _enterBatch(),
-                    icon: Icon(Icons.checklist_rounded,
-                        size: 16, color: tokens.textSecondary),
-                    label: Text('批量管理',
-                        style:
-                            context.textBody.copyWith(color: tokens.textSecondary)),
+                    icon: Icon(
+                      Icons.checklist_rounded,
+                      size: 16,
+                      color: tokens.textSecondary,
+                    ),
+                    label: Text(
+                      '批量管理',
+                      style: context.textBody.copyWith(
+                        color: tokens.textSecondary,
+                      ),
+                    ),
                   ),
               ],
             ),
@@ -281,8 +302,11 @@ class _FollowViewState extends ConsumerState<FollowView> {
               isDense: true,
               underline: const SizedBox.shrink(),
               dropdownColor: tokens.surfaceRaised,
-              icon: Icon(Icons.expand_more_rounded,
-                  size: 16, color: tokens.textSecondary),
+              icon: Icon(
+                Icons.expand_more_rounded,
+                size: 16,
+                color: tokens.textSecondary,
+              ),
               style: context.textBody,
               items: [
                 for (final sort in FollowSort.values)
@@ -314,22 +338,26 @@ class _FollowViewState extends ConsumerState<FollowView> {
                 setState(() => _density = selection.first),
             style: ButtonStyle(
               visualDensity: VisualDensity.compact,
-              backgroundColor: WidgetStateProperty.resolveWith((states) =>
-                  states.contains(WidgetState.selected)
-                      ? tokens.accent.withValues(alpha: 0.18)
-                      : tokens.surface),
-              foregroundColor: WidgetStateProperty.resolveWith((states) =>
-                  states.contains(WidgetState.selected)
-                      ? tokens.accent
-                      : tokens.textSecondary),
+              backgroundColor: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.selected)
+                    ? tokens.accent.withValues(alpha: 0.18)
+                    : tokens.surface,
+              ),
+              foregroundColor: WidgetStateProperty.resolveWith(
+                (states) => states.contains(WidgetState.selected)
+                    ? tokens.accent
+                    : tokens.textSecondary,
+              ),
               side: WidgetStatePropertyAll(BorderSide(color: tokens.border)),
               shape: WidgetStatePropertyAll(
                 RoundedRectangleBorder(borderRadius: AppRadius.allSm),
               ),
-              textStyle: WidgetStatePropertyAll(context.textBody.copyWith(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-              )),
+              textStyle: WidgetStatePropertyAll(
+                context.textBody.copyWith(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ),
         ],
@@ -338,9 +366,9 @@ class _FollowViewState extends ConsumerState<FollowView> {
   }
 
   IconData _densityIcon(FollowDensity density) => switch (density) {
-        FollowDensity.card => Icons.grid_view_rounded,
-        FollowDensity.row => Icons.format_list_bulleted_rounded,
-      };
+    FollowDensity.card => Icons.grid_view_rounded,
+    FollowDensity.row => Icons.format_list_bulleted_rounded,
+  };
 
   Widget _buildList(List<FollowEntry> items) {
     if (items.isEmpty) {
@@ -352,8 +380,7 @@ class _FollowViewState extends ConsumerState<FollowView> {
       selectMode: _batchMode,
       selectedKeys: _selectedKeys,
       // 批量模式下点击改为切换选择,长按进入批量;否则进播放页。
-      onTap: (entry) =>
-          _batchMode ? _toggleSelect(entry.key) : _goPlay(entry),
+      onTap: (entry) => _batchMode ? _toggleSelect(entry.key) : _goPlay(entry),
       onLongPress: (entry) {
         if (!_batchMode) _enterBatch(entry.key);
       },

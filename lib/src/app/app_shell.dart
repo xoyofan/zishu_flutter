@@ -213,8 +213,10 @@ class _AppShellState extends ConsumerState<AppShell> {
           _HoverOverlay(
             centerX: _followX,
             width: _followFlyoutLayoutFor(
-              visibleFollowEntries(ref.watch(followProvider), liveOnly: true)
-                  .length,
+              visibleFollowEntries(
+                ref.watch(followProvider),
+                liveOnly: true,
+              ).length,
             ).width,
             child: _FollowFlyout(
               // 列数同样按实际在播数收敛(与宽度同源,避免「列少反而更宽」)。
@@ -274,14 +276,13 @@ const int _kFollowFlyoutMaxColumns = 7;
 ///
 /// 之前固定 560px 宽 + 看板内部再按内容排,条目少时右侧就留出整片空列 ——
 /// 这里让「列数 → 宽度」同源推导,列少则面板窄。
-({int columns, double width}) _platformFlyoutLayoutFor(
-  CategoryResult? result,
-) {
+({int columns, double width}) _platformFlyoutLayoutFor(CategoryResult? result) {
   final groups = result?.groups ?? const <CategoryGroup>[];
-  final maxColumns = ((_kFlyoutMaxWidth - _kPlatformFlyoutChrome) /
-          _kPlatformFlyoutColumnWidth)
-      .floor()
-      .clamp(1, 64);
+  final maxColumns =
+      ((_kFlyoutMaxWidth - _kPlatformFlyoutChrome) /
+              _kPlatformFlyoutColumnWidth)
+          .floor()
+          .clamp(1, 64);
   final rawColumns = groups.length > 1
       // 多分组:横向分栏,一组一列(超出 maxColumns 时由看板横向滚动)。
       ? groups.length
@@ -425,9 +426,11 @@ class _PlatformStrip extends StatelessWidget {
               height: _kGridHeight,
               child: Column(
                 children: [
-                  for (int r = 0;
-                      r < (platforms.length / _kColumns).ceil();
-                      r++)
+                  for (
+                    int r = 0;
+                    r < (platforms.length / _kColumns).ceil();
+                    r++
+                  )
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(vertical: 2),
@@ -440,7 +443,7 @@ class _PlatformStrip extends StatelessWidget {
                                     brand: platforms[r * _kColumns + c],
                                     selected:
                                         platforms[r * _kColumns + c].id ==
-                                            currentSite,
+                                        currentSite,
                                   ),
                                 ),
                           ],
@@ -606,8 +609,9 @@ class _PlatformCategorySheet extends ConsumerWidget {
           Container(height: 1, color: tokens.border),
           Expanded(
             child: async.when(
-              loading: () =>
-                  const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+              loading: () => const Center(
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
               error: (_, _) => Center(
                 child: Text(
                   '分类加载失败',
@@ -620,7 +624,10 @@ class _PlatformCategorySheet extends ConsumerWidget {
                   return Center(
                     child: Text(
                       '暂无分类数据',
-                      style: TextStyle(fontSize: 12, color: tokens.textSecondary),
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: tokens.textSecondary,
+                      ),
                     ),
                   );
                 }
@@ -662,7 +669,11 @@ class _PlatformCategorySheet extends ConsumerWidget {
                                   border: Border.all(color: tokens.border),
                                 ),
                                 child: Text(
-                                  displayCategoryName(site, item.name, item.cid),
+                                  displayCategoryName(
+                                    site,
+                                    item.name,
+                                    item.cid,
+                                  ),
                                   style: TextStyle(
                                     fontSize: 12,
                                     color: tokens.textPrimary,
@@ -920,7 +931,9 @@ void _toggleTheme(BuildContext context, WidgetRef ref) {
   ref
       .read(settingsProvider.notifier)
       .setThemeMode(
-        _isDarkTheme(context, ref) ? ThemeModeChoice.light : ThemeModeChoice.dark,
+        _isDarkTheme(context, ref)
+            ? ThemeModeChoice.light
+            : ThemeModeChoice.dark,
       );
 }
 
@@ -1022,7 +1035,10 @@ class _UserAvatar extends ConsumerWidget {
                 SizedBox(width: 8),
                 Text(
                   '平台凭证',
-                  style: TextStyle(fontSize: 12, color: context.tokens.textPrimary),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.tokens.textPrimary,
+                  ),
                 ),
               ],
             ),
@@ -1032,11 +1048,18 @@ class _UserAvatar extends ConsumerWidget {
             height: 34,
             child: Row(
               children: [
-                Icon(Icons.logout_rounded, size: 15, color: context.tokens.error),
+                Icon(
+                  Icons.logout_rounded,
+                  size: 15,
+                  color: context.tokens.error,
+                ),
                 SizedBox(width: 8),
                 Text(
                   '退出登录',
-                  style: TextStyle(fontSize: 12, color: context.tokens.textPrimary),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: context.tokens.textPrimary,
+                  ),
                 ),
               ],
             ),
@@ -1128,10 +1151,7 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
           children: [
             TextField(
               controller: _userController,
-              style: TextStyle(
-                fontSize: 13,
-                color: context.tokens.textPrimary,
-              ),
+              style: TextStyle(fontSize: 13, color: context.tokens.textPrimary),
               decoration: InputDecoration(
                 isDense: true,
                 labelText: '用户名',
@@ -1150,10 +1170,7 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
               controller: _passController,
               obscureText: true,
               onSubmitted: (_) => _submit(),
-              style: TextStyle(
-                fontSize: 13,
-                color: context.tokens.textPrimary,
-              ),
+              style: TextStyle(fontSize: 13, color: context.tokens.textPrimary),
               decoration: InputDecoration(
                 isDense: true,
                 labelText: '密码',
@@ -1539,14 +1556,22 @@ class _BottomNav extends StatelessWidget {
           ),
           _BottomItem(
             key: const Key('nav-home'),
-            leading: _bottomIcon(Icons.home_rounded, currentSite == 'all', context.tokens),
+            leading: _bottomIcon(
+              Icons.home_rounded,
+              currentSite == 'all',
+              context.tokens,
+            ),
             label: '首页',
             route: '/all',
             active: currentSite == 'all',
           ),
           _BottomItem(
             key: const Key('nav-category'),
-            leading: _bottomIcon(Icons.grid_view_rounded, false, context.tokens),
+            leading: _bottomIcon(
+              Icons.grid_view_rounded,
+              false,
+              context.tokens,
+            ),
             label: '分类',
             route: _categoryRoute(currentSite),
             active: false,
@@ -1554,7 +1579,9 @@ class _BottomNav extends StatelessWidget {
           _BottomMyCategoryItem(currentSite: currentSite),
           _BottomItem(
             key: const Key('nav-follow'),
-            leading: const _NavFollowAvatars(size: _NavFollowAvatars.bottomSize),
+            leading: const _NavFollowAvatars(
+              size: _NavFollowAvatars.bottomSize,
+            ),
             label: '关注',
             route: '/follow',
             active: currentSite == 'follow',
@@ -1597,11 +1624,8 @@ class _BottomNav extends StatelessWidget {
 }
 
 /// 底部导航图标(按选中态着色)。
-Widget _bottomIcon(IconData icon, bool active, ZishuTokens tokens) => Icon(
-  icon,
-  size: 20,
-  color: active ? tokens.accent : tokens.textSecondary,
-);
+Widget _bottomIcon(IconData icon, bool active, ZishuTokens tokens) =>
+    Icon(icon, size: 20, color: active ? tokens.accent : tokens.textSecondary);
 
 /// 移动底栏「主题」项:与顶栏 `nav-theme` 同一份判定与切换逻辑。
 ///
@@ -1660,7 +1684,10 @@ class _BottomItem extends StatelessWidget {
               // (「我的分类」4 字在 40px 槽位里必须缩)。
               FittedBox(
                 fit: BoxFit.scaleDown,
-                child: Text(label, style: TextStyle(fontSize: 11, color: color)),
+                child: Text(
+                  label,
+                  style: TextStyle(fontSize: 11, color: color),
+                ),
               ),
             ],
           ],
@@ -1698,7 +1725,10 @@ class _NavFollowAvatars extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final live = visibleFollowEntries(ref.watch(followProvider), liveOnly: true);
+    final live = visibleFollowEntries(
+      ref.watch(followProvider),
+      liveOnly: true,
+    );
     if (live.isEmpty) {
       return Icon(
         Icons.star_border_rounded,
@@ -1926,8 +1956,8 @@ class _CategoryBoardState extends State<_CategoryBoard> {
   /// PrimaryScrollController 上多 ScrollPosition 会直接报错(实测)。
   final _scrollControllers = <int, ScrollController>{};
 
-  ScrollController _controllerFor(int index) => _scrollControllers
-      .putIfAbsent(index, () => ScrollController());
+  ScrollController _controllerFor(int index) =>
+      _scrollControllers.putIfAbsent(index, () => ScrollController());
 
   @override
   void dispose() {
@@ -1974,7 +2004,9 @@ class _CategoryBoardState extends State<_CategoryBoard> {
             Container(
               width: _CategoryBoard._kColumnWidth,
               padding: const EdgeInsets.only(left: 2.4),
-              constraints: const BoxConstraints(maxHeight: _CategoryBoard._kBoardContentMax),
+              constraints: const BoxConstraints(
+                maxHeight: _CategoryBoard._kBoardContentMax,
+              ),
               decoration: BoxDecoration(
                 border: Border(right: BorderSide(color: context.tokens.border)),
               ),
@@ -2072,14 +2104,18 @@ class _CategoryChipState extends State<_CategoryChip> {
         onTap: widget.onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 0.64, vertical: 1.28),
-          color: _hovering ? context.tokens.accent.withValues(alpha: 0.12) : null,
+          color: _hovering
+              ? context.tokens.accent.withValues(alpha: 0.12)
+              : null,
           child: Text(
             widget.label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 11.84,
-              color: _hovering ? context.tokens.accent : context.tokens.textPrimary,
+              color: _hovering
+                  ? context.tokens.accent
+                  : context.tokens.textPrimary,
             ),
           ),
         ),
@@ -2131,7 +2167,10 @@ class _FollowFlyout extends ConsumerWidget {
     //
     // 与导航项的头像堆叠共用 [visibleFollowEntries] 同一份口径(同一排序、同一
     // 在播判据),避免「浮层里有 A、导航头像里是 B」的两套世界。
-    final live = visibleFollowEntries(ref.watch(followProvider), liveOnly: true);
+    final live = visibleFollowEntries(
+      ref.watch(followProvider),
+      liveOnly: true,
+    );
     return MouseRegion(
       onEnter: (_) => onEnter(),
       onExit: (_) => onExit(),
@@ -2185,10 +2224,7 @@ class _FollowAvatarTile extends StatelessWidget {
           hoverColor: color.withValues(alpha: 0.3),
           onTap: onTap,
           child: Padding(
-            padding: EdgeInsets.symmetric(
-              horizontal: 0.96,
-              vertical: 2.56,
-            ),
+            padding: EdgeInsets.symmetric(horizontal: 0.96, vertical: 2.56),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -2370,7 +2406,9 @@ class _MyCategoryChipState extends State<_MyCategoryChip> {
               Icon(
                 Icons.star_rounded,
                 size: 12,
-                color: gold ? context.tokens.brand : context.tokens.textSecondary,
+                color: gold
+                    ? context.tokens.brand
+                    : context.tokens.textSecondary,
               ),
               SizedBox(width: 4),
               Text(
@@ -2384,7 +2422,9 @@ class _MyCategoryChipState extends State<_MyCategoryChip> {
                 style: TextStyle(
                   fontSize: 14.4,
                   fontWeight: FontWeight.w500,
-                  color: gold ? context.tokens.brand : context.tokens.textPrimary,
+                  color: gold
+                      ? context.tokens.brand
+                      : context.tokens.textPrimary,
                 ),
               ),
             ],
@@ -2422,7 +2462,10 @@ class _MyCategoryManageDialog extends ConsumerWidget {
             if (favorites.isNotEmpty) ...[
               Text(
                 '已收藏(点击 × 移除)',
-                style: TextStyle(fontSize: 12, color: context.tokens.textSecondary),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: context.tokens.textSecondary,
+                ),
               ),
               const SizedBox(height: 6),
               Wrap(
@@ -2441,7 +2484,10 @@ class _MyCategoryManageDialog extends ConsumerWidget {
             ],
             Text(
               '分类目录(点击收藏/取消)',
-              style: TextStyle(fontSize: 12, color: context.tokens.textSecondary),
+              style: TextStyle(
+                fontSize: 12,
+                color: context.tokens.textSecondary,
+              ),
             ),
             const SizedBox(height: 6),
             Expanded(child: _catalog(context, ref, async, favorites)),
@@ -2490,7 +2536,11 @@ class _MyCategoryManageDialog extends ConsumerWidget {
                             children: [
                               for (final item in group.items)
                                 _PickableChip(
-                                  label: displayCategoryName(site, item.name, item.cid),
+                                  label: displayCategoryName(
+                                    site,
+                                    item.name,
+                                    item.cid,
+                                  ),
                                   selected: favorites.any(
                                     (entry) =>
                                         entry.site == site &&
@@ -2614,14 +2664,18 @@ class _PickableChip extends StatelessWidget {
             Icon(
               selected ? Icons.star_rounded : Icons.star_border_rounded,
               size: 13,
-              color: selected ? context.tokens.brand : context.tokens.textSecondary,
+              color: selected
+                  ? context.tokens.brand
+                  : context.tokens.textSecondary,
             ),
             const SizedBox(width: 4),
             Text(
               label,
               style: TextStyle(
                 fontSize: 13,
-                color: selected ? context.tokens.brand : context.tokens.textPrimary,
+                color: selected
+                    ? context.tokens.brand
+                    : context.tokens.textPrimary,
               ),
             ),
           ],

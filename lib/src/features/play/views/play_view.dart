@@ -281,6 +281,15 @@ class _PlayViewState extends ConsumerState<PlayView> {
     }
   }
 
+  /// 侧栏状态条的真实播放状态(用户口径 2026-09-20:暂停要显示「已暂停」,
+  /// 不再写死「播放中」)。响应性由 build 内对 playerSnapshotProvider 的
+  /// watch 提供;sheet 回调等非 build 路径取当前值即可。
+  PlaybackStatus get _sidePanelPlaybackStatus {
+    final snapshot =
+        ref.read(playerSnapshotProvider).value ?? const PlayerSnapshot();
+    return PlaybackStatus(playing: snapshot.playing, muted: snapshot.muted);
+  }
+
   /// 横屏手机:侧栏以底部 sheet 滑出(sheet 宽近全屏,满足 W12 sheet 形态)。
   Future<void> _showSidePanelSheet(RoomPayload? payload) {
     return showModalBottomSheet<void>(
@@ -299,6 +308,7 @@ class _PlayViewState extends ConsumerState<PlayView> {
           site: widget.site,
           roomId: widget.roomId,
           payload: payload,
+          playbackStatus: _sidePanelPlaybackStatus,
         ),
       ),
     );
@@ -306,6 +316,8 @@ class _PlayViewState extends ConsumerState<PlayView> {
 
   @override
   Widget build(BuildContext context) {
+    // 订阅播放快照:播放/暂停/静音变化实时刷新侧栏状态条。
+    ref.watch(playerSnapshotProvider);
     final async = ref.watch(playControllerProvider(_params));
     final play = async.value;
     // 设置项「弹幕」总开关:关闭时控制条的弹幕按钮整体隐藏。
@@ -365,10 +377,8 @@ class _PlayViewState extends ConsumerState<PlayView> {
     final stageRadius = BorderRadius.circular(
       size.width < AppBreakpoints.compact ? 0 : 12,
     );
-    Widget stageInFrame(Widget child) => ClipRRect(
-          borderRadius: stageRadius,
-          child: child,
-        );
+    Widget stageInFrame(Widget child) =>
+        ClipRRect(borderRadius: stageRadius, child: child);
 
     // 舞台整块挂 MouseRegion:鼠标在视频任意位置移动都唤醒控制条(隐藏
     // chrome 态下重新排程自动隐藏),这是"淡出后移动鼠标即唤出"的入口。
@@ -490,8 +500,10 @@ class _PlayViewState extends ConsumerState<PlayView> {
       // 与舞台同一 Stack;payload 未就绪时无内容可展示,不挂载(web sideReady)。
       final immersivePanelWidth = size.width < AppBreakpoints.phone
           // 手机:面板宽不超过视口 88%(web `min(320px, 88vw)`)。
-          ? math.min(AppSpacing.playSidePanelWidthFor(size.width),
-              size.width * 0.88)
+          ? math.min(
+              AppSpacing.playSidePanelWidthFor(size.width),
+              size.width * 0.88,
+            )
           : AppSpacing.playSidePanelWidthFor(size.width);
       body = SizedBox.expand(
         // 测试锚点:全屏 / 网页全屏的沉浸容器。
@@ -510,6 +522,7 @@ class _PlayViewState extends ConsumerState<PlayView> {
                   site: widget.site,
                   roomId: widget.roomId,
                   payload: play?.payload,
+                  playbackStatus: _sidePanelPlaybackStatus,
                 ),
               ),
           ],
@@ -549,6 +562,7 @@ class _PlayViewState extends ConsumerState<PlayView> {
                             site: widget.site,
                             roomId: widget.roomId,
                             payload: play?.payload,
+                            playbackStatus: _sidePanelPlaybackStatus,
                             // 窄屏堆叠:视频正下方紧跟移动信息条
                             // (头像 + 昵称 + 4 项统计 + 关注/超关)。
                             compactHeader: true,
@@ -574,6 +588,7 @@ class _PlayViewState extends ConsumerState<PlayView> {
                 site: widget.site,
                 roomId: widget.roomId,
                 payload: play?.payload,
+                playbackStatus: _sidePanelPlaybackStatus,
               ),
             ),
           ],
@@ -633,9 +648,11 @@ class _RoomHeader extends StatelessWidget {
       site: site,
       cid: favoriteCid,
     );
-    final badgeBg = categoryStyle?.background ??
+    final badgeBg =
+        categoryStyle?.background ??
         (category.trim().isNotEmpty ? brandColor : null);
-    final badgeFg = categoryStyle?.foreground ??
+    final badgeFg =
+        categoryStyle?.foreground ??
         (badgeBg == null
             ? tokens.textSecondary
             : ThemeData.estimateBrightnessForColor(badgeBg) == Brightness.dark
@@ -643,7 +660,11 @@ class _RoomHeader extends StatelessWidget {
             : tokens.surfaceSoft);
     // 徽标文字统一走跨平台中文映射(twitch/soop 等海外平台的英文/韩文
     // 原名按 cid/别名归一为中文,与侧栏 formatCategoryHeaderLabel 同口径)。
-    final categoryLabel = formatCategoryHeaderLabel(site, category, favoriteCid);
+    final categoryLabel = formatCategoryHeaderLabel(
+      site,
+      category,
+      favoriteCid,
+    );
     // 自适应高度(web `padding .28rem .5rem .32rem`):内容撑开,不再固定 44。
     return Container(
       padding: const EdgeInsets.fromLTRB(2, 4.5, 4, 5),
@@ -659,64 +680,68 @@ class _RoomHeader extends StatelessWidget {
             icon: const Icon(Icons.arrow_back_rounded, size: 18),
           ),
           const SizedBox(width: AppSpacing.sm),
-            if (badgeBg != null)
-              Consumer(
-                builder: (context, ref, _) {
-                  // 分类徽标(web PlayHeader.vue:82-133):平台图标 + 分类文字 +
-                  // 内嵌收藏星标(仅房间带分类上下文时);星标点击切换「我的分类」。
-                  // 已收藏判定按跨平台分类 key(2026-09-20 对齐 web
-                  // useMyCrossCategories):收藏过任一平台的「英雄联盟」,
-                  // 所有平台的英雄联盟房间星标都亮。
-                  final favorited = favoriteCid.isNotEmpty &&
-                      isCategoryFavorited(
-                        ref.watch(myCategoriesProvider),
-                        site: site,
-                        cid: favoriteCid,
-                        name: categoryLabel,
-                      );
-                  return Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: badgeBg.withValues(alpha: 0.92),
-                      borderRadius: AppRadius.allSm,
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        PlatformIcon(id: site, size: 12),
-                        const SizedBox(width: 3),
-                        Text(
-                          categoryLabel.isNotEmpty ? categoryLabel : '直播',
-                          style: context.textCaption.copyWith(
-                            color: badgeFg,
-                            fontWeight: FontWeight.w600,
-                          ),
+          if (badgeBg != null)
+            Consumer(
+              builder: (context, ref, _) {
+                // 分类徽标(web PlayHeader.vue:82-133):平台图标 + 分类文字 +
+                // 内嵌收藏星标(仅房间带分类上下文时);星标点击切换「我的分类」。
+                // 已收藏判定按跨平台分类 key(2026-09-20 对齐 web
+                // useMyCrossCategories):收藏过任一平台的「英雄联盟」,
+                // 所有平台的英雄联盟房间星标都亮。
+                final favorited =
+                    favoriteCid.isNotEmpty &&
+                    isCategoryFavorited(
+                      ref.watch(myCategoriesProvider),
+                      site: site,
+                      cid: favoriteCid,
+                      name: categoryLabel,
+                    );
+                return Container(
+                  // 用户口径(2026-09-20):分类名文字更大、行内上下居中。
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: badgeBg.withValues(alpha: 0.92),
+                    borderRadius: AppRadius.allSm,
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      PlatformIcon(id: site, size: 13),
+                      const SizedBox(width: 3),
+                      Text(
+                        categoryLabel.isNotEmpty ? categoryLabel : '直播',
+                        style: context.textBody.copyWith(
+                          fontSize: 12.5,
+                          height: 1,
+                          color: badgeFg,
+                          fontWeight: FontWeight.w600,
                         ),
-                        if (cid.isNotEmpty) ...[
-                          const SizedBox(width: 2),
-                          InkWell(
-                            key: const Key('play-category-favorite'),
-                            onTap: () => ref
-                                .read(myCategoriesProvider.notifier)
-                                .toggleForCategory(
-                                  MyCategoryEntry(
-                                    site: site,
-                                    // 分类收藏的 cid 必须是**分类号**;soop 的
-                                    // payload.cid 是房间号,真实分类号在 cateNo。
-                                    cid: favoriteCid,
-                                    // 收藏快照存中文展示名(与 web 收藏口径一致),
-                                    // 渲染侧还会再映射一次兜底旧快照。
-                                    name: categoryLabel,
-                                  ),
+                      ),
+                      if (cid.isNotEmpty) ...[
+                        const SizedBox(width: 2),
+                        InkWell(
+                          key: const Key('play-category-favorite'),
+                          onTap: () => ref
+                              .read(myCategoriesProvider.notifier)
+                              .toggleForCategory(
+                                MyCategoryEntry(
+                                  site: site,
+                                  // 分类收藏的 cid 必须是**分类号**;soop 的
+                                  // payload.cid 是房间号,真实分类号在 cateNo。
+                                  cid: favoriteCid,
+                                  // 收藏快照存中文展示名(与 web 收藏口径一致),
+                                  // 渲染侧还会再映射一次兜底旧快照。
+                                  name: categoryLabel,
                                 ),
+                              ),
                           child: Icon(
                             favorited
                                 ? Icons.star_rounded
                                 : Icons.star_border_rounded,
-                            size: 12,
+                            size: 13,
                             color: favorited
                                 ? tokens.brand
                                 : badgeFg.withValues(alpha: 0.85),
@@ -1106,9 +1131,7 @@ class _ErrorCard extends StatelessWidget {
               textAlign: TextAlign.center,
               maxLines: 3,
               overflow: TextOverflow.ellipsis,
-              style: context.textSecondary.copyWith(
-                color: tokens.textPrimary,
-              ),
+              style: context.textSecondary.copyWith(color: tokens.textPrimary),
             ),
           ),
           if (progress.isNotEmpty) ...[

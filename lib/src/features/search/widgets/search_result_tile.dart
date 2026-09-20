@@ -64,7 +64,10 @@ class SearchResultTile extends StatelessWidget {
                       Container(
                         width: 6,
                         height: 6,
-                        decoration: BoxDecoration(color: stateColor, shape: BoxShape.circle),
+                        decoration: BoxDecoration(
+                          color: stateColor,
+                          shape: BoxShape.circle,
+                        ),
                       ),
                       const SizedBox(width: AppSpacing.xs),
                       Text(
@@ -80,7 +83,9 @@ class SearchResultTile extends StatelessWidget {
                         hit.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: context.textSecondary.copyWith(color: tokens.textSecondary),
+                        style: context.textSecondary.copyWith(
+                          color: tokens.textSecondary,
+                        ),
                       ),
                     ),
                   Padding(
@@ -99,7 +104,9 @@ class SearchResultTile extends StatelessWidget {
                             ),
                             child: Text(
                               hit.category,
-                              style: context.textCaption.copyWith(color: tokens.textSecondary),
+                              style: context.textCaption.copyWith(
+                                color: tokens.textSecondary,
+                              ),
                             ),
                           ),
                           const SizedBox(width: AppSpacing.sm),
@@ -113,7 +120,9 @@ class SearchResultTile extends StatelessWidget {
                           const SizedBox(width: 3),
                           Text(
                             hit.online,
-                            style: context.textCaption.copyWith(color: tokens.textSecondary),
+                            style: context.textCaption.copyWith(
+                              color: tokens.textSecondary,
+                            ),
                           ),
                         ],
                       ],
@@ -160,7 +169,8 @@ class _Avatar extends StatelessWidget {
                     width: 40,
                     height: 40,
                     fit: BoxFit.cover,
-                    placeholder: (_, _) => ColoredBox(color: tokens.surfaceRaised),
+                    placeholder: (_, _) =>
+                        ColoredBox(color: tokens.surfaceRaised),
                     errorWidget: (_, _, _) => _fallback(context),
                   ),
           ),

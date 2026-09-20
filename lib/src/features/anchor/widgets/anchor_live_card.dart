@@ -57,7 +57,11 @@ class AnchorLiveCard extends StatelessWidget {
                   children: [
                     NetworkCover(
                       url: room.cover,
-                      fallbackLabel: displayCategoryName(room.site, room.category, room.cid),
+                      fallbackLabel: displayCategoryName(
+                        room.site,
+                        room.category,
+                        room.cid,
+                      ),
                     ),
                     Positioned(
                       left: AppSpacing.md,
@@ -96,10 +100,7 @@ class AnchorLiveCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: AppSpacing.sm),
-                Text(
-                  '${room.anchorName} 正在直播',
-                  style: context.textSecondary,
-                ),
+                Text('${room.anchorName} 正在直播', style: context.textSecondary),
                 const SizedBox(height: AppSpacing.lg),
                 SizedBox(
                   width: double.infinity,
