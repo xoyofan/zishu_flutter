@@ -1,0 +1,61 @@
+name: release-windows
+
+# 标准 tag 发布流程:推送 v* tag → 构建 Windows release(win64)→ 打 zip →
+# 创建 GitHub Release 并上传产物 + 更新说明(tag message + 自动变更日志)。
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 版本与本地开发环境对齐(Flutter 3.47.1 stable)
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.1
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 必须带 ZISHU_REAL_PARSER=true:缺省构建是 fixture 样例数据版(假数据),
+      # 发布包一律为真实解析版(仓库既定口径)。
+      - name: Build Windows release
+        run: >
+          flutter build windows --release -t lib/main.dart
+          --dart-define=ZISHU_REAL_PARSER=true
+
+      - name: Pack win64 zip
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          New-Item -ItemType Directory -Path "stage/zishu_flutter" -Force | Out-Null
+          Copy-Item -Path "build/windows/x64/runner/Release/*" `
+            -Destination "stage/zishu_flutter" -Recurse -Force
+          Compress-Archive -Path "stage/zishu_flutter" `
+            -DestinationPath "zishu_flutter-$tag-win64.zip"
+
+      - name: Extract release notes from tag message
+        shell: pwsh
+        run: |
+          $message = git tag -l --format='%(contents)' "${{ github.ref_name }}"
+          $message | Set-Content -Path release-notes.md -Encoding utf8
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: zishu_flutter ${{ github.ref_name }}
+          body_path: release-notes.md
+          files: zishu_flutter-${{ github.ref_name }}-win64.zip
+          prerelease: ${{ contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
