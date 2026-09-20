@@ -260,7 +260,7 @@ class _SiteCredentialTileState extends ConsumerState<_SiteCredentialTile> {
                   key: Key('user-credential-toggle-$site'),
                   onPressed: () => _toggle(credential),
                   style: TextButton.styleFrom(
-                    foregroundColor: tokens.brand,
+                    foregroundColor: tokens.accent,
                     minimumSize: const Size(0, 28),
                     padding: const EdgeInsets.symmetric(horizontal: 8),
                   ),
@@ -322,7 +322,7 @@ class _SiteCredentialTileState extends ConsumerState<_SiteCredentialTile> {
                     key: Key('user-credential-save-$site'),
                     onPressed: _save,
                     style: FilledButton.styleFrom(
-                      backgroundColor: tokens.brand,
+                      backgroundColor: tokens.accent,
                       minimumSize: const Size(0, 30),
                       padding: const EdgeInsets.symmetric(
                         horizontal: AppSpacing.md,

@@ -225,10 +225,10 @@ class _FollowViewState extends ConsumerState<FollowView> {
                     onPressed:
                         _selectedKeys.isEmpty ? null : () => _setRemindSelected(true),
                     icon: Icon(Icons.notifications_active_rounded,
-                        size: 16, color: tokens.brand),
+                        size: 16, color: tokens.accent),
                     label: Text(
                       '开提醒 (${_selectedKeys.length})',
-                      style: context.textBody.copyWith(color: tokens.brand),
+                      style: context.textBody.copyWith(color: tokens.accent),
                     ),
                   ),
                   TextButton(
@@ -316,11 +316,11 @@ class _FollowViewState extends ConsumerState<FollowView> {
               visualDensity: VisualDensity.compact,
               backgroundColor: WidgetStateProperty.resolveWith((states) =>
                   states.contains(WidgetState.selected)
-                      ? tokens.brand.withValues(alpha: 0.18)
+                      ? tokens.accent.withValues(alpha: 0.18)
                       : tokens.surface),
               foregroundColor: WidgetStateProperty.resolveWith((states) =>
                   states.contains(WidgetState.selected)
-                      ? tokens.brand
+                      ? tokens.accent
                       : tokens.textSecondary),
               side: WidgetStatePropertyAll(BorderSide(color: tokens.border)),
               shape: WidgetStatePropertyAll(

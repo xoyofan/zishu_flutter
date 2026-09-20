@@ -231,7 +231,7 @@ class _AccountSettingRow extends ConsumerWidget {
     return ListTile(
       contentPadding: EdgeInsets.zero,
       leading: CircleAvatar(
-        backgroundColor: context.tokens.brand,
+        backgroundColor: context.tokens.accent,
         child: Icon(
           authenticated ? Icons.person_rounded : Icons.person_outline_rounded,
           color: Colors.black87,

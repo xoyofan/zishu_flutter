@@ -211,7 +211,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
       autofocus: true,
       onChanged: ref.read(searchProvider.notifier).setQuery,
       onSubmitted: (_) => _submit(),
-      cursorColor: tokens.brand,
+      cursorColor: tokens.accent,
       style: context.textBody.copyWith(color: tokens.textPrimary),
       decoration: InputDecoration(
         // 占位文案随档位切换,对齐 web `inputPlaceholder`(SearchDialog.vue:255)。
@@ -255,7 +255,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: AppRadius.allMd,
-          borderSide: BorderSide(color: tokens.brand),
+          borderSide: BorderSide(color: tokens.accent),
         ),
       ),
     );
@@ -271,7 +271,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
           key: const Key('search-submit-room'),
           onPressed: _submit,
           style: FilledButton.styleFrom(
-            backgroundColor: tokens.brand,
+            backgroundColor: tokens.accent,
             // 主题背景色做反差字色(与 parse_benchmark_view 的 brand 按钮同法);
             // 不引用 AppColors.* —— 静态守则要求主题色一律走 context.tokens。
             foregroundColor: tokens.background,
@@ -304,7 +304,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
         if (search.searching)
           LinearProgressIndicator(
             minHeight: 2,
-            color: tokens.brand,
+            color: tokens.accent,
             backgroundColor: tokens.surfaceRaised,
           ),
         Expanded(
@@ -400,7 +400,7 @@ class _SearchTabBar extends StatelessWidget {
             Text(
               label,
               style: context.textBody.copyWith(
-                color: active ? tokens.brand : tokens.textSecondary,
+                color: active ? tokens.accent : tokens.textSecondary,
                 fontWeight: active ? FontWeight.w600 : FontWeight.w400,
               ),
             ),
@@ -408,7 +408,7 @@ class _SearchTabBar extends StatelessWidget {
             Container(
               height: 2,
               width: AppSpacing.xl,
-              color: active ? tokens.brand : const Color(0x00000000),
+              color: active ? tokens.accent : const Color(0x00000000),
             ),
           ],
         ),

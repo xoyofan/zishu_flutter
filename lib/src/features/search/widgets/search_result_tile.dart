@@ -202,12 +202,12 @@ class _EnterButton extends StatelessWidget {
         ),
         decoration: BoxDecoration(
           borderRadius: AppRadius.allSm,
-          border: Border.all(color: tokens.brand),
+          border: Border.all(color: tokens.accent),
         ),
         child: Text(
           '进入直播间',
           style: context.textCaption.copyWith(
-            color: tokens.brand,
+            color: tokens.accent,
             fontWeight: FontWeight.w700,
           ),
         ),

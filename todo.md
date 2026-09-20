@@ -859,3 +859,13 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 - [ ] BUG-WIN-DANMAKU-004 twitch 弹幕连接失败(出口+connector 复验)
 - [ ] PARSER-GAP-002 剩余:kuaishou 表情 URL 抓包、twitch emote 图片渲染
 - [ ] OBS-WIN-OVERLAY-001 飘屏多轨重叠
+
+## 2026-09-20 紫色强调色全面覆盖(用户口径「找同款黄色」)
+
+**结论**:全局搜索 `tokens.brand`(金色)46 处逐一清点定性——控件/选中/hover/按钮/头像/进度/光标全部改 `tokens.accent`(主题宏,唯一定义 zishu_tokens.dart,深 7C4DFF/浅 6A1B9A);金色仅保留收藏星/超关星/徽章 fallback/平台色回退/replay 金黄等 web 对齐功能色。用户点名三项全改:右上角登录头像圆底、侧栏聊天/关注 tab 选中(TabBar label+indicator)、各处选中态。另清 play_side_panel 弹幕开关轨道硬编码 0xfff3d04e→token,删 design_tokens 死常量 AppColors.brand。真机复验:头像紫底/聊天 tab 紫选中/slider 紫全可见。全量测试+golden 重生成后门禁收口。
+
+### 保留金色清单(功能色,非控件)
+- 收藏星:分类收藏(category_view:436)、目录抽屉关注星入口(browse_sidebar:137)、我的分类 hover chip+管理弹窗(app_shell 2358-2624)、封面关注角标(play_room_grid:184)
+- 超关星:侧栏行/卡片 isSpecial 星(follow_entry_card:101/273、follow_entry_row:124)
+- 徽章/平台回退:badge_chips、timeline_tile、play_view:531、category_view:349
+- replay 金黄描边(#f5dc70,web follow-item--replay 对齐)

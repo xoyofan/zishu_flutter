@@ -70,7 +70,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
     if (rooms.isEmpty) {
       return RefreshIndicator(
         onRefresh: controller.refresh,
-        color: context.tokens.brand,
+        color: context.tokens.accent,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
           children: [
@@ -93,7 +93,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
     }
     return RefreshIndicator(
       onRefresh: controller.refresh,
-      color: context.tokens.brand,
+      color: context.tokens.accent,
       child: RoomGrid(
         rooms: rooms,
         hasMore: hasMore,
@@ -127,7 +127,7 @@ class _ErrorRetry extends StatelessWidget {
             onPressed: onRetry,
             icon: const Icon(Icons.refresh_rounded),
             label: const Text('重试'),
-            style: TextButton.styleFrom(foregroundColor: context.tokens.brand),
+            style: TextButton.styleFrom(foregroundColor: context.tokens.accent),
           ),
         ],
       ),

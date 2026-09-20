@@ -39,7 +39,7 @@ class AsyncValueView<T> extends StatelessWidget {
       loading: () =>
           loading ??
           Center(
-            child: CircularProgressIndicator(color: context.tokens.brand),
+            child: CircularProgressIndicator(color: context.tokens.accent),
           ),
       error: (Object error, StackTrace stackTrace) =>
           ErrorView(message: error.toString(), onRetry: onRetry),

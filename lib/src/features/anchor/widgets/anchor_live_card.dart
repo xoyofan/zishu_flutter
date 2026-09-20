@@ -105,7 +105,7 @@ class AnchorLiveCard extends StatelessWidget {
                   width: double.infinity,
                   height: _buttonHeight,
                   child: Material(
-                    color: tokens.brand,
+                    color: tokens.accent,
                     borderRadius: AppRadius.allMd,
                     child: InkWell(
                       borderRadius: AppRadius.allMd,

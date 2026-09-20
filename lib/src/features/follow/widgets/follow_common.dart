@@ -281,7 +281,7 @@ class FollowIconAction extends StatelessWidget {
     final Color color = danger
         ? tokens.error
         : active
-            ? tokens.brand
+            ? tokens.accent
             : tokens.textSecondary;
     return IconButton(
       tooltip: tooltip,

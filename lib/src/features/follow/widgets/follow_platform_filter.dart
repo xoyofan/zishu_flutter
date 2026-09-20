@@ -83,7 +83,7 @@ class FollowPlatformFilter extends StatelessWidget {
               child: _PlatformChip(
                 label: brand.id == 'all' ? '全平台' : brand.name,
                 accent: brand.id == 'all'
-                    ? context.tokens.brand
+                    ? context.tokens.accent
                     : brand.color,
                 showDot: brand.id != 'all',
                 selected: value == brand.id,
@@ -97,7 +97,7 @@ class FollowPlatformFilter extends StatelessWidget {
             _PlatformChip(
               label: brand.id == 'all' ? '全平台' : brand.name,
               accent:
-                  brand.id == 'all' ? context.tokens.brand : brand.color,
+                  brand.id == 'all' ? context.tokens.accent : brand.color,
               showDot: brand.id != 'all',
               selected: value == brand.id,
               compact: compact,

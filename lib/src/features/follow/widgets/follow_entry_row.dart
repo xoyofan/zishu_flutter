@@ -54,7 +54,7 @@ class FollowEntryRow extends StatelessWidget {
     final live = entry.isLive;
     final replay = entry.isReplay;
     final brand = PlatformBrandCatalog.byId(room.site);
-    final selectedBg = (brand?.color ?? tokens.brand).withValues(alpha: 0.14);
+    final selectedBg = (brand?.color ?? tokens.accent).withValues(alpha: 0.14);
     final category = displayCategoryName(room.site, room.category, room.cid);
     final categoryStyle = CategoryColors.opaqueFor(
       category: room.category,
@@ -88,7 +88,7 @@ class FollowEntryRow extends StatelessWidget {
                     onChanged: (_) => onToggleSelect?.call(),
                     visualDensity: VisualDensity.compact,
                     materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    activeColor: tokens.brand,
+                    activeColor: tokens.accent,
                     checkColor: tokens.surfaceSoft,
                     side: BorderSide(color: tokens.border),
                   ),

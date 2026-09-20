@@ -206,7 +206,7 @@ class _SliderRow extends StatelessWidget {
             valueLabel,
             style: TextStyle(
               fontSize: 12,
-              color: context.tokens.brand,
+              color: context.tokens.accent,
               fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
             ),
           ),

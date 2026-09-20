@@ -1136,8 +1136,8 @@ class _RetryButton extends StatelessWidget {
       icon: const Icon(Icons.refresh_rounded, size: 16),
       label: const Text('重试'),
       style: OutlinedButton.styleFrom(
-        foregroundColor: tokens.brand,
-        side: BorderSide(color: tokens.brand.withValues(alpha: 0.6)),
+        foregroundColor: tokens.accent,
+        side: BorderSide(color: tokens.accent.withValues(alpha: 0.6)),
       ),
     );
   }
@@ -1168,7 +1168,7 @@ class _SleepTimerBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.bedtime_rounded, size: 14, color: tokens.brand),
+          Icon(Icons.bedtime_rounded, size: 14, color: tokens.accent),
           const SizedBox(width: AppSpacing.xs),
           Text(
             '定时 $remaining',

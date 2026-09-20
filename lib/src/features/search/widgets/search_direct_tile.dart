@@ -17,7 +17,7 @@ class SearchDirectTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = context.tokens;
     return Material(
-      color: tokens.brand.withValues(alpha: 0.12),
+      color: tokens.accent.withValues(alpha: 0.12),
       borderRadius: AppRadius.allMd,
       child: InkWell(
         borderRadius: AppRadius.allMd,
@@ -29,14 +29,14 @@ class SearchDirectTile extends StatelessWidget {
           ),
           decoration: BoxDecoration(
             borderRadius: AppRadius.allMd,
-            border: Border.all(color: tokens.brand.withValues(alpha: 0.6)),
+            border: Border.all(color: tokens.accent.withValues(alpha: 0.6)),
           ),
           child: Row(
             children: [
               Icon(
                 _isLink ? Icons.link_rounded : Icons.meeting_room_rounded,
                 size: 18,
-                color: tokens.brand,
+                color: tokens.accent,
               ),
               const SizedBox(width: AppSpacing.sm),
               Expanded(
@@ -63,7 +63,7 @@ class SearchDirectTile extends StatelessWidget {
                   ],
                 ),
               ),
-              Icon(Icons.arrow_forward_ios_rounded, size: 12, color: tokens.brand),
+              Icon(Icons.arrow_forward_ios_rounded, size: 12, color: tokens.accent),
             ],
           ),
         ),

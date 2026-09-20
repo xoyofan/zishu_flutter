@@ -137,7 +137,7 @@ class _LoadingMoreFooter extends StatelessWidget {
             height: AppSpacing.lg,
             child: CircularProgressIndicator(
               strokeWidth: 2,
-              color: tokens.brand,
+              color: tokens.accent,
             ),
           ),
           const SizedBox(width: AppSpacing.sm),

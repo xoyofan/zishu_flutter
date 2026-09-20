@@ -964,7 +964,7 @@ class _UserAvatar extends ConsumerWidget {
         children: [
           CircleAvatar(
             radius: 14,
-            backgroundColor: context.tokens.brand,
+            backgroundColor: context.tokens.accent,
             child: Icon(
               Icons.person_outline_rounded,
               size: 16,
@@ -1259,7 +1259,7 @@ class _Logo extends StatelessWidget {
                   height: 30,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: context.tokens.brand,
+                    color: context.tokens.accent,
                     borderRadius: AppRadius.allMd,
                   ),
                   child: const Text(
@@ -1519,7 +1519,7 @@ class _BottomNav extends StatelessWidget {
                   height: 26,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: context.tokens.brand,
+                    color: context.tokens.accent,
                     shape: BoxShape.circle,
                   ),
                   child: const Text(
@@ -2079,7 +2079,7 @@ class _CategoryChipState extends State<_CategoryChip> {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 11.84,
-              color: _hovering ? context.tokens.brand : context.tokens.textPrimary,
+              color: _hovering ? context.tokens.accent : context.tokens.textPrimary,
             ),
           ),
         ),
@@ -2290,7 +2290,7 @@ class _MyCategoryFlyout extends ConsumerWidget {
                     padding: const EdgeInsets.symmetric(horizontal: 6),
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    foregroundColor: context.tokens.brand,
+                    foregroundColor: context.tokens.accent,
                     textStyle: const TextStyle(fontSize: 12),
                   ),
                   child: const Text('管理分类'),

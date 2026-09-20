@@ -29,7 +29,7 @@ class FollowEmptyState extends StatelessWidget {
             OutlinedButton(
               onPressed: onBrowse,
               style: OutlinedButton.styleFrom(
-                foregroundColor: tokens.brand,
+                foregroundColor: tokens.accent,
                 side: BorderSide(color: tokens.border),
                 shape: RoundedRectangleBorder(borderRadius: AppRadius.allSm),
               ),

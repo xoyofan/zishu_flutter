@@ -32,8 +32,8 @@ abstract final class AppColors {
   /// hover/强调等更亮一层的 soft surface。
   static const Color surfaceRaised = Color(0xFF2A2A2A);
 
-  /// 主品牌色:金黄。
-  static const Color brand = Color(0xFFF3D04E);
+  // 主品牌金黄已并入主题 token:控件强调见 ZishuTokens.accent(品牌紫),
+  // 收藏星等 web 对齐功能色见 ZishuTokens.brand。
 
   static const Color textPrimary = Color(0xDEFFFFFF); // white 87%
   static const Color textSecondary = Color(0x8CFFFFFF); // white 55%

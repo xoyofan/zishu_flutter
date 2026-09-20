@@ -61,11 +61,11 @@ class FollowEntryCard extends StatelessWidget {
     return Container(
       // 测试锚点:条目根节点(follow-entry-{site}-{roomId})。
       key: Key('follow-entry-${room.site}-${room.roomId}'),
-      // 批量模式下选中项用品牌金描边提示。
+      // 批量模式下选中项用品牌紫描边提示。
       foregroundDecoration: BoxDecoration(
         borderRadius: AppRadius.allMd,
         border: Border.all(
-          color: selected ? tokens.brand : tokens.border,
+          color: selected ? tokens.accent : tokens.border,
           width: selected ? 1.5 : 1,
         ),
       ),
@@ -369,7 +369,7 @@ class _SelectBox extends StatelessWidget {
         value: selected,
         onChanged: (value) => onChanged(value ?? false),
         visualDensity: VisualDensity.compact,
-        activeColor: tokens.brand,
+        activeColor: tokens.accent,
         checkColor: tokens.surfaceSoft,
         side: BorderSide(color: tokens.border),
       ),

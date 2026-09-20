@@ -325,7 +325,7 @@ class _ParseBenchmarkViewState extends ConsumerState<ParseBenchmarkView> {
                         key: const Key('bench-run'),
                         onPressed: _running ? null : _runBenchmark,
                         style: FilledButton.styleFrom(
-                          backgroundColor: tokens.brand,
+                          backgroundColor: tokens.accent,
                           foregroundColor: tokens.background,
                           minimumSize: const Size(0, 32),
                         ),
@@ -516,7 +516,7 @@ class _ParseBenchmarkViewState extends ConsumerState<ParseBenchmarkView> {
             flex: 2,
             child: Text(
               '${sample.wallMs}ms',
-              style: context.textBody.copyWith(color: tokens.brand),
+              style: context.textBody.copyWith(color: tokens.accent),
             ),
           ),
           Expanded(child: Text('${sample.qualityCount}', style: cell)),

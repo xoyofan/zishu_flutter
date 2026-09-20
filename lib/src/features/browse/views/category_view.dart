@@ -486,7 +486,7 @@ class _RoomSection extends ConsumerWidget {
               )
             : RefreshIndicator(
                 onRefresh: controller.refresh,
-                color: tokens.brand,
+                color: tokens.accent,
                 child: RoomGrid(
                   rooms: value.rooms,
                   hasMore: value.hasMore,
@@ -550,7 +550,7 @@ class _ErrorRetry extends StatelessWidget {
             onPressed: onRetry,
             icon: const Icon(Icons.refresh_rounded),
             label: const Text('重试'),
-            style: TextButton.styleFrom(foregroundColor: tokens.brand),
+            style: TextButton.styleFrom(foregroundColor: tokens.accent),
           ),
         ],
       ),

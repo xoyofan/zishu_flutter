@@ -330,11 +330,11 @@ class _PlatformTab extends StatelessWidget {
           padding: EdgeInsets.zero,
           labelPadding: EdgeInsets.zero,
           backgroundColor: Colors.transparent,
-          selectedColor: tokens.brand.withValues(
+          selectedColor: tokens.accent.withValues(
             alpha: AppDirectoryDrawer.activeChipAlpha,
           ),
-          checkmarkColor: tokens.brand,
-          side: selected ? BorderSide(color: tokens.brand) : BorderSide.none,
+          checkmarkColor: tokens.accent,
+          side: selected ? BorderSide(color: tokens.accent) : BorderSide.none,
           shape: RoundedRectangleBorder(borderRadius: AppRadius.allSm),
           onSelected: (_) =>
               context.go(brand.id == 'all' ? '/all' : '/${brand.id}'),

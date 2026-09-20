@@ -280,9 +280,9 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
                     child: Tab(text: '设置'),
                   ),
                 ],
-                labelColor: tokens.brand,
+                labelColor: tokens.accent,
                 unselectedLabelColor: tokens.textSecondary,
-                indicatorColor: tokens.brand,
+                indicatorColor: tokens.accent,
                 indicatorWeight: 2,
                 dividerColor: tokens.border,
                 labelStyle: const TextStyle(
@@ -618,7 +618,7 @@ class _SideAvatar extends StatelessWidget {
             child: _HeaderIconButton(
               key: const Key('play-side-notify'),
               // web bell/bell-off 两态(SideHeader.vue:27):关=bell-off
-              // 中性色;开=bell + amber 激活色(语义=开播/下播提醒开关)。
+              // 中性色;开=bell + 品牌紫激活色(语义=开播/下播提醒开关)。
               icon: remindOn
                   ? Icons.notifications_rounded
                   : Icons.notifications_off_rounded,
@@ -627,7 +627,7 @@ class _SideAvatar extends StatelessWidget {
                   : '关注后可开启开播提醒',
               // 未关注 = 无可提醒目标,禁用(web 直接隐藏,flutter 留占位)。
               onPressed: followed ? onToggleRemind : null,
-              activeColor: remindOn ? const Color(0xfff3d04e) : null,
+              activeColor: remindOn ? context.tokens.accent : null,
             ),
           ),
           Positioned(
@@ -668,8 +668,8 @@ class _HeaderIconButton extends StatelessWidget {
   /// 图标强调色(如外链蓝 #60a5fa,web `.room-aside-link-btn`)。
   final Color? accent;
 
-  /// 激活态色(amber #f3d04e,web `--amber`):图标取该色,底色取该色
-  /// 22% 混底,对齐 web `.room-aside-notify-btn--on`。
+  /// 激活态色(品牌紫 tokens.accent,用户口径 2026-09-20 控件强调一律
+  /// 品牌紫):图标取该色,底色取该色 22% 混底。
   final Color? activeColor;
 
   @override
@@ -1416,7 +1416,7 @@ class _NewMessagesButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: context.tokens.brand,
+      color: context.tokens.accent,
       borderRadius: AppRadius.allMd,
       child: InkWell(
         key: const Key('play-side-chat-jump-bottom'),
@@ -2223,7 +2223,7 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
                 icon: Icon(
                   _grid ? Icons.list_rounded : Icons.grid_view_rounded,
                   size: 15,
-                  color: _grid ? tokens.textSecondary : tokens.brand,
+                  color: _grid ? tokens.textSecondary : tokens.accent,
                 ),
               ),
             ),
@@ -2506,7 +2506,7 @@ class _SettingsGroup extends StatelessWidget {
               // 对齐 web .settings-group__title(.78rem ≈ 12.5)。
               fontSize: 12.5,
               height: 1.2,
-              color: context.tokens.brand,
+              color: context.tokens.accent,
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -2590,7 +2590,7 @@ class _SettingSliderRow extends StatelessWidget {
               min: min,
               max: max,
               divisions: (max - min).round(),
-              activeColor: tokens.brand,
+              activeColor: tokens.accent,
               inactiveColor: tokens.border,
               onChanged: enabled ? onChanged : null,
             ),
@@ -2612,7 +2612,7 @@ class _SettingSliderRow extends StatelessWidget {
 
 /// 自绘迷你开关(对齐 web el-switch 密度:轨道 30×16、圆角 8、滑块 12)。
 ///
-/// 选中轨道 amber(#f3d04e,web `--amber`);未选中透明底 + #3a3a3a 描边。
+/// 选中轨道品牌紫(tokens.accent);未选中透明底 + #3a3a3a 描边。
 /// 保留 Material Switch 的 value/onChanged/Semantics(toggled) 语义,
 /// 只是视觉收敛为侧栏密度尺寸。
 class _MiniSwitch extends StatelessWidget {
@@ -2627,7 +2627,8 @@ class _MiniSwitch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const track = Color(0xfff3d04e);
+    // 选中轨道走主题强调色(用户口径 2026-09-20 控件强调一律品牌紫)。
+    final track = context.tokens.accent;
     const offBorder = Color(0xff3a3a3a);
     return Semantics(
       toggled: value,

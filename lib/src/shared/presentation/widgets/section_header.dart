@@ -33,7 +33,7 @@ class SectionHeader extends StatelessWidget {
           Container(
             width: 4,
             decoration: BoxDecoration(
-              color: tokens.brand,
+              color: tokens.accent,
               borderRadius: BorderRadius.circular(AppRadius.sm / 2),
             ),
           ),
