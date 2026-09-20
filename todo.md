@@ -891,3 +891,7 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 - [x] 根因:MenuAnchor 的 child/menuChildren 用反 —— 面板内容写在 child(按钮位,不渲染),menuChildren 挂的是旧版大 Switch 面板。已对调:「显示」行换全局 CompactSwitch(30×16,对齐侧栏聊天弹幕开关),透明度/字号/速度滑杆走 AppControls 紧凑规格,区域勾对齐 accent。真机复验:面板紧凑、小开关生效(verify-compact-switch3.png)。
 - [ ] BUG-WIN-VIDEO-001 进房黑屏(暂停→播放 kick 可恢复,多次复现)待排查 VideoController 纹理首帧。
 - [ ] 播放恢复几秒后自动停(单次报告)待复现取日志时间点。
+
+### 2026-09-20 晚追加:简化与模块化复用分析
+- [x] 全库扫描落盘 `docs/refactor-analysis.md`:巨文件拆分(app_shell 2686/play_side_panel 2684/play_view 1204/player_controls 1004)、重复模式 7 项(统计取数×2/万格式化×2/重试按钮×5/滑杆行×3/SliderTheme×3/下拉×5/pill)、遗留清理(_MiniSwitch 并入 CompactSwitch 含补漏 2 处调用、AppColors.brand 与 AppControls.switchScale 死常量删除)。
+- [ ] P1:统计取数与万格式化统一(主播卡/侧栏头行为不一致风险);P2:play_side_panel 拆分;P3:其余提取。

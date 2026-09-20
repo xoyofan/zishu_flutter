@@ -214,9 +214,6 @@ abstract final class AppControls {
   /// 面板内滑杆行高(含触摸余量的最小盒)。
   static const double sliderRowHeight = 20;
 
-  /// Material Switch 的视觉缩放(24px 视觉 → ~18px,对齐 el-switch)。
-  static const double switchScale = 0.72;
-
   /// 面板内小字号(标签/数值)。
   static const double labelFontSize = 11;
 

@@ -25,6 +25,7 @@ import '../../follow/application/settings_provider.dart';
 import '../../../platforms/common/open_external_url.dart';
 import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
+import '../../../shared/presentation/widgets/compact_switch.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import 'chat_badge_image.dart';
 import 'play_meta_bar.dart';
@@ -2388,7 +2389,7 @@ class _SettingsPanel extends ConsumerWidget {
           children: [
             _SettingRow(
               label: '聊天',
-              trailing: _MiniSwitch(
+              trailing: CompactSwitch(
                 key: const Key('play-side-setting-chat'),
                 value: settings.chatEnabled,
                 onChanged: (enabled) =>
@@ -2444,7 +2445,7 @@ class _SettingsPanel extends ConsumerWidget {
                 valueText: throttled
                     ? '每${settings.chatSpeed}秒一条'
                     : ChatThrottleMode.unlimited.label,
-                leading: _MiniSwitch(
+                leading: CompactSwitch(
                   key: const Key('play-side-setting-chat-throttle'),
                   value: throttled,
                   onChanged: (on) => ref
@@ -2600,50 +2601,6 @@ class _SettingSliderRow extends StatelessWidget {
 /// 选中轨道品牌紫(tokens.accent);未选中透明底 + #3a3a3a 描边。
 /// 保留 Material Switch 的 value/onChanged/Semantics(toggled) 语义,
 /// 只是视觉收敛为侧栏密度尺寸。
-class _MiniSwitch extends StatelessWidget {
-  const _MiniSwitch({super.key, required this.value, required this.onChanged});
-
-  final bool value;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    // 选中轨道走主题强调色(用户口径 2026-09-20 控件强调一律品牌紫)。
-    final track = context.tokens.accent;
-    const offBorder = Color(0xff3a3a3a);
-    return Semantics(
-      toggled: value,
-      child: GestureDetector(
-        onTap: () => onChanged(!value),
-        child: AnimatedContainer(
-          duration: AppMotion.fast,
-          width: 30,
-          height: 16,
-          decoration: BoxDecoration(
-            color: value ? track : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: value ? track : offBorder),
-          ),
-          child: AnimatedAlign(
-            duration: AppMotion.fast,
-            alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-            child: AnimatedContainer(
-              duration: AppMotion.fast,
-              width: 12,
-              height: 12,
-              margin: const EdgeInsets.all(1),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: value ? Colors.white : context.tokens.textSecondary,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _PanelHint extends StatelessWidget {
   const _PanelHint({
     required this.icon,
