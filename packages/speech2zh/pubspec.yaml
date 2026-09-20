@@ -1,0 +1,13 @@
+name: speech2zh
+description: "本地语音识别中文字幕核心:流式 ASR(sherpa-onnx 可插拔)+ 模型管理 + 分句翻译流水线。纯 Dart,禁 Flutter/Widget/media-kit。"
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ^3.13.0
+
+dependencies:
+  sherpa_onnx: ^1.13.8
+
+dev_dependencies:
+  test: ^1.25.0
