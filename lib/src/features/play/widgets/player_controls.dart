@@ -732,12 +732,10 @@ class _DanmakuSettingsButtonState
             _settingsTitle(),
             _settingsRow(
               label: '显示',
-              trailing: SizedBox(
-                height: 22,
-                child: Switch(
-                  value: widget.show,
-                  onChanged: (_) => widget.onToggleShow(),
-                ),
+              // 开关大小对齐侧栏「聊天弹幕」开关(全局 CompactSwitch 30×16)。
+              trailing: CompactSwitch(
+                value: widget.show,
+                onChanged: (_) => widget.onToggleShow(),
               ),
             ),
             _settingsSlider(
@@ -803,128 +801,7 @@ class _DanmakuSettingsButtonState
           icon: _DanmakuMark(active: open, corner: _DanmakuCorner.gear),
         );
       },
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _settingsTitle(),
-          _settingsRow(
-            label: '显示',
-            trailing: CompactSwitch(
-              value: widget.show,
-              onChanged: (_) => widget.onToggleShow(),
-            ),
-          ),
-          _settingsRow(
-            label: '透明度',
-            trailing: valueBadge('${settings.opacity}%'),
-            slider: Slider(
-              value: settings.opacity.toDouble(),
-              min: DanmakuSettings.kOpacityMin.toDouble(),
-              max: DanmakuSettings.kOpacityMax.toDouble(),
-              divisions:
-                  DanmakuSettings.kOpacityMax - DanmakuSettings.kOpacityMin,
-              activeColor: context.tokens.accent,
-              onChanged: (v) => ref
-                  .read(danmakuSettingsProvider.notifier)
-                  .setOpacity(v.round()),
-            ),
-          ),
-          _settingsRow(
-            label: '字号',
-            trailing: valueBadge('${settings.fontSize}'),
-            slider: Slider(
-              value: settings.fontSize.toDouble(),
-              min: DanmakuSettings.kFontSizeMin.toDouble(),
-              max: DanmakuSettings.kFontSizeMax.toDouble(),
-              divisions:
-                  DanmakuSettings.kFontSizeMax - DanmakuSettings.kFontSizeMin,
-              activeColor: context.tokens.accent,
-              onChanged: (v) => ref
-                  .read(danmakuSettingsProvider.notifier)
-                  .setFontSize(v.round()),
-            ),
-          ),
-          _settingsRow(
-            label: '速度',
-            trailing: valueBadge('${settings.speed}'),
-            slider: Slider(
-              value: settings.speed.toDouble(),
-              min: DanmakuSettings.kSpeedMin.toDouble(),
-              max: DanmakuSettings.kSpeedMax.toDouble(),
-              divisions: DanmakuSettings.kSpeedMax - DanmakuSettings.kSpeedMin,
-              activeColor: context.tokens.accent,
-              onChanged: (v) => ref
-                  .read(danmakuSettingsProvider.notifier)
-                  .setSpeed(v.round()),
-            ),
-          ),
-          _settingsRow(
-            label: '区域',
-            trailing: PopupMenuButton<double>(
-              initialValue: settings.displayAreaRatio,
-              tooltip: '弹幕显示区域',
-              onSelected: (v) => ref
-                  .read(danmakuSettingsProvider.notifier)
-                  .setDisplayAreaRatio(v),
-              itemBuilder: (context) => [
-                for (final (label, ratio) in const [
-                  ('全屏', 1.0),
-                  ('3/4', 0.75),
-                  ('半屏', 0.5),
-                  ('1/4', 0.25),
-                ])
-                  PopupMenuItem<double>(
-                    value: ratio,
-                    child: Row(
-                      children: [
-                        if (settings.displayAreaRatio == ratio)
-                          Icon(
-                            Icons.check_rounded,
-                            size: 16,
-                            color: context.tokens.brand,
-                          )
-                        else
-                          const SizedBox(width: 16),
-                        const SizedBox(width: AppSpacing.xs),
-                        Text(label),
-                      ],
-                    ),
-                  ),
-              ],
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  border: Border.all(color: AppOnVideo.textMuted),
-                  borderRadius: BorderRadius.circular(AppRadius.sm),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      switch (settings.displayAreaRatio) {
-                        0.75 => '3/4',
-                        0.5 => '半屏',
-                        0.25 => '1/4',
-                        _ => '全屏',
-                      },
-                      style: const TextStyle(
-                        fontSize: 11,
-                        color: AppOnVideo.text,
-                      ),
-                    ),
-                    const Icon(
-                      Icons.arrow_drop_down_rounded,
-                      size: 16,
-                      color: AppOnVideo.textMuted,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+      child: const SizedBox.shrink(),
     );
   }
 
@@ -1014,7 +891,7 @@ class _DanmakuSettingsButtonState
                       Icon(
                         Icons.check_rounded,
                         size: 16,
-                        color: context.tokens.brand,
+                        color: context.tokens.accent,
                       )
                     else
                       const SizedBox(width: 16),

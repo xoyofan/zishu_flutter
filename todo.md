@@ -886,3 +886,8 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 - [ ] BUG-WIN-VIDEO-001:进房黑屏(播放中但画面黑,暂停→播放 kick 恢复,多次复现)——排查 VideoController 纹理首帧,候选:videoInfo 缺失时自动 kick 一次。
 - [ ] 播放恢复几秒后自动停(用户报告一次,OBS-WIN-PLAY-002 相关,需复现+日志时间点)。
 - [ ] BUG-WIN-DANMAKU-003 huya 弹幕零消息;004 twitch 弹幕连接;PARSER-GAP-002 kuaishou 表情抓包/twitch emote;飘屏多轨重叠。
+
+### 2026-09-20 晚追加:popover 开关尺寸修正
+- [x] 根因:MenuAnchor 的 child/menuChildren 用反 —— 面板内容写在 child(按钮位,不渲染),menuChildren 挂的是旧版大 Switch 面板。已对调:「显示」行换全局 CompactSwitch(30×16,对齐侧栏聊天弹幕开关),透明度/字号/速度滑杆走 AppControls 紧凑规格,区域勾对齐 accent。真机复验:面板紧凑、小开关生效(verify-compact-switch3.png)。
+- [ ] BUG-WIN-VIDEO-001 进房黑屏(暂停→播放 kick 可恢复,多次复现)待排查 VideoController 纹理首帧。
+- [ ] 播放恢复几秒后自动停(单次报告)待复现取日志时间点。
