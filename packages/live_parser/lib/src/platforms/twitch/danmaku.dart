@@ -41,7 +41,13 @@ class TwitchDanmakuConnector implements DanmakuConnector {
     if (login.isEmpty) {
       throw ParserHttpException('无法识别的 Twitch 频道');
     }
-    final socket = await transport.connect(Uri.parse(kTwitchIrcUrl));
+    // sendAsText:IRC 行必须以 TEXT 帧发送 —— Twitch tmi 网关收到 BINARY
+    // 帧直接断连(2026-09-20 探针实证:同链路 TEXT 帧收完整注册流程,
+    // BINARY 帧 101 后 ~250ms 被掐零消息,表现即「连接成功但零弹幕」)。
+    final socket = await transport.connect(
+      Uri.parse(kTwitchIrcUrl),
+      sendAsText: true,
+    );
     return TwitchDanmakuSession(login, socket);
   }
 }

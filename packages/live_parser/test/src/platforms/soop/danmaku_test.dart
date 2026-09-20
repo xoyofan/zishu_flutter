@@ -198,6 +198,7 @@ class FakeDanmakuTransport implements DanmakuTransport {
     Uri url, {
     List<String>? protocols,
     Map<String, String>? headers,
+    bool sendAsText = false,
   }) async {
     lastUrl = url;
     lastProtocols = protocols;
@@ -221,6 +222,7 @@ class HostBlockingTransport implements DanmakuTransport {
     Uri url, {
     List<String>? protocols,
     Map<String, String>? headers,
+    bool sendAsText = false,
   }) async {
     attempted.add('${url.scheme}://${url.host}:${url.port}');
     lastHeaders = headers;

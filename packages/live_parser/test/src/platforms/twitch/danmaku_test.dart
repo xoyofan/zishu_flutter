@@ -34,6 +34,10 @@ void main() {
       final socket = transport.sockets.single;
 
       expect(transport.lastUrl.toString(), 'wss://irc-ws.chat.twitch.tv');
+      // IRC 行必须走 TEXT 帧:BINARY 帧被 Twitch tmi 网关直接断连
+      // (2026-09-20 探针实证,见 DanmakuTransport.connect 注释)。
+      expect(transport.lastSendAsText, isTrue,
+          reason: 'Twitch 必须以 TEXT 帧发送,否则连接被上游秒断');
       List<String> linesOf() => socket.rawSent
           .map(utf8.decode)
           .map((l) => l.trimRight())
@@ -177,14 +181,17 @@ class FakeNeverHttp extends http.BaseClient {
 class FakeIrcTransport implements DanmakuTransport {
   final sockets = <FakeIrcSocket>[];
   Uri? lastUrl;
+  bool? lastSendAsText;
 
   @override
   Future<DanmakuSocket> connect(
     Uri url, {
     List<String>? protocols,
     Map<String, String>? headers,
+    bool sendAsText = false,
   }) async {
     lastUrl = url;
+    lastSendAsText = sendAsText;
     final socket = FakeIrcSocket();
     sockets.add(socket);
     return socket;

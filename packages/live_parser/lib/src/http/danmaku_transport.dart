@@ -12,11 +12,16 @@ import 'upstream_proxy.dart';
 /// 建立弹幕 WebSocket 连接的传输工厂。
 abstract interface class DanmakuTransport {
   /// [protocols] 为可选子协议(如 SOOP 要求 `Sec-WebSocket-Protocol: chat`);
-  /// [headers] 为额外握手头(如抖音要求 Origin/Cookie)。
+  /// [headers] 为额外握手头(如抖音要求 Origin/Cookie);
+  /// [sendAsText] 为 true 时 [DanmakuSocket.send] 的字节以 **TEXT 帧**发出
+  /// (默认 BINARY 帧)。IRC 类文本协议(Twitch)只接受 TEXT 帧:上游 tmi
+  /// 网关收到 BINARY 帧直接断连(2026-09-20 实测:同链路 TEXT 收流、
+  /// BINARY 秒断),二进制协议站点(虎牙/斗鱼/SOOP/抖音)保持默认。
   Future<DanmakuSocket> connect(
     Uri url, {
     List<String>? protocols,
     Map<String, String>? headers,
+    bool sendAsText = false,
   });
 }
 
@@ -50,6 +55,7 @@ class IoDanmakuTransport implements DanmakuTransport {
     Uri url, {
     List<String>? protocols,
     Map<String, String>? headers,
+    bool sendAsText = false,
   }) async {
     // 无自定义头且无代理:dart:io 原生路径(对端为常规实现,小写头无碍)。
     if ((headers == null || headers.isEmpty) && !UpstreamProxy.enabled) {
@@ -57,7 +63,7 @@ class IoDanmakuTransport implements DanmakuTransport {
         url.toString(),
         protocols: protocols,
       ).timeout(connectTimeout);
-      return _IoDanmakuSocket(socket);
+      return _IoDanmakuSocket(socket, sendAsText: sendAsText);
     }
 
     final (tap, _) = await _dial(url);
@@ -68,7 +74,7 @@ class IoDanmakuTransport implements DanmakuTransport {
         serverSide: false,
         protocol: handshake.protocol,
       );
-      return _IoDanmakuSocket(webSocket);
+      return _IoDanmakuSocket(webSocket, sendAsText: sendAsText);
     } on Object {
       tap.dispose();
       rethrow;
@@ -407,15 +413,25 @@ class _RawUpgradedSocket implements Socket {
 }
 
 class _IoDanmakuSocket implements DanmakuSocket {
-  _IoDanmakuSocket(this._socket);
+  _IoDanmakuSocket(this._socket, {this.sendAsText = false});
 
   final WebSocket _socket;
+
+  /// true = [send] 的字节经 `addUtf8Text` 以 TEXT 帧发出(Twitch IRC 等
+  /// 文本协议;BINARY 帧被上游 tmi 网关直接断连,见 [DanmakuTransport])。
+  final bool sendAsText;
 
   @override
   Stream<Object?> get data => _socket;
 
   @override
-  void send(List<int> bytes) => _socket.add(bytes);
+  void send(List<int> bytes) {
+    if (sendAsText) {
+      _socket.addUtf8Text(bytes);
+    } else {
+      _socket.add(bytes);
+    }
+  }
 
   @override
   Future<void> close() => _socket.close();

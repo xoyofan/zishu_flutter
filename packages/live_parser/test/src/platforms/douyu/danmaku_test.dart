@@ -194,6 +194,7 @@ class FakeDanmakuTransport implements DanmakuTransport {
     Uri url, {
     List<String>? protocols,
     Map<String, String>? headers,
+    bool sendAsText = false,
   }) async {
     lastUrl = url;
     final socket = FakeDanmakuSocket();
