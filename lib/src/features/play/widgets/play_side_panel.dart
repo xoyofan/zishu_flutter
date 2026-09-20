@@ -1494,67 +1494,78 @@ class _ChatRow extends StatelessWidget {
     ];
   }
 
+  /// 徽章内联进正文段落(见 build 注释):middle 对齐表情图 WidgetSpan 同款,
+  /// 行尾 2px 间距对齐 web 徽章 margin-right 0.14em(14px 基 ≈ 2px)。
+  ///
+  /// 徽章底座 [_BadgeBox] 靠 `Container.alignment` 收缩定位,需要无界宽度
+  /// 约束才不自撑满;旧 Row 布局天然给子项无界宽,段落 WidgetSpan 给的是
+  /// 有界宽(会把徽章拉满整行),这里套一层 `Row(mainAxisSize: min)` 还原
+  /// 无界宽约束,保持徽章收缩为内容宽。
+  WidgetSpan _inlineBadge(Widget badge) => WidgetSpan(
+    alignment: PlaceholderAlignment.middle,
+    child: Padding(
+      padding: const EdgeInsets.only(right: 2),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [badge]),
+    ),
+  );
+
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
     final fanBadge = data.fanLevel;
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 徽章顺序对齐 web SideChatTab.vue:38-44 —— 平台用户等级 pill 在前、
-        // 粉丝牌在后(用户口径 2026-09-19:「平台等级应该在粉丝等级前显示」)。
-        // 间距对齐 web:徽章 margin-right 0.14em(14px 基 ≈ 2px)。
-        if (data.userLevel > 0) ...[
-          _UserLevelBadge(site: data.site, level: data.userLevel),
-          const SizedBox(width: 2),
-        ],
-        if (fanBadge != null) ...[
-          _FanBadge(
-            site: data.site,
-            name: data.fanName,
-            level: fanBadge,
-            colorStart: data.badgeColorStart,
-            colorEnd: data.badgeColorEnd,
-            colorBorder: data.badgeColorBorder,
-            textColor: data.badgeTextColor,
-            levelColor: data.badgeColorLevel,
-          ),
-          const SizedBox(width: 2),
-        ],
-        Expanded(
-          child: Text.rich(
-            key: const Key('play-side-chat-message'),
-            TextSpan(
-              children: [
-                TextSpan(
-                  text: data.user,
-                  style: context.textSecondary.copyWith(
-                    color: _userColor(),
-                    fontWeight: FontWeight.w600,
-                    fontSize: fontSize,
-                    height: _kChatLineHeight,
-                  ),
-                ),
-                TextSpan(
-                  text: '：',
-                  style: context.textSecondary.copyWith(
-                    fontSize: fontSize,
-                    height: _kChatLineHeight,
-                  ),
-                ),
-                // 正文段:按 segments 富文本展开(空 = 单段纯文本)。
-                ..._buildBodySpans(
-                  context.textSecondary.copyWith(
-                    color: tokens.textPrimary,
-                    fontSize: fontSize,
-                    height: _kChatLineHeight,
-                  ),
-                ),
-              ],
+    // 单段落内联流,对齐 web SideChatTab:.chat-item 为 block 段落、徽章
+    // display:contents、正文 display:inline —— 徽章/昵称/正文同处一个
+    // Text.rich 段落,正文折行时第二行从段落最左(= 条目内容区最左,
+    // 徽章列正下方)顶格起排,而非缩进到昵称列(用户口径 2026-09-20:
+    // 「同一个人发言第二行文字应该从最左边开始」)。
+    return Text.rich(
+      key: const Key('play-side-chat-message'),
+      TextSpan(
+        children: [
+          // 徽章顺序对齐 web SideChatTab.vue:38-44 —— 平台用户等级 pill 在前、
+          // 粉丝牌在后(用户口径 2026-09-19:「平台等级应该在粉丝等级前显示」)。
+          if (data.userLevel > 0)
+            _inlineBadge(_UserLevelBadge(site: data.site, level: data.userLevel)),
+          if (fanBadge != null &&
+              _FanBadge.visibleFor(site: data.site, name: data.fanName))
+            _inlineBadge(
+              _FanBadge(
+                site: data.site,
+                name: data.fanName,
+                level: fanBadge,
+                colorStart: data.badgeColorStart,
+                colorEnd: data.badgeColorEnd,
+                colorBorder: data.badgeColorBorder,
+                textColor: data.badgeTextColor,
+                levelColor: data.badgeColorLevel,
+              ),
+            ),
+          TextSpan(
+            text: data.user,
+            style: context.textSecondary.copyWith(
+              color: _userColor(),
+              fontWeight: FontWeight.w600,
+              fontSize: fontSize,
+              height: _kChatLineHeight,
             ),
           ),
-        ),
-      ],
+          TextSpan(
+            text: '：',
+            style: context.textSecondary.copyWith(
+              fontSize: fontSize,
+              height: _kChatLineHeight,
+            ),
+          ),
+          // 正文段:按 segments 富文本展开(空 = 单段纯文本)。
+          ..._buildBodySpans(
+            context.textSecondary.copyWith(
+              color: tokens.textPrimary,
+              fontSize: fontSize,
+              height: _kChatLineHeight,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1639,6 +1650,12 @@ class _FanBadge extends StatefulWidget {
 
   /// 粉丝牌等级数字色(0xRRGGBB;0 = 回落 [textColor])。
   final int levelColor;
+
+  /// 该组合是否会渲染出可见内容:douyu 无团名 → build 返回
+  /// [SizedBox.shrink](零尺寸)。内联段落布局据此跳过该牌,不留一个
+  /// 只贡献 padding 的空 WidgetSpan(旧 Row 布局会残留 2px 幽灵间距)。
+  static bool visibleFor({required String site, String? name}) =>
+      site != 'douyu' || (name != null && name.trim().isNotEmpty);
 
   @override
   State<_FanBadge> createState() => _FanBadgeState();

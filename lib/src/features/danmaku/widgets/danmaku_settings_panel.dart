@@ -66,7 +66,7 @@ class DanmakuSettingsPanel extends ConsumerWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: context.tokens.brand,
+              color: context.tokens.accent,
             ),
           ),
         ),

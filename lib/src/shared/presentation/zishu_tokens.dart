@@ -11,6 +11,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     required this.surfaceSoft,
     required this.surfaceRaised,
     required this.brand,
+    required this.accent,
     required this.textPrimary,
     required this.textSecondary,
     required this.border,
@@ -42,6 +43,15 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
   final Color surfaceSoft;
   final Color surfaceRaised;
   final Color brand;
+
+  /// 通用控件强调色(紫霄品牌紫):slider 填充/滑块、开关、复选、选中态、
+  /// 进度与 CTA 等 Material 控件 accent 统一取此处;经 `app_theme.dart` 接入
+  /// `colorScheme.primary/secondary`。
+  ///
+  /// 与 [brand](金黄,收藏星/hover 等对齐 SFVideoLive web 的功能性颜色)刻意
+  /// 分开:用户口径(2026-09-20)控件强调一律品牌紫,金色不再充当控件色。
+  final Color accent;
+
   final Color textPrimary;
   final Color textSecondary;
   final Color border;
@@ -94,6 +104,8 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     surfaceSoft: Color(0xFF141414),
     surfaceRaised: Color(0xFF2A2A2A),
     brand: Color(0xFFF3D04E),
+    // 控件强调紫:Material Deep Purple Accent 200,深底上清晰且与 logo 紫调一致。
+    accent: Color(0xFF7C4DFF),
     textPrimary: Color(0xDEFFFFFF),
     textSecondary: Color(0x8CFFFFFF),
     border: Color(0xFF3A3A3A),
@@ -128,6 +140,8 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     surfaceSoft: Color(0xFFECECEC),
     surfaceRaised: Color(0xFFE0E0E0),
     brand: Color(0xFFC9A227),
+    // 控件强调紫:低明度档(Deep Purple 800),浅底上可读。
+    accent: Color(0xFF6A1B9A),
     textPrimary: Color(0xE6121212),
     textSecondary: Color(0x99616161),
     border: Color(0xFFD9D9D9),
@@ -164,6 +178,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     Color? surfaceSoft,
     Color? surfaceRaised,
     Color? brand,
+    Color? accent,
     Color? textPrimary,
     Color? textSecondary,
     Color? border,
@@ -195,6 +210,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
       surfaceSoft: surfaceSoft ?? this.surfaceSoft,
       surfaceRaised: surfaceRaised ?? this.surfaceRaised,
       brand: brand ?? this.brand,
+      accent: accent ?? this.accent,
       textPrimary: textPrimary ?? this.textPrimary,
       textSecondary: textSecondary ?? this.textSecondary,
       border: border ?? this.border,
@@ -232,6 +248,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
       surfaceSoft: mix(surfaceSoft, other.surfaceSoft),
       surfaceRaised: mix(surfaceRaised, other.surfaceRaised),
       brand: mix(brand, other.brand),
+      accent: mix(accent, other.accent),
       textPrimary: mix(textPrimary, other.textPrimary),
       textSecondary: mix(textSecondary, other.textSecondary),
       border: mix(border, other.border),

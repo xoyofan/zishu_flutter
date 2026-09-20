@@ -19,10 +19,13 @@
 /// 6. danmakuEmojiSegments:抖音表情富文本段——文本段保持 TextSpan,有 url 的
 ///    表情段内联 WidgetSpan 表情图(边长=字号×1.6,contain),url 为空回退
 ///    「[表情名]」文本;空 segments 消息仍为三段结构(danmakuVisualIntegrity 覆盖)。
+/// 7. danmakuWrapAlignsLeft:带徽章长正文折行,第二行顶格到条目内容区最左
+///    (徽章列正下方,UI-BUG-001 用户口径 2026-09-20),不缩进到昵称列。
 ///
 /// 定位约定(与 driver [expectDanmakuEntries] 一致):
-/// - 弹幕条目 = PlaySidePanel 内含「全角冒号」的 RichText。条目由
-///   `Text.rich(TextSpan(children: [用户名, '：', 正文]))` 构建;Flutter 的
+/// - 弹幕条目 = PlaySidePanel 内含「全角冒号」的 RichText。条目为单段落
+///   `Text.rich(TextSpan(children: [徽章 WidgetSpan?, 用户名, '：', 正文]))`
+///   (对齐 web SideChatTab 徽章 display:contents 内联流);Flutter 的
 ///   Text.build 会再包一层默认样式 wrapper span(剥壳见 [_danmakuRowSpan]);
 /// - tab 标签(聊天/关注/推荐)、粉丝徽章(「粉丝 N」)、面板标题与提示文案、
 ///   侧栏信息头(「关注 —」「开播 —」)均不含全角冒号,不会误计。
@@ -31,6 +34,7 @@ library;
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
@@ -437,8 +441,8 @@ void main() {
     final fanRect = tester.getRect(find.text('提督骑士团'));
     expect(levelRect.left, lessThan(fanRect.left),
         reason: '平台等级(用户口径:平台等级在粉丝等级前)应排在粉丝牌左边');
-    // 两枚徽章由同一 Row 水平排布;高度不同(胶囊 vs 渐变条)顶部可差零点几
-    // 像素,用容差断言"同一行"而非严格相等。
+    // 两枚徽章内联于同一 Text.rich 段落首行(WidgetSpan middle 对齐);
+    // 高度不同(胶囊 vs 官方图牌)使文字盒顶部可差几像素,用容差断言"同一行"。
     expect((levelRect.top - fanRect.top).abs(), lessThan(8.0),
         reason: '两枚徽章应渲染在同一行');
   });
@@ -604,6 +608,93 @@ void main() {
     expect((plain.children![2] as TextSpan).text, '呜');
     expect(plain.children![3], isA<TextSpan>(), reason: 'url 为空的表情段回退文本');
     expect((plain.children![3] as TextSpan).text, '[笑哭]');
+  });
+
+  testWidgets('danmakuWrapAlignsLeft:正文折行第二行顶格内容区最左(徽章列正下方)', (
+    tester,
+  ) async {
+    final connector = _FakeDanmakuConnector();
+    await _pumpHost(tester, connector);
+    _goPlay(tester);
+    await _pumpStable(tester);
+
+    final session = connector.session!;
+    session.emitConnected();
+    // 带平台等级徽章(LV31)+ 超长正文:正文必然折行。用户口径 2026-09-20
+    // (UI-BUG-001):「同一个人发言第二行文字应该从最左边开始」——第二行须
+    // 顶到条目内容区最左(徽章列正下方),而非缩进到昵称列;对齐 web
+    // SideChatTab 徽章 display:contents 的单段落内联流。
+    session.push(
+      _chat(
+        '折行测试员',
+        '这条弹幕正文足够长,会在侧栏宽度内自然折行到第二行,'
+        '第二行文字应该从最左边开始,与首行徽章列对齐,不再缩进,',
+        userLevel: 31,
+      ),
+    );
+    await _pumpStable(tester);
+
+    final entryFinder = find.descendant(
+      of: find.byType(PlaySidePanel),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is RichText &&
+            widget.text.toPlainText().contains('折行测试员：'),
+      ),
+    );
+    final paragraphRect = tester.getRect(entryFinder);
+    final paragraph = tester.renderObject<RenderParagraph>(entryFinder);
+    final plainText = paragraph.text.toPlainText();
+
+    // 首行文本盒:取用户名区段。徽章是内联 WidgetSpan,在 plainText 里表现为
+    // 对象替换符 U+FFFC,因此用户名下标必须大于 0(证明徽章内联在段落里)。
+    const user = '折行测试员';
+    final userStart = plainText.indexOf('$user：');
+    expect(userStart, greaterThan(0), reason: '首行应有内联徽章占位符(U+FFFC)');
+    final userBoxes = paragraph.getBoxesForSelection(
+      TextSelection(
+        baseOffset: userStart,
+        extentOffset: userStart + user.length,
+      ),
+    );
+    expect(userBoxes, isNotEmpty);
+    final userLineTop = userBoxes.first.top;
+    final userLeft = userBoxes.first.left; // 段落局部坐标
+
+    // 第二行起点:对第一行以下(y 更大)的全部文本盒取最左。折行行的首字形
+    // 必然落在 x≈0(段落局部坐标),窗口片段盒则可能取到行中位置,所以必须
+    // 对整行所有盒求最小值,不能只看末尾窗口。
+    final allBoxes = paragraph.getBoxesForSelection(
+      TextSelection(baseOffset: 0, extentOffset: plainText.length),
+    );
+    final secondLineBoxes = allBoxes
+        .where((box) => box.top > userLineTop + 10)
+        .toList();
+    expect(secondLineBoxes, isNotEmpty, reason: '超长正文应折行出第二行');
+    final line2Left = secondLineBoxes
+        .map((box) => box.left)
+        .reduce((a, b) => a < b ? a : b);
+
+    // 断言 1:第二行顶到段落最左(= 条目内容区最左)。
+    expect(line2Left, lessThan(1.0), reason: '折行第二行应从内容区最左顶格开始');
+    // 断言 2:且严格在昵称列左侧(不再缩进到昵称起始列)。
+    expect(line2Left, lessThan(userLeft - 1.0), reason: '第二行不得缩进到昵称列');
+    // 断言 3:第二行与首行徽章列左对齐(徽章内联在段落最左)。取 LV31 的
+    // 最近 Container 祖先 = 徽章胶囊底座(内文字距胶囊壁还有 4px padding,
+    // 不能直接用文字盒比)。
+    final badgePillRect = tester.getRect(
+      find.ancestor(
+        of: find.text('LV31'),
+        matching: find.byType(Container),
+      ).first,
+    );
+    final badgeRelativeLeft = badgePillRect.left - paragraphRect.left;
+    expect(
+      (badgeRelativeLeft - line2Left).abs(),
+      lessThan(1.5),
+      reason: '第二行应与首行徽章列左对齐(内容区最左)',
+    );
+    expect(tester.takeException(), isNull);
   });
 
   testWidgets('danmakuPanelIsolatedFromRoomNav:切关注/推荐再切回聊天条目仍在', (

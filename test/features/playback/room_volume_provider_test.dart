@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:zishu_flutter/src/features/follow/application/settings_provider.dart';
 import 'package:zishu_flutter/src/features/play/application/room_volume_provider.dart';
 
 const _sites = <String>[
@@ -73,6 +74,28 @@ void main() {
           );
           expect(decision.volume, 64, reason: site);
         }
+      },
+    );
+
+    test(
+      'a remembered room never becomes the default of a never-set room '
+      '(BUG-WIN-VOLUME-002 / VOL-001)',
+      () {
+        // 真机口径:房 A 调过 36.8 后,进从未设置过音量的全新房 B,
+        // B 必须用出厂默认 100,不得把 A 的记忆值当 B 的默认。
+        final roomVolumes = {
+          roomVolumeKey('douyu', '24422'): 36.8,
+          roomVolumeKey('twitch', 'zackrawrr'): 86.8,
+        };
+        final decision = resolveRoomVolume(
+          roomVolumes: roomVolumes,
+          globalMuted: false,
+          defaultVolume: SettingsState.defaultVolumeLevel,
+          site: 'huya',
+          roomId: '709107',
+        );
+        expect(decision.volume, 100);
+        expect(decision.globalMuted, isFalse);
       },
     );
 

@@ -71,6 +71,9 @@ class _FakePlatformPlayer extends PlatformPlayer {
   void emitCompleted() => completedController.add(true);
 
   void emitError(String message) => errorController.add(message);
+
+  /// 伪造底层音量属性回流(模拟 mpv observeproperty volume 事件)。
+  void emitVolume(double value) => volumeController.add(value);
 }
 
 void main() {
@@ -277,6 +280,75 @@ void main() {
         logLines().where((line) => line.contains('stall_watchdog')).length,
         armedBefore + 1,
         reason: 'completed 应重新挂看门狗并等待退避,而非绕开退避',
+      );
+    });
+  });
+
+  group('A6 音量快照同步(BUG-WIN-VOLUME-002)', () {
+    test('setVolume 立即归一到快照,不等底层事件回流', () async {
+      // 复现真机:房 A 拖到 36.8,底层已回流,快照停在 36.8。
+      fake.emitVolume(36.8);
+      await pumpEventQueue();
+      expect(snapshots.last.volume, 36.8);
+
+      // 进入从未设置音量的房 B:编排层套默认 100。替身底层不再回流
+      //(真机中该回流会被 open 围栏吞掉/因属性幂等而不再发出),
+      // setVolume 自己必须把快照推到 100,否则 slider 卡在上一房值。
+      await player.setVolume(100);
+      await pumpEventQueue();
+
+      expect(
+        snapshots.last.volume,
+        100,
+        reason: 'setVolume 后快照音量必须立即等于目标值,不得等待底层回流',
+      );
+    });
+
+    test('切房开流窗口内套用新房默认音量,快照不得停留在上一房值', () async {
+      // 真 BUG-WIN-VOLUME-002 时序:房 A 36.8 → 离房 → 进全新房 B(默认 100)。
+      fake.emitVolume(36.8);
+      await pumpEventQueue();
+
+      fake.gateNextOpen();
+      final openFuture = player.open(lineB);
+      await fake.openStarted.future;
+
+      // 开流前编排层先套一次新房音量(默认 100);此刻 open 在途,
+      // 真机上底层即便回流也会被事件围栏丢弃。
+      await player.setVolume(100);
+      await pumpEventQueue();
+
+      fake.releaseGatedOpen();
+      await openFuture;
+      await pumpEventQueue();
+
+      expect(
+        snapshots.last.volume,
+        100,
+        reason: 'open/resync 全部落地后快照音量必须是新房目标值,而非上一房残留',
+      );
+    });
+
+    test('解除静音恢复音量时同样立即归一到快照', () async {
+      fake.emitVolume(64);
+      await pumpEventQueue();
+
+      await player.setMuted(true);
+      // 静音走底层 volume=0,真实 mpv 会把属性变化回流成快照 0。
+      fake.emitVolume(0);
+      await pumpEventQueue();
+      expect(snapshots.last.muted, isTrue);
+      expect(snapshots.last.volume, 0);
+
+      // 解除静音会向底层恢复静音前音量;底层不再回流时快照也要跟上。
+      await player.setMuted(false);
+      await pumpEventQueue();
+
+      expect(snapshots.last.muted, isFalse);
+      expect(
+        snapshots.last.volume,
+        64,
+        reason: '解除静音后快照音量必须恢复为静音前值,不得停在静音的 0',
       );
     });
   });

@@ -1177,7 +1177,7 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
                     child: Checkbox(
                       value: _remember,
                       visualDensity: VisualDensity.compact,
-                      activeColor: context.tokens.brand,
+                      activeColor: context.tokens.accent,
                       onChanged: (v) => setState(() => _remember = v ?? true),
                     ),
                   ),
@@ -1213,8 +1213,8 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
         FilledButton(
           onPressed: _busy ? null : _submit,
           style: FilledButton.styleFrom(
-            backgroundColor: context.tokens.brand,
-            foregroundColor: Colors.black87,
+            backgroundColor: context.tokens.accent,
+            foregroundColor: Colors.white,
             textStyle: const TextStyle(fontSize: 12),
           ),
           child: _busy
@@ -1327,7 +1327,7 @@ class _NavAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? context.tokens.brand : context.tokens.textSecondary;
+    final color = active ? context.tokens.accent : context.tokens.textSecondary;
     return Builder(
       builder: (hoverContext) {
         // 触发点中心 x:MouseRegion 与 InkWell 共用同一个 RenderBox 快照。
@@ -1600,7 +1600,7 @@ class _BottomNav extends StatelessWidget {
 Widget _bottomIcon(IconData icon, bool active, ZishuTokens tokens) => Icon(
   icon,
   size: 20,
-  color: active ? tokens.brand : tokens.textSecondary,
+  color: active ? tokens.accent : tokens.textSecondary,
 );
 
 /// 移动底栏「主题」项:与顶栏 `nav-theme` 同一份判定与切换逻辑。
@@ -1645,7 +1645,7 @@ class _BottomItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = active ? context.tokens.brand : context.tokens.textSecondary;
+    final color = active ? context.tokens.accent : context.tokens.textSecondary;
     return Expanded(
       child: InkWell(
         hoverColor: context.tokens.surface,
@@ -2072,7 +2072,7 @@ class _CategoryChipState extends State<_CategoryChip> {
         onTap: widget.onTap,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 0.64, vertical: 1.28),
-          color: _hovering ? context.tokens.brand.withValues(alpha: 0.12) : null,
+          color: _hovering ? context.tokens.accent.withValues(alpha: 0.12) : null,
           child: Text(
             widget.label,
             maxLines: 1,

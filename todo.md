@@ -841,3 +841,21 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 - [ ] BUG-WIN-DANMAKU-004 twitch 弹幕连接失败(出口+connector 复验)
 - [ ] OBS-WIN-PLAY-001 youtube HOY 频道流拉不动(观察)
 - [ ] OBS-WIN-OVERLAY-001 飘屏多轨重叠(低优先)
+
+## 2026-09-20 smoke 待修清单处理(用户口径 6 项,完成)
+
+**结论**:6 项修复全部完成并真机复验。全量门禁全绿:app-test **656**、analyze 双 0、parser **384/10skip**。release 重建后真机确认:控件强调色全紫(slider/开关/激活态)、主题深⇄浅二态无「金色」、全新房间音量默认 100(不再继承上一房 36.8)、douyu 切房返回弹幕自动重连(A→B→A 直接已连接+飘屏,无需手动刷新)。
+
+### 修复明细
+- [x] UI-BUG-002 控件强调色→紫霄紫:tokens 新增 accent(深 0xFF7C4DFF/浅 0xFF6A1B9A),app_theme 接 colorScheme.primary/secondary;player_controls(slider/弹幕开关/全屏激活/菜单勾选/睡眠定时)、app_shell(登录 checkbox+按钮/导航与底栏激活/分类 hover 底)、弹幕设置面板标题、主播页关注 CTA 全部改紫;brand 金保留收藏星/徽章/卡片角标等 web 对齐功能色。
+- [x] UI-BUG-001 聊天折行顶格:_ChatRow 改单段 Text.rich 内联流(徽章 WidgetSpan 内联,对齐 web SideChatTab display:contents 语义),第二行顶格内容区最左;RenderParagraph 断言第二行 left≈0。
+- [x] BUG-WIN-VOLUME-002 根因:MediaKitLivePlayer.setVolume 只写 mpv 不发快照,切房窗口内事件回流被围栏丢弃+幂等去重致快照卡死上一房值(替身同步 emit 遮蔽缺陷)。修复:setVolume/解除静音主动 emit 快照;3 个 fence 用例+2 个回归锚,TDD 红转绿,playback 130/130。
+- [x] PARSER-GAP-001 主播卡接线:play_meta_bar 接 followProvider 当前房 RoomSummary(followers/online/vip,6d920cf 链路),无字段显「—」不伪造。
+- [x] BUG-WIN-DANMAKU-002 弹幕重连:douyu 对快速重连限流,首连被拒无重试。session provider 加 3 次指数退避(800ms→3.2s)+generation fence,连接成功重置预算,手动刷新为耗尽出口;4 个新用例。
+- [x] PARSER-GAP-002(部分):youtube emoji 短代码→Unicode(gemoji 1913 全量+CLDR 手工核定 144 项覆盖层,含 :grinning_face_with_sweat:→😅),_runsToText 接线,文本段不过表防误改;kuaishou 协议无表情 URL([贊] 保持文本,注释说明,不伪造)。
+
+### 剩余(下轮)
+- [ ] BUG-WIN-DANMAKU-003 huya 已连接零消息(注册/心跳/订阅包)
+- [ ] BUG-WIN-DANMAKU-004 twitch 弹幕连接失败(出口+connector 复验)
+- [ ] PARSER-GAP-002 剩余:kuaishou 表情 URL 抓包、twitch emote 图片渲染
+- [ ] OBS-WIN-OVERLAY-001 飘屏多轨重叠

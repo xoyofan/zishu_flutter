@@ -25,7 +25,7 @@ class _FollowButtonState extends State<FollowButton> {
       duration: AppMotion.normal,
       curve: AppMotion.curve,
       decoration: BoxDecoration(
-        color: followed ? tokens.surfaceRaised : tokens.brand,
+        color: followed ? tokens.surfaceRaised : tokens.accent,
         borderRadius: AppRadius.allSm,
         border: followed ? Border.all(color: tokens.border) : null,
       ),

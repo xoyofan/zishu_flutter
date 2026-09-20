@@ -10,19 +10,23 @@
 /// 本组件只在窄屏由侧栏以 compact 形态渲染 —— 信息条与侧栏信息头共用同一份
 /// 关注状态与切换回调,不重复实现关注语义。
 ///
-/// **数据诚实性**:全部取自 [RoomPayload] 的真实字段;解析层没给的项一律显示
-/// 「—」,不伪造。当前 `RoomPayload` 只有 `startedAt`(斗鱼等平台真实返回)与
-/// `anchorName`/`avatar`;`followers` / `audience` / 弹幕数尚无字段 —— 需解析轨
-/// 补齐 `RoomPayload` 后本组件自动生效(见 todo.md 遗留项)。
+/// **数据诚实性**:统计格取自与桌面侧栏信息头**同一份**数据源 ——
+/// [followProvider] 中当前房间关注条目的 [RoomSummary](`followers`/`online`
+/// 由 `FollowController.refreshStatuses` 按各站真源回填,commit 6d920cf)。
+/// 未关注、或解析层没给的项一律显示「—」,不伪造;纯复用已回填的关注快照,
+/// 不另发网络请求。开播时间取 [RoomPayload].`startedAt`(斗鱼等平台真实返回);
+/// 弹幕总数上游无字段,恒为「—」(会话内已收条数不是平台弹幕总数,不冒充)。
 library;
 
 import 'package:flutter/material.dart';
-import 'package:live_parser/live_parser.dart' show RoomPayload;
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:live_parser/live_parser.dart' show RoomPayload, RoomSummary;
 
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
+import '../../follow/application/follow_provider.dart';
 
-class PlayMetaBar extends StatelessWidget {
+class PlayMetaBar extends ConsumerWidget {
   const PlayMetaBar({
     super.key,
     required this.payload,
@@ -51,12 +55,24 @@ class PlayMetaBar extends StatelessWidget {
   static const double _kStatIconSize = 12;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final tokens = context.tokens;
+    final payload = this.payload;
     final anchor = payload?.anchorName.trim().isNotEmpty == true
         ? payload!.anchorName.trim()
         : '主播信息';
     final isLive = payload?.isLive ?? false;
+    // 统计区数据源:与桌面侧栏信息头同源 —— followProvider 中当前房间关注
+    // 条目的 [RoomSummary](followers/online 由 refreshStatuses 按真源回填)。
+    // 未关注/上游未提供的字段显示「—」,不伪造、不发起新的网络请求。
+    final site = payload?.site ?? '';
+    final roomId = payload?.roomId ?? '';
+    final matched = ref
+        .watch(followProvider)
+        .where((entry) => entry.key == '$site:$roomId');
+    final RoomSummary? summary = matched.isNotEmpty ? matched.first.room : null;
+    final followersText = _statText(summary?.followers);
+    final audienceText = _statText(summary?.online);
     // 高度由内容撑开(web 竖屏堆叠基准 head-h 2.75rem ≈ 44,但 flutter 字体
     // metrics 实测装不下三行文字,固定高会溢出 2-6px;IntrinsicHeight 让头像
     // 与按钮列 stretch 到内容自然高,任何字体缩放档都不溢出)。
@@ -104,8 +120,8 @@ class PlayMetaBar extends StatelessWidget {
                       icon: Icons.favorite_border_rounded,
                       iconColor: context.tokens.playFollowText,
                       label: '关注',
-                      // 解析层暂无 followers 字段(见文件头「数据诚实性」)。
-                      value: '—',
+                      // 关注条目快照的 followers(关注/人气同源回填)。
+                      value: followersText,
                     ),
                     const SizedBox(width: AppSpacing.sm),
                     _MetaStat(
@@ -124,8 +140,8 @@ class PlayMetaBar extends StatelessWidget {
                       icon: Icons.people_alt_outlined,
                       iconColor: context.tokens.statAudience,
                       label: '人气',
-                      // 解析层暂无 audience 字段。
-                      value: '—',
+                      // 关注条目快照的 online(在线人数文案,回填自真源)。
+                      value: audienceText,
                     ),
                     const SizedBox(width: AppSpacing.sm),
                     _MetaStat(
@@ -168,6 +184,15 @@ class PlayMetaBar extends StatelessWidget {
     return '${pad(local.month)}-${pad(local.day)} '
         '${pad(local.hour)}:${pad(local.minute)}';
   }
+}
+
+/// 统计文本:空串(未关注/上游未提供)显示「—」占位,不伪造。
+///
+/// (与 play_side_panel.dart 的 `_statText` 同语义;该文件由桌面信息头维护,
+/// 私有函数跨文件不可复用,故在此等价实现。)
+String _statText(String? value) {
+  final text = value?.trim() ?? '';
+  return text.isEmpty ? '—' : text;
 }
 
 /// 圆形头像:无图时以昵称首字兜底(品牌色底 + 主文字色)。

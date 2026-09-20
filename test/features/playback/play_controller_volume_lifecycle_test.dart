@@ -340,6 +340,36 @@ void main() {
     expect(player.currentSnapshot.volume, 62);
   });
 
+  test(
+    'entering a never-set room applies the factory default 100, not the previous room value',
+    () async {
+      // BUG-WIN-VOLUME-002 / VOL-001:房 A 记忆 36.8,全新房 B 无记忆,
+      // 进 B 必须把播放器套到出厂默认 100,不得继承 A 的值。
+      final player = ScriptedLivePlayer();
+      final container = await _makeContainer(
+        roomVolumes: {'room_vol_douyu_A': 36.8},
+        player: player,
+      );
+      await _startRoom(
+        container,
+        (site: 'douyu', roomId: 'A'),
+        player,
+        expectedOpenCount: 1,
+        expectedVolumeCount: 2,
+      );
+      await _startRoom(
+        container,
+        (site: 'huya', roomId: '709107'),
+        player,
+        expectedOpenCount: 2,
+        expectedVolumeCount: 4,
+      );
+
+      expect(player.volumeCalls, [36.8, 36.8, 100, 100]);
+      expect(player.currentSnapshot.volume, 100);
+    },
+  );
+
   test('returning to the first room restores its remembered volume', () async {
     final player = ScriptedLivePlayer();
     final first = await _makeContainer(

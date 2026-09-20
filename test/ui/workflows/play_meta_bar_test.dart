@@ -15,7 +15,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:live_parser/live_parser.dart'
-    show RoomPayload, RoomState, StreamLine, StreamQuality;
+    show RoomPayload, RoomState, RoomSummary, StreamLine, StreamQuality;
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:zishu_flutter/src/app/app_theme.dart';
@@ -236,13 +236,72 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
+    testWidgets('统计格回填:关注条目 summary 有值时显示数值(PARSER-GAP-001)',
+        (tester) async {
+      final container = await _pumpPlay(tester, size: const Size(375, 812));
+      // fixture 种子可能已含该房;替换为带真源回填统计的关注条目
+      // (followers/online 同桌面侧栏信息头共用 followProvider 快照)。
+      container.read(followProvider.notifier).remove('douyu:63136');
+      container
+          .read(followProvider.notifier)
+          .addFromRoom(
+            const RoomSummary(
+              site: 'douyu',
+              roomId: '63136',
+              title: '',
+              anchorName: '神超',
+              cid: '',
+              category: '',
+              online: '341.2万',
+              cover: '',
+              followers: '5403780',
+              vip: '1128',
+            ),
+          );
+      await _pumpFrames(tester, 2);
+
+      expect(_inMetaBar('关注 5403780'), findsOneWidget);
+      expect(_inMetaBar('人气 341.2万'), findsOneWidget);
+      // 弹幕总数上游无字段,保持「—」不冒充。
+      expect(_inMetaBar('弹幕 —'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('统计格:已关注但上游未提供 followers/online 时仍显示「—」',
+        (tester) async {
+      final container = await _pumpPlay(tester, size: const Size(375, 812));
+      container.read(followProvider.notifier).remove('douyu:63136');
+      // yy/kuaishou 等上游无免登录统计接口,回填值为空 → 占位不伪造。
+      container
+          .read(followProvider.notifier)
+          .addFromRoom(
+            const RoomSummary(
+              site: 'douyu',
+              roomId: '63136',
+              title: '',
+              anchorName: '神超',
+              cid: '',
+              category: '',
+              online: '',
+              cover: '',
+            ),
+          );
+      await _pumpFrames(tester, 2);
+
+      expect(_inMetaBar('关注 —'), findsOneWidget);
+      expect(_inMetaBar('人气 —'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('360x640:缺开播时间显示「开播中」,解析层缺字段一律占位不伪造',
         (tester) async {
       await _pumpPlay(tester, size: const Size(360, 640));
 
+      // fixture 种子首条即本房(douyu:63136):online='42.1万' 已回填 → 人气
+      // 显示真值;followers 上游未提供 → 「—」;弹幕总数无字段 → 「—」。
       expect(_inMetaBar('开播 开播中'), findsOneWidget);
       expect(_inMetaBar('关注 —'), findsOneWidget);
-      expect(_inMetaBar('人气 —'), findsOneWidget);
+      expect(_inMetaBar('人气 42.1万'), findsOneWidget);
       expect(_inMetaBar('弹幕 —'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });

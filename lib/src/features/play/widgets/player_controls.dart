@@ -182,7 +182,7 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
                           100.0,
                         ),
                         max: 100,
-                        activeColor: tokens.brand,
+                        activeColor: tokens.accent,
                         // 未激活轨道在视频上需保持可见:浅色主题 border 近白
                         // 会隐形。
                         inactiveColor: AppOnVideo.textMuted,
@@ -251,7 +251,7 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
                           : Icons.subtitles_off_rounded,
                       size: 20,
                       color: widget.showDanmaku
-                          ? tokens.brand
+                          ? tokens.accent
                           : AppOnVideo.textMuted,
                     ),
                   ),
@@ -311,7 +311,7 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
                           : Icons.open_in_full_rounded,
                       size: 20,
                       color: widget.screenMode.isWidescreen
-                          ? tokens.brand
+                          ? tokens.accent
                           : AppOnVideo.text,
                     ),
                   ),
@@ -328,7 +328,7 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
                         : Icons.fullscreen_rounded,
                     size: 20,
                     color: widget.screenMode.isFullscreen
-                        ? tokens.brand
+                        ? tokens.accent
                         : AppOnVideo.text,
                   ),
                 ),
@@ -379,7 +379,7 @@ class _QualitySelectBox extends StatelessWidget {
             child: Row(
               children: [
                 if (activeQuality?.name == option.name)
-                  Icon(Icons.check_rounded, size: 16, color: tokens.brand)
+                  Icon(Icons.check_rounded, size: 16, color: tokens.accent)
                 else
                   const SizedBox(width: 16),
                 const SizedBox(width: AppSpacing.xs),
@@ -446,7 +446,7 @@ class _LineSelectBox extends StatelessWidget {
             child: Row(
               children: [
                 if (activeLine?.url == line.url)
-                  Icon(Icons.check_rounded, size: 16, color: tokens.brand)
+                  Icon(Icons.check_rounded, size: 16, color: tokens.accent)
                 else
                   const SizedBox(width: 16),
                 const SizedBox(width: AppSpacing.xs),
@@ -533,7 +533,7 @@ class _SleepTimerButton extends ConsumerWidget {
       child: Icon(
         active ? Icons.bedtime_rounded : Icons.bedtime_outlined,
         size: 20,
-        color: active ? tokens.brand : tokens.textPrimary,
+        color: active ? tokens.accent : tokens.textPrimary,
       ),
     );
   }

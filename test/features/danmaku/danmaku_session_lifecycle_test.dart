@@ -50,9 +50,17 @@ class _FakeSession implements DanmakuSession {
 }
 
 class _FakeConnector implements DanmakuConnector {
-  _FakeConnector({this.supported = true});
+  _FakeConnector({this.supported = true, this.failBeforeSuccess = 0});
 
   final bool supported;
+
+  /// connect 总调用次数(含失败):验证「必须发起连接」与「重试次数预算」。
+  int attempts = 0;
+
+  /// 前 N 次 connect 以异常失败(模拟 douyu 对快速重连限流拒绝首连),
+  /// 之后走 completer 正常发牌。测试中途可改写以放行手动刷新。
+  int failBeforeSuccess;
+
   final requests = <DanmakuSessionRequest>[];
   final pending = <Completer<DanmakuSession>>[];
   final sessions = <_FakeSession>[];
@@ -62,7 +70,12 @@ class _FakeConnector implements DanmakuConnector {
 
   @override
   Future<DanmakuSession> connect(DanmakuSessionRequest request) {
+    attempts += 1;
     requests.add(request);
+    if (failBeforeSuccess > 0) {
+      failBeforeSuccess -= 1;
+      return Future.error(StateError('handshake rejected (限流模拟)'));
+    }
     final completer = Completer<DanmakuSession>();
     pending.add(completer);
     return completer.future;
@@ -97,6 +110,8 @@ ProviderContainer _container(_FakeConnector connector) {
   return ProviderContainer(
     overrides: [
       danmakuRegistryProvider.overrideWithValue(_registryFor(connector)),
+      // 退避基准延时归零:用例内确定性驱动重试,不吃真实等待。
+      danmakuRetryBaseDelayProvider.overrideWithValue(Duration.zero),
     ],
   );
 }
@@ -104,6 +119,13 @@ ProviderContainer _container(_FakeConnector connector) {
 Future<void> _flush() async {
   await Future<void>.delayed(Duration.zero);
   await Future<void>.delayed(Duration.zero);
+}
+
+/// 重试驱动:多轮事件循环,让零延时退避 Timer 与连接微任务完整走完。
+Future<void> _pumpRetries() async {
+  for (var i = 0; i < 12; i++) {
+    await Future<void>.delayed(Duration.zero);
+  }
 }
 
 void main() {
@@ -208,6 +230,149 @@ void main() {
     expect(connector.requests, isEmpty);
     expect(states.single.supported, isFalse);
     expect(states.single.connection, DanmakuSessionState.disconnected);
+    sub.close();
+  });
+
+  test('切房 A→B→A:回到原房间必须重新发起连接(BUG-WIN-DANMAKU-002)', () async {
+    final connector = _FakeConnector();
+    final container = _container(connector);
+    addTearDown(container.dispose);
+
+    final roomA = danmakuSessionProvider((site: 'douyu', roomId: '100'));
+    final roomB = danmakuSessionProvider((site: 'douyu', roomId: '200'));
+
+    // 首次进 A:自动建连成功并收流。
+    final subA1 = container.listen(roomA, (_, _) {});
+    await _flush();
+    expect(connector.requests.single.roomId, '100');
+    final firstSession = connector.completeNext();
+    await _flush();
+    expect(container.read(roomA).connection, DanmakuSessionState.connected);
+
+    // 切到 B:A 会话销毁,B 自己建立连接(路由过渡期两房并存)。
+    subA1.close();
+    final subB = container.listen(roomB, (_, _) {});
+    await _flush();
+    expect(firstSession.closeCount, 1, reason: '切房后旧会话必须被 close');
+    expect(connector.requests, hasLength(2));
+    connector.completeNext(); // B 的会话补全,避免悬挂 completer。
+    await _flush();
+
+    // 从 B 切回 A:必须第二次发起 connect,而不是停在「未连接」。
+    final subA2 = container.listen(roomA, (_, _) {});
+    await _flush();
+    expect(connector.requests, hasLength(3), reason: '回房必须重新 connect');
+    expect(connector.requests.last.roomId, '100');
+
+    // 回房后的新会话正常收流(真机症状:未连接 + 暂无弹幕,点刷新才恢复)。
+    final secondSession = connector.completeNext();
+    await _flush();
+    secondSession.push('回房消息');
+    await _flush();
+    expect(container.read(roomA).connection, DanmakuSessionState.connected);
+    expect(container.read(roomA).messages.last.text, '回房消息');
+
+    subA2.close();
+    subB.close();
+  });
+
+  test('连接失败后按指数退避自动重试,重试成功恢复收流', () async {
+    final connector = _FakeConnector(failBeforeSuccess: 2);
+    final container = _container(connector);
+    addTearDown(container.dispose);
+
+    final provider = danmakuSessionProvider((site: 'douyu', roomId: '100'));
+    final states = <DanmakuChatState>[];
+    final sub = container.listen(
+      provider,
+      (_, next) => states.add(next),
+      fireImmediately: true,
+    );
+
+    // 首连失败 + 2 次自动重试,第 3 次 connect(注入)成功。
+    await _pumpRetries();
+    expect(connector.attempts, 3, reason: '失败后必须自动重试而不是停在未连接');
+
+    final session = connector.completeNext();
+    await _flush();
+    session.push('恢复后消息');
+    await _flush();
+
+    expect(states.last.connection, DanmakuSessionState.connected);
+    expect(states.last.messages.single.text, '恢复后消息');
+    sub.close();
+  });
+
+  test('连接持续失败:重试耗尽保持未连接不风暴,手动刷新可重来', () async {
+    final connector = _FakeConnector(failBeforeSuccess: 99);
+    final container = _container(connector);
+    addTearDown(container.dispose);
+
+    final provider = danmakuSessionProvider((site: 'douyu', roomId: '100'));
+    final states = <DanmakuChatState>[];
+    final sub = container.listen(
+      provider,
+      (_, next) => states.add(next),
+      fireImmediately: true,
+    );
+
+    // 首连 + 3 次自动重试 = 4 次 attempt;之后不得继续增长(无重试风暴)。
+    await _pumpRetries();
+    expect(connector.attempts, 4);
+    await _pumpRetries();
+    expect(connector.attempts, 4, reason: '重试耗尽后不得继续自动重试');
+    expect(
+      states.last.connection,
+      DanmakuSessionState.disconnected,
+      reason: '耗尽后保持「未连接」等待手动刷新',
+    );
+
+    // 手动刷新:重置重试预算,本次放行成功。
+    connector.failBeforeSuccess = 0;
+    container.read(provider.notifier).reconnect();
+    await _flush();
+    expect(connector.attempts, 5);
+    connector.completeNext();
+    await _flush();
+    expect(states.last.connection, DanmakuSessionState.connected);
+    sub.close();
+  });
+
+  test('会话异常断开后自动退避重试并恢复收流', () async {
+    final connector = _FakeConnector();
+    final container = _container(connector);
+    addTearDown(container.dispose);
+
+    final provider = danmakuSessionProvider((site: 'douyu', roomId: '100'));
+    final states = <DanmakuChatState>[];
+    final sub = container.listen(
+      provider,
+      (_, next) => states.add(next),
+      fireImmediately: true,
+    );
+    await _flush();
+    final first = connector.completeNext();
+    await _flush();
+    first.push('断开前消息');
+    await _flush();
+    expect(states.last.connection, DanmakuSessionState.connected);
+
+    // 服务端掐流:states 推 disconnected(douyu 连接器自身不重连)。
+    first.statesController.add(DanmakuSessionState.disconnected);
+    await _pumpRetries();
+    expect(connector.requests, hasLength(2), reason: '异常断开后应自动重试');
+
+    final second = connector.completeNext();
+    await _flush();
+    expect(first.closeCount, 1, reason: '重试前旧会话必须被释放');
+    second.push('断开后消息');
+    await _flush();
+    expect(states.last.connection, DanmakuSessionState.connected);
+    expect(
+      states.last.messages.map((message) => message.text).toList(),
+      ['断开前消息', '断开后消息'],
+      reason: '自动重试不清空历史弹幕',
+    );
     sub.close();
   });
 

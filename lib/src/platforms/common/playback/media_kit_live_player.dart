@@ -679,7 +679,12 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     _muted = _muted && clamped <= 0;
     if (!_muted && clamped > 0) _volumeBeforeMute = clamped;
     await _player.setVolume(clamped);
-    _emit((snapshot) => snapshot.copyWith(muted: _muted));
+    // 主动把目标音量归一进快照,不得单赌底层 volume 属性事件回流:
+    // 切房开流窗口内回流会被事件围栏丢弃,open 落地后属性已幂等、mpv 不再
+    // 补发,快照就会永远停在上一间房的音量(真机 BUG-WIN-VOLUME-002:
+    // 全新房间的 slider 显示上一房调过的值而非默认 100)。底层回流晚到时
+    // 与本值相同,经 _emit 去重不会抖动。
+    _emit((snapshot) => snapshot.copyWith(volume: clamped, muted: _muted));
   }
 
   @override
@@ -689,10 +694,18 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     if (muted) {
       if (_latest.volume > 0) _volumeBeforeMute = _latest.volume;
       await _player.setVolume(0);
+      // 静音只翻 muted 位,不改 volume 字段:快照 volume 始终保存
+      // 「用户感知音量基准」,UI 按 muted 位显示 0(见 player_controls)。
+      _emit((snapshot) => snapshot.copyWith(muted: muted));
     } else {
-      await _player.setVolume(_volumeBeforeMute <= 0 ? 100 : _volumeBeforeMute);
+      // 解除静音与 setVolume 同理:主动把恢复后的音量归一进快照,
+      // 防止底层恢复回流丢失时 slider 停在静音的 0。
+      final restored = _volumeBeforeMute <= 0 ? 100.0 : _volumeBeforeMute;
+      await _player.setVolume(restored);
+      _emit(
+        (snapshot) => snapshot.copyWith(volume: restored, muted: muted),
+      );
     }
-    _emit((snapshot) => snapshot.copyWith(muted: muted));
   }
 
   @override

@@ -24,13 +24,14 @@ abstract final class ZishuTheme {
   }
 
   static ThemeData _decorate(ThemeData base, ZishuTokens tokens) {
-    final dark = base.brightness == Brightness.dark;
     return base.copyWith(
       scaffoldBackgroundColor: tokens.background,
+      // 通用控件强调色(slider/开关/复选/进度/CTA 等)统一紫霄品牌紫
+      // (tokens.accent);brand 金仅保留给收藏星等对齐 web 的功能性颜色。
       colorScheme: base.colorScheme.copyWith(
-        primary: tokens.brand,
-        onPrimary: dark ? Colors.black87 : Colors.white,
-        secondary: tokens.brand,
+        primary: tokens.accent,
+        onPrimary: Colors.white,
+        secondary: tokens.accent,
         surface: tokens.surface,
         onSurface: tokens.textPrimary,
         surfaceContainerHighest: tokens.surfaceRaised,
@@ -59,9 +60,9 @@ abstract final class ZishuTheme {
       ),
       navigationBarTheme: NavigationBarThemeData(
         backgroundColor: tokens.surfaceSoft,
-        indicatorColor: tokens.brand.withValues(alpha: 0.2),
+        indicatorColor: tokens.accent.withValues(alpha: 0.2),
       ),
-      progressIndicatorTheme: ProgressIndicatorThemeData(color: tokens.brand),
+      progressIndicatorTheme: ProgressIndicatorThemeData(color: tokens.accent),
       extensions: [tokens],
     );
   }
