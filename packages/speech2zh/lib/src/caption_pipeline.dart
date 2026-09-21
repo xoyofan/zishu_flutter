@@ -16,7 +16,9 @@ import 'speech_recognizer.dart';
 
 /// 识别器工厂(默认 sherpa;测试注入 fake)。
 typedef RecognizerFactory = SpeechRecognizer Function(
-    SpeechLanguage language, String modelDir);
+  SpeechLanguage language,
+  String modelDir,
+);
 
 /// 翻译 hook:原文 → 中文;null 表示本次翻译失败。
 typedef Translator = Future<String?> Function(String text);
@@ -27,12 +29,21 @@ class CaptionPipeline {
     this.translate,
     this.translateRetryDelay = const Duration(seconds: 2),
     this.maxTranslateRetries = 3,
+    this.onAudio,
   }) : _recognizerFactory = recognizerFactory ?? defaultRecognizerFactory;
+
+  /// 音频统计回调(宿主用于落盘诊断:采样帧数 + 峰值振幅)。
+  ///
+  /// 每块 PCM 调用一次,是否节流由宿主决定:release GUI 无控制台,
+  /// 「有没有声音进来 / 是不是全程静音」只能靠这个信号观测。
+  /// 包内不依赖任何日志/平台设施。
+  final void Function(int frames, double peak)? onAudio;
 
   /// 默认实现(sherpa isolate)。
   static SpeechRecognizer defaultRecognizerFactory(
-          SpeechLanguage language, String modelDir) =>
-      SherpaStreamingRecognizer(language: language, modelDir: modelDir);
+    SpeechLanguage language,
+    String modelDir,
+  ) => SherpaStreamingRecognizer(language: language, modelDir: modelDir);
 
   final RecognizerFactory _recognizerFactory;
   final Translator? translate;
@@ -62,7 +73,9 @@ class CaptionPipeline {
     await stop();
     _tap = tap;
     _resampler = StreamingResampler(
-        sourceRate: tap.sampleRate, channels: tap.channels);
+      sourceRate: tap.sampleRate,
+      channels: tap.channels,
+    );
     final recognizer = _recognizerFactory(language, modelDir);
     _recognizer = recognizer;
     _status.add(const CaptionStatus(phase: CaptionPhase.loadingModel));
@@ -70,7 +83,17 @@ class CaptionPipeline {
     await recognizer.load();
     await tap.start();
     _tapSub = tap.pcm.listen((chunk) {
-      recognizer.acceptPcm(_resampler!.process(chunk));
+      final mono = _resampler!.process(chunk);
+      final stats = onAudio;
+      if (stats != null && mono.isNotEmpty) {
+        var peak = 0.0;
+        for (final sample in mono) {
+          final magnitude = sample < 0 ? -sample : sample;
+          if (magnitude > peak) peak = magnitude;
+        }
+        stats(mono.length, peak);
+      }
+      recognizer.acceptPcm(mono);
     });
     _status.add(const CaptionStatus(phase: CaptionPhase.listening));
   }
@@ -99,12 +122,22 @@ class CaptionPipeline {
     _translateWithRetry(recognizer.languageCode, text, 0);
   }
 
-  Future<void> _translateWithRetry(String language, String text, int attempt) async {
+  Future<void> _translateWithRetry(
+    String language,
+    String text,
+    int attempt,
+  ) async {
     final translator = translate;
     if (translator == null) {
       // 无翻译 hook:直接产出原文段(app 侧始终提供 hook,此为兜底)。
-      _segments.add(CaptionSegment(
-          text: text, translated: null, language: language, at: DateTime.now()));
+      _segments.add(
+        CaptionSegment(
+          text: text,
+          translated: null,
+          language: language,
+          at: DateTime.now(),
+        ),
+      );
       return;
     }
     String? zh;
@@ -114,23 +147,29 @@ class CaptionPipeline {
       zh = null;
     }
     if (zh != null && zh.isNotEmpty) {
-      _segments.add(CaptionSegment(
-        text: text,
-        translated: zh,
-        language: language,
-        at: DateTime.now(),
-      ));
+      _segments.add(
+        CaptionSegment(
+          text: text,
+          translated: zh,
+          language: language,
+          at: DateTime.now(),
+        ),
+      );
       return;
     }
     if (attempt < maxTranslateRetries && isRunning) {
-      _pendingTranslations.add(Timer(translateRetryDelay, () {
-        _translateWithRetry(language, text, attempt + 1);
-      }));
+      _pendingTranslations.add(
+        Timer(translateRetryDelay, () {
+          _translateWithRetry(language, text, attempt + 1);
+        }),
+      );
       return;
     }
-    _status.add(CaptionStatus(
-      phase: CaptionPhase.listening,
-      message: 'translate failed: $text',
-    ));
+    _status.add(
+      CaptionStatus(
+        phase: CaptionPhase.listening,
+        message: 'translate failed: $text',
+      ),
+    );
   }
 }

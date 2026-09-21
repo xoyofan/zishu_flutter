@@ -36,8 +36,10 @@ class SpeechModelSpec {
   final String repo;
   final List<SpeechModelFile> files;
 
-  /// 仓库内模型目录名(与上游 tarball 同名,落盘目录同名)。
-  String get dirName => repo;
+  /// 仓库内模型目录名(组织名不落入本地目录)。
+  String get dirName => repo.split('/').last;
+
+  /// 模型目录名。
 
   SpeechModelFile file(String name) => files.singleWhere((f) => f.name == name);
 
@@ -52,21 +54,30 @@ class SpeechModelManifest {
 
   static const english = SpeechModelSpec(
     language: SpeechLanguage.english,
-    repo: 'sherpa-onnx-streaming-zipformer-en-2023-06-26',
+    repo: 'csukuangfj/sherpa-onnx-streaming-zipformer-en-2023-06-26',
     files: [
+      // 字节数按 **HuggingFace 仓库实际文件**填写 —— 与 GitHub release 的
+      // tar.bz2 包不完全一致(int8 权重重新导出过)。填错会让每次下载都
+      // `size mismatch` 而永远无法就绪(2026-09-21 真机故障)。
       SpeechModelFile(
-          'encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx', 70108816),
+        'encoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx',
+        71083163,
+      ),
       SpeechModelFile(
-          'decoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx', 540688),
+        'decoder-epoch-99-avg-1-chunk-16-left-128.int8.onnx',
+        1307236,
+      ),
       SpeechModelFile(
-          'joiner-epoch-99-avg-1-chunk-16-left-128.int8.onnx', 259416),
+        'joiner-epoch-99-avg-1-chunk-16-left-128.int8.onnx',
+        259335,
+      ),
       SpeechModelFile('tokens.txt', 5048),
     ],
   );
 
   static const korean = SpeechModelSpec(
     language: SpeechLanguage.korean,
-    repo: 'sherpa-onnx-streaming-zipformer-korean-2024-06-16',
+    repo: 'k2-fsa/sherpa-onnx-streaming-zipformer-korean-2024-06-16',
     files: [
       SpeechModelFile('encoder-epoch-99-avg-1.int8.onnx', 126968852),
       SpeechModelFile('decoder-epoch-99-avg-1.int8.onnx', 2844692),
@@ -76,9 +87,9 @@ class SpeechModelManifest {
   );
 
   static SpeechModelSpec specOf(SpeechLanguage language) => switch (language) {
-        SpeechLanguage.english => english,
-        SpeechLanguage.korean => korean,
-      };
+    SpeechLanguage.english => english,
+    SpeechLanguage.korean => korean,
+  };
 
   /// 单文件下载直链。
   Uri fileUri(SpeechModelSpec spec, SpeechModelFile file) =>

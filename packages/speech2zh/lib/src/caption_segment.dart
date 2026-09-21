@@ -27,7 +27,7 @@ class CaptionSegment {
 
   @override
   String toString() =>
-      'CaptionSegment(${language}: $text -> ${translated ?? "<null>"})';
+      'CaptionSegment($language: $text -> ${translated ?? '<null>'})';
 }
 
 /// 流水线相位(UI 状态提示:下载中/加载模型/监听/错误)。
@@ -51,8 +51,11 @@ class CaptionStatus {
   /// 人读信息(错误原因等)。
   final String? message;
 
-  CaptionStatus copyWith({CaptionPhase? phase, double? downloadProgress, String? message}) =>
-      CaptionStatus(
+  CaptionStatus copyWith({
+    CaptionPhase? phase,
+    double? downloadProgress,
+    String? message,
+  }) => CaptionStatus(
         phase: phase ?? this.phase,
         downloadProgress: downloadProgress ?? this.downloadProgress,
         message: message ?? this.message,

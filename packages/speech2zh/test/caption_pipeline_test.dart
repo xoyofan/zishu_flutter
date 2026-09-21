@@ -83,18 +83,21 @@ void main() {
     Future<String?> Function(String)? translate,
     Duration retryDelay = const Duration(milliseconds: 5),
     int maxRetries = 3,
-  }) =>
-      CaptionPipeline(
-        recognizerFactory: (_, __) => recognizer,
-        translate: translate,
-        translateRetryDelay: retryDelay,
-        maxTranslateRetries: maxRetries,
-      );
+  }) => CaptionPipeline(
+    recognizerFactory: (_, _) => recognizer,
+    translate: translate,
+    translateRetryDelay: retryDelay,
+    maxTranslateRetries: maxRetries,
+  );
 
   test('final 事件 → 翻译 → 字幕段(译文就绪才上屏)', () async {
     final pipeline = build(translate: (t) async => '中文[$t]');
     final segs = Collector<CaptionSegment>()..attach(pipeline.segments);
-    await pipeline.start(tap: tap, language: SpeechLanguage.korean, modelDir: 'm');
+    await pipeline.start(
+      tap: tap,
+      language: SpeechLanguage.korean,
+      modelDir: 'm',
+    );
 
     recognizer.emit('안녕하세요', isFinal: true);
     await pump();
@@ -111,9 +114,40 @@ void main() {
     await pipeline.stop();
   });
 
+  test('onAudio 统计回调给出帧数与峰值振幅(诊断静音采集)', () async {
+    final stats = <(int, double)>[];
+    final pipeline = CaptionPipeline(
+      recognizerFactory: (_, _) => recognizer,
+      onAudio: (frames, peak) => stats.add((frames, peak)),
+    );
+    await pipeline.start(
+      tap: tap,
+      language: SpeechLanguage.korean,
+      modelDir: 'm',
+    );
+
+    // 静音块:峰值 0(能区分「无声采集」与「根本没采到数据」)。
+    tap.push(Float32List(4800));
+    await pump();
+    expect(stats, hasLength(1));
+    expect(stats.first.$1, inInclusiveRange(750, 850));
+    expect(stats.first.$2, 0);
+
+    // 满幅块:峰值 1(左右声道同相,避免下混相消)。
+    tap.push(Float32List.fromList(List.filled(4800, 1.0)));
+    await pump();
+    expect(stats, hasLength(2));
+    expect(stats.last.$2, closeTo(1, 1e-6));
+    await pipeline.stop();
+  });
+
   test('采集 PCM 经重采样喂给识别器', () async {
     final pipeline = build();
-    await pipeline.start(tap: tap, language: SpeechLanguage.korean, modelDir: 'm');
+    await pipeline.start(
+      tap: tap,
+      language: SpeechLanguage.korean,
+      modelDir: 'm',
+    );
     // 4800 交错样本 = 2400 帧 @48k → 16k 单声道约 800 帧。
     tap.push(Float32List.fromList(List.filled(4800, 0.5)));
     await pump();
@@ -133,7 +167,11 @@ void main() {
       retryDelay: Duration.zero,
     );
     final segs = Collector<CaptionSegment>()..attach(pipeline.segments);
-    await pipeline.start(tap: tap, language: SpeechLanguage.korean, modelDir: 'm');
+    await pipeline.start(
+      tap: tap,
+      language: SpeechLanguage.korean,
+      modelDir: 'm',
+    );
 
     recognizer.emit('테스트', isFinal: true);
     await pump();
@@ -147,7 +185,11 @@ void main() {
     final pipeline = build(translate: (t) async => null, maxRetries: 1);
     final segs = Collector<CaptionSegment>()..attach(pipeline.segments);
     final statuses = Collector<CaptionStatus>()..attach(pipeline.status);
-    await pipeline.start(tap: tap, language: SpeechLanguage.korean, modelDir: 'm');
+    await pipeline.start(
+      tap: tap,
+      language: SpeechLanguage.korean,
+      modelDir: 'm',
+    );
 
     recognizer.emit('버려진 문장', isFinal: true);
     await pump();
@@ -164,7 +206,11 @@ void main() {
   test('无翻译 hook:产出原文段(translated=null 兜底)', () async {
     final pipeline = build();
     final segs = Collector<CaptionSegment>()..attach(pipeline.segments);
-    await pipeline.start(tap: tap, language: SpeechLanguage.korean, modelDir: 'm');
+    await pipeline.start(
+      tap: tap,
+      language: SpeechLanguage.korean,
+      modelDir: 'm',
+    );
     recognizer.emit('텍스트', isFinal: true);
     await pump();
     expect(segs.items.single.translated, isNull);
@@ -175,7 +221,11 @@ void main() {
   test('stop 后空闲,状态回 idle', () async {
     final pipeline = build();
     final statuses = Collector<CaptionStatus>()..attach(pipeline.status);
-    await pipeline.start(tap: tap, language: SpeechLanguage.korean, modelDir: 'm');
+    await pipeline.start(
+      tap: tap,
+      language: SpeechLanguage.korean,
+      modelDir: 'm',
+    );
     expect(pipeline.isRunning, isTrue);
     await pipeline.stop();
     await pump();

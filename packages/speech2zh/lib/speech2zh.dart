@@ -7,7 +7,7 @@
 /// - [CaptionPipeline]:采集 → 重采样 → 识别 → 分句 → 翻译 → 中文字幕段。
 ///
 /// 纯 Dart:无 Flutter/Widget/media-kit 依赖;`sherpa_onnx` 为纯 dart:ffi 依赖。
-library speech2zh;
+library;
 
 export 'src/audio_tap_source.dart';
 export 'src/caption_pipeline.dart';

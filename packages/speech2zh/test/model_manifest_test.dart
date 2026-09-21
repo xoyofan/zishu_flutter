@@ -7,10 +7,17 @@ void main() {
     final ko = SpeechModelManifest.specOf(SpeechLanguage.korean);
     expect(en.files, hasLength(4));
     expect(ko.files, hasLength(4));
-    expect(en.totalBytes, 70108816 + 540688 + 259416 + 5048);
+    // 字节数必须与 HuggingFace 仓库实际文件一致(与 GitHub release 包不同),否则每次下载都 size mismatch。
+    expect(en.totalBytes, 71083163 + 1307236 + 259335 + 5048);
     expect(ko.totalBytes, 126968852 + 2844692 + 2581421 + 60246);
-    expect(en.language.code, 'en');
-    expect(ko.language.code, 'ko');
+    expect(
+      SpeechModelManifest.english.dirName,
+      'sherpa-onnx-streaming-zipformer-en-2023-06-26',
+    );
+    expect(
+      SpeechModelManifest.korean.dirName,
+      'sherpa-onnx-streaming-zipformer-korean-2024-06-16',
+    );
   });
 
   test('fileUri 默认官方源,可替换镜像', () {
