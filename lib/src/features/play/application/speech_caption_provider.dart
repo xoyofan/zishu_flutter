@@ -51,7 +51,8 @@ final speechModelManagerProvider = Provider<ModelManager>((ref) {
       final client = HttpClient()
         ..connectionTimeout = const Duration(seconds: 8);
       if (UpstreamProxy.enabled) {
-        client.findProxy = (_) => UpstreamProxy.findProxyValue;
+        // HuggingFace 需代理;仍走统一主机策略,便于以后换镜像。
+        client.findProxy = (uri) => UpstreamProxy.findProxyFor(uri);
       }
       return client;
     },

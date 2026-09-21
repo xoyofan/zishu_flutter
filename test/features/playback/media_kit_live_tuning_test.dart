@@ -60,19 +60,21 @@ void main() {
       expect(properties['volume-max'], '100');
     });
 
-    test('上游代理注入 mpv(http-proxy):被墙 CDN 只能经代理播放', () {
+    test('上游代理按线路主机注入 mpv(http-proxy),不需要时显式清空', () {
       // mpv 既不读系统代理也不读 Dart 侧 findProxy:YouTube 的
-      // manifest.googlevideo.com 实测直连 `tcp: Connection failed`,
-      // 必须由 _applyLiveTuning 从 UpstreamProxy 取运行期值注入。
+      // manifest.googlevideo.com 实测直连 `tcp: Connection failed`;
+      // 而 SOOP 等直连更快的站点走代理会慢一个数量级。mpv 的 http-proxy
+      // 是进程级选项,故每次 open 都按当前线路主机重设(需要则设、否则清空)。
       final source = File(
         'lib/src/platforms/common/playback/media_kit_live_player.dart',
       ).readAsStringSync();
       expect(
         source,
-        contains("setProperty('http-proxy', 'http://\$proxy')"),
-        reason: 'mpv 需显式 http-proxy,否则被墙线路永远连不上',
+        contains('_applyProxyForLine'),
+        reason: 'mpv 需显式 http-proxy,且必须按当前源主机决定走不走代理',
       );
-      expect(source, contains('UpstreamProxy.hostPort'));
+      expect(source, contains('UpstreamProxy.needsProxy(host)'));
+      expect(source, contains("'http-proxy'"));
     });
 
     test('属性名不重复(重复设置以最后一条为准,易掩盖配置意图)', () {

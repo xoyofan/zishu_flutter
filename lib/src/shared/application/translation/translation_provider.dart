@@ -35,7 +35,8 @@ const List<String> kDefaultSimplyTranslateBases = [
 Future<Object?> _dioFetcher(Uri uri) async {
   final client = HttpClient()..connectionTimeout = const Duration(seconds: 4);
   if (UpstreamProxy.enabled) {
-    client.findProxy = (uri) => UpstreamProxy.findProxyValue;
+    // 按主机分流:翻译实例在国外(需代理),但不影响同进程内其它域名。
+    client.findProxy = (uri) => UpstreamProxy.findProxyFor(uri);
   }
   try {
     final request = await client.getUrl(uri);

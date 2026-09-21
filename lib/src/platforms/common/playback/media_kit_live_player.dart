@@ -490,11 +490,12 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       // 上游代理必须同步给 mpv:`mpv` 不读系统代理也不读 Dart 侧的
       // HttpClient.findProxy,被墙的 CDN(如 YouTube 的
       // manifest.googlevideo.com)会直接 `tcp: Connection failed`
-      // (2026-09-21 真机故障)。代理是运行期值,故不进常量表。
-      final proxy = UpstreamProxy.hostPort;
-      if (proxy != null && proxy.isNotEmpty) {
-        await platform.setProperty('http-proxy', 'http://$proxy');
-      }
+      // (2026-09-21 真机故障)。
+      //
+      /// 注: mpv 的 `http-proxy` 是**进程级**选项,而各平台对代理的需求不同
+      // (Twitch/YouTube 必须代理,SOOP/斗鱼等直连更快),因此真正的取值在
+      // 每次 `open` 时按当前线路主机重设 —— 见 [_applyProxyForLine]。
+      // 这里不预设,避免「上一次 open 的代理」残留到下一次。
       // 缓存目录依赖运行期路径,无法进常量表;其余动态项在下方逐条设置。
       final cacheDir =
           '${Directory.systemTemp.path}${Platform.pathSeparator}zishu_demuxer_cache';
@@ -509,6 +510,32 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       await _player.setPlaylistMode(PlaylistMode.none);
     } catch (_) {
       // 调优失败不应阻断播放;默认缓存下卡顿看门狗仍可兜底重连。
+    }
+  }
+
+  /// 按线路主机设置 mpv 的 `http-proxy`(进程级选项,故每次 open 都重设)。
+  ///
+  /// mpv 不支持按主机分流,只能整个进程一个值;这里用「当前源需要就设、不需要
+  /// 就显式清空」的方式近似实现分流:同一时刻播放的只有一条源,语义足够。
+  Future<void> _applyProxyForLine(StreamLine line) async {
+    final platform = _player.platform;
+    if (platform is! NativePlayer) return;
+    final host = Uri.tryParse(line.url)?.host ?? '';
+    final proxy = UpstreamProxy.needsProxy(host)
+        ? UpstreamProxy.hostPort
+        : null;
+    try {
+      await platform.waitForPlayerInitialization;
+      await platform.setProperty(
+        'http-proxy',
+        proxy == null || proxy.isEmpty ? '' : 'http://$proxy',
+      );
+      PlaybackLog.write('mpv_proxy', {
+        'host': host,
+        'proxy': proxy == null || proxy.isEmpty ? 'direct' : proxy,
+      });
+    } catch (_) {
+      // 设置失败不阻断播放:直连失败时仍有看门狗与恢复重解析兜底。
     }
   }
 
@@ -564,6 +591,9 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
         wrappedLines.add(prepared);
       }
       _currentLines = wrappedLines;
+      // 代理按当前线路主机取:被墙 CDN 走代理,国内可达站点显式清空
+      // (mpv 选项是进程级,不重设会把上一个源的代理策略带过来)。
+      await _applyProxyForLine(line);
       // 新会话从"无广告等待"开始记账。
       _adHoldSince = null;
       if (resetRetries) {
