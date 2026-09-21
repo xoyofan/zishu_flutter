@@ -91,7 +91,8 @@ class IoDanmakuTransport implements DanmakuTransport {
     final isSecure = url.scheme == 'wss' || url.scheme == 'https';
     final port = url.port != 0 ? url.port : (isSecure ? 443 : 80);
 
-    if (!UpstreamProxy.enabled) {
+    // 弹幕同样按主机分流:Twitch IRC 必须经代理,SOOP/斗鱼等国内可达站直连。
+    if (!UpstreamProxy.enabled || !UpstreamProxy.needsProxy(url.host)) {
       if (isSecure) {
         final raw = await RawSecureSocket.connect(
           url.host,
@@ -110,21 +111,28 @@ class IoDanmakuTransport implements DanmakuTransport {
 
     final proxyHostPort = UpstreamProxy.hostPort!;
     final separator = proxyHostPort.lastIndexOf(':');
-    final proxyHost =
-        separator < 0 ? proxyHostPort : proxyHostPort.substring(0, separator);
+    final proxyHost = separator < 0
+        ? proxyHostPort
+        : proxyHostPort.substring(0, separator);
     final proxyPort = separator < 0
         ? 80
         : int.tryParse(proxyHostPort.substring(separator + 1)) ?? 80;
-    final raw =
-        await RawSocket.connect(proxyHost, proxyPort, timeout: connectTimeout);
+    final raw = await RawSocket.connect(
+      proxyHost,
+      proxyPort,
+      timeout: connectTimeout,
+    );
     final tap = _RawEventTap(raw, connectTimeout);
     // CONNECT 隧道:请求头同样保持规范大小写。
-    _rawWriteAll(tap, latin1.encode(
-      'CONNECT ${url.host}:$port HTTP/1.1\r\n'
-      'Host: ${url.host}:$port\r\n'
-      'Proxy-Connection: keep-alive\r\n'
-      '\r\n',
-    ));
+    _rawWriteAll(
+      tap,
+      latin1.encode(
+        'CONNECT ${url.host}:$port HTTP/1.1\r\n'
+        'Host: ${url.host}:$port\r\n'
+        'Proxy-Connection: keep-alive\r\n'
+        '\r\n',
+      ),
+    );
     final response = await _waitForHeader(tap);
     final statusLine = _statusLineOf(response.headerBytes);
     if (!statusLine.contains(' 200')) {
@@ -152,9 +160,11 @@ class IoDanmakuTransport implements DanmakuTransport {
     Map<String, String>? headers,
   ) async {
     final port = url.port != 0 ? url.port : (url.scheme == 'wss' ? 443 : 80);
-    final hostHeader =
-        port == 80 || port == 443 ? url.host : '${url.host}:$port';
-    final path = '${url.path.isEmpty ? '/' : url.path}'
+    final hostHeader = port == 80 || port == 443
+        ? url.host
+        : '${url.host}:$port';
+    final path =
+        '${url.path.isEmpty ? '/' : url.path}'
         '${url.query.isEmpty ? '' : '?${url.query}'}';
     final request = StringBuffer()
       ..write('GET $path HTTP/1.1\r\n')
@@ -201,9 +211,7 @@ Future<_HeaderBytes> _waitForHeader(_RawEventTap tap) {
     ..onRead = check
     ..onClosed = () {
       if (!completer.isCompleted) {
-        completer.completeError(
-          const SocketException('连接在 WebSocket 握手中关闭'),
-        );
+        completer.completeError(const SocketException('连接在 WebSocket 握手中关闭'));
       }
     };
   check();

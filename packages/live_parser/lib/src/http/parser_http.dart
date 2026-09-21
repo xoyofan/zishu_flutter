@@ -40,11 +40,13 @@ class ParserHttp {
        };
 
   /// 自建 client 时接上游代理(宿主经 [UpstreamProxy.configure] 配置);
+  /// **按主机分流** —— 只有直连不可达的域(Twitch/YouTube/HF/翻译)经代理,
+  /// 国内可达站点走 DIRECT(实测走代理会给 SOOP 加 3~30 倍延迟)。
   /// 外部注入的 client 由注入方自行决定代理行为(fixture 测试不受影响)。
   static http.Client _buildDefaultClient() {
     if (!UpstreamProxy.enabled) return http.Client();
     final inner = HttpClient()
-      ..findProxy = (uri) => UpstreamProxy.findProxyValue;
+      ..findProxy = (uri) => UpstreamProxy.findProxyFor(uri);
     return IOClient(inner);
   }
 
@@ -128,10 +130,7 @@ class ParserHttp {
 
   void _ensureOk(http.Response response) {
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw ParserHttpException(
-        '上游响应异常',
-        statusCode: response.statusCode,
-      );
+      throw ParserHttpException('上游响应异常', statusCode: response.statusCode);
     }
   }
 

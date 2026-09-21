@@ -1,6 +1,8 @@
 /// YouTube 站点组装:房间解析(纯 HTTP)+ 直播浏览 + live_chat 弹幕。
 library;
 
+import 'dart:async';
+
 import 'package:http/http.dart' as http;
 
 import '../../contracts/contracts.dart';
@@ -32,6 +34,11 @@ class YoutubeRoomResolver implements RoomResolver {
   /// 子进程(直播 HLS URL 的 expire 通常以小时计,60s 复用安全)。
   final Map<String, ({DateTime at, YoutubeDlpExtract extract})> _dlpCache = {};
   final Map<String, DateTime> _dlpValidatedAt = {};
+
+  /// 后台校验判定不可用的视频(负缓存):本轮改用页面链,避免"dlp 地址无效 →
+  /// 播放失败 → 重解析又拿到同一批无效地址"的空转。
+  final Map<String, DateTime> _dlpRejectedUntil = {};
+
   static const Duration _dlpCacheTtl = Duration(seconds: 60);
 
   @override
@@ -106,7 +113,19 @@ class YoutubeRoomResolver implements RoomResolver {
         streams: dlpTiers,
       );
       _cache[videoId] = (at: DateTime.now(), payload: payload);
+      // 首档地址链校验放到**后台**:它是纯前置检查,实测经代理要 ~9s
+      // (master → variant → 首个分片),占冷解析一半以上。不校验也能播 ——
+      // 地址真失效时播放器会报错并走恢复重解析。校验失败则给该视频打上
+      // 负标记,后续解析直接走页面链兜底(不重复踩坑)。
+      final firstUrl = dlpTiers.first.lines.firstOrNull?.url;
+      if (firstUrl != null && !_recentlyValidated(videoId)) {
+        unawaited(_validateInBackground(videoId, firstUrl));
+      }
       return payload;
+    }
+    // 后台校验过且失败:直接走页面链,不再重试 dlp 地址。
+    if (_dlpRejectedUntil[videoId] != null) {
+      _dlpRejectedUntil.remove(videoId);
     }
     var ctxForPage = ctx;
     var tiers = const <StreamQuality>[];
@@ -169,23 +188,46 @@ class YoutubeRoomResolver implements RoomResolver {
     return payload;
   }
 
+  /// 是否已在 [_dlpCacheTtl] 内校验过该视频的地址链(命中则跳过重复校验)。
+  bool _recentlyValidated(String videoId) {
+    final at = _dlpValidatedAt[videoId];
+    return at != null && DateTime.now().difference(at) < _dlpCacheTtl;
+  }
+
+  /// 后台校验 dlp 地址链:成功记时间戳;失败则作废该视频的 dlp 缓存与负标记,
+  /// 使下一次解析改走页面链。
+  Future<void> _validateInBackground(String videoId, String url) async {
+    var ok = false;
+    try {
+      ok = await validateYoutubeChain(_client, url);
+    } on Object {
+      ok = false;
+    }
+    if (ok) {
+      _dlpValidatedAt[videoId] = DateTime.now();
+      return;
+    }
+    _dlpRejectedUntil[videoId] = DateTime.now();
+    _dlpValidatedAt.remove(videoId);
+    _dlpCache.remove(videoId);
+    _cache.remove(videoId);
+  }
+
   /// dlp 提取 + 首档预校验;任一步失败返回 null 交由页面链兜底。
+  ///
+  /// 注:首档链校验不再在此阻塞 —— 见 [resolveRoom] 中的后台校验。
   Future<List<StreamQuality>?> _tryDlpTiers(String videoId) async {
     try {
+      // 后台校验刚判过不可用:本轮直接放弃 dlp,走页面链。
+      final rejectedAt = _dlpRejectedUntil[videoId];
+      if (rejectedAt != null &&
+          DateTime.now().difference(rejectedAt) < _dlpCacheTtl) {
+        return null;
+      }
       final available = await (dlpAvailableCheck ?? isYoutubeDlpAvailable)();
       if (!available) return null;
       final extract = await (dlpExtractor ?? _defaultDlpExtract)(videoId);
       if (extract == null || extract.tiers.isEmpty) return null;
-      // 60s 内同一实例已校验过该视频的地址链:跳过重复 master/变体/分片探测。
-      final validatedAt = _dlpValidatedAt[videoId];
-      final recentlyValidated =
-          validatedAt != null &&
-          DateTime.now().difference(validatedAt) < _dlpCacheTtl;
-      if (!recentlyValidated) {
-        final firstUrl = extract.tiers.first.url;
-        if (!await validateYoutubeChain(_client, firstUrl)) return null;
-        _dlpValidatedAt[videoId] = DateTime.now();
-      }
       return youtubeDlpQualities(extract.tiers);
     } on Object {
       return null;
@@ -194,8 +236,7 @@ class YoutubeRoomResolver implements RoomResolver {
 
   Future<YoutubeDlpExtract?> _defaultDlpExtract(String videoId) async {
     final cached = _dlpCache[videoId];
-    if (cached != null &&
-        DateTime.now().difference(cached.at) < _dlpCacheTtl) {
+    if (cached != null && DateTime.now().difference(cached.at) < _dlpCacheTtl) {
       return cached.extract;
     }
     final extract = await extractYoutubeViaDlp(videoId);
