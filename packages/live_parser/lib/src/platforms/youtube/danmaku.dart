@@ -42,7 +42,9 @@ Future<String> fetchYoutubeChatToken(ParserHttp http, String videoId) async {
     final continuations = jsonListOf(renderer['continuations']);
     if (continuations.isEmpty) return '';
     return jsonText(
-      jsonMapOf(jsonMapOf(continuations.first)['reloadContinuationData'])['continuation'],
+      jsonMapOf(
+        jsonMapOf(continuations.first)['reloadContinuationData'],
+      )['continuation'],
     );
   } on Object {
     return '';
@@ -193,24 +195,21 @@ class YoutubeDanmakuSession implements DanmakuSession {
       for (final action in jsonListOf(liveChat['actions'])) {
         final item = jsonMapOf(jsonMapOf(action)['addChatItemAction'])['item'];
         final itemMap = jsonMapOf(item);
-        final textRenderer = jsonMapOf(
-          itemMap['liveChatTextMessageRenderer'],
-        );
-        final paidRenderer = jsonMapOf(
-          itemMap['liveChatPaidMessageRenderer'],
-        );
+        final textRenderer = jsonMapOf(itemMap['liveChatTextMessageRenderer']);
+        final paidRenderer = jsonMapOf(itemMap['liveChatPaidMessageRenderer']);
         final renderer = textRenderer.isNotEmpty ? textRenderer : paidRenderer;
         if (renderer.isEmpty) continue;
         final paid = textRenderer.isEmpty;
 
-        final text = _runsToText(jsonMapOf(renderer['message'])['runs']);
+        final text = youtubeRunsToText(jsonMapOf(renderer['message'])['runs']);
         if (text.isEmpty && !paid) continue;
         final id = jsonText(renderer['id']);
         if (id.isNotEmpty && !_seen.add(id)) continue;
         if (_seen.length > _maxSeen) _seen.clear();
 
-        final userName =
-            jsonText(jsonMapOf(renderer['authorName'])['simpleText']).trim();
+        final userName = jsonText(
+          jsonMapOf(renderer['authorName'])['simpleText'],
+        ).trim();
         final amount = jsonText(
           jsonMapOf(renderer['purchaseAmountText'])['simpleText'],
         ).trim();
@@ -266,8 +265,7 @@ class YoutubeDanmakuSession implements DanmakuSession {
     final continuations = jsonListOf(liveChat['continuations']);
     if (continuations.isEmpty) return null;
     final first = jsonMapOf(continuations.first);
-    final data =
-        jsonMapOf(first['invalidationContinuationData']).isNotEmpty
+    final data = jsonMapOf(first['invalidationContinuationData']).isNotEmpty
         ? jsonMapOf(first['invalidationContinuationData'])
         : jsonMapOf(first['timedContinuationData']);
     final token = jsonText(data['continuation']);
@@ -338,7 +336,17 @@ class YoutubeDanmakuSession implements DanmakuSession {
 /// - 否则取首个 shortcut 过 `replaceYoutubeEmojiShortcodes` 短代码映射表
 ///   (含 CLDR 短名补充;未知名保留原文,数据诚实不伪造);
 /// - 文本段(用户逐字输入)不过映射表,避免把「1:100:2」这类字面量误改。
-String _runsToText(Object? runs) {
+/// 把 YouTube `message.runs` 拼成展示文本(纯函数,便于单测)。
+///
+/// emoji run 有两种形态,必须区分(用户报「弹幕乱码」的根因):
+/// - **普通 emoji**:`emojiId` 就是 Unicode 字符(如 `😀`);
+/// - **频道自定义 emoji**:`emojiId` 是**不透明标识符**(形如
+///   `UCxxxx/…` 的字符串),直接写进正文就是一堆乱码。
+///
+/// 因此优先用 `shortcuts`(人类可读短名,如 `:smile:`):命中 emoji 表→
+/// Unicode;未知名→保留 `:短名:` 原文(仍可读,不伪造)。只有在没有
+/// shortcuts 时才回退 `emojiId`,并只接受不含 `/` 的短值(= 真正的 Unicode)。
+String youtubeRunsToText(Object? runs) {
   final buffer = StringBuffer();
   for (final raw in jsonListOf(runs)) {
     final run = jsonMapOf(raw);
@@ -348,14 +356,14 @@ String _runsToText(Object? runs) {
       continue;
     }
     final emoji = jsonMapOf(run['emoji']);
-    final emojiId = jsonText(emoji['emojiId']);
-    if (emojiId.isNotEmpty && !emojiId.startsWith(':')) {
-      buffer.write(emojiId);
-      continue;
-    }
     final shortcuts = jsonListOf(emoji['shortcuts']);
     if (shortcuts.isNotEmpty) {
       buffer.write(replaceYoutubeEmojiShortcodes(jsonText(shortcuts.first)));
+      continue;
+    }
+    final emojiId = jsonText(emoji['emojiId']);
+    if (emojiId.isNotEmpty && !emojiId.contains('/')) {
+      buffer.write(emojiId);
     }
   }
   return buffer.toString();

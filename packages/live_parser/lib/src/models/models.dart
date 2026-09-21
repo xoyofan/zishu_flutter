@@ -43,15 +43,21 @@ class StreamLine {
     name: json['name']?.toString() ?? '',
     url: json['url']?.toString() ?? '',
     format: json['format']?.toString() ?? '',
-    headers: (json['headers'] as Map<String, dynamic>?)?.map(
-      (k, v) => MapEntry(k, v.toString()),
-    ) ?? const {},
+    headers:
+        (json['headers'] as Map<String, dynamic>?)?.map(
+          (k, v) => MapEntry(k, v.toString()),
+        ) ??
+        const {},
   );
 }
 
 /// 一个画质档位:名称 + 该档位下的全部线路。
 class StreamQuality {
-  const StreamQuality({required this.name, required this.rate, required this.lines});
+  const StreamQuality({
+    required this.name,
+    required this.rate,
+    required this.lines,
+  });
 
   final String name;
   final int rate;
@@ -154,7 +160,8 @@ class RoomPayload {
   bool get isReplay => roomState == RoomState.replay;
 
   /// 默认播放地址:首选画质的首选线路。
-  String get playUrl => streams.isEmpty ? '' : (streams.first.preferredLine?.url ?? '');
+  String get playUrl =>
+      streams.isEmpty ? '' : (streams.first.preferredLine?.url ?? '');
 
   /// 按画质名选择档位;未命中时回退首选档。
   StreamQuality? qualityByName(String? name) {
@@ -164,7 +171,9 @@ class RoomPayload {
       if (stream.name == name) return stream;
     }
     for (final stream in streams) {
-      if (name.contains(stream.name) || stream.name.contains(name)) return stream;
+      if (name.contains(stream.name) || stream.name.contains(name)) {
+        return stream;
+      }
     }
     return streams.first;
   }
@@ -214,9 +223,35 @@ class RoomPayload {
         .map((item) => QualityOption.fromJson(Map<String, dynamic>.from(item)))
         .toList(growable: false),
     source: json['source']?.toString() ?? '',
-    fetchedAt: DateTime.tryParse(json['fetchedAt']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0),
+    fetchedAt:
+        DateTime.tryParse(json['fetchedAt']?.toString() ?? '') ??
+        DateTime.fromMillisecondsSinceEpoch(0),
     error: json['error']?.toString(),
     startedAt: DateTime.tryParse(json['startedAt']?.toString() ?? ''),
+  );
+
+  RoomPayload copyWith({
+    List<StreamQuality>? streams,
+    DateTime? fetchedAt,
+    String? error,
+  }) => RoomPayload(
+    site: site,
+    roomId: roomId,
+    sourceUrl: sourceUrl,
+    anchorName: anchorName,
+    title: title,
+    cover: cover,
+    avatar: avatar,
+    category: category,
+    cid: cid,
+    cateNo: cateNo,
+    roomState: roomState,
+    streams: streams ?? this.streams,
+    availableQualities: availableQualities,
+    source: source,
+    fetchedAt: fetchedAt ?? this.fetchedAt,
+    error: error ?? this.error,
+    startedAt: startedAt,
   );
 
   String encode() => jsonEncode(toJson());
@@ -340,7 +375,8 @@ class RoomSummary {
     site: json['site']?.toString() ?? '',
     roomId: json['roomId']?.toString() ?? '',
     title: json['title']?.toString() ?? '',
-    anchorName: json['nickname']?.toString() ?? json['anchorName']?.toString() ?? '',
+    anchorName:
+        json['nickname']?.toString() ?? json['anchorName']?.toString() ?? '',
     cid: json['cid']?.toString() ?? '',
     category: json['category']?.toString() ?? '',
     online: json['online']?.toString() ?? '',
@@ -357,7 +393,11 @@ class RoomSummary {
 
 /// 分类房间列表分页结果。
 class RoomListResult {
-  const RoomListResult({required this.rooms, required this.page, required this.hasMore});
+  const RoomListResult({
+    required this.rooms,
+    required this.page,
+    required this.hasMore,
+  });
 
   final List<RoomSummary> rooms;
   final int page;
@@ -366,7 +406,11 @@ class RoomListResult {
 
 /// 二级分类项。
 class CategoryItem {
-  const CategoryItem({required this.cid, required this.name, required this.pic});
+  const CategoryItem({
+    required this.cid,
+    required this.name,
+    required this.pic,
+  });
 
   final String cid;
   final String name;
@@ -375,7 +419,11 @@ class CategoryItem {
 
 /// 一级分类分组。
 class CategoryGroup {
-  const CategoryGroup({required this.id, required this.name, required this.items});
+  const CategoryGroup({
+    required this.id,
+    required this.name,
+    required this.items,
+  });
 
   final String id;
   final String name;
@@ -467,11 +515,7 @@ enum DanmakuSegmentType { text, emoji }
 /// name 不单列:表情段 [text] 恒为 `[表情名]` 括号形态,UI 需要纯名字时
 /// 去括号即可(web normalizeEmojiName 同语义)。
 class DanmakuSegment {
-  const DanmakuSegment({
-    required this.type,
-    this.text = '',
-    this.url = '',
-  });
+  const DanmakuSegment({required this.type, this.text = '', this.url = ''});
 
   /// 文本段。
   const DanmakuSegment.text(this.text)

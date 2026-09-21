@@ -12,7 +12,9 @@ void main() {
   setUp(() {
     api = FakeTwitchApi()
       ..useLiveResponse = twitchFixtureData('use_live.json')['user']
-      ..tokenResponse = twitchFixtureData('playback_access_token.json')['streamPlaybackAccessToken']
+      ..tokenResponse = twitchFixtureData(
+        'playback_access_token.json',
+      )['streamPlaybackAccessToken']
       ..usherBody = twitchFixture('usher_master.m3u8');
   });
 
@@ -39,7 +41,10 @@ void main() {
       final resolver = TwitchRoomResolver(clientFor());
       expect(
         resolver.resolveRoom(
-          const RoomRequest(site: 'twitch', roomIdOrUrl: 'https://www.douyu.com/123'),
+          const RoomRequest(
+            site: 'twitch',
+            roomIdOrUrl: 'https://www.douyu.com/123',
+          ),
         ),
         throwsA(isA<ParserHttpException>()),
       );
@@ -47,7 +52,7 @@ void main() {
   });
 
   group('在播房间', () {
-    test('未指定清晰度:默认 480p 高清单档,其余档空线路占位', () async {
+    test('未指定清晰度:默认 480p 高清档排首位,其余档保留真实线路', () async {
       final payload = await TwitchRoomResolver(clientFor()).resolveRoom(
         const RoomRequest(site: 'twitch', roomIdOrUrl: 'fps_shaka'),
       );
@@ -60,15 +65,22 @@ void main() {
       expect(payload.cid, '263490');
       expect(payload.source, 'live_parser/twitch');
 
-      // 单档收敛(对齐 web 6b4983e):进房只下发默认高清档的 media playlist。
-      expect(payload.streams, hasLength(5), reason: '其余档位空占位,chips 仍全档列出');
+      // 单次 master m3u8 即带全档线路:选中档排首位(起播用它),其余档也携带
+      // 真实地址 —— 切档零延迟、零额外解析(用户口径 2026-09-21)。
+      expect(payload.streams, hasLength(5), reason: 'chips 仍全档列出');
       expect(payload.streams.first.name, '480p');
-      expect(payload.streams.first.lines.single.url,
-          'https://usher.example/v1/playlist/480p30.m3u8');
       expect(
-        payload.streams.skip(1).every((stream) => stream.lines.isEmpty),
+        payload.streams.first.lines.single.url,
+        'https://usher.example/v1/playlist/480p30.m3u8',
+      );
+      expect(
+        payload.streams.skip(1).every((stream) => stream.lines.isNotEmpty),
         isTrue,
-        reason: '未选中的档位不预取线路',
+        reason: '其余档位应带上 master m3u8 里已有的 media playlist 地址',
+      );
+      expect(
+        payload.qualityByName('原画')?.lines.single.url,
+        'https://usher.example/v1/playlist/chunked.m3u8',
       );
       expect(payload.availableQualities.map((q) => q.name).toList(), [
         '原画',
@@ -85,9 +97,13 @@ void main() {
       );
     });
 
-    test('指定偏好档:只取该档,其余档空占位', () async {
+    test('指定偏好档:该档排首位且全档仍带线路', () async {
       final payload = await TwitchRoomResolver(clientFor()).resolveRoom(
-        const RoomRequest(site: 'twitch', roomIdOrUrl: 'fps_shaka', preferredQuality: '原画'),
+        const RoomRequest(
+          site: 'twitch',
+          roomIdOrUrl: 'fps_shaka',
+          preferredQuality: '原画',
+        ),
       );
 
       expect(payload.streams.first.name, '原画');
@@ -97,7 +113,7 @@ void main() {
         'https://usher.example/v1/playlist/chunked.m3u8',
       );
       expect(
-        payload.streams.skip(1).every((stream) => stream.lines.isEmpty),
+        payload.streams.skip(1).every((stream) => stream.lines.isNotEmpty),
         isTrue,
       );
       expect(payload.availableQualities.map((q) => q.name), contains('原画'));
@@ -128,7 +144,11 @@ https://usher.example/v1/playlist/720p60.m3u8
         const RoomRequest(site: 'twitch', roomIdOrUrl: 'fps_shaka'),
       );
       final second = await resolver.resolveRoom(
-        const RoomRequest(site: 'twitch', roomIdOrUrl: 'fps_shaka', preferredQuality: '720p60'),
+        const RoomRequest(
+          site: 'twitch',
+          roomIdOrUrl: 'fps_shaka',
+          preferredQuality: '720p60',
+        ),
       );
 
       expect(first.streams.first.name, '480p');
@@ -153,7 +173,9 @@ https://usher.example/v1/playlist/720p60.m3u8
       await TwitchRoomResolver(clientFor()).resolveRoom(
         const RoomRequest(site: 'twitch', roomIdOrUrl: 'fps_shaka'),
       );
-      final usher = api.requests.firstWhere((uri) => uri.host == 'usher.ttvnw.net');
+      final usher = api.requests.firstWhere(
+        (uri) => uri.host == 'usher.ttvnw.net',
+      );
       expect(usher.path, '/api/channel/hls/fps_shaka.m3u8');
       expect(usher.queryParameters['sig'], isNotNull);
       expect(usher.query, isNot(contains('{')), reason: 'token 里的花括号必须被编码');
@@ -185,9 +207,9 @@ https://usher.example/v1/playlist/720p60.m3u8
   group('非在播状态', () {
     test('未开播:三态为 offline 且无线路', () async {
       api.useLiveResponse = twitchFixtureData('use_live_offline.json')['user'];
-      final payload = await TwitchRoomResolver(clientFor()).resolveRoom(
-        const RoomRequest(site: 'twitch', roomIdOrUrl: 'shroud'),
-      );
+      final payload = await TwitchRoomResolver(
+        clientFor(),
+      ).resolveRoom(const RoomRequest(site: 'twitch', roomIdOrUrl: 'shroud'));
       expect(payload.roomState, RoomState.offline);
       expect(payload.isLive, isFalse);
       expect(payload.streams, isEmpty);
@@ -215,7 +237,10 @@ https://usher.example/v1/playlist/720p60.m3u8
   group('状态刷新(RoomSummaryRefresher)', () {
     test('在播:回填标题/分类/封面与观看数文案,roomId 归一为 login', () async {
       final summary = await TwitchRoomResolver(clientFor()).refreshRoomSummary(
-        const RoomRequest(site: 'twitch', roomIdOrUrl: 'https://www.twitch.tv/FPS_Shaka'),
+        const RoomRequest(
+          site: 'twitch',
+          roomIdOrUrl: 'https://www.twitch.tv/FPS_Shaka',
+        ),
       );
       expect(summary.site, 'twitch');
       expect(summary.roomId, 'fps_shaka');
@@ -260,22 +285,26 @@ https://usher.example/v1/playlist/720p60.m3u8
       expect(registration.resolver, isA<RoomSummaryRefresher>());
       final summary = await (registration.resolver as RoomSummaryRefresher)
           .refreshRoomSummary(
-        const RoomRequest(site: 'twitch', roomIdOrUrl: 'fps_shaka'),
-      );
+            const RoomRequest(site: 'twitch', roomIdOrUrl: 'fps_shaka'),
+          );
       expect(summary.online, '2.3万');
     });
   });
 
   group('master m3u8 解析', () {
     test('丢弃 audio_only 并按分辨率降序', () {
-      final streams = parseTwitchMasterPlaylist(twitchFixture('usher_master.m3u8'));
+      final streams = parseTwitchMasterPlaylist(
+        twitchFixture('usher_master.m3u8'),
+      );
       expect(streams.length, 5);
       expect(streams.map((s) => s.rate).toList(), [1080, 720, 480, 360, 160]);
       expect(streams.any((s) => s.name.contains('audio_only')), isFalse);
     });
 
     test('source 档命名为原画', () {
-      final streams = parseTwitchMasterPlaylist(twitchFixture('usher_master.m3u8'));
+      final streams = parseTwitchMasterPlaylist(
+        twitchFixture('usher_master.m3u8'),
+      );
       expect(streams.first.name, '原画');
     });
 

@@ -60,10 +60,9 @@ Future<String> resolveYoutubeDlpBin() async {
   final fromEnv = Platform.environment['YOUTUBE_DLP_PATH']?.trim();
   if (fromEnv != null && fromEnv.isNotEmpty) return fromEnv;
   try {
-    final result = await Process.run(
-      'where',
-      ['yt-dlp'],
-    ).timeout(const Duration(seconds: 10));
+    final result = await Process.run('where', [
+      'yt-dlp',
+    ]).timeout(const Duration(seconds: 10));
     if (result.exitCode == 0) {
       for (final line in '${result.stdout}'.split(RegExp(r'\r?\n'))) {
         final candidate = line.trim();
@@ -91,6 +90,10 @@ String? denoCandidate() {
 }
 
 /// yt-dlp 是否可用(结果缓存 10 分钟)。
+///
+/// `where` 已给出绝对路径时只需一次存在性检查 —— 不再额外启动
+/// `yt-dlp --version` 子进程:Windows 上子进程冷启动 0.5~2s,而本检查位于
+/// 首次解析的关键路径(dlp 提取之前)。裸名(未定位到路径)才回退版本探测。
 Future<bool> isYoutubeDlpAvailable() async {
   final cached = _availabilityCache;
   final at = _availabilityAt;
@@ -101,14 +104,17 @@ Future<bool> isYoutubeDlpAvailable() async {
   }
   final bin = await resolveYoutubeDlpBin();
   var ok = false;
-  try {
-    final result = await Process.run(
-      bin,
-      const ['--version'],
-    ).timeout(const Duration(seconds: 10));
-    ok = result.exitCode == 0;
-  } on Object {
-    ok = false;
+  if (bin.contains(Platform.pathSeparator) || bin.contains('/')) {
+    ok = File(bin).existsSync();
+  } else {
+    try {
+      final result = await Process.run(bin, const [
+        '--version',
+      ]).timeout(const Duration(seconds: 10));
+      ok = result.exitCode == 0;
+    } on Object {
+      ok = false;
+    }
   }
   _availabilityCache = (ok: ok, bin: bin);
   _availabilityAt = DateTime.now();
@@ -209,9 +215,7 @@ List<YoutubeDlpTier> parseYoutubeDlpTiers(Object? formats) {
         ? '自动'
         : (fps > 30 ? '${height}p$fps' : '${height}p');
     if (!seenLabels.add(label)) continue;
-    tiers.add(
-      YoutubeDlpTier(label: label, url: url, height: height, fps: fps),
-    );
+    tiers.add(YoutubeDlpTier(label: label, url: url, height: height, fps: fps));
   }
   tiers.sort((a, b) {
     final byHeight = b.height.compareTo(a.height);

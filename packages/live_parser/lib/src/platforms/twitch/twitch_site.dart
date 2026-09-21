@@ -27,14 +27,15 @@ const String kTwitchDefaultQuality = '480p';
 
 /// Twitch 客户端:GQL 与 usher 共用同一个 HTTP 实例。
 class TwitchClient {
-  TwitchClient({
-    http.Client? httpClient,
-    this.clientId = kTwitchWebClientId,
-  }) : _http = ParserHttp(
-         client: httpClient,
-         // Client-ID 必须在这里带上:GQL 客户端复用本实例,不再自行注入。
-         defaultHeaders: {'Client-ID': clientId, 'Referer': 'https://www.twitch.tv/'},
-       ) {
+  TwitchClient({http.Client? httpClient, this.clientId = kTwitchWebClientId})
+    : _http = ParserHttp(
+        client: httpClient,
+        // Client-ID 必须在这里带上:GQL 客户端复用本实例,不再自行注入。
+        defaultHeaders: {
+          'Client-ID': clientId,
+          'Referer': 'https://www.twitch.tv/',
+        },
+      ) {
     gql = TwitchGqlClient(parserHttp: _http, clientId: clientId);
   }
 
@@ -159,17 +160,18 @@ class TwitchRoomResolver implements RoomResolver, RoomSummaryRefresher {
       throw const ParserHttpException('未获取到可播放的 HLS 地址');
     }
 
-    // 单档收敛(对齐 web 6b4983e):未指定清晰度时默认 480p 高清档,只把
-    // 选中档的 media playlist 下发给播放器(跳过 AUTO 主清单的 ABR 逐级
-    // 探测,首帧更快);其余档位以空线路占位供 UI chips 列出,点击后播放侧
-    // 以该档为偏好重新解析。master m3u8 本就是 usher 的一次请求,收敛的是
-    // 播放器侧的档位请求,不增加也不减少上游次数。
+    // 全档线路一次拿到(master m3u8 本身就带每档 media playlist 地址):
+    // 只把选中档排到首位(播放侧取 streams.first 起播,不做 ABR 逐级探测,
+    // 首帧仍然快),其余档位**保留真实线路**。
+    //
+    // 历史实现把非选中档的线路清空成占位,代价是切档必须整轮重新解析
+    // (GQL token + usher,约 2-3 个请求);实测切换延迟与「Twitch 解析慢」
+    // 均源于此。承载全档线路不增加任何上游请求,切档变为零延迟。
     final picked = _pickTwitchQuality(allStreams, preferredQuality);
     final streams = [
       picked,
       for (final stream in allStreams)
-        if (!identical(stream, picked))
-          StreamQuality(name: stream.name, rate: stream.rate, lines: const []),
+        if (!identical(stream, picked)) stream,
     ];
 
     return _payload(
@@ -185,7 +187,8 @@ class TwitchRoomResolver implements RoomResolver, RoomSummaryRefresher {
       streams: streams,
       // chips 保持平台原顺序(分辨率降序),不因默认选中档提前而打乱。
       availableQualities: [
-        for (final item in allStreams) QualityOption(name: item.name, rate: item.rate),
+        for (final item in allStreams)
+          QualityOption(name: item.name, rate: item.rate),
       ],
     );
   }
@@ -199,7 +202,11 @@ class TwitchRoomResolver implements RoomResolver, RoomSummaryRefresher {
   ) {
     final preference = preferredQuality?.trim() ?? '';
     final requested = preference.isEmpty ? kTwitchDefaultQuality : preference;
-    return matchQualityPreference(streams, requested, (stream) => stream.name) ??
+    return matchQualityPreference(
+          streams,
+          requested,
+          (stream) => stream.name,
+        ) ??
         streams.first;
   }
 
@@ -251,9 +258,11 @@ class TwitchRoomResolver implements RoomResolver, RoomSummaryRefresher {
     cid: cid,
     roomState: roomState,
     streams: streams,
-    availableQualities: availableQualities ??
+    availableQualities:
+        availableQualities ??
         [
-          for (final stream in streams) QualityOption(name: stream.name, rate: stream.rate),
+          for (final stream in streams)
+            QualityOption(name: stream.name, rate: stream.rate),
         ],
     source: kTwitchSource,
     fetchedAt: DateTime.now(),
@@ -268,7 +277,8 @@ SiteRegistration buildTwitchRegistration({
   String clientId = kTwitchWebClientId,
   DanmakuTransport? danmakuTransport,
 }) {
-  final effectiveClient = client ?? TwitchClient(httpClient: httpClient, clientId: clientId);
+  final effectiveClient =
+      client ?? TwitchClient(httpClient: httpClient, clientId: clientId);
   return SiteRegistration(
     id: kTwitchSiteId,
     name: 'Twitch',
