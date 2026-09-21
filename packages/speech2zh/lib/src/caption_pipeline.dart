@@ -30,7 +30,18 @@ class CaptionPipeline {
     this.translateRetryDelay = const Duration(seconds: 2),
     this.maxTranslateRetries = 3,
     this.onAudio,
+    this.onAsr,
+    this.onTranslate,
   }) : _recognizerFactory = recognizerFactory ?? defaultRecognizerFactory;
+
+  /// ASR 事件回调(诊断:partial/final 是否在产出)。
+  ///
+  /// 「字幕时有时无」有两种完全不同的成因 —— 识别没出 final(连读无停顿),
+  /// 还是翻译失败被丢弃;只看产出结果无法区分,故把两类事件都暴露给宿主。
+  final void Function(bool isFinal, String text)? onAsr;
+
+  /// 翻译结果回调(诊断:译文缺失导致该句被丢弃)。
+  final void Function(String text, String? zh, int attempt)? onTranslate;
 
   /// 音频统计回调(宿主用于落盘诊断:采样帧数 + 峰值振幅)。
   ///
@@ -114,6 +125,7 @@ class CaptionPipeline {
   }
 
   void _onAsrEvent(AsrEvent event) {
+    onAsr?.call(event.isFinal, event.text);
     if (!event.isFinal) return; // partial 不上屏
     final text = event.text.trim();
     if (text.isEmpty) return;
@@ -146,6 +158,7 @@ class CaptionPipeline {
     } catch (_) {
       zh = null;
     }
+    onTranslate?.call(text, zh, attempt);
     if (zh != null && zh.isNotEmpty) {
       _segments.add(
         CaptionSegment(

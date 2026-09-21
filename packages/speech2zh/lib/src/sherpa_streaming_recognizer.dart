@@ -50,10 +50,12 @@ sherpa.OnlineRecognizerConfig _buildConfig(SpeechLanguage language, String model
       provider: 'cpu',
     ),
     decodingMethod: 'modified_beam_search',
-    // 分句节奏:说话中尾静音 2.4s 收句;句间快速停顿 1.2s 收句。
+    // 分句节奏(用户口径 2026-09-21:连续说话也要持续出字幕):
+    // 尾静音 1.8s 收句、句间快速停顿 0.9s 收句。原值 2.4/1.2 在连读时
+    // 长时间不产生 final,字幕表现为「时有时无」。
     enableEndpoint: true,
-    rule1MinTrailingSilence: 2.4,
-    rule2MinTrailingSilence: 1.2,
+    rule1MinTrailingSilence: 1.8,
+    rule2MinTrailingSilence: 0.9,
     rule3MinUtteranceLength: 20,
   );
 }
