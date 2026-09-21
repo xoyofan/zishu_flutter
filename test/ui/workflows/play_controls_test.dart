@@ -53,7 +53,11 @@ class FakeLivePlayer implements LivePlayer {
       const SizedBox.expand();
 
   @override
-  Future<void> open(StreamLine line, [List<StreamLine> fallbacks = const [], bool resetRetries = true]) async => calls.add('open:${line.url}');
+  Future<void> open(
+    StreamLine line, [
+    List<StreamLine> fallbacks = const [],
+    bool resetRetries = true,
+  ]) async => calls.add('open:${line.url}');
 
   @override
   Future<void> play() async => calls.add('play');
@@ -70,10 +74,12 @@ class FakeLivePlayer implements LivePlayer {
   @override
   Future<void> toggleFullscreen() async => calls.add('fullscreen');
   @override
-  Future<void> setFullscreen(bool fullscreen) async => calls.add('fullscreen:$fullscreen');
+  Future<void> setFullscreen(bool fullscreen) async =>
+      calls.add('fullscreen:$fullscreen');
 
   @override
-  Future<void> enterPictureInPicture({double? aspectRatio}) async => calls.add('pip:enter');
+  Future<void> enterPictureInPicture({double? aspectRatio}) async =>
+      calls.add('pip:enter');
 
   @override
   Future<void> exitPictureInPicture() async => calls.add('pip:exit');
@@ -395,9 +401,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('danmakuSettings:控制条提供飘屏弹幕设置入口(SFVideo 复刻)', (
-    tester,
-  ) async {
+  testWidgets('danmakuSettings:控制条提供飘屏弹幕设置入口(SFVideo 复刻)', (tester) async {
     final play = await _pumpPlay(tester);
     await _awaitSettingsHydrated(tester, play.container);
 
@@ -462,15 +466,28 @@ void main() {
     final fs = tester.getRect(find.byKey(const Key('play-toggle-fullscreen')));
     // ignore: avoid_print
     print('[dbg] bar=$bar fs=$fs');
-    for (final key in ['play-toggle-play', 'play-toggle-mute', 'play-toggle-danmaku', 'play-quality-menu', 'play-line-menu', 'play-toggle-pip', 'play-sleep-timer', 'play-refresh-stream', 'play-toggle-widescreen']) {
+    for (final key in [
+      'play-toggle-play',
+      'play-toggle-mute',
+      'play-toggle-danmaku',
+      'play-quality-menu',
+      'play-line-menu',
+      'play-toggle-pip',
+      'play-sleep-timer',
+      'play-refresh-stream',
+      'play-toggle-widescreen',
+    ]) {
       final f = find.byKey(Key(key));
       if (f.evaluate().isNotEmpty) {
         // ignore: avoid_print
         print('[dbg] $key -> ${tester.getRect(f)}');
       }
     }
-    expect(bar.right - fs.right, lessThan(24),
-        reason: '全屏按钮应贴控制条右缘(自适应播放区宽度,Spacer 聚拢)');
+    expect(
+      bar.right - fs.right,
+      lessThan(24),
+      reason: '全屏按钮应贴控制条右缘(自适应播放区宽度,Spacer 聚拢)',
+    );
 
     // 左组(播放)贴左缘,与右组之间有大段弹性空隙(pure_live 手感)。
     final pp = tester.getRect(find.byKey(const Key('play-toggle-play')));
@@ -591,35 +608,47 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('captionToggle:「译」按钮切换语音字幕全局开关并持久化', (tester) async {
+  testWidgets('captionToggle:「译」按钮经确认弹窗开启语音字幕并持久化', (tester) async {
     final play = await _pumpPlay(tester);
     await _awaitSettingsHydrated(tester, play.container);
 
-    // 默认开(用户口径):按钮可见且处于激活描边态。
+    // 出厂默认关闭(用户口径 2026-09-21):不主动下载模型。
     final toggle = find.byKey(const Key('play-toggle-caption'));
     expect(toggle, findsOneWidget, reason: '控制条应有「译」字幕开关按钮');
     expect(
       _settingsOf(play.container).speechCaptionEnabled,
-      isTrue,
-      reason: '语音字幕默认应开启',
+      isFalse,
+      reason: '语音字幕默认关闭,等待用户确认下载模型',
     );
 
-    // 点击关闭:settings 落 false。
+    // 首次点击:弹确认框,取消不改开关(也不下载)。
     await tester.tap(toggle);
-    await _pumpFrames(tester, 2);
+    await _pumpFrames(tester, 3);
+    expect(find.text('下载字幕模型'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await _pumpFrames(tester, 3);
     expect(
       _settingsOf(play.container).speechCaptionEnabled,
       isFalse,
-      reason: '点击「译」按钮应切换全局字幕开关',
+      reason: '取消下载不应开启字幕',
     );
 
-    // 再点恢复开启。
+    // 再点并确认下载:开关落 true。
     await tester.tap(find.byKey(const Key('play-toggle-caption')));
-    await _pumpFrames(tester, 2);
+    await _pumpFrames(tester, 3);
+    await tester.tap(find.byKey(const Key('caption-download-confirm')));
+    await _pumpFrames(tester, 3);
     expect(
       _settingsOf(play.container).speechCaptionEnabled,
       isTrue,
+      reason: '确认下载后应开启全局字幕开关',
     );
+
+    // 开启态再点:直接关闭,不再弹窗。
+    await tester.tap(find.byKey(const Key('play-toggle-caption')));
+    await _pumpFrames(tester, 2);
+    expect(_settingsOf(play.container).speechCaptionEnabled, isFalse);
+    expect(find.text('下载字幕模型'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }

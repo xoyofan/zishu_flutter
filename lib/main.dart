@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:live_parser/live_parser.dart' show UpstreamProxy;
 import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'src/app/app_router.dart';
 import 'src/apps/windows/windows_app.dart';
+import 'src/platforms/common/playback/playback_log.dart';
 import 'src/platforms/common/playback/window_presentation.dart';
 import 'src/platforms/common/proxy_setup.dart';
 
@@ -18,6 +20,12 @@ Future<void> main(List<String> args) async {
   // 上游代理探测(env→Windows 系统代理)先于任何解析请求:海外站
   // twitch/youtube 直连不可达,探测结果决定 HTTP/弹幕层是否走代理。
   await configureUpstreamProxy();
+  // 会话分隔标记:日志会跨多次启动追加,没有它无法区分「这次运行」。
+  // 同时记录代理状态 —— 海外站解析/翻译/模型下载失败时第一个要看的字段。
+  PlaybackLog.write('app_start', {
+    'proxy': UpstreamProxy.hostPort ?? 'direct',
+    'route': StartupRoute.value,
+  });
   // window_manager 必须先初始化:播放页的全屏(setFullScreen)与画中画都走它。
   // 未初始化时插件不监听窗口事件,isFullScreen() 的边界与状态同步都没有保障。
   // 非桌面平台(Web / Android)没有对应原生实现,静默跳过——那些平台的窗口呈现

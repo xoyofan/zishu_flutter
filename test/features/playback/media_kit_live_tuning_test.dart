@@ -12,6 +12,8 @@
 /// 两者任一到达即停止预读(mpv 手册)。
 library;
 
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/media_kit_live_player.dart';
 
@@ -56,6 +58,21 @@ void main() {
       expect(properties['hwdec-software-fallback'], '1');
       expect(properties['video-sync'], 'audio');
       expect(properties['volume-max'], '100');
+    });
+
+    test('上游代理注入 mpv(http-proxy):被墙 CDN 只能经代理播放', () {
+      // mpv 既不读系统代理也不读 Dart 侧 findProxy:YouTube 的
+      // manifest.googlevideo.com 实测直连 `tcp: Connection failed`,
+      // 必须由 _applyLiveTuning 从 UpstreamProxy 取运行期值注入。
+      final source = File(
+        'lib/src/platforms/common/playback/media_kit_live_player.dart',
+      ).readAsStringSync();
+      expect(
+        source,
+        contains("setProperty('http-proxy', 'http://\$proxy')"),
+        reason: 'mpv 需显式 http-proxy,否则被墙线路永远连不上',
+      );
+      expect(source, contains('UpstreamProxy.hostPort'));
     });
 
     test('属性名不重复(重复设置以最后一条为准,易掩盖配置意图)', () {

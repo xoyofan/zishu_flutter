@@ -9,7 +9,7 @@ import 'dart:io';
 import 'package:flutter/widgets.dart' show BoxFit, Color, Widget;
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
-import 'package:live_parser/live_parser.dart' show StreamLine;
+import 'package:live_parser/live_parser.dart' show StreamLine, UpstreamProxy;
 import 'package:window_manager/window_manager.dart' show DragToResizeArea;
 
 import 'live_player.dart';
@@ -486,6 +486,14 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       await platform.waitForPlayerInitialization;
       for (final (name, value) in kLiveTuningProperties) {
         await platform.setProperty(name, value);
+      }
+      // 上游代理必须同步给 mpv:`mpv` 不读系统代理也不读 Dart 侧的
+      // HttpClient.findProxy,被墙的 CDN(如 YouTube 的
+      // manifest.googlevideo.com)会直接 `tcp: Connection failed`
+      // (2026-09-21 真机故障)。代理是运行期值,故不进常量表。
+      final proxy = UpstreamProxy.hostPort;
+      if (proxy != null && proxy.isNotEmpty) {
+        await platform.setProperty('http-proxy', 'http://$proxy');
       }
       // 缓存目录依赖运行期路径,无法进常量表;其余动态项在下方逐条设置。
       final cacheDir =

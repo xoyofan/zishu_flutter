@@ -29,8 +29,10 @@ import '../../danmaku/widgets/danmaku_overlay.dart';
 import '../application/play_provider.dart';
 import '../application/play_screen_provider.dart';
 import '../application/sleep_timer_provider.dart';
+import '../application/speech_caption_provider.dart';
 import '../../follow/application/settings_provider.dart';
-import '../widgets/caption_overlay.dart';
+import '../widgets/caption_overlay.dart'
+    show CaptionDownloadAction, CaptionDownloadDialog, CaptionOverlay;
 import '../widgets/pip_surface.dart';
 import '../widgets/play_immersive_side_sheet.dart';
 import '../widgets/play_side_panel.dart';
@@ -160,6 +162,28 @@ class _PlayViewState extends ConsumerState<PlayView> {
 
   /// 画中画小窗切换。
   void _togglePip() => unawaited(_screen.togglePip());
+
+  /// 切换字幕开关;首次开启先询问是否下载模型。
+  Future<void> _toggleSpeechCaption() async {
+    final settings = ref.read(settingsProvider);
+    if (settings.speechCaptionEnabled) {
+      await ref.read(settingsProvider.notifier).setSpeechCaptionEnabled(false);
+      return;
+    }
+    final language = speechLanguageForSite(widget.site);
+    final manager = ref.read(speechModelManagerProvider);
+    final info = manager.inspect(language);
+    if (!mounted) return;
+    final action = await showDialog<CaptionDownloadAction>(
+      context: context,
+      builder: (context) =>
+          CaptionDownloadDialog(language: language, info: info),
+    );
+    if (!mounted || action == null) return;
+    if (action == CaptionDownloadAction.download) {
+      await ref.read(settingsProvider.notifier).setSpeechCaptionEnabled(true);
+    }
+  }
 
   /// 全局键盘 handler:**只接管 Esc**,其余键一律放行。
   ///
@@ -487,11 +511,8 @@ class _PlayViewState extends ConsumerState<PlayView> {
                                     playControllerProvider(_params).notifier,
                                   )
                                   .toggleDanmaku(),
-                              onCaptionToggle: () => ref
-                                  .read(settingsProvider.notifier)
-                                  .setSpeechCaptionEnabled(
-                                    !speechCaptionEnabled,
-                                  ),
+                              onCaptionToggle: () =>
+                                  unawaited(_toggleSpeechCaption()),
                               onToggleWidescreen: _toggleWidescreen,
                               onToggleFullscreen: _toggleFullscreen,
                               onTogglePip: _togglePip,

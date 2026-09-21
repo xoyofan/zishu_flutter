@@ -84,6 +84,18 @@ class PlayState {
 final playControllerProvider = AsyncNotifierProvider.autoDispose
     .family<PlayController, PlayState, PlayParams>(PlayController.new);
 
+/// 后台预取的档位上限、并发数与首批错开间隔。
+///
+/// 预取是「锦上添花」:首档已可播,其余档位慢几秒无感;但若不限速,它会与
+/// 起播/切房争抢代理连接(2026-09-21 Twitch 卡慢的成因)。上限之外的档位
+/// 仍可点击 —— 切档时按需解析。
+///
+/// 并发 2:斗鱼/B站/YY/SOOP 每档 1~2 个请求,串行会把 4 档拖到 4~6s;
+/// 并发 2 约减半,再高就会抢首帧带宽。
+const int kPrefetchQualityLimit = 4;
+const int kPrefetchConcurrency = 2;
+const Duration kPrefetchStagger = Duration(milliseconds: 800);
+
 class PlayController extends AsyncNotifier<PlayState> {
   PlayController(this.params);
 
@@ -95,9 +107,19 @@ class PlayController extends AsyncNotifier<PlayState> {
   /// 重新解析,解析侧只取该档,避免整房全档取流。
   String? _qualityOverride;
 
+  /// 后台预取到的档位线路,切档时优先复用。
+  final Map<String, StreamQuality> _prefetchedQualities = {};
+
+  /// 预取代际:只在「重新解析房间」(build/retry)时推进。
+  ///
+  /// 不能复用 [_generation]:切画质/切线路都会推进它,那会把还在跑的
+  /// 后台预取全部作废(用户口径 2026-09-21:其他线路必须后台加载完)。
+  int _prefetchToken = 0;
+
   @override
   FutureOr<PlayState> build() async {
     final generation = ++_generation;
+    final prefetchToken = ++_prefetchToken;
     // 离开播放页(autoDispose 触发)→ 停止全局播放器:直播不得在后台继续出声/出画。
     // 仅卸载媒体源,不 dispose 实例(下次进房复用同一 Player)。捕获实例而非在
     // 回调里 ref.read,避免 provider 销毁期再去读依赖。
@@ -154,17 +176,130 @@ class PlayController extends AsyncNotifier<PlayState> {
       // 必须走 _open:首次进房就要装上恢复回调,否则签名平台地址过期后,
       // 播放器在放弃分支拿不到"重新解析"的新地址。
       _open(line, _fallbackLines(quality, line));
+      // 当前档先起播,其他档位后台预取,不阻塞首帧。
+      unawaited(_prefetchQualities(payload, source, prefetchToken));
     }
     return next;
   }
 
-  /// 切换画质:已预取线路则直接开流;懒取流的档位(空线路占位)以其为偏好
-  /// 重新解析,解析侧只取该档后自动开流。线路选取遵循线路格式偏好。
+  Future<void> _prefetchQualities(
+    RoomPayload initial,
+    RoomSource source,
+    int prefetchToken,
+  ) async {
+    // 待补档位:只选「确实缺线路」的档,超出上限的记录跳过原因。
+    final targets = <QualityOption>[];
+    for (final option in initial.availableQualities) {
+      final existing =
+          _prefetchedQualities[option.name] ??
+          initial.qualityByName(option.name);
+      // 已带线路的档位直接跳过 —— Twitch/YouTube 这类平台
+      // 一次响应就已拿全档线路,完全不需要预取。
+      if (existing != null && existing.lines.isNotEmpty) continue;
+      if (targets.length >= kPrefetchQualityLimit) {
+        PlaybackLog.write('prefetch_skip', {
+          'site': params.site,
+          'room': params.roomId,
+          'quality': option.name,
+          'reason': 'limit',
+        });
+        continue;
+      }
+      targets.add(option);
+    }
+    if (targets.isEmpty) return;
+
+    // 只错开一次:让首帧先落地,随后并发补档(逐档 600ms 串行会把 4 档拖到
+    // 4~6s;并发 2 约减半,又不至于抢首帧带宽)。
+    await Future<void>.delayed(kPrefetchStagger);
+    if (prefetchToken != _prefetchToken || !ref.mounted) return;
+
+    var cursor = 0;
+    Future<void> worker() async {
+      while (true) {
+        final index = cursor++;
+        if (index >= targets.length) return;
+        if (prefetchToken != _prefetchToken || !ref.mounted) return;
+        await _prefetchOne(targets[index], source, prefetchToken);
+      }
+    }
+
+    await Future.wait([
+      for (var i = 0; i < kPrefetchConcurrency; i++) worker(),
+    ]);
+  }
+
+  /// 补一个档位的线路并合并回当前 payload。
+  Future<void> _prefetchOne(
+    QualityOption option,
+    RoomSource source,
+    int prefetchToken,
+  ) async {
+    final startedAt = DateTime.now();
+    PlaybackLog.write('prefetch_start', {
+      'site': params.site,
+      'room': params.roomId,
+      'quality': option.name,
+    });
+    try {
+      final fetchedPayload = await source.resolveRoom(
+        site: params.site,
+        roomIdOrUrl: params.roomId,
+        preferredQuality: option.name,
+      );
+      if (prefetchToken != _prefetchToken || !ref.mounted) return;
+      final fetched = fetchedPayload.qualityByName(option.name);
+      if (fetched == null || fetched.lines.isEmpty) {
+        PlaybackLog.write('prefetch_empty', {
+          'site': params.site,
+          'room': params.roomId,
+          'quality': option.name,
+          'ms': DateTime.now().difference(startedAt).inMilliseconds,
+        });
+        return;
+      }
+      _prefetchedQualities[option.name] = fetched;
+      PlaybackLog.write('prefetch_ok', {
+        'site': params.site,
+        'room': params.roomId,
+        'quality': option.name,
+        'lines': fetched.lines.length,
+        'ms': DateTime.now().difference(startedAt).inMilliseconds,
+      });
+      final current = state.value;
+      final currentPayload = current?.payload;
+      if (current == null || currentPayload == null) return;
+      final merged = [
+        for (final stream in currentPayload.streams)
+          stream.name == fetched.name ? fetched : stream,
+      ];
+      state = AsyncData(
+        current.copyWith(
+          payload: currentPayload.copyWith(
+            streams: merged,
+            fetchedAt: fetchedPayload.fetchedAt,
+          ),
+        ),
+      );
+    } catch (error) {
+      // 后台预取失败不影响当前播放;用户切档时仍按需解析。
+      PlaybackLog.write('prefetch_fail', {
+        'site': params.site,
+        'room': params.roomId,
+        'quality': option.name,
+        'error': error,
+        'ms': DateTime.now().difference(startedAt).inMilliseconds,
+      });
+    }
+  }
+
+  /// 切换画质:预取完成时直接开流;否则按需重新解析。
   void switchQuality(StreamQuality quality) {
     final current = state.value;
     if (current == null || current.payload == null) return;
+    final effectiveQuality = _prefetchedQualities[quality.name] ?? quality;
     final line = pickStreamLine(
-      quality,
+      effectiveQuality,
       ref.read(settingsProvider).preferredLineFormat.value,
       site: params.site,
     );
@@ -175,9 +310,13 @@ class PlayController extends AsyncNotifier<PlayState> {
     }
     final generation = ++_generation;
     state = AsyncData(
-      current.copyWith(quality: quality, line: line, generation: generation),
+      current.copyWith(
+        quality: effectiveQuality,
+        line: line,
+        generation: generation,
+      ),
     );
-    _open(line, _fallbackLines(quality, line));
+    _open(line, _fallbackLines(effectiveQuality, line));
   }
 
   /// 同画质内切换线路。
@@ -204,6 +343,8 @@ class PlayController extends AsyncNotifier<PlayState> {
       return;
     }
     final generation = ++_generation;
+    // 整体重解析:旧一批预取线路已与当前 payload 脱钩,作废。
+    _prefetchToken++;
     if (current != null) {
       state = AsyncData(current.copyWith(generation: generation));
     }

@@ -15,8 +15,10 @@
 2. **构建本项目 exe**:
    ```bash
    flutter build windows --debug -t lib/main.dart
-   # 真实解析版(首页/播放为真实站点数据):
-   flutter build windows --debug -t lib/main.dart --dart-define=ZISHU_REAL_PARSER=true
+   # 默认 Windows 打包(真实解析版):
+   powershell -ExecutionPolicy Bypass -File tool/build-windows.ps1
+   # 真实解析 Debug 版:
+   powershell -ExecutionPolicy Bypass -File tool/build-windows.ps1 -Debug
    ```
 3. **启动并驱动 exe**(`win_tool.py` 零编译,需 Python 3.10+ 与 Pillow/pyautogui;
    PrintWindow 抓 GPU 合成内容,后台截图不打扰前台):
@@ -30,6 +32,32 @@
    渲染循环才会继续;`shot` 本身永不激活窗口。
 4. **对比**:同视口的 `zishu/*.png` 与 `sfvideo/*.png` 并排比对;逐轮实拍
    按日期留档即可,过期帧删除。
+
+## 真机日志(release GUI 无控制台,一律看文件)
+
+位置:`%APPDATA%\zishu_flutter\logs\playback.log`(超 2MB 轮转为
+`playback.old.log`)。每次启动先写一条 `app_start`(含 `proxy=`),用它切分不同运行。
+
+```powershell
+$log = Join-Path $env:APPDATA 'zishu_flutter\logs\playback.log'
+Select-String -Path $log -Pattern 'app_start|caption_' | Select-Object -Last 60   # 字幕链路
+Select-String -Path $log -Pattern 'prefetch_' | Select-Object -Last 40           # 后台预取线路
+Select-String -Path $log -Pattern 'resolve_|give_up|stall' | Select-Object -Last 40
+```
+
+关键事件速查:
+
+| 事件 | 含义 |
+|---|---|
+| `app_start proxy=<host:port\|direct>` | 本次运行起始标记;海外站失败先看这里 |
+| `caption_start ready/doneMB/partial` | 进入播放页时的模型状态(是否已有部分下载) |
+| `caption_download pct=N` | 模型下载进度(每 10% 一条) |
+| `caption_download_done dir=...` | 模型就绪及落盘目录 |
+| `caption_load_ok ms=N` | sherpa 引擎加载成功及耗时 |
+| `caption_audio frames/peak` | 采集统计:首块必记、之后每 5s 一条。**`peak=0.0000` 说明采到的是静音**,`peak` 正常但无字幕则问题在识别/翻译 |
+| `caption_seg len/translated` | 产出字幕段(含是否译文就绪) |
+| `caption_fail` / `caption_unsupported` | 失败原因(下载/引擎/平台不支持) |
+| `prefetch_start/ok/empty/fail ms` | 其他画质线路后台预取结果与耗时 |
 
 ## 文件清单
 

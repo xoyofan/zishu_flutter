@@ -159,12 +159,12 @@ class _NoNetworkHttpClient implements HttpClient {
   set userAgent(String? value) => _real.userAgent = value;
 
   @override
-  void set authenticate(
+  set authenticate(
     Future<bool> Function(Uri url, String scheme, String? realm)? f,
   ) => _real.authenticate = f;
 
   @override
-  void set authenticateProxy(
+  set authenticateProxy(
     Future<bool> Function(String host, int port, String scheme, String? realm)?
     f,
   ) => _real.authenticateProxy = f;
@@ -185,7 +185,7 @@ class _NoNetworkHttpClient implements HttpClient {
   ) => _real.addProxyCredentials(host, port, realm, credentials);
 
   @override
-  void set connectionFactory(
+  set connectionFactory(
     Future<ConnectionTask<Socket>> Function(
       Uri url,
       String? proxyHost,
@@ -195,13 +195,13 @@ class _NoNetworkHttpClient implements HttpClient {
   ) => _real.connectionFactory = f;
 
   @override
-  void set findProxy(String Function(Uri url)? f) => _real.findProxy = f;
+  set findProxy(String Function(Uri url)? f) => _real.findProxy = f;
 
   @override
-  void set badCertificateCallback(
+  set badCertificateCallback(
     bool Function(X509Certificate cert, String host, int port)? callback,
   ) => _real.badCertificateCallback = callback;
 
   @override
-  void set keyLog(Function(String line)? callback) => _real.keyLog = callback;
+  set keyLog(Function(String line)? callback) => _real.keyLog = callback;
 }

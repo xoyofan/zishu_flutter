@@ -159,8 +159,8 @@ class SettingsState {
   /// 文显示在播放页底部。默认开(用户口径);模型未就绪时首次开启会先下载。
   final bool speechCaptionEnabled;
 
-  /// 语音字幕开关出厂默认(用户口径:默认开)。
-  static const bool defaultSpeechCaptionEnabled = true;
+  /// 语音字幕开关出厂默认关闭;用户点击「译」后确认下载模型。
+  static const bool defaultSpeechCaptionEnabled = false;
 
   /// 线路格式偏好(auto/hls/flv)。
   final PreferredLineFormat preferredLineFormat;
@@ -312,7 +312,8 @@ class SettingsController extends Notifier<SettingsState> {
   static const String _kPreferredLineFormat =
       'zishu.settings.preferredLineFormat';
   static const String _kServerUrl = 'zishu.settings.serverUrl';
-  static const String _kTranslationEnabled = 'zishu.settings.translationEnabled';
+  static const String _kTranslationEnabled =
+      'zishu.settings.translationEnabled';
   static const String _kTranslationEndpoint =
       'zishu.settings.translationEndpoint';
   static const String _kSpeechCaptionEnabled =
@@ -377,7 +378,10 @@ class SettingsController extends Notifier<SettingsState> {
         danmakuEnabled: danmaku,
         chatEnabled: chat,
         chatFontSize: chatFontSize
-            ?.clamp(SettingsState.chatFontSizeMin, SettingsState.chatFontSizeMax)
+            ?.clamp(
+              SettingsState.chatFontSizeMin,
+              SettingsState.chatFontSizeMax,
+            )
             .toInt(),
         chatOpacity: chatOpacity
             ?.clamp(SettingsState.chatOpacityMin, SettingsState.chatOpacityMax)
@@ -396,10 +400,10 @@ class SettingsController extends Notifier<SettingsState> {
             : ChatThrottleMode.fromValue(chatThrottleModeRaw),
         preferredLineFormat: PreferredLineFormat.fromValue(format),
         serverUrl: server != null && server.isNotEmpty ? server : null,
-      translationEnabled: translation,
-      translationEndpoint: translationEndpoint,
-      speechCaptionEnabled: await prefs.getBool(_kSpeechCaptionEnabled),
-      hydrated: true,
+        translationEnabled: translation,
+        translationEndpoint: translationEndpoint,
+        speechCaptionEnabled: await prefs.getBool(_kSpeechCaptionEnabled),
+        hydrated: true,
       );
     } catch (_) {
       // 平台存储不可用等异常:静默保留默认值,页面不崩溃。
@@ -520,7 +524,10 @@ class SettingsController extends Notifier<SettingsState> {
   /// 设置侧栏聊天消息行间距(px)并持久化;越界值钳制到合法区间(0-16)。
   Future<void> setChatLineSpacing(int spacing) async {
     final clamped = spacing
-        .clamp(SettingsState.chatLineSpacingMin, SettingsState.chatLineSpacingMax)
+        .clamp(
+          SettingsState.chatLineSpacingMin,
+          SettingsState.chatLineSpacingMax,
+        )
         .toInt();
     state = state.copyWith(chatLineSpacing: clamped);
     try {
