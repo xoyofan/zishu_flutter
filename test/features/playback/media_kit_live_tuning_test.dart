@@ -23,21 +23,75 @@ void main() {
       name: value,
   };
 
-  group('kLiveTuningProperties 缓冲上限(60s 封顶语义)', () {
-    test('cache-secs=60:回放缓冲约 60s 封顶(对齐 hls.js backBufferLength: 60)', () {
-      expect(asMap()['cache-secs'], '60');
+  group('缓冲分档(用户口径 2026-09-21:twitch/soop/youtube 宁可变延迟也不断画面)', () {
+    Map<String, String> profile(List<(String, String)> entries) => {
+      for (final (name, value) in entries) name: value,
+    };
+
+    test('深缓冲档:起播不等待缓存(首帧优先),欠载恢复才攒 2s', () {
+      // 用户口径 2026-09-22:进页面必须先出画面 —— 任何缓存等待都不得挡在
+      // 起播前面;`cache-pause-wait` 只在欠载恢复时生效。
+      final deep = profile(MediaKitLivePlayer.kDeepBufferProperties);
+      expect(deep['cache-pause-initial'], 'no');
+      expect(deep['cache-pause-wait'], '2');
     });
 
-    test('前向字节硬顶保持 32MiB,高码率先于 60s 到达即封顶', () {
-      expect(asMap()['demuxer-max-bytes'], '33554432');
+    test('深缓冲档:前向字节顶 96MiB(高码率也有十几秒以上余量)', () {
+      // 旧值 32MiB 在 20 Mbps 下只有约 13s,高清源一抖就欠载;
+      // 96MiB ≈ 20 Mbps 38s / 8 Mbps 96s。
+      final deep = profile(MediaKitLivePlayer.kDeepBufferProperties);
+      expect(deep['demuxer-max-bytes'], '100663296');
+      expect(deep['demuxer-readahead-secs'], '8');
+      expect(deep['cache-secs'], '90');
     });
 
-    test('回看缓冲保持 4MiB 有界(mpv 手册:back buffer 无秒级控制)', () {
+    test('低延迟档:国内直连源不为起播额外等待,保持快速起播', () {
+      final low = profile(MediaKitLivePlayer.kLowLatencyBufferProperties);
+      expect(low['cache-pause-initial'], 'no');
+      expect(low['cache-pause-wait'], '1');
+      expect(low['demuxer-max-bytes'], '33554432');
+      expect(low['demuxer-readahead-secs'], '2');
+    });
+
+    test('主机判定:twitch / youtube / soop 走深缓冲,国内站走低延迟', () {
+      expect(
+        MediaKitLivePlayer.needsDeepBuffer('apn12.playlist.ttvnw.net'),
+        isTrue,
+      );
+      expect(MediaKitLivePlayer.needsDeepBuffer('gql.twitch.tv'), isTrue);
+      expect(
+        MediaKitLivePlayer.needsDeepBuffer('manifest.googlevideo.com'),
+        isTrue,
+      );
+      expect(
+        MediaKitLivePlayer.needsDeepBuffer('live-global-cdn-v02.sooplive.com'),
+        isTrue,
+      );
+      expect(MediaKitLivePlayer.needsDeepBuffer('live.sooplive.co.kr'), isTrue);
+
+      expect(MediaKitLivePlayer.needsDeepBuffer('hw1a.douyucdn2.cn'), isFalse);
+      expect(MediaKitLivePlayer.needsDeepBuffer('al.hls.huya.com'), isFalse);
+      expect(
+        MediaKitLivePlayer.needsDeepBuffer('cn-hbwh-cm-01-03.bilivideo.com'),
+        isFalse,
+      );
+      // 后缀匹配不误伤相似域名。
+      expect(MediaKitLivePlayer.needsDeepBuffer('eviltwitch.tv'), isFalse);
+    });
+
+    test('两档覆盖同一组键,避免切换时残留上一个源的取值', () {
+      final deep = MediaKitLivePlayer.kDeepBufferProperties
+          .map((e) => e.$1)
+          .toSet();
+      final low = MediaKitLivePlayer.kLowLatencyBufferProperties
+          .map((e) => e.$1)
+          .toSet();
+      expect(deep, equals(low));
+    });
+
+    test('回看缓冲仍在基础表里有界(4MiB,与源无关)', () {
       expect(asMap()['demuxer-max-back-bytes'], '4194304');
-    });
-
-    test('预读秒数保持 2s 低延迟目标(cache-secs 与之取较大者)', () {
-      expect(asMap()['demuxer-readahead-secs'], '2');
+      expect(asMap()['cache'], 'yes');
     });
   });
 
@@ -60,20 +114,21 @@ void main() {
       expect(properties['volume-max'], '100');
     });
 
-    test('上游代理按线路主机注入 mpv(http-proxy),不需要时显式清空', () {
+    test('代理与缓冲档都按当前线路主机在 open 前重设', () {
       // mpv 既不读系统代理也不读 Dart 侧 findProxy:YouTube 的
       // manifest.googlevideo.com 实测直连 `tcp: Connection failed`;
       // 而 SOOP 等直连更快的站点走代理会慢一个数量级。mpv 的 http-proxy
-      // 是进程级选项,故每次 open 都按当前线路主机重设(需要则设、否则清空)。
+      // 与缓冲项都是进程级选项,故每次 open 都按当前线路主机重设。
       final source = File(
         'lib/src/platforms/common/playback/media_kit_live_player.dart',
       ).readAsStringSync();
       expect(
         source,
-        contains('_applyProxyForLine'),
-        reason: 'mpv 需显式 http-proxy,且必须按当前源主机决定走不走代理',
+        contains('_applyStreamProfileFor'),
+        reason: 'mpv 需显式 http-proxy,且必须按当前源主机决定走不走代理/多深缓冲',
       );
       expect(source, contains('UpstreamProxy.needsProxy(host)'));
+      expect(source, contains('needsDeepBuffer(host)'));
       expect(source, contains("'http-proxy'"));
     });
 

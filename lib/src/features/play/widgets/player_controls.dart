@@ -35,6 +35,7 @@ import '../../../shared/presentation/widgets/compact_switch.dart';
 import '../../../shared/presentation/widgets/settings_slider_row.dart';
 import '../application/room_volume_provider.dart';
 import '../application/sleep_timer_provider.dart';
+import '../application/speech_caption_provider.dart' show supportsSpeechCaption;
 
 class PlayerControlsBar extends ConsumerStatefulWidget {
   const PlayerControlsBar({
@@ -217,19 +218,22 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
                     onToggleShow: widget.onDanmakuToggle,
                   ),
                 ],
-                IconButton(
-                  // 测试锚点:语音字幕开关(SFVideo「弹」方块同款形态,
-                  // 字为「译」+ √ 角标;全局设置持久化,默认开)。
-                  key: const Key('play-toggle-caption'),
-                  tooltip: widget.speechCaptionEnabled ? '关闭语音字幕' : '开启语音字幕',
-                  onPressed: widget.onCaptionToggle,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(
-                    minWidth: 32,
-                    minHeight: 32,
+                // 语音字幕只对 youtube/twitch/soop 生效(用户口径 2026-09-22):
+                // 其余平台连入口都不出,避免误导用户以为开了会有字幕。
+                if (supportsSpeechCaption(widget.site))
+                  IconButton(
+                    // 测试锚点:语音字幕开关(SFVideo「弹」方块同款形态,
+                    // 字为「译」+ √ 角标;全局设置持久化,默认关)。
+                    key: const Key('play-toggle-caption'),
+                    tooltip: widget.speechCaptionEnabled ? '关闭语音字幕' : '开启语音字幕',
+                    onPressed: widget.onCaptionToggle,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 32,
+                      minHeight: 32,
+                    ),
+                    icon: _TranslateMark(active: widget.speechCaptionEnabled),
                   ),
-                  icon: _TranslateMark(active: widget.speechCaptionEnabled),
-                ),
               ],
             ),
           ),

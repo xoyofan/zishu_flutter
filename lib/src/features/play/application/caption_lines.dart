@@ -1,7 +1,8 @@
 /// 语音字幕的「多句并存」缓冲:每句存活固定时长,过期自动消失。
 ///
 /// 用户口径(2026-09-21):字幕条充分利用播放宽度,多句**横向排列**、
-/// 句间留空隙,每句显示 5 秒后消失 —— 而不是只显示最新一句。
+/// 句间留空隙,每句显示 5 秒后消失 —— 而不是只显示最新一句;
+/// 同时在屏**最多两行**(连续说话时不会堆满画面)。
 ///
 /// 纯逻辑,不依赖 Flutter/Riverpod,便于确定性单测。
 library;
@@ -33,8 +34,9 @@ class CaptionLineBuffer {
   /// 每句存活时长(用户口径 5s)。
   static const Duration defaultLifetime = Duration(seconds: 5);
 
-  /// 上限保护:极端情况下(极短句连发)也不至于无限累积。
-  static const int maxLines = 12;
+  /// 同时在屏上限(用户口径 2026-09-21:连续说话时**最多两行**连续显示)。
+  /// 超过即丢最旧 —— 保证最新两句话始终可见。
+  static const int maxLines = 2;
 
   final Duration lifetime;
 

@@ -1,7 +1,7 @@
 name: zishu_flutter
 description: "紫薯直播 Flutter 客户端：核心解析、平台适配与 Windows/Web UI 宿主分层。"
 publish_to: 'none'
-version: 1.0.2-beta
+version: 1.0.3-beta
 
 environment:
   sdk: ^3.13.0

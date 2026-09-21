@@ -20,8 +20,22 @@ import 'caption_lines.dart';
 import 'play_provider.dart' show PlayParams;
 import 'speech_tap_factory.dart';
 
-SpeechLanguage speechLanguageForSite(String site) =>
-    site == 'soop' ? SpeechLanguage.korean : SpeechLanguage.english;
+/// 支持语音字幕的站点(用户口径 2026-09-22:只做这三个平台)。
+///
+/// 其余平台(斗鱼/虎牙/B站/抖音/快手/YY/IPTV)无论翻译开关如何都**不加载**
+/// 语音字幕:不下载模型、不启采集、控制条也不出「译」按钮 —— 避免为看国内
+/// 直播白白下载 70MB 模型并占用 CPU。
+const Set<String> kSpeechCaptionSites = {'youtube', 'twitch', 'soop'};
+
+/// 该站点是否支持语音字幕。
+bool supportsSpeechCaption(String site) => kSpeechCaptionSites.contains(site);
+
+/// 语言先验:SOOP 韩语站,Twitch/YouTube 英语;不支持的站点返回 null。
+SpeechLanguage? speechLanguageForSite(String site) => switch (site) {
+  'soop' => SpeechLanguage.korean,
+  'twitch' || 'youtube' => SpeechLanguage.english,
+  _ => null,
+};
 
 /// 语言的中文展示名(字幕条文案:「英文/韩文字幕模型下载中…」)。
 String speechLanguageLabel(SpeechLanguage language) => switch (language) {
@@ -109,6 +123,7 @@ class SpeechCaptionController extends Notifier<CaptionUiState> {
   int _generation = 0;
   int _lastProgressBucket = -1;
   DateTime? _lastAudioLogAt;
+  DateTime? _lastAsrLogAt;
   Timer? _watchdog;
   CaptionUiPhase? _lastLoggedPhase;
   int _lastLoggedBucket = -1;
@@ -132,6 +147,11 @@ class SpeechCaptionController extends Notifier<CaptionUiState> {
   @override
   CaptionUiState build() {
     ref.onDispose(_stop);
+    // 站点门控:不支持的平台一律 idle —— 不下载模型、不启采集,与开关无关。
+    if (!supportsSpeechCaption(params.site)) {
+      _stop();
+      return const CaptionUiState();
+    }
     final enabled = ref.watch(
       settingsProvider.select((s) => s.speechCaptionEnabled),
     );
@@ -173,6 +193,8 @@ class SpeechCaptionController extends Notifier<CaptionUiState> {
   Future<void> _start() async {
     final generation = ++_generation;
     final language = speechLanguageForSite(params.site);
+    // 不支持的站点直接不启动(双保险:build 已拦,这里再挡一次异步入口)。
+    if (language == null) return;
     final manager = ref.read(speechModelManagerProvider);
     final initial = manager.inspect(language);
     _log('caption_start', {
@@ -372,6 +394,29 @@ class SpeechCaptionController extends Notifier<CaptionUiState> {
     return delta * 1000 / elapsed;
   }
 
+  /// ASR 事件:final 必记(它是字幕的唯一来源);partial 每 10s 记一条
+  /// (只看「有没有在识别」,不刷屏)。
+  void _logAsr(bool isFinal, String text) {
+    final now = DateTime.now();
+    if (isFinal) {
+      _log('caption_asr', {'final': true, 'len': text.trim().length});
+      return;
+    }
+    final last = _lastAsrLogAt;
+    if (last != null && now.difference(last) < const Duration(seconds: 10)) {
+      return;
+    }
+    _lastAsrLogAt = now;
+    _log('caption_asr', {'final': false, 'len': text.trim().length});
+  }
+
+  /// 翻译结果:只记失败与末次尝试 —— 「识别有 final 但无字幕」时看这里。
+  void _logTranslate(String text, String? zh, int attempt) {
+    final ok = zh != null && zh.isNotEmpty;
+    if (ok && attempt == 0) return;
+    _log('caption_tr', {'len': text.length, 'ok': ok, 'attempt': attempt});
+  }
+
   void _log(String event, Map<String, Object?> fields) {
     if (!kCaptionLogEnabled) return;
     PlaybackLog.write(event, fields);
@@ -383,6 +428,8 @@ class SpeechCaptionController extends Notifier<CaptionUiState> {
     final coordinator = ref.read(translationCoordinatorProvider);
     return CaptionPipeline(
       onAudio: _logAudio,
+      onAsr: _logAsr,
+      onTranslate: _logTranslate,
       translate: (text) async {
         final zh = await coordinator.translate(text);
         return zh == text ? null : zh;

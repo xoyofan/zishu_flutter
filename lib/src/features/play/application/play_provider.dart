@@ -4,12 +4,14 @@
 library;
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:live_parser/live_parser.dart';
 
 import '../../../platforms/common/playback/live_player.dart';
 import '../../../platforms/common/playback/media_kit_live_player.dart';
+import '../../../platforms/common/playback/line_latency_ranker.dart';
 import '../../../platforms/common/playback/playback_log.dart';
 import '../../../shared/application/browse_source.dart';
 import '../../../shared/application/providers.dart';
@@ -109,6 +111,13 @@ class PlayController extends AsyncNotifier<PlayState> {
 
   /// 后台预取到的档位线路,切档时优先复用。
   final Map<String, StreamQuality> _prefetchedQualities = {};
+
+  /// 线路首包实测延时缓存(url -> (时刻, 毫秒))。
+  ///
+  /// 测速本身要一次往返,不能每次开流都做:同一条线路 5 分钟内复用结果,
+  /// 切档/自动重连因此零额外开销。
+  final Map<String, ({DateTime at, int ms})> _lineLatency = {};
+  static const Duration _lineLatencyTtl = Duration(minutes: 5);
 
   /// 预取代际:只在「重新解析房间」(build/retry)时推进。
   ///
@@ -373,9 +382,103 @@ class PlayController extends AsyncNotifier<PlayState> {
       aware.setLineRecovery(_recoverLines);
     }
     final generation = _generation;
+    unawaited(_openRanked(player, line, fallbacks, generation, openToken));
+  }
+
+  /// 开流:立刻用解析给的首选线路起播(**首帧优先**),线路测速放后台。
+  ///
+  /// 用户口径 2026-09-22:进页面必须先出画面,任何测速/预取都不得挡在
+  /// 起播前面。测速结果用于两件事:
+  /// 1. 写入 5 分钟延时缓存 —— 切档/重连/再次进房时直接取最快线路;
+  /// 2. 若「还没出画面」且存在明显更快的线路,用更快的线路重开一次
+  ///    (实测同一档位线路差可达 5~6 倍:706ms vs 4903ms)。
+  Future<void> _openRanked(
+    LivePlayer player,
+    StreamLine line,
+    List<StreamLine> fallbacks,
+    int generation,
+    int openToken,
+  ) async {
+    final candidates = [line, ...fallbacks];
+    // 先播:不等测速。
     unawaited(
       _openAndApplyVolume(player, line, fallbacks, generation, openToken),
     );
+    if (candidates.length < 2) return;
+
+    final result = await rankLinesByLatency(
+      candidates,
+      probe: _probeLineLatency,
+    );
+    if (!ref.mounted ||
+        generation != _generation ||
+        openToken != _latestPlayerOpenToken) {
+      return;
+    }
+    final fastest = result.ordered.first;
+    PlaybackLog.write('line_rank', {
+      'site': params.site,
+      'room': params.roomId,
+      'current': Uri.tryParse(line.url)?.host,
+      'fastest': Uri.tryParse(fastest.url)?.host,
+      'latency': result.latencyMs.values.join(','),
+      'dropped': result.dropped.length,
+    });
+    if (fastest.url == line.url) return;
+    // 只有「还没出画面」才换线:已出画面再重开会闪断,得不偿失。
+    final snapshot = ref.read(playerSnapshotProvider).value;
+    final started =
+        snapshot != null && (snapshot.playing || (snapshot.width ?? 0) > 0);
+    if (started) return;
+    PlaybackLog.write('line_rank_switch', {
+      'site': params.site,
+      'room': params.roomId,
+      'from': Uri.tryParse(line.url)?.host,
+      'to': Uri.tryParse(fastest.url)?.host,
+    });
+    final current = state.value;
+    if (current != null) {
+      state = AsyncData(current.copyWith(line: fastest));
+    }
+    await _openAndApplyVolume(
+      player,
+      fastest,
+      [
+        for (final candidate in result.ordered)
+          if (candidate.url != fastest.url) candidate,
+      ],
+      generation,
+      openToken,
+    );
+  }
+
+  /// 线路首包探测(带 5 分钟缓存):只读首块即断开,代价约一次 RTT。
+  Future<int?> _probeLineLatency(String url) async {
+    final cached = _lineLatency[url];
+    if (cached != null &&
+        DateTime.now().difference(cached.at) < _lineLatencyTtl) {
+      return cached.ms;
+    }
+    final uri = Uri.tryParse(url);
+    if (uri == null) return null;
+    final client = HttpClient()..connectionTimeout = const Duration(seconds: 4);
+    final sw = Stopwatch()..start();
+    try {
+      final request = await client.getUrl(uri);
+      final response = await request.close().timeout(
+        const Duration(seconds: 4),
+      );
+      if (response.statusCode >= 400) return null;
+      await response.first.timeout(const Duration(seconds: 4));
+      sw.stop();
+      final ms = sw.elapsedMilliseconds;
+      _lineLatency[url] = (at: DateTime.now(), ms: ms);
+      return ms;
+    } on Object {
+      return null;
+    } finally {
+      client.close(force: true);
+    }
   }
 
   /// 等待媒体源真正落地后再补套一次房间音量。

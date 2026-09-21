@@ -170,7 +170,9 @@ class _PlayViewState extends ConsumerState<PlayView> {
       await ref.read(settingsProvider.notifier).setSpeechCaptionEnabled(false);
       return;
     }
+    // 不支持的站点没有语言先验(控制条也不出按钮),这里兼作双保险。
     final language = speechLanguageForSite(widget.site);
+    if (language == null) return;
     final manager = ref.read(speechModelManagerProvider);
     final info = manager.inspect(language);
     if (!mounted) return;

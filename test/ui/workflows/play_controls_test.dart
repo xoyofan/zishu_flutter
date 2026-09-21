@@ -115,8 +115,9 @@ late FakeLivePlayer _player;
 
 /// 启动宿主并深链到播放页,返回 router 与 container。
 Future<({GoRouter router, ProviderContainer container})> _pumpPlay(
-  WidgetTester tester,
-) async {
+  WidgetTester tester, {
+  String location = _playLocation,
+}) async {
   tester.view.devicePixelRatio = 1.0;
   tester.view.physicalSize = const Size(1600, 1200);
   addTearDown(tester.view.resetPhysicalSize);
@@ -134,7 +135,7 @@ Future<({GoRouter router, ProviderContainer container})> _pumpPlay(
   final element = tester.element(find.byType(Navigator).first);
   final container = ProviderScope.containerOf(element);
   final router = container.read(routerProvider);
-  router.go(_playLocation);
+  router.go(location);
   await _pumpFrames(tester, 3);
   return (router: router, container: container);
 }
@@ -609,7 +610,9 @@ void main() {
   });
 
   testWidgets('captionToggle:「译」按钮经确认弹窗开启语音字幕并持久化', (tester) async {
-    final play = await _pumpPlay(tester);
+    // 语音字幕只对 youtube/twitch/soop 生效(用户口径 2026-09-22),
+    // 故用 twitch 播放页验证开关行为。
+    final play = await _pumpPlay(tester, location: '/twitch/play/tubbo');
     await _awaitSettingsHydrated(tester, play.container);
 
     // 出厂默认关闭(用户口径 2026-09-21):不主动下载模型。
@@ -649,6 +652,18 @@ void main() {
     await _pumpFrames(tester, 2);
     expect(_settingsOf(play.container).speechCaptionEnabled, isFalse);
     expect(find.text('下载字幕模型'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('语音字幕入口只出现在 youtube/twitch/soop', (tester) async {
+    // 不支持的平台(douyu 等):无论翻译开关如何都不出「译」入口,
+    // 也不会因此下载模型(provider 侧同样有站点门控)。
+    await _pumpPlay(tester);
+    expect(
+      find.byKey(const Key('play-toggle-caption')),
+      findsNothing,
+      reason: '斗鱼不支持语音字幕,不应出现入口',
+    );
     expect(tester.takeException(), isNull);
   });
 }

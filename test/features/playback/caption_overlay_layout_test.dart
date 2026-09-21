@@ -67,22 +67,26 @@ CaptionUiState _listening(List<String> texts) {
 }
 
 void main() {
-  testWidgets('多句同时上屏且横向排列(同一行,左句在右句左侧)', (tester) async {
-    await _pump(tester, _listening(['第一句', '第二句', '第三句']));
+  testWidgets('两句同时上屏且横向排列(同一行,左句在右句左侧)', (tester) async {
+    await _pump(tester, _listening(['第一句', '第二句']));
 
     final first = find.text('第一句');
     final second = find.text('第二句');
-    final third = find.text('第三句');
     expect(first, findsOneWidget);
     expect(second, findsOneWidget);
-    expect(third, findsOneWidget);
 
     final r1 = tester.getRect(first);
     final r2 = tester.getRect(second);
-    final r3 = tester.getRect(third);
     expect(r2.left, greaterThan(r1.right), reason: '句间应有空隙(不粘连)');
-    expect(r3.left, greaterThan(r2.right));
     expect(r1.center.dy, closeTo(r2.center.dy, 1), reason: '同排:纵向中心一致');
+  });
+
+  testWidgets('最多两行:第三句到达时最旧的一句下屏', (tester) async {
+    await _pump(tester, _listening(['第一句', '第二句', '第三句']));
+
+    expect(find.text('第一句'), findsNothing, reason: '超出两行,最旧的应下屏');
+    expect(find.text('第二句'), findsOneWidget);
+    expect(find.text('第三句'), findsOneWidget);
   });
 
   testWidgets('字幕条占满可用宽度(不再限宽 720 居中)', (tester) async {
@@ -94,20 +98,16 @@ void main() {
   });
 
   testWidgets('放不下时折行而不是截断文案', (tester) async {
+    // 两句都足够长,窄容器里一行放不下 → 必须折行且都不丢字。
     await _pump(
       tester,
-      _listening(['一句话', '二句话', '三句话', '四句话', '五句话', '六句话']),
+      _listening(['第一句比较长的中文字幕内容用于占满这一行宽度', '第二句同样很长的中文字幕内容用于溢出到下一行']),
       size: const Size(420, 720),
     );
 
-    final rows = <double>{
-      for (final text in ['一句话', '二句话', '三句话', '四句话', '五句话', '六句话'])
-        tester.getRect(find.text(text)).center.dy.roundToDouble(),
-    };
-    expect(rows.length, greaterThan(1), reason: '窄容器应折成多行');
-    for (final text in ['一句话', '六句话']) {
-      expect(find.text(text), findsOneWidget, reason: '$text 不应被丢弃');
-    }
+    final r1 = tester.getRect(find.text('第一句比较长的中文字幕内容用于占满这一行宽度'));
+    final r2 = tester.getRect(find.text('第二句同样很长的中文字幕内容用于溢出到下一行'));
+    expect(r2.top, greaterThan(r1.top), reason: '窄容器应折成两行(第二句在下一行)');
   });
 
   testWidgets('下载中显示百分比与速度(慢速下载不再像卡死)', (tester) async {

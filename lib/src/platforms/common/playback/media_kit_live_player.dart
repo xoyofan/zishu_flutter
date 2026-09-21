@@ -143,6 +143,16 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   ///   many seconds are actually cached」—— 已播(回看)缓冲**只有字节上限、
   ///   无秒级控制**,故 60s 语义无法落在它上面;4 MiB 本就封顶(总缓存用量被
   ///   手册限定为前向+回退之和),比真源的 60s 回看余量更省内存,不放大。
+  ///
+  /// **缓冲取舍(用户口径 2026-09-21)**:宁可变延迟也不断画面 —— 直播源
+  /// 偶发抖动时,低延迟配置(预读 2s / 前向 32 MiB)一抖就卡;越高清码率
+  /// 越高、同一字节顶覆盖的秒数越少,所以优先扩到「高码率也有十几秒余量」:
+  /// - `cache-pause-initial=no` + `cache-pause-wait=2`:起播**不等待**(首帧
+  ///   优先),欠载恢复前先攒 2s,把中途抖动吃掉;
+  /// - `demuxer-max-bytes=100663296`(96 MiB):20 Mbps 约 38s、8 Mbps 约
+  ///   96s 余量(旧值 32 MiB 在 20 Mbps 下仅 ~13s);
+  /// - `demuxer-readahead-secs=8` 与 `cache-secs=90`:读前深度与秒级封顶同步放宽。
+  /// 首帧因此比旧配置晚约 4s,是本次明确选择的代价。
   static const List<(String, String)> kLiveTuningProperties = [
     ('force-seekable', 'yes'),
     (
@@ -158,11 +168,54 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     // 造成的周期性小回退(观感为"回跳")。
     ('video-sync', 'audio'),
     ('volume-max', '100'),
-    ('demuxer-max-bytes', '33554432'),
+    ('cache', 'yes'),
+    // 回看缓冲只有字节上限(mpv 手册:back buffer 无秒级控制),4 MiB 有界即可。
     ('demuxer-max-back-bytes', '4194304'),
+  ];
+
+  /// 需要**深缓冲**的源(用户口径 2026-09-21):这些站点 RTT 高、抖动大,
+  /// 宁可变延迟也不断画面;越高清码率越高,越需要更深的字节余量。
+  static const List<String> kDeepBufferHostSuffixes = [
+    'ttvnw.net',
+    'twitch.tv',
+    'googlevideo.com',
+    'youtube.com',
+    'sooplive.com',
+    'sooplive.co.kr',
+  ];
+
+  /// 深缓冲档:前向 96 MiB(20 Mbps 约 38s、8 Mbps 约 96s 余量,旧值
+  /// 32 MiB 在 20 Mbps 下仅约 13s)+ 预读 8s,用于吸收中途抖动。
+  ///
+  /// **起播不等待缓存**(`cache-pause-initial=no`,用户口径 2026-09-22:
+  /// 首要原则是尽快出画面)—— 首帧一到就播;`cache-pause-wait=2` 只在
+  /// 欠载恢复时生效,即中途抖动后先攒 2s 再续播,避免断续。
+  static const List<(String, String)> kDeepBufferProperties = [
+    ('cache-pause-initial', 'no'),
+    ('cache-pause-wait', '2'),
+    ('demuxer-max-bytes', '100663296'),
+    ('demuxer-readahead-secs', '8'),
+    ('cache-secs', '90'),
+  ];
+
+  /// 低延迟档(国内直连可达的源):不为起播额外等待,预读 2s。
+  /// 斗鱼/虎牙/B站/抖音/快手/YY 的直连抖动小,保持原有快速起播体验。
+  static const List<(String, String)> kLowLatencyBufferProperties = [
+    ('cache-pause-initial', 'no'),
+    ('cache-pause-wait', '1'),
+    ('demuxer-max-bytes', '33554432'),
     ('demuxer-readahead-secs', '2'),
     ('cache-secs', '60'),
   ];
+
+  /// 该主机是否使用深缓冲档。
+  static bool needsDeepBuffer(String host) {
+    final normalized = host.toLowerCase();
+    for (final suffix in kDeepBufferHostSuffixes) {
+      if (normalized == suffix || normalized.endsWith('.$suffix')) return true;
+    }
+    return false;
+  }
 
   /// 恢复重解析的节流策略:避免"重试→恢复→重试"高速空转。
   static const PlaybackRecoveryPolicy _recoveryPolicy =
@@ -494,7 +547,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       //
       /// 注: mpv 的 `http-proxy` 是**进程级**选项,而各平台对代理的需求不同
       // (Twitch/YouTube 必须代理,SOOP/斗鱼等直连更快),因此真正的取值在
-      // 每次 `open` 时按当前线路主机重设 —— 见 [_applyProxyForLine]。
+      // 每次 `open` 时按当前线路主机重设 —— 见 [_applyStreamProfileFor]。
       // 这里不预设,避免「上一次 open 的代理」残留到下一次。
       // 缓存目录依赖运行期路径,无法进常量表;其余动态项在下方逐条设置。
       final cacheDir =
@@ -513,26 +566,32 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     }
   }
 
-  /// 按线路主机设置 mpv 的 `http-proxy`(进程级选项,故每次 open 都重设)。
+  /// 按线路主机套用「代理 + 缓冲」两项进程级 mpv 选项(每次 open 都重设)。
   ///
-  /// mpv 不支持按主机分流,只能整个进程一个值;这里用「当前源需要就设、不需要
-  /// 就显式清空」的方式近似实现分流:同一时刻播放的只有一条源,语义足够。
-  Future<void> _applyProxyForLine(StreamLine line) async {
+  /// mpv 不支持按主机分流,只能整个进程一个值;这里用「当前源适用就设、不适用
+  /// 就显式清空/回退」的方式近似实现分流:同一时刻播放的只有一条源,语义足够。
+  Future<void> _applyStreamProfileFor(StreamLine line) async {
     final platform = _player.platform;
     if (platform is! NativePlayer) return;
     final host = Uri.tryParse(line.url)?.host ?? '';
     final proxy = UpstreamProxy.needsProxy(host)
         ? UpstreamProxy.hostPort
         : null;
+    final deep = needsDeepBuffer(host);
     try {
       await platform.waitForPlayerInitialization;
       await platform.setProperty(
         'http-proxy',
         proxy == null || proxy.isEmpty ? '' : 'http://$proxy',
       );
-      PlaybackLog.write('mpv_proxy', {
+      for (final (name, value)
+          in deep ? kDeepBufferProperties : kLowLatencyBufferProperties) {
+        await platform.setProperty(name, value);
+      }
+      PlaybackLog.write('mpv_profile', {
         'host': host,
         'proxy': proxy == null || proxy.isEmpty ? 'direct' : proxy,
+        'buffer': deep ? 'deep' : 'low-latency',
       });
     } catch (_) {
       // 设置失败不阻断播放:直连失败时仍有看门狗与恢复重解析兜底。
@@ -591,9 +650,10 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
         wrappedLines.add(prepared);
       }
       _currentLines = wrappedLines;
-      // 代理按当前线路主机取:被墙 CDN 走代理,国内可达站点显式清空
-      // (mpv 选项是进程级,不重设会把上一个源的代理策略带过来)。
-      await _applyProxyForLine(line);
+      // 代理与缓冲档都按当前线路主机取:被墙 CDN 走代理 + 深缓冲,国内可达
+      // 站点直连 + 低延迟(mpv 两项都是进程级选项,不重设会把上一个源的
+      // 策略带过来)。
+      await _applyStreamProfileFor(line);
       // 新会话从"无广告等待"开始记账。
       _adHoldSince = null;
       if (resetRetries) {
