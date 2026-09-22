@@ -110,9 +110,25 @@ UI 文件里写死 `AppColors.*` 会被 `test/ui/light_theme_test.dart` 的静�
 
 ### 2.3 平台站点色
 
-8 个平台的品牌色定义在 `lib/src/shared/presentation/platform_brands.dart`
+平台的品牌色定义在 `lib/src/shared/presentation/platform_brands.dart`
 （`PlatformBrandCatalog`），取值与证据见 `docs/ui-parity/spec-tokens.md` §3。
 平台色只用于平台 tab、卡片角标、平台图标，**不得**用于通用控件强调。
+
+**平台色有\*\*两个真源家族\*\***，不能混用（2026-09-21 核实，web 出处逐条给出）：
+
+| 家族 | web 出处 | 用于 | 哔哩 | 斗鱼 |
+|---|---|---|---|---|
+| `PlatformBrand.accentColor` | `styles/theme.css:9-16` 的 `--platform-{id}` | 平台**图标**底色、顶栏平台 tab 的描边与光晕、头像环 | **蓝 `#00a1d6`** | `#ff6b00` |
+| `PlatformBrand.color` | `config/platformCatalog.ts:12-25` 的 `bg` | 封面**角标** / chip 底色 | **粉 `#fb7299`** | `#ff6a00` |
+
+两家族仅在少数平台不同色（哔哩蓝/粉差异显著、斗鱼差 1/255），其余同值，故
+`accentColor` 默认回退到 `color`。**混用的后果**：顶栏 tab 与平台图标会串成角标色
+（哔哩会从蓝变粉）。
+
+同理，平台色块/图标上的**前景**按平台硬编码在 `PlatformBrand.chipForeground`
+（web `platformCatalog.ts` 的 `fg`）—— 虎牙/YY/全平台这类**亮底**用深色 `#1a1a1a`，
+其余用白。禁止改成“按背景亮度自动算”或“统一黑 87%”：前者会在橙色上给出深色字、
+后者会在黄/金底上给出低对比度白字，两者都与真源不符。
 
 ---
 
@@ -344,7 +360,7 @@ Flutter 的 `TextStyle.height` 是**倍数**，所以吸附后的 px 要除回�
 | `AppElevation.popover` | 黑 24%、blur 16、y+4 | 下拉菜单 / flyout 浮层 |
 | `AppElevation.hairline` | 黑 35%、blur 0、spread 1 | on-video 控件贴边 1px 描边 |
 | `AppElevation.sheet` | 黑 55%、blur 28、x−6 | 沉浸模式侧滑面板向左投射 |
-| `AppElevation.accentGlow(accent)` | 强调色 22%、blur 8、y+2 | 平台 / 分类选中态光晕 |
+| `AppElevation.accentGlow(accent)` | 强调色 22%、blur 8、y+2 | 平台 / 分类**选中态与 hover 态**光晕（同一语义：强调色外发光，不新增档位） |
 
 原则：
 
@@ -376,6 +392,8 @@ Flutter 的 `TextStyle.height` 是**倍数**，所以吸附后的 px 要除回�
 - ❌ 在一个项目里混用两套外部品牌的设计系统（`awesome-design-md` 一次只选一套，且只取结构不取品牌色 / 字体 / logo）。
 - ❌ 复制外部品牌的 logo、商标字形、专有插图。
 - ❌ 让 `liveBadge` 用红（直播中是绿，红是「关注」按钮）。
+- ❌ 给按钮加**按压位移/缩放**（press scale）做反馈（2026-09-21 裁决禁止）：按钮反馈只走颜色 / 描边 / 阴影 / 图标，不做位移与缩放。
+- ❌ 把平台色的两个家族混用（`accentColor` 用于图标/tab，`color` 用于角标/chip）；也禁止把平台 `chipForeground` 换成“按亮度自动算”或“统一黑 87%”（见 §2.3）。
 - ❌ 常规容器用 > 12px 圆角（chip / badge / 头像用 `AppRadius.pill`）。
 
 ---
@@ -531,3 +549,35 @@ web 真源 `config/platformCatalog.ts` 的 `ROOM_STAT_COLUMNS` 为**每个平台
 
 `lib/src/platforms/common/open_external_url_stub.dart` 恒返回 `false`（Web 优先级靠后，
 有意如此；文件内注释已说明）。Windows/Android 走各自的真实实现。
+
+---
+
+## 13. 验收与像素回归网
+
+本节的规则是“改 UI 后必须跑什么”的唯一口径（配合 §9 的提示词使用）。
+
+### 13.1 命令
+
+```bash
+flutter analyze                                    # 必须 0 issue
+dart run tool/check_design_tokens.dart             # 裸值守卫，基线只允许下降
+flutter test                                       # 全量（含 golden）
+flutter build windows --debug -t lib/main.dart      # 主链路改动时
+```
+
+`tool/check.ps1` 把前三步（加上三个包的 `pub get` 与 legacy web 构建）串成一次性门禁。
+
+### 13.2 golden 是正式回归网（2026-09-21 裁决）
+
+`test/ui/follow_style_shot_test.dart` 与 `test/ui/hover_shot_test.dart` 产出全库
+**仅有的 7 张 golden**（`test/ui/*.png`）。它们是改视觉时唯一能拦住“悄悄改坏像素”
+的机械防线——2026-09-21 两轮共抓到 13 处真实像素变化。
+
+- **不要删除**这两个用例（`hover_shot_test.dart` 旧注释里“生成后即删除”已作废）。
+- 更新基线的**强制流程**：先 `read` 打开 `test/ui/failures/*_isolatedDiff.png` /
+  `*_testImage.png` **实际看差异**，确认差异就是本次有意改动，再 `--update-goldens`。
+  看不懂的差异**不要更新**，报出来。
+- 注意 golden 环境的限制：VM 无中文字体（渲染为方块）、网络图被拦成占位块，
+  所以 golden 校验的是**结构与间距**，不是文字内容。
+- `test/ui/failures/` 是失败产物，**不要提交**（已确认其为 git 跟踪的历史遗留，
+  改动只会产生噪音）。

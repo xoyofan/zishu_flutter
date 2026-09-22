@@ -1,6 +1,12 @@
-/// 临时截图用例:渲染顶栏 hover 浮层的两种形态(平台分类 / 我的关注主播网格),
-/// 产物 PNG 用于人工比对 SFVideoLive 的 `.nav-platform-menu` 与
-/// `.nav-follow-flyout`。用 `--update-goldens` 生成;生成后本文件即删除。
+/// 顶栏 hover 浮层的两种形态(平台分类 / 我的关注主播网格)的 **golden 基线**。
+///
+/// **本文件是项目正式 golden 回归网的一部分,不是临时用例**（2026-09-21 裁决）:
+/// 它与 `follow_style_shot_test.dart` 一起构成全库仅有的 7 张 golden,AI 改动视觉时
+/// 会先在这里失败——是唯一能拦住“悄悄改坏像素”的机械防线。
+/// 实证:2026-09-21 两轮共抓到 13 处真实像素变化（6 + 7）。
+///
+/// 旧注释里“生成后本文件即删除”那条**已作废**:删掉它等于丢掉仅有的像素回归网。
+/// 更新基线前必须先 `read` 打开 `test/ui/failures/*.png` 确认差异成因。
 library;
 
 import 'package:flutter/gestures.dart';

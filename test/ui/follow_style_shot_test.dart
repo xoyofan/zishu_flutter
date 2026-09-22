@@ -1,8 +1,12 @@
 /// 关注页三密度 + 播放页推荐 tab 的样式截图(golden)。
 ///
+/// **项目正式 golden 回归网的一部分**（2026-09-21 裁决,与 `hover_shot_test.dart`
+/// 共同构成全库仅有的 7 张 golden）。
+///
 /// 用途:与 SFVideoLive 参考实现做视觉对齐时快速比对。运行:
 /// `flutter test test/ui/follow_style_shot_test.dart --update-goldens`
 /// 产物会被复制到 `tool/screenshots/zishu/`。
+/// **更新前必须先 `read` 打开 `test/ui/failures/*.png` 确认差异就是本次有意改动**。
 ///
 /// 说明:VM 测试环境无中文字体(渲染为方块)且网络图片被拦成占位块,
 /// 真机上为真实封面与中文;本套图只用于校验结构与间距。

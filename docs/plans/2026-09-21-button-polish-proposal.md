@@ -927,3 +927,22 @@ grep -rn "matchesGoldenFile" test --include=*.dart
 **盘点快照提醒**：行号以 2026-09-22 10:48 工作区为准；并发轨（token 收敛 + svip 第 3 列）
 仍在改 `side_panel_header.dart` / `compact_switch.dart` / `design_tokens.dart`——
 请**以符号名定位**，见开头“盘点快照与并发改动”一节。
+
+---
+
+## 裁决结果（2026-09-21，产品确认）
+
+| # | 议题 | 裁决 | 落地 |
+|---|---|---|---|
+| 1 | 按压缩放 0.97 | **禁止** | 已写入 `DESIGN.md` §7 Don'ts：按钮反馈只走颜色/描边/阴影/图标，不做位移与缩放 |
+| 2 | 关注/超关 chip 圆角 4 → pill | **采纳** | `side_panel_header.dart` 与 `play_meta_bar.dart` 各 2 处 `AppRadius.allSm` → `allPill`；已更新 play 相关 golden |
+| 3 | hover 光晕是否算新 elevation 语义 | 主控裁定：**不算新语义** | `AppElevation.accentGlow` 本就在 §6 登记（强调色外发光）；已把适用面从「选中态」扩到「选中态 + hover 态」，不新增档位 |
+| 4 | `test/ui/*_shot_test.dart` 存废 | 主控裁定：**保留并升格为正式 golden 套件** | 本轮它连抓 13 处真实像素变化（6 + 7），证明价值；其余取舍见下 |
+| 5 | 浅色 accent 上黑系前景对比度 | **处理**（按实测） | 4 处 accent 底前景黑→白（`AppOnBright.glyph` 已删除）；白前景在两种主题都更优：深 accent 4.81:1 vs 黑 4.36:1，浅 accent 9.39:1 vs 黑 **2.24:1** |
+| 6 | `platform_icon` 四象限余 4 处裸值 | 主控裁定：**限定到平台色表** | 四象限改为按 `accentColor` 派生（见下「新发现」），`raw_color` 基线 33 → 24 |
+| 7 | `platform_badge` 改用平台 `chipForeground`？ | **采纳**（对齐 web `platformCatalog.ts` 的 `fg`） | 角标文字改为按平台：虎牙/YY/全平台用深色 `#1a1a1a`，其余用白；不再是"统一黑 87%" |
+
+### 本轮顺带发现的两个真 bug（不在原提案里）
+
+1. **平台色有两个真源家族，项目混用了**：web `--platform-{id}`（theme.css，供平台图标/顶栏 tab 描边与光晕）与 `PLATFORM_BRAND_COLORS` 的 `bg`/`fg`（platformCatalog.ts，供封面角标/chip）是两套。哔哩两套不同色——**变体蓝 `#00a1d6` vs 角标粉 `#fb7299`**。项目只存了后者并用于两处，导致顶栏 tab 与平台图标串成粉色。已给色表加 `accentColor` 字段（默认回退 `color`），按 web 变量家族填哔哩蓝与斗鱼 `#ff6b00`，并让四象限与顶栏 tab 光晕改用它。
+2. **色表漏了两个前景定义**：`yy`（黄底 `#ffd000`）与「全平台」（品牌金底）在 web 里都该用深色字 `#1a1a1a`，项目用的是默认白字——白字压在黄/金底上对比度极低。已补 `chipForeground: chipForegroundDark`。
