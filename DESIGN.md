@@ -345,7 +345,7 @@ AppElevation / AppFocus / AppOnVideo / AppControls / AppDirectoryDrawer / AppRoo
 | 3 | 10 处非 4pt 栅格值 | 见 §5.4 表 | 逐字保留 | 逐像素复刻优先于栅格归一 | — |
 | 4 | 主题范围 | dark + light 双套，默认 dark | 双套已实现，但 Windows 第一轮只验收 dark | 收敛验收面 | — |
 | 5 | 字体 | 浏览器 system-ui | 显式 `Microsoft YaHei` + 回退链 | 桌面端中文排版稳定 | — |
-| 6 | 手机底栏项 | `docs/ui-reference/README.md:44` 记“首页/分类/我的分类/关注/搜索/主题” | 另有一个“我的”（挂 `/settings`，有 `nav-settings` 锚点契约）；360px 下不隐藏“我的分类”（靠 `scaleDown`） | 保留既有路由与测试契约，暂不重构；属已知差异 | 2026-09-21 |
+| 6 | 窄屏底栏文字标签 | `responsive-chrome.css:231-233`：phone+portrait 下隐藏 `.nav-label` 与 `.nav-brand__name`，只留图标 | zishu 用 `FittedBox scaleDown` 压缩显示「我的分类」等 4 字标签 | 待裁决（本阶段不动，避免连带改 mobile golden） | 2026-09-21 |
 
 ---
 
@@ -378,7 +378,8 @@ AppElevation / AppFocus / AppOnVideo / AppControls / AppDirectoryDrawer / AppRoo
 |---|---|---|---|
 | T2 抽屉收起态 rail | “真源 52px，但视觉 rail 约 28px”，要求布局改 28px | ❌ `main.css:39 --directory-rail-width: 52px`；`DirectoryDrawer.vue:660` 直接取该变量；rail 内按钮 `width:100%` | 回退改动，保持 52px |
 | T3 房卡平台 badge | “真源 右下 = 平台 badge 与热度并列”，要求从左下移到右下 | ❌ `RoomCard.vue:262-273` `.room-card__foot-left { left:0; bottom:0 }` 内含 `.platform-cover-badge`；热度是另一个 `.cover-online-badge` | 不改代码，现状已对齐 |
-| T4 手机底栏项数 | “真源 6 项（紫薯 logo/首页/分类/关注/搜索/我的）” | ⚠️ `ui-reference/README.md:44` 是“首页/分类/我的分类/关注/搜索/主题”——数字与项目都不对；但“没有动态”这一点成立 | 只移除 `nav-time`（动态），保留主题与我的分类 |
+| T4 手机底栏项数 | “真源 6 项（紫薯 logo/首页/分类/关注/搜索/我的）”，且要求删「主题」 | ⚠️ 看板两行都错：`NavSidebar.vue` 实际是 **8 项**（品牌/首页/分类/我的分类/我的关注/搜索/切换主题/账号·登录），既有「主题」也有「我的分类」；`ui-reference/README.md:44` 的 6 项列表漏了「品牌」与「账号」 | 只移除 zishu 自加的 `nav-time`（动态）；真源根本没有该项 |
+| T4 补充：360px 是否隐藏「我的分类」 | lane 据截图推断“360px 真源隐藏它，只剩 7 项” | ❌ 不成立。`nav-my-cat-wrap` 无任何 `display:none` 规则；`responsive-chrome.css:231-233` 只隐藏**文字标签**；`360x640_mobile_home.png` 实测仍是 **8 个图标** | 不改（无差异）；真正的差异是“窄屏是否显示标签”，已记入 §10 |
 
 教训：**看板不是真源**。裁决前必须回到 `SFVideoLive/apps/web/src` 的 CSS/模板原文或官方截图，
 中介文档（看板、实测笔记）只能当线索。这条已写入 `AGENTS.md` 的视觉真源一节。

@@ -99,18 +99,26 @@ zishu 当前额外有"动态"和"主题"。建议将"主题"移入设置页，"�
 
 **结论（2026-09-21 复核）**：✅ 已执行 **只裁「动态」**，底栏 = **8 项**；看板两行说明本身有误。
 
-- 真源底栏（截图 `tool/screenshots/sfvideo/360x640_mobile_home.png` 与 `640x800_compact_home.png`，
-  外加 `docs/ui-reference/README.md:44`）= 紫薯 logo / 首页 / 分类 / 我的分类 / 关注 / 搜索 /
-  **主题(月亮)** / 我的 —— **没有「动态」**，**有「主题」**。看板写的「6 项…没有主题」与真源不符。
+- 真源底栏（权威：`SFVideoLive/apps/web/src/components/layout/NavSidebar.vue` 的
+  `nav-group--top` + `nav-group--tools`；截图 `tool/screenshots/sfvideo/360x640_mobile_home.png` 与
+  `640x800_compact_home.png` 实测同款）= 紫薯 logo / 首页 / 分类 / 我的分类 / 我的关注 / 搜索 /
+  **切换主题(月/日)** / **账号·登录** —— **没有「动态」**，**有「主题」**。
+  看板原写的「6 项…没有主题」与真源不符（`docs/ui-reference/README.md:44` 的摘要不可作项数依据）。
 - 改动：`lib/src/app/shell/bottom_nav.dart` 移除 `nav-time` 项（真源本来就无此项），保留「主题」
   与「我的分类」；`/timeline` 路由可达性由新增用例
   `test/ui/workflows/shell_mobile_align_test.dart`「移动底栏裁掉「动态」后,/timeline 路由仍可达且顶栏入口保留」
   钉死（桌面顶栏 `nav-time` 入口 + `router.go('/timeline')` 两条断言）。
 - 执行后底栏项序与 640px 真源截图逐项一致：品牌/首页/分类/我的分类/关注/搜索/主题/我的。
-- **已知差异（本卡不做，产品裁决后再定）**：
-  1) 360px 真源会隐藏「我的分类」（7 项），zishu 用 `FittedBox scaleDown` 全保留 8 项；
-  2) zishu 比 `docs/ui-reference/README.md:44` 多一个「我的」（挂 `/settings`、承担 `nav-settings`
-  锚点契约），保留不删。
+- **残余差异（2026-09-21 复核 web 真源后订正）**：
+  1) 「我的」**不是**差异：真源底栏第 8 项就是「账号·登录」——`NavSidebar.vue` 里
+     `.nav-item` + `User` 图标 + `nav-label--user`（登录后显示用户名），zishu 的「我的」正对应它。
+     `docs/ui-reference/README.md:44` 的 6 项列表漏了「紫薯 logo」与「账号」两项，不能当项数依据。
+  2) 360px 真源**不隐藏任何项**（仍 8 项）：`styles/responsive-chrome.css:231-233` 只隐藏文字标签
+     （`.nav-label` 与 `.nav-brand__name`），`.nav-my-cat-wrap` 全仓没有任何 `display:none` 规则；
+     `tool/screenshots/sfvideo/360x640_mobile_home.png` 实测就是 8 个图标。
+  3) **真正的差异**：360px 下真源隐藏文字标签（只留图标），zishu 用 `FittedBox scaleDown`
+     把「我的分类」等 4 字标签压缩显示。要对齐成“窄屏隐藏标签”就需同步重抓 mobile golden，
+     待产品裁决（已登记到 `DESIGN.md` §10 第 6 条）。
 - 验证命令：`flutter test test/ui/workflows/shell_mobile_align_test.dart`（含项序 + 路由可达性）
   与 `test/ui/workflows/navigation_test.dart`、`test/ui/workflows/mobile_phones_test.dart` 全绿。
 
