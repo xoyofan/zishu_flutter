@@ -12,7 +12,16 @@ description: 74 套取自知名网站真实设计系统的 DESIGN.md（Vercel、
 | `AGENTS.md` | 编码 Agent | 项目**怎么搭**（架构、约定、命令） |
 | `DESIGN.md` | 设计/UI Agent | 项目**长什么样**（配色、字体、间距、组件、响应式） |
 
-本 skill 内置 74 套逆向自真实网站的设计系统，每套都是完整的 Stitch 格式 `DESIGN.md`（含 YAML tokens + 说明性规则），不是"风格关键词清单"。
+本 skill 内置 74 套逆向自真实网站的设计系统，集合内有**两种格式**，读法不同：
+
+| 格式 | 套数 | 特征 | 读法 |
+|---|---|---|---|
+| **B** | 64 | 有 YAML frontmatter，`colors:` / `typography:` 等 tokens 是结构化定义 | 先读 YAML 取 tokens，再按需读正文 |
+| **A** | 10 | 无 YAML；正文用 `## 1.` – `## 9.` 编号章节，值以 hex 散在段落里 | 先读 `## 2. Color Palette & Roles` 与 `## 3. Typography Rules` 自己提值 |
+
+格式 A 的 10 套：`kraken`、`lamborghini`、`lovable`、`mastercard`、`runwayml`、`sanity`、`spotify`、`starbucks`、`tesla`、`theverge`。
+
+两种都是完整设计规格，不是"风格关键词清单"；差别只在 token 有没有被 YAML 结构化。
 
 ## 何时使用
 
@@ -33,7 +42,10 @@ description: 74 套取自知名网站真实设计系统的 DESIGN.md（Vercel、
 ## 使用流程
 
 1. **选品牌**：从下方目录挑与目标气质最接近的 1 套。**一次只选一套**——混用 2 套以上品牌系统必然产生风格冲突。
-2. **读文件**：`read` 对应 `references/<brand>.md`（绝对路径按本 skill 目录解析）。文件较长（500–1500 行），先读 YAML frontmatter（tokens）与 `## ` 章节标题，再按需深入具体章节。
+2. **读文件**：`read` 对应 `references/<brand>.md`（绝对路径按本 skill 目录解析）。文件较长（500–1500 行），**先看开头有没有 YAML frontmatter**：
+   - 有（格式 B，64 套）：先读 YAML 拿 tokens，再看 `## ` 章节标题决定深入哪节。
+   - 没有（格式 A，10 套）：直接读 `## 2. Color Palette & Roles` 与 `## 3. Typography Rules` 提值，
+     并在回答里**列出你提取的 hex/字号**（无结构化校验，必须自证出处）。
 3. **落成项目文件**：
    - 新项目：把 DESIGN.md 内容拷到项目根 `DESIGN.md`，并按项目实际删改（去掉不适用的品牌独有元素）。
    - 已有项目：**不要**直接用外部品牌覆盖项目 tokens。而是提取其中的结构化部分（间距刻度、字号阶梯、无障碍对比、响应式收缩策略），映射到项目现有 token 文件，只补齐缺口。
@@ -129,19 +141,34 @@ awesome-design-md/
 | `x.ai` | An inspired interpretation of xAI's design language — Elon Musk's frontier-AI company whose web surface is a strict near |
 | `zapier` | An inspired interpretation of Zapier's design language — a workflow-automation platform whose surface combines warm-crea |
 
-## DESIGN.md 的标准章节
+## DESIGN.md 的两种章节骨架
 
-每套文件都遵循同一骨架，可按需跳读：
+**格式 B（64 套，有 YAML frontmatter）** —— 先读 YAML 取 tokens，再按需跳正文：
 
-1. **Visual Theme & Atmosphere** — 气质、密度、设计哲学
-2. **Color Palette & Roles** — 语义名 + hex + 功能角色（canvas / surface / ink / hairline / accent）
-3. **Typography Rules** — 字体族 + 完整字号阶梯表
-4. **Component Stylings** — 按钮、卡片、输入框、导航的各状态
-5. **Layout Principles** — 间距刻度、栅格、留白哲学
-6. **Depth & Elevation** — 阴影系统、层级关系
-7. **Do's and Don'ts** — 设计护栏与反模式
-8. **Responsive Behavior** — 断点、触控目标、收缩策略
-9. **Agent Prompt Guide** — 速查色板 + 可直接复用的提示词
+| 正文章节 | 内容 |
+|---|---|
+| `## Overview` | 气质、密度、设计哲学 |
+| `## Colors` | 语义色名 + hex + 功能角色 |
+| `## Typography` | 字体族 + 完整字号阶梯 |
+| `## Layout` | 间距刻度、栅格、留白哲学 |
+| `## Elevation & Depth` | 阴影系统、层级关系 |
+| `## Shapes` | 圆角与形态 |
+| `## Components` | 按钮、卡片、输入框、导航的各状态 |
+| `## Do's and Don'ts` | 设计护栏与反模式 |
+| `## Responsive Behavior` | 断点、触控目标、收缩策略 |
+| `## Iteration Guide` / `## Known Gaps` | 迭代建议与已知缺口 |
+
+**格式 A（10 套，无 YAML）** —— 值都在段落里，需要自己提取：
+
+1. `## 1. Visual Theme & Atmosphere` — 气质与设计哲学（含 Key Characteristics 要点列表）
+2. `## 2. Color Palette & Roles` — hex 与功能角色（散在正文，逐条抄）
+3. `## 3. Typography Rules` — 字体族与字号阶梯
+4. `## 4. Component Stylings` — 组件与各状态
+5. `## 5. Layout Principles` — 间距与栅格
+6. `## 6. Depth & Elevation` — 阴影与层级
+7. `## 7. Do's and Don'ts` — 护栏与反模式
+8. `## 8. Responsive Behavior` — 断点与收缩
+9. `## 9. Agent Prompt Guide` — 速查色板 + 可直接复用的提示词
 
 ## 硬约束
 
