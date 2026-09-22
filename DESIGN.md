@@ -346,6 +346,7 @@ golden 差 2074px，整块底色/描边都变）。需要更明显的交互态�
 | 网格间距 | `gridCrossAxisSpacing = 16`、`gridMainAxisSpacing = 13.6` |
 | `AppRadius` | `sm 4` / `md 8` / `lg 12` / `pill 999` |
 | `AppMotion` | `fast 150ms` / `normal 250ms` / `curve Cubic(0.16, 1, 0.3, 1)` |
+| `AmbientMotion`（氛围轨） | `pageTransition 180ms` / `pulse 1.6s`（循环） / `shimmer 1.4s`（循环）；easing 复用 `AppMotion.curve`（不新造）；`reduce_motion` 降级一律走 `AmbientMotion.of(context)`（`MediaQuery.disableAnimations == true` 时返回零时长/静态档），禁止在 Widget 里散写 `Duration(...)` 裸时长 |
 
 ### 5.2 抽屉与播放侧栏
 
@@ -411,8 +412,12 @@ golden 差 2074px，整块底色/描边都变）。需要更明显的交互态�
 
 ## 6. Depth & Elevation
 
-四档，定义在 `AppElevation`（`design_tokens.dart`）。数值从原先散落的裸 `BoxShadow`
+投影四档，定义在 `AppElevation`（`design_tokens.dart`）。数值从原先散落的裸 `BoxShadow`
 逐字搬家而来，**不得改动数值**，否则 golden 会漂。
+
+氛围轨（`ui/ambient-polish` 清单 §1）另有 **`AmbientGlow` 三档**（同在
+`design_tokens.dart`），是 accent 派生的**外发光**而非投影。两组共七档一表登记
+（`AmbientGlow` 行的格式仿 `accentGlow` 行）：
 
 | 档位 | 值 | 语义 |
 |---|---|---|
@@ -420,10 +425,14 @@ golden 差 2074px，整块底色/描边都变）。需要更明显的交互态�
 | `AppElevation.hairline` | 黑 35%、blur 0、spread 1 | on-video 控件贴边 1px 描边 |
 | `AppElevation.sheet` | 黑 55%、blur 28、x−6 | 沉浸模式侧滑面板向左投射 |
 | `AppElevation.accentGlow(accent)` | 强调色 22%、blur 8、y+2 | 平台 / 分类**选中态与 hover 态**光晕（同一语义：强调色外发光，不新增档位） |
+| `AmbientGlow.cardHover(accent)` | 强调色 18%、blur 12 | 卡片 hover 发光（清单 2.1，氛围 hover 轨专用） |
+| `AmbientGlow.ctaSheen(accent)` | 强调色 24%、blur 16 | 主 CTA 流光 / 呼吸描边（清单 2.2） |
+| `AmbientGlow.halo(accent)` | 强调色 8%、blur 64 | 播放器外圈氛围光晕（清单 3.3） |
 
 原则：
 
-- **阴影只用这四档**，禁止在 Widget 里新写 `BoxShadow(...)`（守卫脚本会拦）。
+- **阴影/发光只用这七档**（`AppElevation` 四档 + `AmbientGlow` 三档），禁止在 Widget 里新写 `BoxShadow(...)`（守卫脚本会拦）；发光一律经 `AmbientGlow.*` helper 由 accent 派生。
+- 毛玻璃 `BackdropFilter` 的 sigma 上限 `AmbientBlur.maxSigma = 20`（Windows 性能约束），**超限即违规**；具体用点的 sigma 必须 ≤ 本值且取自 token。
 - 抬升层级用"底色档位"表达优先于加大阴影：`surfaceSoft` < `background` < `surface` < `surfaceRaised`。
 - 不用 Material `Card` 默认 elevation（`app_theme.dart` 已置 0）。
 

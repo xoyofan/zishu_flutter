@@ -45,6 +45,62 @@ void main() {
     });
   });
 
+  group('AmbientMotion 契约(氛围轨,清单 1.1/1.4)', () {
+    // 真源: docs/ui-refine/ambient-effect-inventory.md §1 —— 值必须逐字采用;
+    // 本组失败先回清单核对,不要改断言迁就实现。
+    test('pageTransition = 180ms(页面过渡)', () {
+      expect(AmbientMotion.pageTransition, const Duration(milliseconds: 180));
+    });
+
+    test('pulse = 1.6s(循环)', () {
+      expect(AmbientMotion.pulse, const Duration(milliseconds: 1600));
+    });
+
+    test('shimmer = 1.4s(循环)', () {
+      expect(AmbientMotion.shimmer, const Duration(milliseconds: 1400));
+    });
+
+    testWidgets('disableAnimations=true → 零时长/静态模式(reduce_motion 降级)',
+        (tester) async {
+      AmbientMotionSpec? spec;
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(disableAnimations: true),
+          child: Builder(
+            builder: (context) {
+              spec = AmbientMotion.of(context);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+      expect(spec!.reduced, isTrue);
+      expect(spec!.pageTransition, Duration.zero);
+      expect(spec!.pulse, Duration.zero);
+      expect(spec!.shimmer, Duration.zero);
+    });
+
+    testWidgets('disableAnimations=false → 完整档(时长取 token 常量)',
+        (tester) async {
+      AmbientMotionSpec? spec;
+      await tester.pumpWidget(
+        MediaQuery(
+          data: const MediaQueryData(disableAnimations: false),
+          child: Builder(
+            builder: (context) {
+              spec = AmbientMotion.of(context);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+      expect(spec!.reduced, isFalse);
+      expect(spec!.pageTransition, AmbientMotion.pageTransition);
+      expect(spec!.pulse, AmbientMotion.pulse);
+      expect(spec!.shimmer, AmbientMotion.shimmer);
+    });
+  });
+
   group('AppDirectoryDrawer 契约', () {
     test('railWidth 保持 52(不要改成 28)', () {
       // 真源:`apps/web/src/components/layout/DirectoryDrawer.vue:660`
@@ -169,6 +225,57 @@ void main() {
       expect(shadow.blurRadius, 8);
       expect(shadow.offset, const Offset(0, 2));
       expect(shadow.spreadRadius, 0);
+    });
+  });
+
+  group('AmbientGlow 契约(氛围轨,清单 1.2)', () {
+    // 三档均为 accent 派生的纯外发光:无偏移、无 spread;alpha 必须是
+    // `withValues(alpha: ...)` 的浮点值,与调用点逐像素一致。
+    const accent = Color(0xFF8B5CF6);
+
+    test('cardHover = accent 18% / blur 12', () {
+      expect(AmbientGlow.cardHoverAlpha, 0.18);
+      expect(AmbientGlow.cardHoverBlur, 12);
+      final shadows = AmbientGlow.cardHover(accent);
+      expect(shadows.length, 1);
+      final shadow = shadows.single;
+      expect(shadow.color, accent.withValues(alpha: 0.18));
+      expect(shadow.color.a, closeTo(0.18, 1e-9));
+      expect(shadow.blurRadius, 12);
+      expect(shadow.offset, Offset.zero);
+      expect(shadow.spreadRadius, 0);
+    });
+
+    test('ctaSheen = accent 24% / blur 16', () {
+      expect(AmbientGlow.ctaSheenAlpha, 0.24);
+      expect(AmbientGlow.ctaSheenBlur, 16);
+      final shadows = AmbientGlow.ctaSheen(accent);
+      expect(shadows.length, 1);
+      final shadow = shadows.single;
+      expect(shadow.color, accent.withValues(alpha: 0.24));
+      expect(shadow.color.a, closeTo(0.24, 1e-9));
+      expect(shadow.blurRadius, 16);
+      expect(shadow.offset, Offset.zero);
+      expect(shadow.spreadRadius, 0);
+    });
+
+    test('halo = accent 8% / blur 64', () {
+      expect(AmbientGlow.haloAlpha, 0.08);
+      expect(AmbientGlow.haloBlur, 64);
+      final shadows = AmbientGlow.halo(accent);
+      expect(shadows.length, 1);
+      final shadow = shadows.single;
+      expect(shadow.color, accent.withValues(alpha: 0.08));
+      expect(shadow.color.a, closeTo(0.08, 1e-9));
+      expect(shadow.blurRadius, 64);
+      expect(shadow.offset, Offset.zero);
+      expect(shadow.spreadRadius, 0);
+    });
+  });
+
+  group('AmbientBlur 契约(毛玻璃上限,清单 1.3)', () {
+    test('maxSigma = 20(BackdropFilter 超限即违规)', () {
+      expect(AmbientBlur.maxSigma, 20);
     });
   });
 

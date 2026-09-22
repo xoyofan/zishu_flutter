@@ -253,6 +253,67 @@ abstract final class AppElevation {
   ];
 }
 
+/// 氛围级发光(glow)三档 —— `ui/ambient-polish` 清单 §1,DESIGN.md §6 登记。
+///
+/// 与 [AppElevation] 的分工:`AppElevation` 是既有投影四档(golden 锚点,值不可
+/// 改),本类是氛围轨**新增**的 accent 派生**外发光**(无偏移、无 spread),
+/// 值以 DESIGN.md §6 表为准。Widget 里禁止手写 `BoxShadow(...)` 裸构造,
+/// 发光一律经本类 helper 派生;需要颜色本体(如流光渐变描边)时取配套的
+/// `*Alpha` 常量拼 `accent.withValues(alpha: ...)`,不要散写裸 alpha。
+abstract final class AmbientGlow {
+  /// 卡片 hover 发光的 accent 不透明度(18%,清单 1.2)。
+  static const double cardHoverAlpha = 0.18;
+
+  /// 卡片 hover 发光的模糊半径(12,清单 1.2)。
+  static const double cardHoverBlur = 12;
+
+  /// CTA 流光 / 呼吸描边的 accent 不透明度(24%,清单 1.2)。
+  static const double ctaSheenAlpha = 0.24;
+
+  /// CTA 流光的模糊半径(16,清单 1.2)。
+  static const double ctaSheenBlur = 16;
+
+  /// 氛围光晕的 accent 不透明度(8%,清单 1.2)。
+  static const double haloAlpha = 0.08;
+
+  /// 氛围光晕的模糊半径(64,清单 1.2)。
+  static const double haloBlur = 64;
+
+  /// 卡片 hover 发光(accent 18%、blur 12;清单 2.1 的消费点)。
+  static List<BoxShadow> cardHover(Color accent) => [
+    BoxShadow(
+      color: accent.withValues(alpha: cardHoverAlpha),
+      blurRadius: cardHoverBlur,
+    ),
+  ];
+
+  /// 主 CTA 流光 / 呼吸(accent 24%、blur 16;清单 2.2 的消费点)。
+  static List<BoxShadow> ctaSheen(Color accent) => [
+    BoxShadow(
+      color: accent.withValues(alpha: ctaSheenAlpha),
+      blurRadius: ctaSheenBlur,
+    ),
+  ];
+
+  /// 氛围光晕(accent 8%、blur 64;清单 3.3 播放器外圈的消费点)。
+  static List<BoxShadow> halo(Color accent) => [
+    BoxShadow(
+      color: accent.withValues(alpha: haloAlpha),
+      blurRadius: haloBlur,
+    ),
+  ];
+}
+
+/// 毛玻璃(`BackdropFilter`)sigma 上限 —— Windows 性能约束(清单 1.3)。
+abstract final class AmbientBlur {
+  /// 毛玻璃模糊 sigma 上限:blur ≤ 20,**超限即违规**。
+  ///
+  /// `BackdropFilter` 的高 sigma 是逐帧全屏卷积,Windows 桌面实测以 20 为
+  /// 可接受上界;具体用点(如 top_nav blur 16、侧栏 blur 12,见清单 3.1/3.2)
+  /// 必须 ≤ 本值,且 sigma 一律取自 token、禁止在 Widget 里手写裸数字。
+  static const double maxSigma = 20;
+}
+
 /// 键盘焦点环基线(Windows 桌面键盘可达性)。
 ///
 /// 替代 Material 默认聚焦态:两圈 `BoxShadow` 拼出「2px 实环 + 2px 间隙」的
@@ -430,6 +491,66 @@ abstract final class AppMotion {
   /// 注意**不是** `Curves.easeOutCubic`(那是 `Cubic(0.215, 0.61, 0.355, 1)`),
   /// 两者手感不同;这里显式复刻 web 的四个控制点。
   static const Curve curve = Cubic(0.16, 1, 0.3, 1);
+}
+
+/// 氛围级(ambient)动效 token —— `ui/ambient-polish` 清单 §1 的时长**单一来源**。
+///
+/// 与 [AppMotion] 的分工:`AppMotion` 管既有微交互/结构性过渡(150/250ms),
+/// 本类只收氛围轨新增的**页面过渡与循环动效**时长;easing 一律**复用
+/// [AppMotion.curve]**,不新造曲线(清单 1.1)。
+///
+/// `reduce_motion` 降级(清单 1.4):所有新动效 widget 必须经 [of] 取降级结果,
+/// 不得在 Widget 里散写 `MediaQuery.disableAnimationsOf` 判定,更不得手写
+/// `Duration(...)` 裸时长。
+abstract final class AmbientMotion {
+  /// 页面切换过渡时长(180ms,清单 1.1):fade-through 的 opacity/y 位移共用此档。
+  static const Duration pageTransition = Duration(milliseconds: 180);
+
+  /// 脉冲循环周期(1.6s,清单 1.1):CTA 流光呼吸、直播中红点扩散涟漪等循环动效。
+  static const Duration pulse = Duration(milliseconds: 1600);
+
+  /// shimmer 扫光循环周期(1.4s,清单 1.1):骨架屏扫光。
+  static const Duration shimmer = Duration(milliseconds: 1400);
+
+  /// `reduce_motion` 降级入口(清单 1.4):`MediaQuery.disableAnimations == true`
+  /// (系统「减少动画」/静态测试环境)时返回**零时长静态档**,否则返回完整档。
+  static AmbientMotionSpec of(BuildContext context) =>
+      MediaQuery.disableAnimationsOf(context)
+          ? const AmbientMotionSpec.reduced()
+          : const AmbientMotionSpec.enabled();
+}
+
+/// [AmbientMotion.of] 的返回值:一组动效时长 + 是否降级为静态。
+///
+/// [reduced] 为 true 时所有时长均为 [Duration.zero]:此时 widget 应**跳过动画、
+/// 直出静态终态**(循环类动效直接渲染静态占位,不要用零时长去建
+/// `AnimationController`,循环周期为零无意义)。
+class AmbientMotionSpec {
+  /// 完整档:动画系统可用,时长取 [AmbientMotion] 的常量。
+  const AmbientMotionSpec.enabled()
+      : pageTransition = AmbientMotion.pageTransition,
+        pulse = AmbientMotion.pulse,
+        shimmer = AmbientMotion.shimmer,
+        reduced = false;
+
+  /// 静态档(`reduce_motion`):零时长,动效直出终态,等价现状无过渡。
+  const AmbientMotionSpec.reduced()
+      : pageTransition = Duration.zero,
+        pulse = Duration.zero,
+        shimmer = Duration.zero,
+        reduced = true;
+
+  /// 页面切换过渡时长(完整档 = 180ms,静态档 = 零)。
+  final Duration pageTransition;
+
+  /// 脉冲循环周期(完整档 = 1.6s,静态档 = 零)。
+  final Duration pulse;
+
+  /// shimmer 扫光循环周期(完整档 = 1.4s,静态档 = 零)。
+  final Duration shimmer;
+
+  /// 是否为 `reduce_motion` 静态档;为 true 时应跳过动画直出终态。
+  final bool reduced;
 }
 
 /// 交互态叠加层(overlay)的统一取值 —— 交互四态的**唯一数值来源**。
