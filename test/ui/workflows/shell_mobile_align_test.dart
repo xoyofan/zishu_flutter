@@ -6,7 +6,8 @@
 /// - 竖屏 `.nav-platform-strip__item { flex: 1 1 15% }` → 折行宫格、隐藏文字、不滚动;
 /// - 横屏 `flex-wrap: nowrap` + `overflow-x: auto` → 单行横向滚动;
 /// - 底栏 = `nav-group--top`(品牌/首页/分类/我的分类)+ `nav-group--tools`
-///   (我的关注/搜索/主题/用户);本项目额外保留「动态」入口(产品要求);
+///   (我的关注/搜索/主题/用户);真源截图(360×640 / 640×800 底栏)无「动态」,
+///   2026-09-21 据此从底栏裁掉 nav-time(路由 /timeline 仍可达,见本文件用例);
 /// - `.nav-follow-avatars`:最多 3 个在播头像,`1.48rem` + 32% 重叠,
 ///   无在播回落星形图标。
 library;
@@ -206,12 +207,12 @@ void main() {
   });
 
   group('底栏项集与顺序', () {
-    testWidgets('390×844:项序对齐 web(top 组 + tools 组)且保留动态', (tester) async {
+    testWidgets('390×844:项序对齐 web(top 组 + tools 组),底栏无「动态」', (tester) async {
       await _pump(tester, const Size(390, 844));
 
       // web 底栏 = 品牌/首页/分类/我的分类 | 我的关注/搜索/主题/用户;
-      // 本项目在工具组保留「动态」(产品要求),去掉 web 的「用户」独立项
-      // (登录/设置在顶栏与「我的」入口承担)。
+      // 本项目去掉 web 的「用户」独立项(登录/设置在顶栏与「我的」入口承担),
+      // 「动态」已按真源截图裁掉(2026-09-21),不再出现在底栏。
       const order = [
         'nav-brand',
         'nav-home',
@@ -219,7 +220,6 @@ void main() {
         'nav-my-category',
         'nav-follow',
         'nav-search',
-        'nav-time',
         'nav-theme',
         'nav-settings',
       ];
@@ -227,9 +227,14 @@ void main() {
         expect(
           find.byKey(Key(id)),
           findsOneWidget,
-          reason: '底栏缺少 $id(项集应对齐 web 并保留动态)',
+          reason: '底栏缺少 $id(项集应对齐 web)',
         );
       }
+      expect(
+        find.byKey(const Key('nav-time')),
+        findsNothing,
+        reason: '真源底栏无「动态」项(入口在桌面顶栏 nav-time)',
+      );
 
       // 顺序:按 x 递增。
       var lastX = -1.0;
@@ -253,9 +258,50 @@ void main() {
         expect(rect.top, greaterThanOrEqualTo(bandTop - 0.01),
             reason: '$id 不在底部导航带内');
         expect(rect.right, lessThanOrEqualTo(390 + 0.01),
-            reason: '$id 超出视口右侧(9 项需收敛而不是溢出)');
+            reason: '$id 超出视口右侧(8 项需收敛而不是溢出)');
         expect(rect.bottom, lessThanOrEqualTo(height + 0.01));
       }
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('移动底栏裁掉「动态」后,/timeline 路由仍可达且顶栏入口保留', (tester) async {
+      // 390 宽下 TimelineTile 的既有 RenderFlex 溢出(timeline_tile.dart:139,
+      // 与本轨改动无关:底栏项数不影响时间线内容宽度)——同 navigation_test
+      // 的口径,只放行溢出类渲染错误,其余异常照旧上报。
+      final originalOnError = FlutterError.onError;
+      FlutterError.onError = (details) {
+        if (details.exception.toString().contains('A RenderFlex overflowed')) {
+          return;
+        }
+        originalOnError?.call(details);
+      };
+      addTearDown(() => FlutterError.onError = originalOnError);
+
+      final router = await _pump(tester, const Size(390, 844));
+
+      // 底栏不再有「动态」项(真源截图口径),但路由本身必须仍可达:
+      // 深链 / 程序化导航(router.go)不得因剪入口而失联。
+      expect(find.byKey(const Key('nav-time')), findsNothing);
+      router.go('/timeline');
+      await _frames(tester, 8);
+      expect(
+        router.routeInformationProvider.value.uri.path,
+        '/timeline',
+        reason: '裁掉底栏入口不能把 /timeline 路由一起弄丢',
+      );
+      expect(tester.takeException(), isNull);
+
+      // 桌面(>=768)顶栏 nav-time 仍是动态的入口。
+      final deskRouter = await _pump(tester, const Size(1440, 900));
+      final navTime = find.byKey(const Key('nav-time'));
+      expect(navTime, findsOneWidget, reason: '桌面顶栏保留动态入口');
+      await tester.tap(navTime);
+      await _frames(tester, 8);
+      expect(
+        deskRouter.routeInformationProvider.value.uri.path,
+        '/timeline',
+        reason: '顶栏「动态」应仍能导航到时间线',
+      );
       expect(tester.takeException(), isNull);
     });
 

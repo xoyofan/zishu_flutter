@@ -46,7 +46,11 @@ cd F:/project/SFVideoLive/apps/web && NODE_OPTIONS= npm run dev  # :9000
 
 ### DirectoryDrawer（首页/分类页专用，播放页无）
 - 展开态 **220px**（--directory-drawer-width），主内容 `margin-left: 220px`
-- 收起态：细图标导轨（--directory-rail-width ≈28px），主内容 margin-left 同步
+- 收起态：细图标导轨（--directory-rail-width = **52px**，`main.css:39` +
+  `DirectoryDrawer.vue:660` `.directory-drawer { width: var(--directory-rail-width) }`），
+  主内容 margin-left 同步（`AppLayout.vue:216`）
+  > 注：本行早前误记为「≈28px」。28px 是同文件第 39 行**顶栏平台图标 tab** 在
+  > 768–1080 的收缩值，两者不要混用（2026-09-21 订正）。
 - 内容：平台图标行 + 分区目录列表；顶部有关注头像区
 
 ### 房间网格（.room-grid）
@@ -66,7 +70,7 @@ cd F:/project/SFVideoLive/apps/web && NODE_OPTIONS= npm run dev  # :9000
 ## 复刻注意（对应 zishu_flutter 现状差距）
 
 1. zishu_flutter 现为自创顶部导航+色点文字 tabs；需改为：44px 吸顶条（左品牌+三项、中平台图标 tab 绝对居中、右工具组）、<768 底部 56px 图标栏 + 顶部平台图标条。
-2. 首页/分类页缺左侧 DirectoryDrawer（220px 展开 / 28px 导轨，主内容 margin 同步）。
+2. 首页/分类页缺左侧 DirectoryDrawer（220px 展开 / 52px 导轨，主内容 margin 同步）。
 3. 主题令牌需全量换成上表（#181818/#F3D04E/#1f1f1f/#242424/#3a3a3a，4px 卡片圆角，0.85/1rem 网格间距）。
 4. 播放页需保留顶导航、去抽屉，桌面左右分栏（右栏 425px）、窄屏 stack。
 5. 房卡结构按徽章/标题/副行三段复刻，网格列数按断点 5/6/7。

@@ -7,6 +7,15 @@
 ///
 /// 宿主写法与 browse_home_test / play_follow_panel_test 一致:真实 router +
 /// 固定次数 pump(封面图在 VM 中不会真正加载)。
+///
+/// 角位真源(widget 与 web 两侧均已对齐,2026-09-21 复核):
+/// - 网格卡 RoomCard.vue:262-273 `.room-card__foot-left { position:absolute;
+///   left:0; bottom:0; max-width:72% }` + `:deep(.platform-cover-badge)
+///   { border-radius: 0 8px 0 0 }` → 平台 badge **左下**贴角;
+///   热度则是另一个 `.cover-online-badge` 在**右下**;
+/// - 内部看板 `tasks-ui-refine.md` T3 曾声称「平台 badge 在右下与热度并列」,
+///   与真源不符(真源截图 360×640 / 1920×1080 也显示左下平台 + 右下热度),
+///   故**不改象限**。
 library;
 
 import 'dart:convert';
@@ -229,6 +238,8 @@ void main() {
       ),
       CoverCorner.bottomRight,
     );
+    // 平台 badge 贴左下角:真源 `.room-card__foot-left`(RoomCard.vue:262-273,
+    // `left:0; bottom:0` + 圆角 `0 8px 0 0`)。看板曾误记为「右下与热度并列」。
     _expectCorner(
       tester,
       card,

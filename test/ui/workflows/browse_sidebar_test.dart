@@ -232,11 +232,21 @@ void main() {
     );
 
     // 点击 toggle → 收起为 52px;分类树隐藏,平台锚点仍唯一命中。
+    //
+    // 收起态宽 = 真源 `--directory-rail-width` = 52px(main.css:39 +
+    // DirectoryDrawer.vue:660 `.directory-drawer { width: var(...) }`);
+    // docs/ui-reference/README.md 曾误作「≈28px」(那是顶栏平台 tab 在窄屏的
+    // 收缩值),2026-09-21 已回写 —— rail 视觉宽度无需改动。
     await tester.tap(find.byKey(BrowseSidebar.toggleKey));
     await tester.pump();
     await tester.pump(AppMotion.normal);
     await tester.pump(const Duration(milliseconds: 50));
     expect(sidebarWidth(tester), closeTo(BrowseSidebar.railWidth, 0.01));
+    expect(
+      BrowseSidebar.railWidth,
+      AppDirectoryDrawer.railWidth,
+      reason: '收起态宽 = 真源 --directory-rail-width 52px',
+    );
     expect(find.byKey(const Key('browse-sidebar-cat-1')), findsNothing);
     expect(find.byKey(const Key('home-platform-chip-douyu')), findsOneWidget);
     expect(find.byKey(const Key('home-platform-chip-all')), findsOneWidget);

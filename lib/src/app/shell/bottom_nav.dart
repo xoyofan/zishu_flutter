@@ -2,9 +2,14 @@ part of '../app_shell.dart';
 
 /// 手机(<768)底部主导航:56px 高,保留既有 nav-* 锚点契约。
 ///
-/// 7 项对齐 SFVideoLive 移动端底部栏:紫薯 logo / 首页 / 分类 / 关注 / 搜索 /
-/// 主题 / 我的。其中 `nav-home`/`nav-follow`/`nav-search`/`nav-settings` 锚点
-/// 必须保留(`nav-settings` 挂在「我的」项上,该路由到 `/settings`)。
+/// 8 项对齐 SFVideoLive 移动端底部栏(真源 360×640 / 640×800 截图):
+/// 紫薯 logo / 首页 / 分类 / 我的分类 / 关注 / 搜索 / 主题 / 我的。
+/// 其中 `nav-home`/`nav-follow`/`nav-search`/`nav-settings` 锚点必须保留
+/// (`nav-settings` 挂在「我的」项上,该路由到 `/settings`)。
+///
+/// 「动态」(/timeline)不再占底栏项 —— 真源底栏没有它(2026-09-21 截图核对),
+/// 桌面顶栏 `nav-time` 仍是它的入口(见 `shell/top_nav.dart`);
+/// 路由可达性由 `test/ui/workflows/shell_mobile_align_test.dart` 钉死。
 class _BottomNav extends StatelessWidget {
   const _BottomNav({required this.currentSite});
 
@@ -93,17 +98,6 @@ class _BottomNav extends StatelessWidget {
             onTap: () => openSearchDialog(context),
             active: false,
           ),
-          _BottomItem(
-            key: const Key('nav-time'),
-            leading: _bottomIcon(
-              Icons.timeline_rounded,
-              currentSite == 'timeline',
-              context.tokens,
-            ),
-            label: '动态',
-            route: '/timeline',
-            active: currentSite == 'timeline',
-          ),
           const _BottomThemeItem(),
           _BottomItem(
             key: const Key('nav-settings'),
@@ -155,7 +149,7 @@ class _BottomItem extends StatelessWidget {
             leading,
             if (label.isNotEmpty) ...[
               const SizedBox(height: 2),
-              // 9 项挤在 360px 宽下时,靠 scaleDown 收敛而不是溢出
+              // 8 项挤在 360px 宽下时,靠 scaleDown 收敛而不是溢出
               // (「我的分类」4 字在 40px 槽位里必须缩)。
               FittedBox(
                 fit: BoxFit.scaleDown,
