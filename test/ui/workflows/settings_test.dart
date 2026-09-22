@@ -205,6 +205,7 @@ void main() {
       reason: '桌面端基线为深色(浅色/跟随系统为显式选择项)',
     );
     expect(state.defaultQuality, '超清');
+    expect(state.auroraEnabled, isFalse);
     expect(state.danmakuEnabled, isTrue);
 
     // 界面控件反映同一组默认值。
@@ -280,6 +281,13 @@ void main() {
   ) async {
     await _pumpSettings(tester);
 
+    final auroraSwitch = find.byKey(const Key('settings-aurora-toggle'));
+    await tester.ensureVisible(auroraSwitch);
+    await tester.tap(auroraSwitch);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(_readSettings(tester).auroraEnabled, isTrue);
+
     // 通过 UI 触发一组变更(即持久化写入)。
     await _selectDropdownOption(
       tester,
@@ -300,6 +308,7 @@ void main() {
     // 直接从 SharedPreferencesAsync 内存后端读回,断言各键已写入。
     final prefs = SharedPreferencesAsync();
     expect(await prefs.getString('zishu.settings.themeMode'), 'dark');
+    expect(await prefs.getBool('zishu.settings.auroraEnabled'), isTrue);
     expect(await prefs.getString('zishu.settings.defaultQuality'), '蓝光8M');
     expect(await prefs.getBool('zishu.settings.danmakuEnabled'), isFalse);
 
@@ -309,6 +318,7 @@ void main() {
     final restored = _readSettings(tester);
     expect(restored.hydrated, isTrue);
     expect(restored.themeMode, ThemeModeChoice.dark);
+    expect(restored.auroraEnabled, isTrue);
     expect(restored.defaultQuality, '蓝光8M');
     expect(restored.danmakuEnabled, isFalse);
 

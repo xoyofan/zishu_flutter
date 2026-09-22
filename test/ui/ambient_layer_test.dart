@@ -163,7 +163,7 @@ Color _containerColor(WidgetTester tester, Key key) {
 }
 
 void main() {
-  testWidgets('3.1 顶栏毛玻璃:surface 85% + blur 16(取自 token,≤ 上限)', (tester) async {
+  testWidgets('3.1 顶栏毛玻璃:薄档 glassThinAlpha 0.55 + blur 16(取自 token,≤ 上限)', (tester) async {
     await _pumpApp(tester);
     // 顶栏容器:nav-brand 最近的 Container 祖先(高度 = AppSpacing.topNavHeight)。
     final nav = tester.widget<Container>(
@@ -176,7 +176,13 @@ void main() {
     );
     expect(nav.constraints?.maxHeight, AppSpacing.topNavHeight);
     final color = (nav.decoration! as BoxDecoration).color!;
-    expect(color.a, closeTo(AmbientBlur.glassSurfaceAlpha, 1e-9));
+    // 批1(DESIGN.md §2.4):顶栏改薄档 0.55 透出 Aurora 平台色氛围;
+    // 0.85 厚档保留给清单 3.2 侧栏/沉浸面板(底下是视频)。
+    expect(color.a, closeTo(AmbientBlur.glassThinAlpha, 1e-9));
+    expect(
+      AmbientBlur.glassThinAlpha,
+      lessThan(AmbientBlur.glassSurfaceAlpha),
+    );
     expect(AmbientBlur.navSigma, lessThanOrEqualTo(AmbientBlur.maxSigma));
     expect(_hasBlur(tester, AmbientBlur.navSigma), isTrue);
     // 清单 §4「明确不做」:毛玻璃只做 3.1/3.2 两处 —— 壳层静止态只有顶栏一层。
