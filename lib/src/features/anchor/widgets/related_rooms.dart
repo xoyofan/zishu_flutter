@@ -67,9 +67,9 @@ class _RelatedCard extends StatelessWidget {
           onTap: onTap,
           // 状态反馈(全部走 token):hover 抬亮;焦点/按压用 accent 低 alpha。
           hoverColor: tokens.surfaceRaised,
-          splashColor: tokens.accent.withValues(alpha: 0.12),
-          highlightColor: tokens.accent.withValues(alpha: 0.10),
-          focusColor: tokens.accent.withValues(alpha: 0.10),
+          splashColor: AppStateLayer.splashOf(tokens.accent),
+          highlightColor: AppStateLayer.pressedOf(tokens.accent),
+          focusColor: AppStateLayer.focusOf(tokens.accent),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [

@@ -206,10 +206,10 @@ class _FollowAvatarTile extends StatelessWidget {
           hoverColor: color.withValues(alpha: 0.3),
           // 焦点/按下也用**平台品牌色**(本格的语义色,不用通用 accent),
           // 与 hover 同源;焦点另走抬升档保证键盘可见性。
-          focusColor: context.tokens.surfaceRaised,
-          splashColor: color.withValues(alpha: 0.12),
+          focusColor: AppStateLayer.focusOf(context.tokens.accent),
+          splashColor: AppStateLayer.splashOf(color),
           // 按下在 hover(0.3)基础上再压一档(DESIGN.md §4.2)。
-          highlightColor: color.withValues(alpha: 0.4),
+          highlightColor: AppStateLayer.pressedOf(color),
           onTap: onTap,
           child: Padding(
             padding: EdgeInsets.symmetric(horizontal: 0.96, vertical: 2.56),

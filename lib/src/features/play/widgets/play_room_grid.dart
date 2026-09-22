@@ -125,9 +125,9 @@ class PlayRoomCard extends StatelessWidget {
         // 卡片 hover 抬一档底(surface → surfaceRaised,DESIGN.md §4.2);
         // 按下/键盘焦点走 accent 低 alpha。只改颜色,不动尺寸与位置。
         hoverColor: tokens.surfaceRaised,
-        splashColor: tokens.accent.withValues(alpha: 0.12),
-        highlightColor: tokens.accent.withValues(alpha: 0.16),
-        focusColor: tokens.accent.withValues(alpha: 0.24),
+        splashColor: AppStateLayer.splashOf(tokens.accent),
+        highlightColor: AppStateLayer.pressedOf(tokens.accent),
+        focusColor: AppStateLayer.focusOf(tokens.accent),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

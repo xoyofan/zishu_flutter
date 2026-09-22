@@ -391,10 +391,10 @@ class _SideTextAction extends StatelessWidget {
               ? tokens.accent.withValues(alpha: 0.24)
               : tokens.surfaceRaised,
           // splash/highlight:accent 低 alpha;禁用态由 InkWell 自行忽略。
-          splashColor: tokens.accent.withValues(alpha: 0.12),
-          highlightColor: tokens.accent.withValues(alpha: 0.16),
+          splashColor: AppStateLayer.splashOf(tokens.accent),
+          highlightColor: AppStateLayer.pressedOf(tokens.accent),
           // 键盘焦点:Material 系的 focusColor 覆盖色(外扩环留给自绘 chip)。
-          focusColor: tokens.accent.withValues(alpha: 0.24),
+          focusColor: AppStateLayer.focusOf(tokens.accent),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
             child: Text(
@@ -590,8 +590,8 @@ class _SideActionButtonState extends State<_SideActionButton> {
             onTapCancel: () => setState(() => _pressed = false),
             // 涟漪/按压覆盖色从 chip **自身**文字色推导
             // (button-states「状态色由基色推导」),不引入外来色相。
-            splashColor: colors.activeForeground.withValues(alpha: 0.10),
-            highlightColor: colors.activeForeground.withValues(alpha: 0.14),
+            splashColor: AppStateLayer.splashOf(colors.activeForeground),
+            highlightColor: AppStateLayer.pressedOf(colors.activeForeground),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [

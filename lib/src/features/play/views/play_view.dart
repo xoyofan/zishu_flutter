@@ -723,7 +723,7 @@ class _RoomHeader extends StatelessWidget {
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
             // 键盘焦点可见(Material 系 focusColor 覆盖色,不动盒模型)。
-            focusColor: tokens.accent.withValues(alpha: 0.24),
+            focusColor: AppStateLayer.focusOf(tokens.accent),
             icon: const Icon(Icons.arrow_back_rounded, size: 18),
           ),
           const SizedBox(width: AppSpacing.sm),
@@ -789,9 +789,11 @@ class _RoomHeader extends StatelessWidget {
                           hoverColor: tokens.surfaceRaised.withValues(
                             alpha: 0.24,
                           ),
-                          splashColor: tokens.accent.withValues(alpha: 0.12),
-                          highlightColor: tokens.accent.withValues(alpha: 0.16),
-                          focusColor: tokens.accent.withValues(alpha: 0.24),
+                          splashColor: AppStateLayer.splashOf(tokens.accent),
+                          highlightColor: AppStateLayer.pressedOf(
+                            tokens.accent,
+                          ),
+                          focusColor: AppStateLayer.focusOf(tokens.accent),
                           child: Icon(
                             favorited
                                 ? Icons.star_rounded
@@ -830,7 +832,7 @@ class _RoomHeader extends StatelessWidget {
             onPressed: onToggleSidePanel,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-            focusColor: tokens.accent.withValues(alpha: 0.24),
+            focusColor: AppStateLayer.focusOf(tokens.accent),
             icon: Icon(
               sidePanelVisible
                   ? Icons.keyboard_double_arrow_right_rounded

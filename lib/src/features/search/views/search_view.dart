@@ -402,9 +402,9 @@ class _SearchTabBar extends StatelessWidget {
       // 档位 tab:底为透明(靠选中下划线表达),hover 抬亮;
       // 键盘焦点/按压用 accent 低 alpha。
       hoverColor: tokens.surfaceRaised,
-      splashColor: tokens.accent.withValues(alpha: 0.12),
-      highlightColor: tokens.accent.withValues(alpha: 0.10),
-      focusColor: tokens.accent.withValues(alpha: 0.10),
+      splashColor: AppStateLayer.splashOf(tokens.accent),
+      highlightColor: AppStateLayer.pressedOf(tokens.accent),
+      focusColor: AppStateLayer.focusOf(tokens.accent),
       child: Padding(
         padding: const EdgeInsets.only(
           right: AppSpacing.lg,

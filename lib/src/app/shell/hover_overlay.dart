@@ -6,11 +6,16 @@ part of '../app_shell.dart';
 /// 供 InkWell 的 `splashColor` / `highlightColor`(pressed)使用——
 /// 零新增 token、零裸值。
 ///
-/// 键盘焦点另走 `focusColor: context.tokens.surfaceRaised`(DESIGN.md §4.2 抬升档);
-/// hover 底色**按组件语义取**(导航品牌块压暗到 `surfaceSoft`、卡片/浮层抬到
-/// `surfaceRaised`),见 DESIGN.md §4.2/§11.2,不在此处统一。
-Color _pressTint(BuildContext context) =>
-    context.tokens.accent.withValues(alpha: AppDirectoryDrawer.activeChipAlpha);
+/// 各交互态的**叠加色**统一取 `AppStateLayer`（见 design_tokens.dart）：
+/// 按下/涟漪/焦点都由**基色**派生，基色由调用方给。
+///
+/// 键盘焦点一律用强调色（`AppStateLayer.focusOf(accent)`，或自绘的
+/// `AppFocus.ring`），不用 `surfaceRaised` 这类“只比常态亮一点”的底色 ——
+/// 浅色主题下那样键盘用户看不出焦点在哪。
+///
+/// hover 的**底色**（而非叠加层）按组件语义取（导航品牌块压暗到
+/// `surfaceSoft`、卡片/浮层抬到 `surfaceRaised`），见 DESIGN.md §4.2/§11.2，
+/// 不在此处统一。
 
 /// hover 浮层定位:水平以触发点为中心,并夹到视口内;
 /// 顶部留 [_kBridgeHeight] 透明桥接区(SFVideoLive `.nav-*-flyout::before`),

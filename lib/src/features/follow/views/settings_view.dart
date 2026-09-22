@@ -104,8 +104,8 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                       // 状态层走 token:hover 抬亮;键盘焦点/按压用 accent 低 alpha。
                       style: IconButton.styleFrom(
                         hoverColor: tokens.surfaceRaised,
-                        highlightColor: tokens.accent.withValues(alpha: 0.10),
-                        focusColor: tokens.accent.withValues(alpha: 0.10),
+                        highlightColor: AppStateLayer.pressedOf(tokens.accent),
+                        focusColor: AppStateLayer.focusOf(tokens.accent),
                       ),
                       icon: Icon(
                         _platformQualityExpanded

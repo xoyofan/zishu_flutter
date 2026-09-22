@@ -432,6 +432,47 @@ abstract final class AppMotion {
   static const Curve curve = Cubic(0.16, 1, 0.3, 1);
 }
 
+/// 交互态叠加层(overlay)的统一取值 —— 交互四态的**唯一数值来源**。
+///
+/// 覆盖 `InkWell` / `Material` 按钮的 `splashColor`(按下涟漪)、`highlightColor`
+/// 与 `focusColor`(键盘焦点底色),以及自绘容器的 hover/pressed 补色。
+///
+/// 三条决策(2026-09-21 收口三条交互轨后统一):
+/// 1. 这些颜色**只在交互中出现、不参与静止渲染** —— 集中在此既统一手感又不动 golden。
+/// 2. 它们是“叠在某个基色上的半透明层”,**与色相无关**:基色由调用方传入
+///    (`accent` / `AppOnVideo.text` / `AppOnBright.white` / 自绘 chip 自身的前景色)。
+/// 3. **焦点一律用强调色**,不用 `surfaceRaised` 这类“抬升一档的底色”——
+///    后者在浅色主题下与常态几乎无差别,键盘用户看不出焦点在哪
+///    (无障碍要求可见);自绘控件用 [AppFocus.ring] 外扩环,两者同为“焦点用 accent”。
+///
+/// “已经处在抬升面(`surfaceRaised`)上的元素 hover”不能再抬亮,退回用
+/// [hoverOf] 的强调色淡层,避免“越 hover 越看不出”。
+abstract final class AppStateLayer {
+  /// hover:最弱的提示层。
+  static const double hoverAlpha = 0.10;
+
+  /// 按下涟漪(splash):比 hover 明显一档。
+  static const double splashAlpha = 0.12;
+
+  /// 按下底色(highlight / pressed overlay)。
+  static const double pressedAlpha = 0.16;
+
+  /// 键盘焦点:最强,必须一眼可见。
+  static const double focusAlpha = 0.24;
+
+  /// hover 层颜色(`InkWell.hoverColor` / 自绘 hover 补色)。
+  static Color hoverOf(Color base) => base.withValues(alpha: hoverAlpha);
+
+  /// 按下涟漪颜色(`InkWell.splashColor`)。
+  static Color splashOf(Color base) => base.withValues(alpha: splashAlpha);
+
+  /// 按下底色(`InkWell.highlightColor` / `overlayColor` 的 pressed 档)。
+  static Color pressedOf(Color base) => base.withValues(alpha: pressedAlpha);
+
+  /// 键盘焦点底色(`focusColor` / `overlayColor` 的 focused 档)。
+  static Color focusOf(Color base) => base.withValues(alpha: focusAlpha);
+}
+
 /// 响应式断点,与 SFVideoLive 布局断点对齐。
 abstract final class AppBreakpoints {
   static const double compact = 640;

@@ -117,9 +117,11 @@ class AnchorLiveCard extends StatelessWidget {
                       // accent 实底 CTA:状态层取反白 on-accent
                       // (accent 低 alpha 压在同色底上不可见),焦点可见。
                       hoverColor: AppOnBright.white.withValues(alpha: 0.12),
-                      splashColor: AppOnBright.white.withValues(alpha: 0.12),
-                      highlightColor: AppOnBright.white.withValues(alpha: 0.10),
-                      focusColor: AppOnBright.white.withValues(alpha: 0.12),
+                      splashColor: AppStateLayer.splashOf(AppOnBright.white),
+                      highlightColor: AppStateLayer.pressedOf(
+                        AppOnBright.white,
+                      ),
+                      focusColor: AppStateLayer.focusOf(AppOnBright.white),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [

@@ -140,9 +140,9 @@ class _PlatformChip extends StatelessWidget {
       hoverColor: selected
           ? accent.withValues(alpha: 0.12)
           : tokens.surfaceRaised,
-      splashColor: accent.withValues(alpha: 0.12),
-      highlightColor: accent.withValues(alpha: 0.10),
-      focusColor: accent.withValues(alpha: 0.10),
+      splashColor: AppStateLayer.splashOf(accent),
+      highlightColor: AppStateLayer.pressedOf(accent),
+      focusColor: AppStateLayer.focusOf(accent),
       child: AnimatedContainer(
         duration: AppMotion.fast,
         curve: AppMotion.curve,

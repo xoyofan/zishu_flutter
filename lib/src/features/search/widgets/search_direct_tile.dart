@@ -29,9 +29,9 @@ class SearchDirectTile extends StatelessWidget {
         // 快捿直达项:底已是 accent 淡底,hover 用同一个 accent 低 alpha 加深;
         // 焦点/按压同族(不盖掉 accent 语义)。
         hoverColor: tokens.accent.withValues(alpha: 0.10),
-        splashColor: tokens.accent.withValues(alpha: 0.12),
-        highlightColor: tokens.accent.withValues(alpha: 0.10),
-        focusColor: tokens.accent.withValues(alpha: 0.10),
+        splashColor: AppStateLayer.splashOf(tokens.accent),
+        highlightColor: AppStateLayer.pressedOf(tokens.accent),
+        focusColor: AppStateLayer.focusOf(tokens.accent),
         child: Container(
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.md,

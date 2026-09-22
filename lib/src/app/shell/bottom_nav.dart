@@ -142,9 +142,9 @@ class _BottomItem extends StatelessWidget {
     return Expanded(
       child: InkWell(
         hoverColor: context.tokens.surface,
-        focusColor: context.tokens.surfaceRaised,
-        splashColor: _pressTint(context),
-        highlightColor: _pressTint(context),
+        focusColor: AppStateLayer.focusOf(context.tokens.accent),
+        splashColor: AppStateLayer.splashOf(context.tokens.accent),
+        highlightColor: AppStateLayer.pressedOf(context.tokens.accent),
         onTap: onTap ?? (route == null ? null : () => context.go(route!)),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,

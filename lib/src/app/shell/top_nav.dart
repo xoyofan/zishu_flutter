@@ -207,9 +207,9 @@ class _Logo extends StatelessWidget {
         // hover 压暗一档是导航品牌块的 web 真源(`.nav-brand:hover{background:var(--bg-soft)}`,
         // DESIGN.md §11.2);焦点另走 focusColor。
         hoverColor: context.tokens.surfaceSoft,
-        focusColor: context.tokens.surfaceRaised,
-        splashColor: _pressTint(context),
-        highlightColor: _pressTint(context),
+        focusColor: AppStateLayer.focusOf(context.tokens.accent),
+        splashColor: AppStateLayer.splashOf(context.tokens.accent),
+        highlightColor: AppStateLayer.pressedOf(context.tokens.accent),
         onTap: () => context.go('/all'),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -318,9 +318,9 @@ class _NavAction extends StatelessWidget {
               child: InkWell(
                 borderRadius: AppRadius.allMd,
                 hoverColor: context.tokens.surfaceSoft,
-                focusColor: context.tokens.surfaceRaised,
-                splashColor: _pressTint(context),
-                highlightColor: _pressTint(context),
+                focusColor: AppStateLayer.focusOf(context.tokens.accent),
+                splashColor: AppStateLayer.splashOf(context.tokens.accent),
+                highlightColor: AppStateLayer.pressedOf(context.tokens.accent),
                 onTap: onTap != null
                     ? () => onTap!(centerX())
                     : (route == null ? null : () => context.go(route!)),

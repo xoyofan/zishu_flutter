@@ -139,9 +139,9 @@ class _UserAvatar extends ConsumerWidget {
           key: const Key('nav-user'),
           borderRadius: AppRadius.allPill,
           hoverColor: context.tokens.surfaceSoft,
-          focusColor: context.tokens.surfaceRaised,
-          splashColor: _pressTint(context),
-          highlightColor: _pressTint(context),
+          focusColor: AppStateLayer.focusOf(context.tokens.accent),
+          splashColor: AppStateLayer.splashOf(context.tokens.accent),
+          highlightColor: AppStateLayer.pressedOf(context.tokens.accent),
           onTap: () => showDialog<void>(
             context: context,
             builder: (_) => const LoginDialog(),

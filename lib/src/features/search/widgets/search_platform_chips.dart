@@ -57,9 +57,9 @@ class _PlatformChip extends StatelessWidget {
       hoverColor: selected
           ? brand.color.withValues(alpha: 0.12)
           : tokens.surfaceRaised,
-      splashColor: brand.color.withValues(alpha: 0.12),
-      highlightColor: brand.color.withValues(alpha: 0.10),
-      focusColor: brand.color.withValues(alpha: 0.10),
+      splashColor: AppStateLayer.splashOf(brand.color),
+      highlightColor: AppStateLayer.pressedOf(brand.color),
+      focusColor: AppStateLayer.focusOf(brand.color),
       // 选中切换的颜色过渡统一 AppMotion.fast + curve(不位移/不缩放)。
       child: AnimatedContainer(
         duration: AppMotion.fast,

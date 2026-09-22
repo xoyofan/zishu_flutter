@@ -463,8 +463,8 @@ class _MetaActionButtonState extends State<_MetaActionButton> {
             onTapUp: (_) => setState(() => _pressed = false),
             onTapCancel: () => setState(() => _pressed = false),
             // 覆盖色从 chip 自身文字色推导(状态色由基色推导),不引入外来色相。
-            splashColor: colors.activeForeground.withValues(alpha: 0.10),
-            highlightColor: colors.activeForeground.withValues(alpha: 0.14),
+            splashColor: AppStateLayer.splashOf(colors.activeForeground),
+            highlightColor: AppStateLayer.pressedOf(colors.activeForeground),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 4),
               child: Row(

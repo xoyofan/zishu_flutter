@@ -132,9 +132,9 @@ class _MyCategoryChipState extends State<_MyCategoryChip> {
           borderRadius: AppRadius.allPill,
           onTap: widget.onTap,
           hoverColor: context.tokens.brand.withValues(alpha: 0.1),
-          focusColor: context.tokens.surfaceRaised,
-          splashColor: context.tokens.brand.withValues(alpha: 0.12),
-          highlightColor: context.tokens.brand.withValues(alpha: 0.2),
+          focusColor: AppStateLayer.focusOf(context.tokens.accent),
+          splashColor: AppStateLayer.splashOf(context.tokens.brand),
+          highlightColor: AppStateLayer.pressedOf(context.tokens.brand),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 9.6, vertical: 4.8),
             child: Row(
@@ -358,9 +358,9 @@ class _RemovableChip extends StatelessWidget {
             borderRadius: AppRadius.allPill,
             onTap: onRemove,
             hoverColor: context.tokens.surfaceRaised,
-            focusColor: context.tokens.surfaceRaised,
-            splashColor: _pressTint(context),
-            highlightColor: _pressTint(context),
+            focusColor: AppStateLayer.focusOf(context.tokens.accent),
+            splashColor: AppStateLayer.splashOf(context.tokens.accent),
+            highlightColor: AppStateLayer.pressedOf(context.tokens.accent),
             child: Padding(
               padding: EdgeInsets.all(3),
               child: Icon(
@@ -410,8 +410,8 @@ class _PickableChip extends StatelessWidget {
         // 焦点色直接取 AppFocus 环的光晕档(品牌金 24%),不另造数值。
         hoverColor: context.tokens.brand.withValues(alpha: 0.1),
         focusColor: AppFocus.ring(context.tokens.brand).first.color,
-        splashColor: context.tokens.brand.withValues(alpha: 0.12),
-        highlightColor: context.tokens.brand.withValues(alpha: 0.2),
+        splashColor: AppStateLayer.splashOf(context.tokens.brand),
+        highlightColor: AppStateLayer.pressedOf(context.tokens.brand),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 9.6, vertical: 5),
           child: Row(

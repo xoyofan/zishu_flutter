@@ -262,18 +262,69 @@ Flutter 的 `TextStyle.height` 是**倍数**，所以吸附后的 px 要除回�
 
 ### 4.2 状态矩阵
 
+#### 底色（表面）状态
+
 | 状态 | 颜色来源 | 形态 |
 |---|---|---|
 | default | `surface` / `surfaceSoft` 底，`border` 描边 | 圆角 `AppRadius.sm`(4) 或 `md`(8) |
-| hover | 底色**按组件语义取，不是统一“抬升”**：导航品牌块压暗到 `surfaceSoft`（web `--bg-soft` `#141414`）、卡片/浮层抬到 `surfaceRaised`（web `--dark-6` `#2A2A2A`）、导航项 web 真源是**文字变琥珀**（`.nav-brand:hover{background:var(--bg-soft)}` / `.nav-item:hover{color:var(--amber)}`）；动效 `AppMotion.fast`(150ms) + `AppMotion.curve` | 颜色/边框过渡，不位移 |
+| hover（**底色**） | **按组件语义取，不是统一“抬升”**：导航品牌块压暗到 `surfaceSoft`（web `--bg-soft` `#141414`）、卡片/浮层抬到 `surfaceRaised`（web `--dark-6` `#2A2A2A`）、导航项 web 真源是**文字变琥珀**（`.nav-brand:hover{background:var(--bg-soft)}` / `.nav-item:hover{color:var(--amber)}`）；动效 `AppMotion.fast`(150ms) + `AppMotion.curve` | 颜色/边框过渡，**不位移、不缩放** |
 | active / pressed | 在 hover 基础上再压一档（如 `playFollowBgActive`） | 仍不位移 |
 | selected | `accent.withValues(alpha: 0.2)` 底（见 `app_theme.dart` 的 `navigationBarTheme.indicatorColor`）；平台/分类选中另加 `AppElevation.accentGlow` | — |
-| focus | `AppFocus.ring(accent)`——2px 实环 + 2px 间隙 | 外扩，不占布局 |
 | disabled | `textSecondary` 文字 + 不响应指针；不额外加灰罩 | — |
 | invalid | `error` = `#E55050` 描边 / 文字 | — |
 
-**待办**：`AppFocus` 目前只有 token，组件默认聚焦态仍是 Material 默认样式。
-键盘可达性是 Windows 桌面验收项，迁移需逐组件进行，不在 v0.1 范围。
+#### 焦点态：**一律用强调色**
+
+两种写法，同一条原则（focus 必须是 accent，不用“只比常态亮一点”的表面色）：
+
+| 控件类型 | 写法 |
+|---|---|
+| Material 系（`InkWell` / `IconButton` / `TextButton` …） | `focusColor: AppStateLayer.focusOf(accent)` |
+| 自绘容器（自绘 chip / 开关等） | `FocusableActionDetector` / `FocusNode` + 聚焦时 `boxShadow: AppFocus.ring(accent)`（外扩、不占布局、不改尺寸） |
+
+> **为何不整 `surfaceRaised`**：浅色主题下它与常态几乎无差别，键盘用户看不出焦点在哪。
+> 自绘控件用外扩环是因为 `focusColor` 对非 Material 容器无效 —— 两种写法存在的原因在此。
+> 本项已落地（2026-09-21）：组件层 `AppFocus.ring` 引用 0 → 12，focus 处理 0 → 48。
+
+#### 交互叠加层：`AppStateLayer` 是唯一数值来源
+
+`InkWell` 的 `splashColor` / `highlightColor`、Material 的 `overlayColor`、自绘容器的
+hover/pressed 补色一律取 `AppStateLayer`（`design_tokens.dart`），**不再手写 alpha**：
+
+| 角色 | alpha | 取色 |
+|---|---|---|
+| hover | 0.10 | `AppStateLayer.hoverOf(base)` |
+| 涟漪 splash | 0.12 | `AppStateLayer.splashOf(base)` |
+| 按下 pressed | 0.16 | `AppStateLayer.pressedOf(base)` |
+| 焦点 focus | 0.24 | `AppStateLayer.focusOf(base)` |
+
+`base` 是**叠加的基色**，由调用方给：普通控件用 `accent`；**on-video 控件用
+`AppOnVideo.text`**（不能换成随主题切换的 token，否则浅色主题下会在暗底上叠深色）；
+亮饱和底（如自绘的已关注 chip）用**该 chip 自身的前景色**（`button-states` 的“状态色由基色推导”）。
+
+两条派生规则：
+
+- **已经处在抬升面（`surfaceRaised`）上的元素 hover 时不能再“抬亮”**，退回
+  `AppStateLayer.hoverOf(accent)` 的强调色淡层，否则“越 hover 越看不出”。
+- **`overlayColor` 逐态值只能走 `.copyWith`**：`TextButton.styleFrom(...)` 等同名参数
+  类型是 `Color?`（单个颜色），不收 `WidgetStateProperty`。
+
+#### 不做全局按钮主题（实测结论）
+
+**不要**在 `app_theme.dart` 里加 `textButtonTheme` / `iconButtonTheme` /
+`segmentedButtonTheme` 等来“统一交互态”。`colorScheme.primary = tokens.accent`
+已经让 M3 默认样式从 accent 派生出同量级的 state layer；而显式加 theme `style`
+**并非只覆盖指定字段** —— 2026-09-21 实测：只给 `segmentedButtonTheme` 加
+`overlayColor`，结果破坏了 `SegmentedButton` 的 **rest 渲染**（`follow_style_row`
+golden 差 2074px，整块底色/描边都变）。需要更明显的交互态时，**在调用点**用
+`AppStateLayer.*Of(...)` 显式化。
+
+#### 控制条等 `PopupMenuButton` 的内部 InkWell
+
+`PopupMenuButton(child:)` 的内部 `InkWell` 不暴露颜色参数，只能从 **Theme 层**切墨色
+（`player_controls.dart` 的 `_onVideoInkTheme` / `_onVideoButtonStyle` 就是为此）。
+这属于“只能从 Theme 层接线”的已知例外，与本节的“不要加全局按钮主题”不矛盾：
+前者是 **on-video 局部子树**的 Theme 覆盖，不是全局主题。
 
 ### 4.3 控件全局规格（`AppControls`）
 

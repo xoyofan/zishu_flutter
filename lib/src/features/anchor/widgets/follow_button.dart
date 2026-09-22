@@ -57,9 +57,9 @@ class _FollowButtonState extends State<FollowButton> {
           // accent 实底按钮:状态层取反白 on-accent(accent 低 alpha 压在同色
           // 底上不可见,等于没有反馈)。焦点只用外环,不叠 M3 内层 tint。
           hoverColor: AppOnBright.white.withValues(alpha: 0.12),
-          splashColor: AppOnBright.white.withValues(alpha: 0.12),
-          highlightColor: AppOnBright.white.withValues(alpha: 0.10),
-          focusColor: tokens.accent.withValues(alpha: 0.0),
+          splashColor: AppStateLayer.splashOf(AppOnBright.white),
+          highlightColor: AppStateLayer.pressedOf(AppOnBright.white),
+          focusColor: AppStateLayer.focusOf(tokens.accent),
           child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.lg,

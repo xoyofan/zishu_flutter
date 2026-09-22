@@ -75,6 +75,16 @@ abstract final class ZishuTheme {
         indicatorColor: tokens.accent.withValues(alpha: 0.2),
       ),
       progressIndicatorTheme: ProgressIndicatorThemeData(color: tokens.accent),
+      // 注：Material 系控件（TextButton/IconButton/FilledButton/SegmentedButton/
+      // Switch/Checkbox…）的 hover/pressed/focus 交互层**不需要在这里收口** ——
+      // 上面的 `colorScheme.primary = tokens.accent` 已经让 M3 默认样式从 accent
+      // 派生出了同量级的 state layer（轨 C 的审计结论）。
+      //
+      // 2026-09-21 实测：曾尝试在此加 `segmentedButtonTheme`（只给 overlayColor）
+      // 来“统一”，结果**破坏了 SegmentedButton 的 rest 渲染**（follow_style_row
+      // golden 2074px 差异——整块底色/描边都变，说明显式 theme style 并非只覆盖
+      // 指定字段）。故回退：需要更明显的交互态时，**在调用点**用
+      // `AppStateLayer.*Of(...)` 显式化（自绘与 Material 同源取值）。
       extensions: [tokens],
     );
   }

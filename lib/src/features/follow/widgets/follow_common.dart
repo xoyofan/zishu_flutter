@@ -293,8 +293,8 @@ class FollowIconAction extends StatelessWidget {
       // 键盘焦点/按压用 accent 低 alpha(26×26 小目标也能看出焦点)。
       style: IconButton.styleFrom(
         hoverColor: tokens.surfaceRaised,
-        highlightColor: tokens.accent.withValues(alpha: 0.10),
-        focusColor: tokens.accent.withValues(alpha: 0.10),
+        highlightColor: AppStateLayer.pressedOf(tokens.accent),
+        focusColor: AppStateLayer.focusOf(tokens.accent),
       ),
       visualDensity: VisualDensity.compact,
       padding: const EdgeInsets.all(AppSpacing.xs),

@@ -47,9 +47,9 @@ class RoomCard extends StatelessWidget {
         // splash/highlight/focus 用 accent 低 alpha(8–12%),键盘焦点可见。
         // 只改颜色,不位移/不缩放(DESIGN.md §7)。
         hoverColor: tokens.surfaceRaised,
-        splashColor: tokens.accent.withValues(alpha: 0.12),
-        highlightColor: tokens.accent.withValues(alpha: 0.10),
-        focusColor: tokens.accent.withValues(alpha: 0.10),
+        splashColor: AppStateLayer.splashOf(tokens.accent),
+        highlightColor: AppStateLayer.pressedOf(tokens.accent),
+        focusColor: AppStateLayer.focusOf(tokens.accent),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [

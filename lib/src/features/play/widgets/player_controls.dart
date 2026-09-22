@@ -48,9 +48,9 @@ import '../application/speech_caption_provider.dart' show supportsSpeechCaption;
 /// 它的 hover/focus 只能从 Theme 层统一给,故这里同时提供 Theme 版本。
 ThemeData _onVideoInkTheme(BuildContext context) => Theme.of(context).copyWith(
   hoverColor: AppOnVideo.text.withValues(alpha: 0.12),
-  highlightColor: AppOnVideo.text.withValues(alpha: 0.18),
-  focusColor: AppOnVideo.text.withValues(alpha: 0.24),
-  splashColor: AppOnVideo.text.withValues(alpha: 0.12),
+  highlightColor: AppStateLayer.pressedOf(AppOnVideo.text),
+  focusColor: AppStateLayer.focusOf(AppOnVideo.text),
+  splashColor: AppStateLayer.splashOf(AppOnVideo.text),
 );
 
 /// 控制条 `IconButton` 的状态覆盖色(`IconButton` 走 `colorScheme` 默认值,

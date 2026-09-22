@@ -72,9 +72,9 @@ class FollowEntryRow extends StatelessWidget {
         onLongPress: onLongPress,
         // 状态反馈(全部走 token):hover 抬亮;焦点/按压用 accent 低 alpha。
         hoverColor: tokens.surfaceRaised,
-        splashColor: tokens.accent.withValues(alpha: 0.12),
-        highlightColor: tokens.accent.withValues(alpha: 0.10),
-        focusColor: tokens.accent.withValues(alpha: 0.10),
+        splashColor: AppStateLayer.splashOf(tokens.accent),
+        highlightColor: AppStateLayer.pressedOf(tokens.accent),
+        focusColor: AppStateLayer.focusOf(tokens.accent),
         child: Container(
           height: rowHeight,
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),

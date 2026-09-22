@@ -85,7 +85,7 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 22, minHeight: 22),
                 // 键盘焦点可见(Material 系走 focusColor 覆盖色,不动盒模型)。
-                focusColor: tokens.accent.withValues(alpha: 0.24),
+                focusColor: AppStateLayer.focusOf(tokens.accent),
                 icon: Icon(
                   // 卡片态显示「列表」入口、列表态显示「网格」入口(点击即切)。
                   _grid ? Icons.view_list_rounded : Icons.grid_view_rounded,

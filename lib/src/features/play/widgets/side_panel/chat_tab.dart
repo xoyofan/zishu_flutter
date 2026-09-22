@@ -683,10 +683,10 @@ class _NewMessagesButton extends StatelessWidget {
         borderRadius: AppRadius.allMd,
         onTap: onTap,
         hoverColor: AppOnBright.white.withValues(alpha: 0.12),
-        splashColor: AppOnBright.white.withValues(alpha: 0.12),
-        highlightColor: AppOnBright.white.withValues(alpha: 0.18),
+        splashColor: AppStateLayer.splashOf(AppOnBright.white),
+        highlightColor: AppStateLayer.pressedOf(AppOnBright.white),
         // 键盘焦点:accent 实底上再用白 24% 提亮一档(与 hover/pressed 同色系)。
-        focusColor: AppOnBright.white.withValues(alpha: 0.24),
+        focusColor: AppStateLayer.focusOf(AppOnBright.white),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Text(

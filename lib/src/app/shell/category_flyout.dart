@@ -43,9 +43,11 @@ class _PlatformCategorySheet extends ConsumerWidget {
                   tooltip: '关闭',
                   onPressed: () => Navigator.of(context).pop(),
                   hoverColor: tokens.surfaceRaised,
-                  focusColor: tokens.surfaceRaised,
-                  splashColor: _pressTint(context),
-                  highlightColor: _pressTint(context),
+                  focusColor: AppStateLayer.focusOf(tokens.accent),
+                  splashColor: AppStateLayer.splashOf(context.tokens.accent),
+                  highlightColor: AppStateLayer.pressedOf(
+                    context.tokens.accent,
+                  ),
                   icon: Icon(
                     Icons.close_rounded,
                     size: 18,
@@ -125,8 +127,12 @@ class _PlatformCategorySheet extends ConsumerWidget {
                                 focusColor: AppFocus.ring(tokens.accent)
                                     .first
                                     .color,
-                                splashColor: _pressTint(context),
-                                highlightColor: _pressTint(context),
+                                splashColor: AppStateLayer.splashOf(
+                                  context.tokens.accent,
+                                ),
+                                highlightColor: AppStateLayer.pressedOf(
+                                  context.tokens.accent,
+                                ),
                                 onTap: () {
                                   Navigator.of(context).pop();
                                   context.go(
@@ -445,9 +451,9 @@ class _CategoryChipState extends State<_CategoryChip> {
         hoverColor: context.tokens.accent.withValues(
           alpha: AppDirectoryDrawer.activeChipAlpha,
         ),
-        focusColor: context.tokens.surfaceRaised,
-        splashColor: _pressTint(context),
-        highlightColor: _pressTint(context),
+        focusColor: AppStateLayer.focusOf(context.tokens.accent),
+        splashColor: AppStateLayer.splashOf(context.tokens.accent),
+        highlightColor: AppStateLayer.pressedOf(context.tokens.accent),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 0.64, vertical: 1.28),
           child: Text(

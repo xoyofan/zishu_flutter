@@ -156,9 +156,11 @@ class _StripItem extends StatelessWidget {
                   key: Key('platform-tab-${brand.id}'),
                   onTap: () => context.go(_platformRoute(brand.id)),
                   hoverColor: tokens.surfaceRaised,
-                  focusColor: tokens.surfaceRaised,
-                  splashColor: _pressTint(context),
-                  highlightColor: _pressTint(context),
+                  focusColor: AppStateLayer.focusOf(tokens.accent),
+                  splashColor: AppStateLayer.splashOf(context.tokens.accent),
+                  highlightColor: AppStateLayer.pressedOf(
+                    context.tokens.accent,
+                  ),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 4.8,
@@ -181,9 +183,11 @@ class _StripItem extends StatelessWidget {
                   key: Key('platform-strip-cat-${brand.id}'),
                   onTap: () => _openCategorySheet(context, brand.id),
                   hoverColor: tokens.surfaceRaised,
-                  focusColor: tokens.surfaceRaised,
-                  splashColor: _pressTint(context),
-                  highlightColor: _pressTint(context),
+                  focusColor: AppStateLayer.focusOf(tokens.accent),
+                  splashColor: AppStateLayer.splashOf(context.tokens.accent),
+                  highlightColor: AppStateLayer.pressedOf(
+                    context.tokens.accent,
+                  ),
                   child: SizedBox(
                     width: arrowWidth,
                     height: iconSize + 12,
@@ -254,9 +258,15 @@ class _PlatformTabs extends StatelessWidget {
                         key: Key('platform-tab-${brand.id}'),
                         borderRadius: AppRadius.allSm,
                         hoverColor: context.tokens.surfaceSoft,
-                        focusColor: context.tokens.surfaceRaised,
-                        splashColor: _pressTint(context),
-                        highlightColor: _pressTint(context),
+                        focusColor: AppStateLayer.focusOf(
+                          context.tokens.accent,
+                        ),
+                        splashColor: AppStateLayer.splashOf(
+                          context.tokens.accent,
+                        ),
+                        highlightColor: AppStateLayer.pressedOf(
+                          context.tokens.accent,
+                        ),
                         onTap: () => context.go(_platformRoute(brand.id)),
                         child: AnimatedContainer(
                           duration: AppMotion.fast,

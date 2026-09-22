@@ -125,9 +125,9 @@ class _FollowRow extends ConsumerWidget {
         onTap: () => context.go('/follow'),
         // 状态反馈(全部走 token):hover 抬亮;焦点/按压用 accent 低 alpha。
         hoverColor: tokens.surfaceRaised,
-        splashColor: tokens.accent.withValues(alpha: 0.12),
-        highlightColor: tokens.accent.withValues(alpha: 0.10),
-        focusColor: tokens.accent.withValues(alpha: 0.10),
+        splashColor: AppStateLayer.splashOf(tokens.accent),
+        highlightColor: AppStateLayer.pressedOf(tokens.accent),
+        focusColor: AppStateLayer.focusOf(tokens.accent),
         child: Container(
           height: AppDirectoryDrawer.followRowHeight,
           padding: const EdgeInsets.only(
@@ -246,9 +246,9 @@ class _ToggleRail extends StatelessWidget {
               // 底已是 surfaceRaised(灰阶顶档)、无法再抬亮,只能退一档到
               // surface;仍在更暗的抽屉画布(surfaceSoft)之上。
               hoverColor: tokens.surface,
-              splashColor: tokens.accent.withValues(alpha: 0.12),
-              highlightColor: tokens.accent.withValues(alpha: 0.10),
-              focusColor: tokens.accent.withValues(alpha: 0.10),
+              splashColor: AppStateLayer.splashOf(tokens.accent),
+              highlightColor: AppStateLayer.pressedOf(tokens.accent),
+              focusColor: AppStateLayer.focusOf(tokens.accent),
               child: Icon(
                 open ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
                 size: 12,
@@ -468,9 +468,9 @@ class _CategoryLeaf extends StatelessWidget {
         // 底已是 surfaceRaised(灰阶顶档),hover 退一档到 surface
         // (仍在抽屉画布 surfaceSoft 之上);焦点/按压用 accent 低 alpha。
         hoverColor: tokens.surface,
-        splashColor: tokens.accent.withValues(alpha: 0.12),
-        highlightColor: tokens.accent.withValues(alpha: 0.10),
-        focusColor: tokens.accent.withValues(alpha: 0.10),
+        splashColor: AppStateLayer.splashOf(tokens.accent),
+        highlightColor: AppStateLayer.pressedOf(tokens.accent),
+        focusColor: AppStateLayer.focusOf(tokens.accent),
         child: Align(
           alignment: Alignment.center,
           child: Padding(

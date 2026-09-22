@@ -110,11 +110,11 @@ class PlayImmersiveSideSheet extends StatelessWidget {
                             onTap: onClose,
                             // hover / 按下 / 键盘焦点补全(只改覆盖色,不动尺寸)。
                             hoverColor: tokens.surfaceRaised,
-                            splashColor: tokens.accent.withValues(alpha: 0.12),
-                            highlightColor: tokens.accent.withValues(
-                              alpha: 0.16,
+                            splashColor: AppStateLayer.splashOf(tokens.accent),
+                            highlightColor: AppStateLayer.pressedOf(
+                              tokens.accent,
                             ),
-                            focusColor: tokens.accent.withValues(alpha: 0.24),
+                            focusColor: AppStateLayer.focusOf(tokens.accent),
                             child: Icon(
                               Icons.chevron_right_rounded,
                               size: 13,
