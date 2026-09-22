@@ -47,17 +47,21 @@ abstract final class AppOnVideo {
 /// 深浅两套主题下取同一套前景,故前景是主题无关常量(深底上的前景才是随主题
 /// 切换的 `ZishuTokens.textPrimary` 那类语义)。
 ///
-/// **已知对比度问题(既有取值,本轮只做同值换 token,未改数值)**:浅色主题的
-/// accent 是深紫 `#6A1B9A`,本类的 [text] / [glyph](黑系)压在其上对比度偏低;
-/// 浅色主题真正需要的是反白前景。是否按主题分套待裁决。
+/// **取值口径(2026-09-21 按实测对比度定,已裁决)**:
+/// - accent 底一律用 [white]。此前 logo 字形 / 头像图标用的是黑系(原 `glyph`),
+///   实测白前景在两种主题下都更优 —— 深色 accent `#7C4DFF`:白 4.81:1 vs 黑 4.36:1;
+///   浅色 accent `#6A1B9A`:白 9.39:1 vs 黑 **2.24:1**(后者属无障碍缺陷)。
+/// - 平台色块底用**平台色表按平台定义**的 `PlatformBrand.chipForeground`
+///   (web 真源 `--platform-{id}-chip-fg`:虎牙黄底深色、斗鱼橙底白色),不要用本类;
+///   只有平台未收录、底色回退到品牌金时才用 [text]。
 abstract final class AppOnBright {
-  /// 实心字形(纯黑):logo 兜底字「薯」等需要最高对比度的字形。
-  static const Color glyph = Color(0xFF000000);
-
-  /// 文字与线条图标(黑 87%,对齐 Material `black87`)。
+  /// 亮底(品牌金 `#F3D04E` 等)上的文字与线条图标(黑 87%,对齐 Material `black87`)。
+  ///
+  /// 仅用于**未收录平台的品牌金底**兜底:accent 底用 [white],平台色底用
+  /// `PlatformBrand.chipForeground`,两者都更精确。
   static const Color text = Color(0xDD000000);
 
-  /// 反白前景(纯白):强调色底上的 CTA 文字 / 开关滑块 / `colorScheme.onPrimary`。
+  /// 反白前景(纯白):accent 底上的字形/图标/CTA 文字 / 开关滑块 / `colorScheme.onPrimary`。
   static const Color white = Color(0xFFFFFFFF);
 }
 

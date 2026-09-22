@@ -60,9 +60,11 @@ class PlatformIcon extends StatelessWidget {
         : null;
     final color = _colors[id] ?? Theme.of(context).colorScheme.primary;
     // 字形前景:平台色表的约定档 —— YY 的黄底用深色字,其余品牌色底用白。
-    final glyphColor = id == 'yy'
-        ? PlatformBrandCatalog.chipForegroundDark
-        : PlatformBrandCatalog.chipForegroundLight;
+    // 字形前景取平台色表的**按平台定义**(与 PlatformBadge 同源),
+    // 不再在本文件写 `id == 'yy'` 这类特例。
+    final glyphColor =
+        PlatformBrandCatalog.byId(id)?.chipForeground ??
+        PlatformBrandCatalog.chipForegroundLight;
     final fallback = _labels[id] ?? (id.isEmpty ? '?' : id.substring(0, 1));
     final radius = BorderRadius.circular(size * 0.22);
 
@@ -120,11 +122,13 @@ class _AllPlatformIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const colors = [
-      Color(0xFFFF6A00),
-      Color(0xFFFFB800),
-      Color(0xFF00A1D6),
-      Color(0xFFFE2C55),
+    // 四象限 = 四个代表平台的品牌色;取平台色表的**图标/tab 家族**
+    // (`accentColor`,web `--platform-{id}`),不再写死色值。
+    // 注:哔哩在此用蓝 #00a1d6,与其角标粉 #fb7299 分属两个真源家族。
+    final colors = <Color>[
+      for (final id in const ['douyu', 'huya', 'bilibili', 'douyin'])
+        PlatformBrandCatalog.byId(id)?.accentColor ??
+            Theme.of(context).colorScheme.primary,
     ];
     return SizedBox(
       width: size,

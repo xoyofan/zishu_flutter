@@ -37,8 +37,10 @@ class PlatformBadge extends StatelessWidget {
           height: 1,
           fontWeight: FontWeight.w600,
           fontFamily: AppTypography.family,
-          // 彩色底上统一黑 87% 保证可读性
-          color: AppOnBright.text,
+          // 平台色块上的文字色取**平台色表的按平台定义**(web 真源
+          // `--platform-{id}-chip-fg`:虎牙黄底用深色、斗鱼橙底用白);
+          // 未收录站点回退到主题品牌金色底上的黑字。
+          color: brand?.chipForeground ?? AppOnBright.text,
         ),
       ),
     );

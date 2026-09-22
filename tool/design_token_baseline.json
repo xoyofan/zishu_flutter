@@ -35,10 +35,6 @@
     "lib/src/features/play/widgets/side_panel/side_panel_header.dart|raw_color|Colors.transparent": 1,
     "lib/src/features/search/views/search_view.dart|raw_color|Color(0x00000000)": 1,
     "lib/src/platforms/common/playback/media_kit_live_player.dart|raw_color|Color(0x00000000)": 1,
-    "lib/src/shared/presentation/widgets/compact_switch.dart|raw_color|Colors.transparent": 1,
-    "lib/src/shared/presentation/widgets/platform_icon.dart|raw_color|Color(0xFF00A1D6)": 1,
-    "lib/src/shared/presentation/widgets/platform_icon.dart|raw_color|Color(0xFFFE2C55)": 1,
-    "lib/src/shared/presentation/widgets/platform_icon.dart|raw_color|Color(0xFFFF6A00)": 1,
-    "lib/src/shared/presentation/widgets/platform_icon.dart|raw_color|Color(0xFFFFB800)": 1
+    "lib/src/shared/presentation/widgets/compact_switch.dart|raw_color|Colors.transparent": 1
   }
 }

@@ -44,7 +44,7 @@ class _UserAvatar extends ConsumerWidget {
             child: Icon(
               Icons.person_outline_rounded,
               size: 16,
-              color: AppOnBright.text,
+              color: AppOnBright.white,
             ),
           ),
           if (showLabels) ...[

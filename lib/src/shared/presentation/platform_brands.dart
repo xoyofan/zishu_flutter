@@ -7,13 +7,25 @@ class PlatformBrand {
     required this.id,
     required this.name,
     required this.color,
+    Color? accentColor,
     this.chipForeground = PlatformBrandCatalog.chipForegroundLight,
     this.browseSupported = true,
-  });
+  }) : accentColor = accentColor ?? color;
 
   final String id;
   final String name;
   final Color color;
+
+  /// 平台的**图标 / tab 强调色** —— 对齐 web `styles/theme.css:9-16` 的
+  /// `--platform-{id}` 家族。用于平台图标底色、顶栏平台 tab 的描边与光晕。
+  /// 未单独声明时回退到 [color]。
+  ///
+  /// **为什么是两个字段**:web 真源本身就是两个家族 ——
+  /// `--platform-{id}`（theme.css）供图标/tab/头像环，
+  /// `PLATFORM_BRAND_COLORS`（platformCatalog.ts 的 `bg`/`fg`）供角标/chip。
+  /// 哔哩两家族不同色（变体蓝 `#00a1d6` vs 角标粉 `#fb7299`）、斗鱼差 1/255
+  /// （`#ff6b00` vs `#ff6a00`）；混用就会串色。\n  /// 详见 `DESIGN.md` §2.3。
+  final Color accentColor;
 
   /// 平台色块(pill/chip)上的文字色。
   ///
@@ -50,12 +62,17 @@ abstract final class PlatformBrandCatalog {
     id: 'all',
     name: '全平台',
     color: Color(0xFFF3D04E),
+    // 「全平台」是品牌金底(亮底),web 无对应条目;按同族亮底的约定用深色字
+    // (与 yy / huya 同理),不能用默认的白字。
+    chipForeground: chipForegroundDark,
   );
 
   static const PlatformBrand douyu = PlatformBrand(
     id: 'douyu',
     name: '斗鱼',
     color: Color(0xFFFF6A00),
+    // 图标/tab 家族用 `--platform-douyu: #ff6b00`(与角标底 #ff6a00 差 1/255)。
+    accentColor: Color(0xFFFF6B00),
   );
 
   static const PlatformBrand huya = PlatformBrand(
@@ -70,6 +87,9 @@ abstract final class PlatformBrandCatalog {
     id: 'bilibili',
     name: '哔哩',
     color: Color(0xFFFB7299),
+    // 图标/tab 家族用 `--platform-bilibili: #00a1d6`(蓝);
+    // 角标底仍用 [color] 的粉 #fb7299。两者都是 web 真源,不可混用。
+    accentColor: Color(0xFF00A1D6),
   );
 
   static const PlatformBrand douyin = PlatformBrand(
@@ -83,6 +103,9 @@ abstract final class PlatformBrandCatalog {
     id: 'yy',
     name: 'YY',
     color: Color(0xFFFFD000),
+    // 对齐 web `platformCatalog.ts` 的 `yy: { bg: "#ffd000", fg: "#1a1a1a" }`
+    // (黄底用深色字)。此前漏了这一档,与 platform_icon 的兜底字形取值不一致。
+    chipForeground: chipForegroundDark,
   );
 
   static const PlatformBrand twitch = PlatformBrand(

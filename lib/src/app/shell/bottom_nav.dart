@@ -46,7 +46,7 @@ class _BottomNav extends StatelessWidget {
                   child: const Text(
                     '薯',
                     style: TextStyle(
-                      color: AppOnBright.glyph,
+                      color: AppOnBright.white,
                       fontSize: AppFontSize.subtitle,
                       fontWeight: FontWeight.w900,
                     ),

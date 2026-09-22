@@ -485,11 +485,11 @@ class _SideActionButton extends StatelessWidget {
       child: Material(
         color: background,
         shape: RoundedRectangleBorder(
-          borderRadius: AppRadius.allSm,
+          borderRadius: AppRadius.allPill,
           side: BorderSide(color: border),
         ),
         child: InkWell(
-          borderRadius: AppRadius.allSm,
+          borderRadius: AppRadius.allPill,
           onTap: onPressed,
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,

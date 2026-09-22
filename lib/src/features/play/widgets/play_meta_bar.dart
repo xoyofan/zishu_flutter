@@ -391,11 +391,11 @@ class _MetaActionButton extends StatelessWidget {
       child: Material(
         color: background,
         shape: RoundedRectangleBorder(
-          borderRadius: AppRadius.allSm,
+          borderRadius: AppRadius.allPill,
           side: BorderSide(color: border),
         ),
         child: InkWell(
-          borderRadius: AppRadius.allSm,
+          borderRadius: AppRadius.allPill,
           onTap: onPressed,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
