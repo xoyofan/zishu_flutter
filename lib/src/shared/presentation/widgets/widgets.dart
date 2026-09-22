@@ -11,3 +11,5 @@ export 'section_header.dart';
 export 'settings_slider_row.dart';
 export 'state_dot.dart';
 export 'translated_text.dart';
+// 追加在末尾(不打乱既有导出行顺序),降低与他路改动并行的合并冲突。
+export 'shimmer_skeleton.dart';

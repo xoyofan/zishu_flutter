@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:live_parser/live_parser.dart';
 
 import '../../../shared/presentation/design_tokens.dart';
-import '../../../shared/presentation/zishu_tokens.dart';
+import '../../../shared/presentation/widgets/widgets.dart';
 import 'room_card.dart';
 
 /// 自适应房间网格:对齐 SFVideoLive `RoomGrid.vue:120-155` 的**断点固定列数**
@@ -121,30 +121,20 @@ class _RoomGridState extends State<RoomGrid> {
   }
 }
 
-/// 网格末尾的加载中 footer,视觉上与卡片底色区分。
+/// 网格末尾的加载中 footer(清单 §3.6):卡片形状的骨架占位替换原加载圈。
+///
+/// footer 占一个网格格位,而 [SkeletonTile] 与格位里的房间卡同形等高
+/// (16:9 封面 + 两行文字条),所以"还在加载的那张"看起来就是卡片自身的
+/// 骨架,不再是一个孤立的转圈。
+///
+/// 原先与加载圈同排的「加载中…」文案改为读屏语义标签(骨架是纯图形,对
+/// 读屏不可见):加载时机/位置与替换前一致,无障碍提示不丢失。
 class _LoadingMoreFooter extends StatelessWidget {
   const _LoadingMoreFooter();
 
   @override
-  Widget build(BuildContext context) {
-    final tokens = context.tokens;
-    return Container(
-      alignment: Alignment.center,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: AppSpacing.lg,
-            height: AppSpacing.lg,
-            child: CircularProgressIndicator(
-              strokeWidth: 2,
-              color: tokens.accent,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.sm),
-          Text('加载中…', style: context.textCaption),
-        ],
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Semantics(
+    label: '加载中…',
+    child: const SkeletonTile(key: Key('room-grid-loading-more')),
+  );
 }
