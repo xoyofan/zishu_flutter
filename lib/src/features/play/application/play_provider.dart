@@ -149,11 +149,19 @@ class PlayController extends AsyncNotifier<PlayState> {
       settingsProvider.select((settings) => settings.preferredLineFormat.value),
     );
     final preferredQuality = _qualityOverride ?? settingsQuality;
+    final resolveWatch = Stopwatch()..start();
     final payload = await source.resolveRoom(
       site: params.site,
       roomIdOrUrl: params.roomId,
       preferredQuality: preferredQuality,
     );
+    resolveWatch.stop();
+    // 进房解析耗时落盘:此前只有失败才有日志,"打开慢"缺的正是这段度量。
+    PlaybackLog.write('resolve_ms', {
+      'ms': resolveWatch.elapsedMilliseconds,
+      'site': params.site,
+      'room': params.roomId,
+    });
 
     // generation fence:等待期间出现了更新的代际(retry 等),丢弃本次结果。
     if (generation != _generation) {
@@ -176,10 +184,33 @@ class PlayController extends AsyncNotifier<PlayState> {
       // 必须走 _open:首次进房就要装上恢复回调,否则签名平台地址过期后,
       // 播放器在放弃分支拿不到"重新解析"的新地址。
       _open(line, _fallbackLines(quality, line));
-      // 当前档先起播,其他档位后台预取,不阻塞首帧。
-      unawaited(_prefetchQualities(payload, source, prefetchToken));
+      // 首帧落地后才预取其他画质(pure_live 进房不做任何预取):开流握手的
+      // 1~3s 是最敏感窗口,此刻并发补档会与它抢带宽,表现为「打开很慢」。
+      unawaited(_prefetchAfterFirstFrame(payload, source, prefetchToken));
     }
     return next;
+  }
+
+  /// 等首个出帧事件后再启动画质预取。
+  ///
+  /// 保留本仓「切画质即开」的能力,但把时机推到首帧之后 —— 参考实现
+  /// (pure_live)在进房时根本不预取,先帧优先是它开流快的一个原因。
+  /// 首帧迟迟不来(15s 超时)则放弃预取:首帧都没来,切画质本就走懒取流。
+  Future<void> _prefetchAfterFirstFrame(
+    RoomPayload payload,
+    RoomSource source,
+    int prefetchToken,
+  ) async {
+    final player = ref.read(playerProvider);
+    try {
+      await player.snapshots
+          .firstWhere((snapshot) => snapshot.playing && !snapshot.buffering)
+          .timeout(const Duration(seconds: 15));
+    } on Object {
+      return; // 超时 / 流关闭:放弃预取,不阻塞任何路径。
+    }
+    if (prefetchToken != _prefetchToken || !ref.mounted) return;
+    unawaited(_prefetchQualities(payload, source, prefetchToken));
   }
 
   Future<void> _prefetchQualities(
@@ -385,7 +416,9 @@ class PlayController extends AsyncNotifier<PlayState> {
     int generation,
     int openToken,
   ) async {
-    await _applyRoomVolume(player);
+    // 音量套用不阻塞开流(对齐 pure_live:进房先开流):mpv 的 volume 是
+    // 进程级属性,通常先于首帧音频落地;开流后再补一次,校正快照与迟到回流。
+    unawaited(_applyRoomVolume(player));
     await player.open(line, fallbacks);
     if (!ref.mounted ||
         generation != _generation ||

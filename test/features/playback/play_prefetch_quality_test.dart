@@ -99,6 +99,12 @@ void main() {
     final first = await container.read(playControllerProvider(params).future);
     expect(first.line, isNotNull, reason: '首档必须立即有线路可播');
 
+    // 新契约:预取在**首帧之后**才启动(pure_live 进房不做任何预取,先帧优先
+    // —— 开流握手期间不抢带宽)。替身默认不出帧,这里补一次出帧驱动闸门。
+    player.emitSnapshot(
+      player.currentSnapshot.copyWith(playing: true, buffering: false),
+    );
+
     // 等后台预取把其余两档补齐(等待真实结果,而不是「已发起」)。
     await _until(() {
       final payload = container

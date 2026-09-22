@@ -117,6 +117,10 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   /// 见 [_settleHealthyWindow]。
   DateTime? _playingSince;
 
+  /// `_player.open` 发出的时刻;首个出帧事件时落盘 `open_to_first_frame`,
+  /// 用于定位「打开慢」到底慢在 mpv 起播还是前序环节。
+  DateTime? _openStartedAt;
+
   /// 最后一次**终局**错误的类别:用于自动重试耗尽后给出对症的处置建议。
   /// 刻意不存原始诊断文本 —— 那是 mpv 日志原文,其中大量条目是可自愈噪音。
   PlayerErrorKind _lastErrorKind = PlayerErrorKind.native;
@@ -280,6 +284,14 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     final retries = _stallRetries;
     // 健康播放起点:重复的 playing 事件不重置,免得连续抖动永远凑不满观察窗。
     _playingSince ??= DateTime.now();
+    final openedAt = _openStartedAt;
+    if (openedAt != null) {
+      _openStartedAt = null;
+      PlaybackLog.write('open_to_first_frame', {
+        'ms': DateTime.now().difference(openedAt).inMilliseconds,
+        'host': _currentLines.isEmpty ? null : _hostOf(_currentLines.first),
+      });
+    }
     if (retries > 0) {
       // 出帧即记:配合 reopen/recover 事件,日志里能直接量出每次中断到恢复的耗时。
       PlaybackLog.write('playing_ok', {'afterRetries': retries});
@@ -573,6 +585,8 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     // 同步自增代际:后续任何 await 回来后若代际已变,说明有更新的 open/stop
     // 覆盖了本次指令,直接作废(不写快照、不动计时器)。
     final myGen = ++_sourceGeneration;
+    // 度量生命周期队列等待:切房时前一个 stop 排在开流前面会直接推后首帧。
+    final requestedAt = DateTime.now();
     return _enqueueLifecycle(() async {
       if (myGen != _sourceGeneration) {
         PlaybackLog.write('open_superseded', {
@@ -581,6 +595,13 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
           'phase': 'queued',
         });
         return;
+      }
+      if (resetRetries) {
+        // 只记用户主动开流(自动重开走同一队列但无此信号意义)。
+        PlaybackLog.write('open_queue_wait', {
+          'ms': DateTime.now().difference(requestedAt).inMilliseconds,
+          'lines': [line, ...fallbacks].length,
+        });
       }
       // 进入开流:屏蔽底层事件,直到本次 open 落地再补发真实状态。
       _eventsFenced = true;
@@ -643,6 +664,8 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
               .map((item) => Media(item.url, httpHeaders: item.headers))
               .toList(growable: false),
         );
+        // 记下发时刻:首个出帧事件时落盘 open_to_first_frame。
+        _openStartedAt = DateTime.now();
         await _player.open(playlist, play: true);
       } catch (error) {
         // 被更新的指令顶掉:连错误都不该写(否则旧源的异常会覆写新房文案)。
@@ -713,12 +736,12 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       _stallTimer = null;
       _cancelHealthTimer();
       _playingSince = null;
+      _openStartedAt = null;
       _currentLines = const [];
       // 离房即重置恢复节流与重试记账:下一次进房从干净状态开始,
       // 而不是继承上一间的窗口 / 已放弃闩锁(否则重进同一间永不自动重连)。
       _lastRecoverAt = null;
       _stallRetries = 0;
-      _playingSince = null;
       _givenUp = false;
       _adHoldSince = null;
       _lastErrorKind = PlayerErrorKind.native;
