@@ -196,4 +196,39 @@ void main() {
       expect(registration.search, isNull);
     });
   });
+
+  group('InnerTube ANDROID_VR 兜底(2026-09-22 实测修复)', () {
+    test('必须下发 X-Goog-Visitor-Id,否则上游固定返回 LOGIN_REQUIRED', () async {
+      // 真机实测:不带头 → status=LOGIN_REQUIRED(reason "Sign in to confirm you're not a bot")、
+      // hlsManifestUrl 空;补上后曾出现 status=OK + 6 档 HLS + 分片 200。
+      // 该头是必要条件(IP 未被挑战时可用),但上游会按 IP 状态重新发起挑战 ——
+      // 因此本改动只是让兜底不再必然失败,不构成可靠主路径。
+      // 此前 WEB 分支发了这个头,ANDROID_VR 分支漏发 —— 于是兜底形同虚设。
+      final fake = FakeYoutubeApi()..playerResponse = {'streamingData': <String, Object?>{}};
+      final client = YoutubeClient(httpClient: fake);
+      final context = YoutubePageContext(
+        innertubeContext: const {
+          'client': {'clientName': 'WEB', 'visitorData': 'VISITOR_ABC_123'},
+        },
+        apiKey: 'TEST_KEY',
+      );
+
+      // 两个分支都拿不到 hls(WEB 已 SABR-only,ANDROID_VR 拿到空),但请求得发出去。
+      final hls = await resolveYoutubeInnerTubeHls(client, context, 'vid12345678');
+      expect(hls, isEmpty);
+
+      final playerRequests = fake.requests
+          .where((request) => request.url.path == '/youtubei/v1/player')
+          .toList();
+      expect(playerRequests, hasLength(2), reason: '先 WEB 再 ANDROID_VR 兜底');
+      final fallback = playerRequests.last;
+      expect(fallback.headers['X-Youtube-Client-Name'], '28');
+      expect(
+        fallback.headers['X-Goog-Visitor-Id'],
+        'VISITOR_ABC_123',
+        reason: 'ANDROID_VR 缺此头会被上游判 LOGIN_REQUIRED,兜底永远拿不到地址',
+      );
+      client.close();
+    });
+  });
 }

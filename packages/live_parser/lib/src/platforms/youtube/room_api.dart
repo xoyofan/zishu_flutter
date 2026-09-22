@@ -284,6 +284,14 @@ Future<String> _innertubePlayerHls(
           '(Linux; U; Android 12L; eureka-user Build/SQ3A.220605.009.A1) gzip',
       'X-Youtube-Client-Name': '28',
       'X-Youtube-Client-Version': '1.60.19',
+      // 必需:不带这个头,ANDROID_VR 分支固定返回 LOGIN_REQUIRED(reason
+      // "Sign in to confirm you're not a bot"),hlsManifestUrl 为空 —— 兜底形同虚设。
+      // 2026-09-22 隔离实测:补上后曾出现 status=OK + 6 档 HLS + 分片 200(250~450ms,
+      // 无需 PO Token/Deno);但同一 IP 连续请求后被重新挑战(又变 LOGIN_REQUIRED),
+      // 说明这是**机会性**提升而非可靠路径:上游按 IP 状态决定是否要求 bot 校验。
+      // 主路径仍是 dlp(yt-dlp+Deno 能解挑战);本头只是让兜底不再必然失败。
+      // visitorData 取自 watch 页的 INNERTUBE_CONTEXT。
+      if (visitorData.isNotEmpty) 'X-Goog-Visitor-Id': visitorData,
     },
   );
 }
