@@ -9,10 +9,11 @@ description: 把 SFVideoLive/web 的 Vue 组件与视图移植为 zishu_flutter 
 
 ## 开始前必读(按需加载,不要跳过)
 
-1. `F:\project\zishu_flutter\AGENTS.md` — 目录与依赖边界(新代码在 `lib/src/`,禁止 import `lib/legacy/`)。
-2. `F:\project\zishu_flutter\docs\implementation-plan.md` 第 6 节 — 视觉基线、路由清单、页面功能目标。
-3. 待移植的 Vue 源文件(views + 它 import 的 components/composables/styles)。
-4. `F:\project\zishu_flutter\lib\src\shared\presentation\` — 已有 design tokens,禁止在 Widget 里写裸色值/裸数字。
+1. `F:\project\zishu_flutter\DESIGN.md` — **视觉唯一真源**(色板/字号/间距/圆角/阴影/状态矩阵/响应式)。
+2. `F:\project\zishu_flutter\AGENTS.md` — 目录与依赖边界(新代码在 `lib/src/`,禁止 import `lib/legacy/`)。
+3. `F:\project\zishu_flutter\docs\implementation-plan.md` 第 6 节 — 路由清单、页面功能目标。
+4. 待移植的 Vue 源文件(views + 它 import 的 components/composables/styles)。
+5. `F:\project\zishu_flutter\lib\src\shared\presentation\` — 已有 design tokens,禁止在 Widget 里写裸色值/裸数字。
 
 ## 工作流
 
@@ -40,16 +41,20 @@ description: 把 SFVideoLive/web 的 Vue 组件与视图移植为 zishu_flutter 
 | composable(useXxx) | `ChangeNotifier`/`ValueNotifier` controller,Widget 只读状态 |
 | `ref/reactive` 状态 | controller 字段 + `notifyListeners` 或 `ValueListenableBuilder` |
 
-## 视觉 token 基线(SFVideoLive 深色主题)
+## 视觉 token:一律以根 DESIGN.md 为准
 
-```text
-页面背景 #181818   elevated surface #1f1f1f   soft surface #141414 / #2a2a2a
-品牌金 #f3d04e     主文字 white 87%          次文字 white 55%
-边框 #3a3a3a      圆角 4/8/12px 三级         顶部导航高约 44px,底部导航约 56px
-断点 640/768/1024/1366/1920   平台品牌色:斗鱼橙、虎牙黄、B站粉蓝、抖音红、Twitch 紫
-```
+本 skill **不自带色板**,避免与真源漂移。开工前读 `F:\project\zishu_flutter\DESIGN.md`,
+再从 `lib/src/shared/presentation/` 取证:`design_tokens.dart`(`AppColors` / `AppSpacing` /
+`AppRadius` / `AppTypography` / `AppMotion` / `AppElevation` / `AppFocus` / `AppOnVideo` /
+`AppControls` / `AppDirectoryDrawer` / `AppRoomGrid`)、`zishu_tokens.dart`(`ZishuTokens`
+深浅两套实例 + `context.tokens` / `context.textTitle` 等扩展)、`platform_brands.dart`
+(`PlatformBrandCatalog`)、`app_theme.dart`(`ZishuTheme`,浅色同步、深色为 Windows 验收基线)。
 
-落点:`lib/src/shared/presentation/` 下 `AppColors`、`AppSpacing`、`AppRadius`、`AppTypography`、`AppMotion`、`PlatformBrandCatalog` + `ZishuTheme`(浅色同步,深色为 Windows 验收基线)。
+两处高频错误:
+- 控件强调色是**品牌紫**(`ZishuTokens.accent`);金黄 `#f3d04e`(`brand`)只用于收藏星等对齐 web 的功能性颜色。
+- 直播中标识是**绿**(`liveBadge`);播放页「关注」按钮才是红系(`playFollow*`),两者不冲突。
+
+改完必须过裸值守卫:`dart run tool/check_design_tokens.dart`(裸色值/裸阴影/裸字号/裸圆角都会被拦)。
 
 ## 响应式导航收缩规范(源自 SFVideoLive 实测行为)
 
