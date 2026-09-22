@@ -102,7 +102,7 @@ dart run tool/check_design_tokens.dart --update-baseline
 | `screenshots/zishu/app_*.log` | exe 运行日志 | ❌(`*.log` 全局忽略) |
 | `sfvideo_*.mjs` | 参考截图抓取脚本(Playwright 无头) | ✅ |
 | `extra_screenshots.mjs` `test_*.mjs` `quick_test.mjs` | 参考站多视口截图辅助 | ✅ |
-| `check.ps1` | 全量门禁:pub get → analyze → design token guard → test → build web | ✅ |
+| `check.ps1` | 全量门禁:pub get(根 + live_parser + speech2zh)→ analyze → design token guard → test → build web | ✅ |
 | `check_design_tokens.dart` | 裸值守卫（裸色值/阴影/字号/圆角），比对 `design_token_baseline.json` | ✅ |
 | `design_token_baseline.json` | 裸值存量基线（与行号无关的稳定 key） | ✅ |
 | `build-web.ps1` | legacy Web UI 构建(build/web) | ✅ |

@@ -24,6 +24,7 @@
 - 总体实施基线见 `docs/implementation-plan.md`，架构概要见 `docs/architecture.md`。
 - UI 与解析双轨通过稳定 Dart models/interfaces 和 JSON fixtures 解耦，禁止 UI 直接消费松散 `Map<String, dynamic>`。
 - 每次结构性修改至少运行 `flutter analyze` 和相关测试；Windows 主链路修改还需运行 `flutter build windows --debug -t lib/main.dart`。
+- `packages/live_parser` 与 `packages/speech2zh` 是**独立 package**（本仓库不是 pub workspace，也没有 melos）：`flutter analyze` 前必须分别在各自目录执行 `pub get`，否则 analyzer 会在 `packages/**/test` 上报出约 3000 个假 error（`uri_does_not_exist` / `undefined_function`），看起来像代码坏了。`tool/check.ps1` 已自动包含这两步。
 
 ## 视觉真源
 - 视觉真源是项目根 `DESIGN.md`（格式取自 Google Stitch 的 DESIGN.md）：色板、字号阶梯、间距/圆角、elevation、组件状态矩阵、响应式断点、Do's and Don'ts 都在那里。

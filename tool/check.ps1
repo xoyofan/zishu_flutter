@@ -1,15 +1,20 @@
 [CmdletBinding()]
 param(
     # Full path to flutter.bat. Override with -Flutter or $env:ZISHU_FLUTTER.
-    [string] $Flutter = 'D:\flutter-sdk\flutter-3.47.0\flutter\bin\flutter.bat'
+    [string] $Flutter = 'D:\flutter-sdk\flutter-3.47.0\flutter\bin\flutter.bat',
+
+    # Full path to dart.bat (guard / 子包 pub get 需要). 缺省取 flutter.bat 同目录下的 dart.bat;
+    # 可用 -Dart 或 $env:ZISHU_DART 覆盖.
+    [string] $Dart = ''
 )
 
-# One-shot gate: pub get -> analyze -> test -> build legacy web.
+# One-shot gate: pub get(根 + 2 个子包) -> analyze -> guard -> test -> build legacy web.
 # Any step failing stops the run immediately with that step's exit code.
 
 $ErrorActionPreference = 'Stop'
 
 if ($env:ZISHU_FLUTTER) { $Flutter = $env:ZISHU_FLUTTER }
+if ($env:ZISHU_DART) { $Dart = $env:ZISHU_DART }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $repoRoot
@@ -25,11 +30,30 @@ if (-not (Test-Path -LiteralPath $Flutter)) {
     exit 1
 }
 
+# dart.bat 与 flutter.bat 在同一目录; 不依赖 PATH, 也不靠调用方预先激活环境.
+if (-not $Dart) { $Dart = Join-Path (Split-Path -Parent $Flutter) 'dart.bat' }
+if (-not (Test-Path -LiteralPath $Dart)) {
+    Write-Host "[check] dart.bat not found: $Dart" -ForegroundColor Red
+    Write-Host '[check] pass -Dart <path> or set ZISHU_DART.' -ForegroundColor Red
+    Pop-Location
+    exit 1
+}
+
 $steps = @(
     @{ Title = 'flutter pub get';   Args = @('pub', 'get') },
+
+    # packages/ 下是**独立 package**(本仓库不是 pub workspace, 也没有 melos)。
+    # 根 pub get 只把两个子包当 path 依赖解析, 不会为它们自己生成 .dart_tool,
+    # 也不会解析它们自己的 dev_dependencies(如 test)。缺了这两步时,
+    # fresh clone 上跑 analyze 会在本仓库报出约 3000 个假 error
+    # (packages/**/test 的 uri_does_not_exist / undefined_function),
+    # 看起来像代码坏了, 实际只是子包没解析依赖。
+    @{ Title = 'pub get (packages/live_parser)'; Command = $Dart; WorkingDirectory = 'packages/live_parser'; Args = @('pub', 'get') },
+    @{ Title = 'pub get (packages/speech2zh)';   Command = $Dart; WorkingDirectory = 'packages/speech2zh';   Args = @('pub', 'get') },
+
     @{ Title = 'flutter analyze';   Args = @('analyze') },
     # 裸值守卫(裸色值/裸阴影/裸字号/裸圆角): 纯 Dart 脚本, 用 Command 覆盖可执行文件。
-    @{ Title = 'design token guard'; Command = 'dart'; Args = @('run', 'tool/check_design_tokens.dart') },
+    @{ Title = 'design token guard'; Command = $Dart; Args = @('run', 'tool/check_design_tokens.dart') },
     @{ Title = 'flutter test';      Args = @('test') },
     @{ Title = 'flutter build web (legacy UI)'; Args = @('build', 'web', '--target', 'lib/legacy/main_web.dart') }
 )
@@ -41,6 +65,18 @@ foreach ($step in $steps) {
 
     # 步骤可用可选的 Command 覆盖可执行文件; 缺省仍是 flutter.bat, 老步骤行为不变。
     $cmd = if ($step.Command) { $step.Command } else { $Flutter }
+
+    # 步骤可指定子目录(子包各自的 pub get / test 必须在自己目录里跑)。
+    $stepDir = if ($step.WorkingDirectory) { Join-Path $repoRoot $step.WorkingDirectory } else { $null }
+    if ($stepDir) {
+        if (-not (Test-Path -LiteralPath $stepDir)) {
+            Write-Host "-------- [$($step.Title)] SKIPPED: 目录不存在 $stepDir --------" -ForegroundColor Red
+            $failed = $true
+            $exitCode = 1
+            break
+        }
+        Push-Location $stepDir
+    }
 
     $previousPreference = $ErrorActionPreference
     $nativePreferenceVariable = Get-Variable PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue
@@ -54,6 +90,7 @@ foreach ($step in $steps) {
         & $cmd @($step.Args)
         $exitCode = $LASTEXITCODE
     } finally {
+        if ($stepDir) { Pop-Location }
         if ($nativePreferenceVariable) { $PSNativeCommandUseErrorActionPreference = $previousNativePreference }
         $ErrorActionPreference = $previousPreference
     }
@@ -72,5 +109,5 @@ Pop-Location
 if ($failed) { exit $exitCode }
 
 Write-Host ''
-Write-Host 'check: all gates passed (pub get / analyze / test / legacy web build)' -ForegroundColor Green
+Write-Host 'check: all gates passed (pub get x3 / analyze / design token guard / test / legacy web build)' -ForegroundColor Green
 exit 0

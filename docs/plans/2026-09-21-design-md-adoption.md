@@ -223,7 +223,7 @@ D3 完成定义：skill 与 `AGENTS.md` 都指向根 `DESIGN.md`，且不再重�
 | 项 | 计划假设 | 实测 | 说明 |
 |---|---|---|---|
 | `flutter analyze` | 0 issue | **0 error + 11 info** | info 全部是 `test/flutter_test_config.dart` 的 `avoid_return_types_on_setters` |
-| 首次 analyze | — | **3006 issues（2995 error）** | `packages/live_parser`、`packages/speech2zh` 未 `pub get`，`uri_does_not_exist`/`undefined_function` 刷屏；子包 `pub get` 后归零 |
+| 首次 analyze | — | **3006 issues（2995 error）** | `packages/live_parser`、`packages/speech2zh` 未 `pub get`，`uri_does_not_exist`/`undefined_function` 刷屏；子包 `pub get` 后归零。**已修复根因**：`tool/check.ps1` 现自动为两个子包各跑一次 `pub get`（实测：去掉子包 `.dart_tool` 复现 3131 issues，恢复后 0 issue） |
 | `flutter test` | 未知 | **677 通过 / 1 失败** | 唯一失败 `test/ui/workflows/latency_test.dart`（bilibili 首帧进房耗时，网络相关；单独重跑通过） |
 | T1（error 色 + 动效） | 待处理 | **早已完成** | `design_tokens.dart` 已是 `#E55050` / 150ms / 250ms / `Cubic(0.16,1,0.3,1)` |
 | T5（6 张 golden） | 失败 0.97%–1.26% | **全部通过** | 看板漂移，已按此回填 |
