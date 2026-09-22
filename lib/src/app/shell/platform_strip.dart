@@ -265,7 +265,7 @@ class _PlatformTabs extends StatelessWidget {
                             ),
                             borderRadius: AppRadius.allSm,
                             boxShadow: currentSite == brand.id
-                                ? AppElevation.accentGlow(brand.accentColor)
+                                ? AppElevation.accentGlow(brand.color)
                                 : null,
                           ),
                           child: PlatformIcon(id: brand.id, size: 28),

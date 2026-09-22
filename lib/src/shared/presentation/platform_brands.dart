@@ -7,25 +7,24 @@ class PlatformBrand {
     required this.id,
     required this.name,
     required this.color,
-    Color? accentColor,
     this.chipForeground = PlatformBrandCatalog.chipForegroundLight,
     this.browseSupported = true,
-  }) : accentColor = accentColor ?? color;
+  });
 
   final String id;
   final String name;
-  final Color color;
-
-  /// 平台的**图标 / tab 强调色** —— 对齐 web `styles/theme.css:9-16` 的
-  /// `--platform-{id}` 家族。用于平台图标底色、顶栏平台 tab 的描边与光晕。
-  /// 未单独声明时回退到 [color]。
+  /// 平台品牌色。**单一真源**:对齐 web `config/platformCatalog.ts` 的
+  /// `PLATFORM_BRAND_COLORS[id].bg`。
   ///
-  /// **为什么是两个字段**:web 真源本身就是两个家族 ——
-  /// `--platform-{id}`（theme.css）供图标/tab/头像环，
-  /// `PLATFORM_BRAND_COLORS`（platformCatalog.ts 的 `bg`/`fg`）供角标/chip。
-  /// 哔哩两家族不同色（变体蓝 `#00a1d6` vs 角标粉 `#fb7299`）、斗鱼差 1/255
-  /// （`#ff6b00` vs `#ff6a00`）；混用就会串色。\n  /// 详见 `DESIGN.md` §2.3。
-  final Color accentColor;
+  /// 图标底色、顶栏 tab 描边/光晕、封面角标、侧栏标签都用这一个值 ——
+  /// web 也是同一份:启动时 `initPlatformBrandVars()`（main.js:57）把
+  /// `info.bg` 内联注入 `--platform-{id}` / `-chip-bg` / `--sidebar-tag-{id}-bg`,
+  /// **覆盖** theme.css/main.css 里的静态同名变量。
+  ///
+  /// 因此 theme.css:12 的 `--platform-bilibili: #00a1d6`（蓝）是**被覆盖的旧值**，
+  /// 不是第二个真源：哔哩实渲染色是色表里的 **粉 `#fb7299`**。
+  /// 同理斗鱼的静态 `#ff6b00` 也被 `#ff6a00` 覆盖。详见 `DESIGN.md` §2.3。
+  final Color color;
 
   /// 平台色块(pill/chip)上的文字色。
   ///
@@ -71,8 +70,6 @@ abstract final class PlatformBrandCatalog {
     id: 'douyu',
     name: '斗鱼',
     color: Color(0xFFFF6A00),
-    // 图标/tab 家族用 `--platform-douyu: #ff6b00`(与角标底 #ff6a00 差 1/255)。
-    accentColor: Color(0xFFFF6B00),
   );
 
   static const PlatformBrand huya = PlatformBrand(
@@ -87,9 +84,6 @@ abstract final class PlatformBrandCatalog {
     id: 'bilibili',
     name: '哔哩',
     color: Color(0xFFFB7299),
-    // 图标/tab 家族用 `--platform-bilibili: #00a1d6`(蓝);
-    // 角标底仍用 [color] 的粉 #fb7299。两者都是 web 真源,不可混用。
-    accentColor: Color(0xFF00A1D6),
   );
 
   static const PlatformBrand douyin = PlatformBrand(

@@ -122,12 +122,12 @@ class _AllPlatformIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 四象限 = 四个代表平台的品牌色;取平台色表的**图标/tab 家族**
-    // (`accentColor`,web `--platform-{id}`),不再写死色值。
-    // 注:哔哩在此用蓝 #00a1d6,与其角标粉 #fb7299 分属两个真源家族。
+    // 四象限 = 四个代表平台的品牌色;取平台色表(唯一真源 `color`),不写死。
+    // 注:哔哩在此是**粉** `#fb7299` —— web 启动时把 platformCatalog 的 bg
+    // 注入并覆盖了 theme.css 里旧的蓝 #00a1d6(详见平台色表 `color` 的注释)。
     final colors = <Color>[
       for (final id in const ['douyu', 'huya', 'bilibili', 'douyin'])
-        PlatformBrandCatalog.byId(id)?.accentColor ??
+        PlatformBrandCatalog.byId(id)?.color ??
             Theme.of(context).colorScheme.primary,
     ];
     return SizedBox(
