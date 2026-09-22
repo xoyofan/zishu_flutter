@@ -14,11 +14,11 @@ void main() {
   };
 
   group('统一缓冲配置(对齐 pure_live)', () {
-    test('前向缓冲保持 32MiB / 2s 预读 / 60s 封顶', () {
+    test('前向缓冲保持 pure_live 的 32MiB / 2s 预读配置', () {
       final properties = asMap();
       expect(properties['demuxer-max-bytes'], '33554432');
       expect(properties['demuxer-readahead-secs'], '2');
-      expect(properties['cache-secs'], '60');
+      expect(properties.containsKey('cache-secs'), isFalse);
     });
 
     test('回看缓冲保持 4MiB 有界', () {
@@ -53,8 +53,8 @@ void main() {
       expect(properties['demuxer-lavf-analyzeduration'], '2');
       expect(properties['force-seekable'], 'yes');
       expect(properties['hwdec-software-fallback'], '1');
-      expect(properties['video-sync'], 'audio');
       expect(properties['volume-max'], '100');
+      expect(properties.containsKey('video-sync'), isFalse);
     });
 
     test('代理仍按当前线路主机在 open 前重设', () {

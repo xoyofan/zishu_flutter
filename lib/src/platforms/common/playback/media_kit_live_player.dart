@@ -126,23 +126,14 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   /// 可被单测直接断言(VM 测试无法实例化 NativePlayer)。
   ///
   /// 缓冲上限的语义与取值依据(mpv 手册,DOCS/man/options.rst):
-  /// - `cache-secs=60`:「How many seconds of audio/video to prefetch if the
-  ///   cache is active … Setting this option is usually only useful for
-  ///   limiting readahead」—— cache 激活(网络流默认激活)时以**秒**为单位的
-  ///   前向预读上限;默认值极高(实际由字节顶兜底),显式设 60 即「回放缓冲
-  ///   约 60s 封顶」,与 web 真源 hls.js `backBufferLength: 60`(SFVideoLive
-  ///   commit 7515cff,默认无上限导致长时观看内存持续涨)对齐。它与
-  ///   `demuxer-readahead-secs` 取较大者生效(设 60 覆盖 2s 只放宽数值,
-  ///   真正封顶靠字节顶)。
   /// - `demuxer-max-bytes=33554432`(32 MiB):「This controls how much the
   ///   demuxer is allowed to buffer ahead … The demuxer will stop reading
   ///   additional packets as soon as one of the limits is reached」—— 前向
-  ///   字节硬顶;高码率(≥4.5 Mbps)下先于 60s 到达,内存上限约 32 MiB。
+  ///   字节硬顶;高码率(≥4.5 Mbps)下先于默认预读上限到达,内存上限约 32 MiB。
   /// - `demuxer-max-back-bytes=4194304`(4 MiB):「This controls how much
   ///   past data the demuxer is allowed to preserve … there is no control how
   ///   many seconds are actually cached」—— 已播(回看)缓冲**只有字节上限、
-  ///   无秒级控制**,故 60s 语义无法落在它上面;4 MiB 本就封顶(总缓存用量被
-  ///   手册限定为前向+回退之和),比真源的 60s 回看余量更省内存,不放大。
+  ///   无秒级控制**,4 MiB 有界即可。
   static const List<(String, String)> kLiveTuningProperties = [
     ('force-seekable', 'yes'),
     (
@@ -153,15 +144,10 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     ('demuxer-lavf-analyzeduration', '2'),
     ('network-timeout', '15'),
     ('hwdec-software-fallback', '1'),
-    // video-sync=audio:直播以音频为同步基准(对齐 pure_live 的
-    // media_kit_video/windows/video_output.cc),避免视频按显示时钟追帧
-    // 造成的周期性小回退(观感为"回跳")。
-    ('video-sync', 'audio'),
     ('volume-max', '100'),
     ('demuxer-max-bytes', '33554432'),
     ('demuxer-max-back-bytes', '4194304'),
     ('demuxer-readahead-secs', '2'),
-    ('cache-secs', '60'),
   ];
 
   /// 恢复重解析的节流策略:避免"重试→恢复→重试"高速空转。
