@@ -95,7 +95,9 @@ UI 文件里写死 `AppColors.*` 会被 `test/ui/light_theme_test.dart` 的静�
 配 `BackdropFilter` sigma ≤ `AmbientBlur.maxSigma`（顶栏 `navSigma` 16 / 侧栏
 `panelSigma` 12）。取色一律走 `AmbientGlass.tintOf(context, tokens.surface)`，不在
 Widget 里散写 alpha；全站只两处（`top_nav` + 播放页侧栏），不做全站 surface
-毛玻璃（清单 §4「明确不做」）。
+毛玻璃（清单 §4「明确不做」）。批1 起顶栏改走**薄玻璃档**
+`AmbientBlur.glassThinAlpha = 0.55`（背后由 Aurora 色团兜底，见 §2.4）；
+85% 档保留给播放页侧栏 / 沉浸面板。两档都经 `tintOf` 取，不散写。
 
 ### 2.2 浅色主题（同步维护，非验收基线）
 
@@ -144,6 +146,65 @@ Widget 里散写 alpha；全站只两处（`top_nav` + 播放页侧栏），不�
 其余用白；“全平台”是品牌金底、web 无对应条目，按同族亮底用深色。禁止改成
 “按背景亮度自动算”或“统一黑 87%”：前者会在橙色上给出深色字、后者会在黄/金底上
 给出低对比度白字，两者都与真源不符。
+
+### 2.4 Aurora 氛围背景（批1）
+
+真源：`preview/glass-preview.html` Demo F（用户拍板默认值）。四层结构 ——
+① wash 全屏平台色薄雾 → ② 团1 平台色大团（左上主导）→ ③④ accent / 平衡色
+角落点缀，另叠 grain 噪点覆层。token 单一来源 `AmbientAurora`
+（`design_tokens.dart`），**超上限即违规**：
+
+| 档位 | 值 | 语义 |
+|---|---|---|
+| `AmbientAurora.washAlpha` | 0.2（上限 0.25） | ① 全屏平台色薄雾：铺满窗口背景（顶栏/卡片底下全部），平台色「占据大部分」的第一层 |
+| `AmbientAurora.primaryBlobAlpha` | 0.78（上限 0.8） | ② 团1 平台色大团：880×520 级、左上主导 |
+| `AmbientAurora.accentBlobAlpha` | 0.4（上限 0.5） | ③ 团2 = 产品 accent 紫，右上角点缀，**切平台不变**（产品家族色） |
+| `AmbientAurora.balanceBlobAlpha` | 0.34（上限 0.4） | ④ 团3 平衡色，右下角点缀（人工配对，黄/橙亮底平台必配冷色对冲） |
+| `AmbientAurora.grainAlpha` | 0.06（上限 6%） | grain 噪点覆层：防渐变 banding + 提质感 |
+| `AmbientAurora` 色团软边 | RadialGradient 径向渐变 | 中心→边缘 alpha 衰减的软光团；曾用 ImageFilter.blur σ36（切平台动画期逐帧卷积掉帧）已弃用，**不再设 σ token** |
+| `AmbientBlur.glassThinAlpha` | 0.55 | 薄玻璃档：顶栏 / 内容卡等 aurora 兜底场景（透出率 45%） |
+| `AmbientCardGlass.border` / `borderHover` | 白 9% / 白 22% | 内容卡 hairline 边框（常态 / hover 加亮） |
+
+颜色来源（单一真源，不新造色值）：
+
+- **团1** = 平台品牌色(§2.3 真源 `PlatformBrandCatalog.byId(site)?.color`);
+  **聚合页 `all` 与未收录站点没有平台色语义,取 `tokens.accent`**(品牌金
+  大面积铺满发「土黄」,golden 实测;且与预览确认的默认态团1紫一致),
+  只换色不换参数。
+- **团2** = `context.tokens.accent`，固定不随平台变；必须由调用点经
+  `AmbientAuroraPalette.forSite(site, accent: …, fallbackBrand: …)` 传入，
+  **禁止在 Palette / token 里硬编码 accent 或品牌金**。
+- **团3** = `AmbientAuroraPalette` 内 12 平台人工配对表；黄/橙等亮底平台
+  必配冷色（all 金→青 `#00D2D3`、斗鱼橙→青、虎牙黄→ `#48DBFB`、
+  YY 黄→ `#54A0FF`），冷色平台配暖色点缀（SOOP/iptv→ 粉/橙）。
+
+动效与降级:平台切换直接替换背景缓存，色团位置保持静态，避免平台切换 / 网格
+滚动时持续请求全窗口合成帧。背景不建立持续动画，也不散写
+`MediaQuery.disableAnimations` 判定。
+
+**浅色主题不渲染 aurora**(`Theme.of(context).brightness != dark` 时整层
+直出空):wash 0.2 会把浅色界面洗成米黄(golden 实测),aurora 是深色基线
+的专属氛围层;浅色主题保持原纯色背景。
+
+薄玻璃分工：`glassThinAlpha = 0.55` 给**顶栏等 aurora 兜底**场景（背景有
+色团可透，需 45% 透出率才看得见玻璃）；`glassSurfaceAlpha = 0.85` 保留给
+清单 3.2 的侧栏 / 沉浸面板（底下是视频，15% 透出已够）。
+
+**内容卡薄玻璃（批3）**：`RoomCard` / `AnchorLiveCard` / `PlayRoomCard` /
+`FollowEntryCard` 四类卡统一 —— 底色 `surface` 薄档 55%（经
+`AmbientGlass.tintOf`，透出 aurora 平台色）+ `AmbientCardGlass` hairline
+边框（常态 / hover 加亮）；常态不铺大面积投影，hover 沿用 §4.2 清单 2.1（−2px + cardHover 发光），**底色
+hover 不再抬实心 `surfaceRaised`**（玻璃底保持，反馈 = 边亮 + 发光 + 抬升，
+覆盖 §4.2「卡片 hover 底色抬到 surfaceRaised」条款）。**不加
+`BackdropFilter`**：卡片背后是 aurora 软光（无细节），再 blur 视觉增益≈0，
+而网格 10+ 卡每卡一层逐帧卷积是性能地雷 —— 半透明底即可透出平台色。
+
+**明确不做（D 档，防蔓延）**：
+
+- ❌ 弹幕列表 / 正文文字底下铺玻璃（可读性优先）。
+- ❌ 实心列表行（时间线等）逐个玻璃化。
+- ❌ 12 个平台各配一套 aurora 参数 —— 统一 token，只换团1色。
+- ❌ shimmer 骨架 / 登录表单等静态功能性 UI 玻璃化。
 
 ---
 
@@ -423,8 +484,9 @@ golden 差 2074px，整块底色/描边都变）。需要更明显的交互态�
 逐字搬家而来，**不得改动数值**，否则 golden 会漂。
 
 氛围轨（`ui/ambient-polish` 清单 §1）另有 **`AmbientGlow` 三档**（同在
-`design_tokens.dart`），是 accent 派生的**外发光**而非投影。两组共七档一表登记
-（`AmbientGlow` 行的格式仿 `accentGlow` 行）：
+`design_tokens.dart`），是 accent 派生的**外发光**而非投影；批3 再增
+内容卡不新增常态投影档：网格卡片数量多，常态阴影会增加栅格化与合成成本；hover 只使用已有 `AmbientGlow.cardHover`。两组共七档一表登记
+（格式仿 `accentGlow` 行）：
 
 | 档位 | 值 | 语义 |
 |---|---|---|
@@ -438,9 +500,10 @@ golden 差 2074px，整块底色/描边都变）。需要更明显的交互态�
 
 原则：
 
-- **阴影/发光只用这七档**（`AppElevation` 四档 + `AmbientGlow` 三档），禁止在 Widget 里新写 `BoxShadow(...)`（守卫脚本会拦）；发光一律经 `AmbientGlow.*` helper 由 accent 派生。
+- **阴影/发光只用这七档**（`AppElevation` 四档 + `AmbientGlow` 三档），禁止在 Widget 里新写 `BoxShadow(...)`（守卫脚本会拦）；内容卡常态不新增阴影档，hover 发光一律经 `AmbientGlow.*` helper 由 accent 派生。
 - 毛玻璃 `BackdropFilter` 的 sigma 上限 `AmbientBlur.maxSigma = 20`（Windows 性能约束），**超限即违规**；具体用点的 sigma 必须 ≤ 本值且取自 token。
-- 毛玻璃用点档位：`AmbientBlur.navSigma = 16`（顶栏，清单 3.1）、`AmbientBlur.panelSigma = 12`（侧栏 / 沉浸侧滑面板，清单 3.2）；底色透明度 `AmbientBlur.glassSurfaceAlpha = 0.85`（`surface` 85%，清单 3.1）。两档 sigma 均 ≤ `maxSigma`，且不得在 Widget 里手写裸数字。
+- 毛玻璃用点档位：`AmbientBlur.navSigma = 16`（顶栏，清单 3.1）、`AmbientBlur.panelSigma = 12`（侧栏 / 沉浸侧滑面板，清单 3.2）；底色透明度分两档 —— 薄档 `glassThinAlpha = 0.55`（顶栏等 aurora 兜底场景，批1）、厚档 `glassSurfaceAlpha = 0.85`（`surface` 85%，清单 3.1/3.2 侧栏面板）。两档 sigma 均 ≤ `maxSigma`，且不得在 Widget 里手写裸数字。
+- Aurora 氛围背景（`AmbientAurora`：wash / 三团 alpha、静态背景、grain）登记在 §2.4，**不是阴影不入本节档位表**；各项 alpha 的上限即 §2.4 表中值，超限即违规（色团软边为 RadialGradient，无 σ token）。
 - 壳层顶部光带 `AmbientGlow.topBandAlpha = 0.06`（清单 3.4，**上限即 6%**）：它是 `top_nav` 下沿的**渐变底**（accent 由全透明渐入 6%），不是外发光，故不配 helper、只给颜色本体常量。
 - 抬升层级用"底色档位"表达优先于加大阴影：`surfaceSoft` < `background` < `surface` < `surfaceRaised`。
 - 不用 Material `Card` 默认 elevation（`app_theme.dart` 已置 0）。
@@ -467,6 +530,7 @@ golden 差 2074px，整块底色/描边都变）。需要更明显的交互态�
 - ❌ 把播放器 / 重试 / 选线状态机放进 UI 层；播放统一走 `LivePlayer` 抽象 + media-kit adapter。
 - ❌ 用 `Map<String, dynamic>` 直接喂 UI；必须经过 `shared/domain` 的稳定 model。
 - ❌ 在一个项目里混用两套外部品牌的设计系统（`awesome-design-md` 一次只选一套，且只取结构不取品牌色 / 字体 / logo）。
+- ❌ 把 Aurora 色团 / 玻璃铺满所有 surface（D 档明确不做清单见 §2.4：弹幕、列表行、shimmer 骨架、登录表单一律不玻璃化；aurora 参数一套全平台通用，不按平台分裂）。
 - ❌ 复制外部品牌的 logo、商标字形、专有插图。
 - ❌ 让 `liveBadge` 用红（直播中是绿，红是「关注」按钮）。
 - ❌ 给按钮加**按压位移/缩放**（press scale）做反馈（2026-09-21 裁决禁止）：按钮反馈只走颜色 / 描边 / 阴影 / 图标，不做位移与缩放。<br>2026-09-22 氛围分支 `ui/ambient-polish` 修订（清单 2.5）：仅主 CTA `FollowButton` / `player_controls.dart` 的 `play-toggle-play` 允许 pressed 缩放 0.97，与 `AppStateLayer` 叠加，其余按钮仍禁止。

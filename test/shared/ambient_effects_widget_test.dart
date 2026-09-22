@@ -92,12 +92,13 @@ void main() {
           reduced: reduced,
         );
 
-    testWidgets('常态不位移不发光；hover 抬升 −2px 且发光取 AmbientGlow.cardHover', (
+    testWidgets('常态不位移、投影恒在；hover 抬升 −2px 且发光取 AmbientGlow.cardHover', (
       tester,
     ) async {
       await pumpCard(tester);
 
       expect(hostTransform(tester).transform.getTranslation().y, 0);
+      // 性能约束：常态网格不保留大面积阴影，避免多卡栅格化。
       expect((hostBox(tester).decoration! as BoxDecoration).boxShadow, isNull);
 
       final gesture = await hoverIn(tester, find.byType(AmbientCardHover));

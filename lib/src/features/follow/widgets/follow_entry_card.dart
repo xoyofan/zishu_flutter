@@ -14,6 +14,7 @@ import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../../../shared/presentation/widgets/ambient_card_hover.dart';
+import '../../../shared/presentation/widgets/ambient_glass.dart';
 import '../../../shared/presentation/widgets/translated_text.dart';
 import '../application/follow_provider.dart';
 import 'follow_common.dart';
@@ -60,6 +61,13 @@ class FollowEntryCard extends StatelessWidget {
     final room = entry.room;
     final live = entry.isLive;
     final replay = entry.isReplay;
+    // 批3 内容卡薄玻璃(DESIGN.md §2.4):底色 surface 55% 透 aurora;
+    // 选中态仍由上方 foregroundDecoration 描边,hover 不抬实心。
+    final glass = AmbientGlass.tintOf(
+      context,
+      tokens.surface,
+      alpha: AmbientBlur.glassThinAlpha,
+    );
     return AmbientCardHover(
       borderRadius: AppRadius.allMd,
       child: Container(
@@ -74,14 +82,15 @@ class FollowEntryCard extends StatelessWidget {
           ),
         ),
         child: Material(
-          color: tokens.surface,
+          color: glass,
           borderRadius: AppRadius.allMd,
           clipBehavior: Clip.antiAlias,
           child: InkWell(
             onTap: onTap,
             onLongPress: onLongPress,
-            // 状态反馈(全部走 token):hover 抬亮;焦点/按压用 accent 低 alpha。
-            hoverColor: tokens.surfaceRaised,
+            // 状态反馈(全部走 token):hover 底色保持玻璃(同值不跳实心);
+            // 焦点/按压用 accent 低 alpha。
+            hoverColor: glass,
             splashColor: AppStateLayer.splashOf(tokens.accent),
             highlightColor: AppStateLayer.pressedOf(tokens.accent),
             focusColor: AppStateLayer.focusOf(tokens.accent),

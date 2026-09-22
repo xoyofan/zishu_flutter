@@ -6,6 +6,7 @@ import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../../../shared/presentation/widgets/ambient_card_hover.dart';
+import '../../../shared/presentation/widgets/ambient_glass.dart';
 import '../../../shared/presentation/widgets/translated_text.dart';
 import '../application/anchor_provider.dart';
 import 'badge_chips.dart';
@@ -36,11 +37,18 @@ class AnchorLiveCard extends StatelessWidget {
       return const _OfflineCard();
     }
     final tokens = context.tokens;
+    // 批3 内容卡薄玻璃(§2.4):底色 surface 55% 透 aurora;边框沿用自有
+    // tokens.border(hairline 不开,避免双框)。
+    final glass = AmbientGlass.tintOf(
+      context,
+      tokens.surface,
+      alpha: AmbientBlur.glassThinAlpha,
+    );
     return AmbientCardHover(
       borderRadius: AppRadius.allMd,
       child: Container(
         decoration: BoxDecoration(
-          color: tokens.surface,
+          color: glass,
           borderRadius: AppRadius.allMd,
           border: Border.all(color: tokens.border),
         ),

@@ -11,6 +11,11 @@ import '../zishu_tokens.dart';
 ///
 /// - 仅响应 hover 轨；focus / pressed 仍由子控件自身的
 ///   `AppStateLayer` / `AppFocus` 状态层维护，本 widget 不介入、不重复发明按下色。
+/// - 卡片常态不添加大面积投影：网格中多卡阴影会增加栅格化与合成成本；
+///   发光只在 hover 时出现，避免静止页面持续付出阴影成本。
+/// - [glassHairline] 开启时叠 hairline 边框(hover 加亮到 borderHover)——
+///   仅无自带边框的卡开启(RoomCard / PlayRoomCard),AnchorLiveCard /
+///   FollowEntryCard 各自有边框逻辑,不叠双框。
 /// - 进/出时长 [AppMotion.fast]（150ms）+ [AppMotion.curve]；[AmbientMotion.of]
 ///   的 `reduce_motion` 静态档下降级为零时长直出终态。
 /// - 位移发生在子控件**之上**（`AnimatedContainer.transform`），不改变布局尺寸，
@@ -20,12 +25,17 @@ class AmbientCardHover extends StatefulWidget {
     super.key,
     required this.child,
     this.borderRadius = BorderRadius.zero,
+    this.glassHairline = false,
   });
 
   final Widget child;
 
   /// 卡片自身圆角：用于让外发光贴合卡片轮廓（不传则按直角矩形投光）。
   final BorderRadius borderRadius;
+
+  /// 是否画薄玻璃 hairline 边框(常态白 9% / hover 白 22%,取自
+  /// [AmbientCardGlass])。仅无自带边框的卡开启,避免双框。
+  final bool glassHairline;
 
   @override
   State<AmbientCardHover> createState() => _AmbientCardHoverState();
@@ -52,6 +62,13 @@ class _AmbientCardHoverState extends State<AmbientCardHover> {
         transform: Matrix4.translationValues(0, _hover ? _hoverLift : 0, 0),
         decoration: BoxDecoration(
           borderRadius: widget.borderRadius,
+          border: widget.glassHairline
+              ? Border.all(
+                  color: _hover
+                      ? AmbientCardGlass.borderHover
+                      : AmbientCardGlass.border,
+                )
+              : null,
           boxShadow: _hover ? AmbientGlow.cardHover(tokens.accent) : null,
         ),
         child: widget.child,

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'platform_brands.dart';
+
 /// SFVideoLive 深色视觉基线的 design tokens。
 /// Widget 内禁止散落裸色值/裸数字,一律引用此处。
 /// on-video(叠在视频画面上的控件)恒定暗色语义,移植自 pure_live
@@ -333,6 +335,135 @@ abstract final class AmbientBlur {
   /// (`context.tokens.surface`)决定;取值走 `AmbientGlass.tintOf` helper,
   /// 别在 Widget 里散写 `withValues(alpha: 0.85)`。
   static const double glassSurfaceAlpha = 0.85;
+
+  /// 薄玻璃底色的不透明度(surface 55%,批1,DESIGN.md §2.4 登记)。
+  ///
+  /// 与 [glassSurfaceAlpha] 的分工:薄档给 **aurora 兜底**的场景(顶栏 ——
+  /// 背后有 Aurora 色团可透,需 45% 透出率才看得见玻璃);85% 厚档保留给
+  /// 清单 3.2 的侧栏 / 沉浸面板(底下是视频,15% 透出已够)。两档都经
+  /// `AmbientGlass.tintOf` 取,禁止在 Widget 里散写 alpha。
+  static const double glassThinAlpha = 0.55;
+}
+
+/// Aurora 氛围背景 token —— 批1,DESIGN.md §2.4 登记(真源 `preview/glass-preview.html` Demo F)。
+///
+/// 四层结构:① wash 全屏平台色薄雾([washAlpha]) → ② 团1 平台色大团
+/// ([primaryBlobAlpha],左上主导) → ③ 团2 accent 紫([accentBlobAlpha],右上点缀)
+/// → ④ 团3 平衡色([balanceBlobAlpha],右下点缀),另叠 grain 噪点覆层
+/// ([grainAlpha])。颜色经 [AmbientAuroraPalette.forSite] 取,不新造色值。
+///
+/// 性能约束:色团软边用 **RadialGradient 径向渐变**(shader 参数动画,零卷积);
+/// 早期 ImageFiltered.blur(σ36) 方案在切平台 700ms 动画期间逐帧重做全尺寸
+/// 高斯卷积,Windows 实测掉帧,已弃用(注意区别于 [AmbientBlur.maxSigma] 管的
+/// BackdropFilter 逐帧背景卷积)。消费点:`app_shell` 的 aurora 覆层(批1)。
+abstract final class AmbientAurora {
+  /// wash 全屏平台色薄雾的不透明度(0.2,上限 0.25)。
+  ///
+  /// 铺满整个窗口背景(顶栏 / 卡片底下全部),是平台色「占据大部分」的
+  /// 第一层;与 [primaryBlobAlpha] 叠加后平台色占比过半。超 0.25 即违规
+  /// (会把近黑底洗成彩色底,破坏深色基线)。
+  static const double washAlpha = 0.2;
+
+  /// 团1(平台色大团,左上主导)的不透明度(0.78,上限 0.8)。
+  static const double primaryBlobAlpha = 0.78;
+
+  /// 团2(accent 紫,右上角点缀)的不透明度(0.4,上限 0.5)。
+  static const double accentBlobAlpha = 0.4;
+
+  /// 团3(平衡色,右下角点缀)的不透明度(0.34,上限 0.4)。
+  static const double balanceBlobAlpha = 0.34;
+
+  /// grain 噪点覆层的不透明度(0.06,上限 6%)。
+  ///
+  /// 用途:防 aurora 渐变 banding(深色底大面积渐变的色阶断层)+ 提质感。
+  /// 叠在最上层、`IgnorePointer` 透传手势。超 6% 即违规(噪点变可见颗粒)。
+  static const double grainAlpha = 0.06;
+}
+
+/// 内容卡薄玻璃材质(批3,DESIGN.md §2.4 内容卡条目;真源 `preview/glass-preview.html` Demo F)。
+///
+/// 底色不在本类(基色 `surface` + [AmbientBlur.glassThinAlpha] 经
+/// `AmbientGlass.tintOf` 取,透出 Aurora 平台色);本类只收**必须 token 化的
+/// 装饰**:hairline 边框(裸值守卫拦)。hover 加亮边 + 发光由
+/// `AmbientCardHover` 一处实现,卡片不得自行写 BoxShadow / 裸边框色。
+abstract final class AmbientCardGlass {
+  /// 常态 hairline 边框:白 9%(0x17 = 23/255)。
+  static const Color border = Color(0x17FFFFFF);
+
+  /// hover 边框:白 22%(0x38 = 56/255),预览 Demo F 的 hover 边亮一档。
+  static const Color borderHover = Color(0x38FFFFFF);
+
+}
+
+/// [AmbientAurora] 的三团颜色:按当前平台派生,单一真源不新造色值。
+///
+/// - 团1 [primary]:平台品牌色(§2.3 真源);
+///   **聚合页 `all` 与未收录站点没有平台色语义,取 [accent]** —— 品牌金
+///   大面积铺满发「土黄」(golden 实测),且与预览确认的默认态(团1紫)不一致。
+/// - 团2 [accent]:产品强调色,**切平台不变**;由调用点传 `tokens.accent`,
+///   本类禁止硬编码 accent / 品牌金。
+/// - 团3 [balance]:12 平台人工配对表,黄/橙等亮底平台必配冷色对冲。
+class AmbientAuroraPalette {
+  const AmbientAuroraPalette({
+    required this.primary,
+    required this.accent,
+    required this.balance,
+  });
+
+  /// 团1:当前平台品牌色;`all` / 未收录站点取 accent(见 [forSite])。
+  final Color primary;
+
+  /// 团2:产品 accent(固定家族色,不随平台变)。
+  final Color accent;
+
+  /// 团3:人工配对的平衡色(冷暖对冲)。
+  final Color balance;
+
+  /// 按站点取 aurora 三团颜色。
+  ///
+  /// [accent] 必须由调用点传入(`context.tokens.accent`),Palette 内不硬编码。
+  static AmbientAuroraPalette forSite(String site, {required Color accent}) {
+    final brand = PlatformBrandCatalog.byId(site);
+    // all/未收录:无平台色语义,团1取 accent(见类头 doc)。
+    final primary = site == 'all' || brand == null ? accent : brand.color;
+    return AmbientAuroraPalette(
+      primary: primary,
+      accent: accent,
+      balance: _balanceTable[site] ?? _balanceFallback,
+    );
+  }
+
+  /// 未收录站点的团3默认值:冷色青。
+  ///
+  /// 兜底团1是 accent 紫,紫青对比;与 all(团1紫)→ 青同一规则。
+  static const Color _balanceFallback = Color(0xFF00D2D3);
+
+  /// 团3 人工配对表(12 平台,DESIGN.md §2.4 登记)。
+  ///
+  /// 规则:**黄/橙/红等亮底暖色平台必配冷色**(大面积暖团会发闷,需要
+  /// 冷色对冲),冷色平台反过来配暖色点缀:
+  /// - all(团1 accent 紫)→ 青 `#00D2D3`(紫青对比,同兜底规则);
+  /// - 斗鱼橙 / 抖音红 / 快手橙红 / 小红书红 / YouTube 红 → 青 `#00D2D3`(互补);
+  /// - 虎牙黄 → `#48DBFB`、YY 黄 → `#54A0FF`(黄配蓝青,同族冷色);
+  /// - 哔哩粉 → `#54A0FF`(粉蓝经典配);
+  /// - Twitch 紫 → 青(团2 已是 accent 紫,同色系团3 无对比,故取冷青);
+  /// - SOOP 蓝 / iptv 蓝(本就冷色)→ 粉 / 橙(暖色点缀平衡)。
+  /// 注:预览页抖音配方曾把青放团2、紫放团3;落地统一规则「团2 恒 accent」后,
+  /// 青移入团3 保留红青对冲,紫由团2(accent)承担。
+  static const Map<String, Color> _balanceTable = {
+    'all': Color(0xFF00D2D3),
+    'douyu': Color(0xFF00D2D3),
+    'huya': Color(0xFF48DBFB),
+    'bilibili': Color(0xFF54A0FF),
+    'douyin': Color(0xFF00D2D3),
+    'yy': Color(0xFF54A0FF),
+    'twitch': Color(0xFF00D2D3),
+    'kuaishou': Color(0xFF00D2D3),
+    'soop': Color(0xFFFF6BCB),
+    'xhs': Color(0xFF00D2D3),
+    'youtube': Color(0xFF00D2D3),
+    'iptv': Color(0xFFFF9F43),
+  };
 }
 
 /// 键盘焦点环基线(Windows 桌面键盘可达性)。

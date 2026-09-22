@@ -9,7 +9,11 @@ import '../design_tokens.dart';
 ///
 /// 与底色的分工:[AmbientGlass] **只加滤镜**,底色由调用点自己画 ——
 /// 两条约定:
-/// 1. 底色 = 基色 + [AmbientBlur.glassSurfaceAlpha](85%),经 [tintOf] 取;
+/// 1. 底色 = 基色 + 档位 alpha,经 [tintOf] 取 —— 两档分工:
+///    - 薄档 [AmbientBlur.glassThinAlpha](55%):**aurora 兜底**的顶栏
+///      (批1,透出率 45%,透出壳层 Aurora 平台色氛围);
+///    - 厚档 [AmbientBlur.glassSurfaceAlpha](85%):清单 3.2 的侧栏 /
+///      沉浸侧滑面板(底下是视频画面,15% 透出已够);
 /// 2. 调用点原样保留自己的 `Container`(高度 / 内边距 / 边框),
 ///    只把 `BoxDecoration.color` 换成 [tintOf] 的结果。
 ///
@@ -40,12 +44,22 @@ class AmbientGlass extends StatelessWidget {
   /// 底色 —— 那会把玻璃透出的画面整块盖住。
   static bool onGlass(BuildContext context) => _glassScopeOf(context) != null;
 
-  /// 玻璃底色:基色 [tint] 的 85%(清单 3.1)。
+  /// 玻璃底色:基色 [tint] 按 [alpha] 档位取透明度。
+  ///
+  /// 两档分工(取值均来自 [AmbientBlur],禁止在调用点散写裸 alpha):
+  /// - 默认 [AmbientBlur.glassSurfaceAlpha](85%,厚档):清单 3.2 的
+  ///   侧栏 / 沉浸侧滑面板(现有调用点零改动);
+  /// - [AmbientBlur.glassThinAlpha](55%,薄档):aurora 兜底的顶栏(批1),
+  ///   45% 透出率才能看见壳层 Aurora 色团(见 DESIGN.md §2.4)。
   ///
   /// 已在玻璃面上时返回全透明(基色 alpha=0):同一平面上不重复压暗。
-  static Color tintOf(BuildContext context, Color tint) => onGlass(context)
+  static Color tintOf(
+    BuildContext context,
+    Color tint, {
+    double alpha = AmbientBlur.glassSurfaceAlpha,
+  }) => onGlass(context)
       ? tint.withValues(alpha: 0)
-      : tint.withValues(alpha: AmbientBlur.glassSurfaceAlpha);
+      : tint.withValues(alpha: alpha);
 
   static _AmbientGlassScope? _glassScopeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<_AmbientGlassScope>();

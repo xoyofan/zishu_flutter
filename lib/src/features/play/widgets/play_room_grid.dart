@@ -21,6 +21,7 @@ import 'package:live_parser/live_parser.dart';
 import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/widgets/ambient_card_hover.dart';
+import '../../../shared/presentation/widgets/ambient_glass.dart';
 import '../../../shared/presentation/widgets/cover_badges.dart';
 import '../../../shared/presentation/widgets/translated_text.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -117,17 +118,25 @@ class PlayRoomCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
+    // 批3 内容卡薄玻璃(DESIGN.md §2.4):底色 surface 55% 透 aurora;
+    // hover 不抬实心,反馈 = 边亮 + 发光 + 抬升(AmbientCardHover)。
+    final glass = AmbientGlass.tintOf(
+      context,
+      tokens.surface,
+      alpha: AmbientBlur.glassThinAlpha,
+    );
     return AmbientCardHover(
       borderRadius: AppRadius.allSm,
+      glassHairline: true,
       child: Material(
-        color: tokens.surface,
+        color: glass,
         borderRadius: AppRadius.allSm,
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
-          // 卡片 hover 抬一档底(surface → surfaceRaised,DESIGN.md §4.2);
+          // 卡片 hover 底色保持玻璃(同值不跳实心,DESIGN.md §2.4 批3);
           // 按下/键盘焦点走 accent 低 alpha。只改颜色,不动尺寸与位置。
-          hoverColor: tokens.surfaceRaised,
+          hoverColor: glass,
           splashColor: AppStateLayer.splashOf(tokens.accent),
           highlightColor: AppStateLayer.pressedOf(tokens.accent),
           focusColor: AppStateLayer.focusOf(tokens.accent),

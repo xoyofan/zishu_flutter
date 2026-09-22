@@ -4,6 +4,7 @@ import 'package:live_parser/live_parser.dart';
 
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/widgets/ambient_card_hover.dart';
+import '../../../shared/presentation/widgets/ambient_glass.dart';
 import '../../../shared/presentation/widgets/cover_badges.dart';
 import '../../../shared/presentation/widgets/translated_text.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -36,19 +37,27 @@ class RoomCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
+    // 批3 内容卡薄玻璃(DESIGN.md §2.4):底色 surface 55%,透出 aurora 平台色;
+    // hover 不再抬实心(玻璃底保持),反馈 = 边亮 + 发光 + 抬升(AmbientCardHover)。
+    final glass = AmbientGlass.tintOf(
+      context,
+      tokens.surface,
+      alpha: AmbientBlur.glassThinAlpha,
+    );
     return AmbientCardHover(
       borderRadius: AppRadius.allMd,
+      glassHairline: true,
       child: Material(
         // 测试锚点:定位/点击具体房间卡片。
         key: Key('room-card-${room.site}-${room.roomId}'),
-        color: tokens.surface,
+        color: glass,
         borderRadius: AppRadius.allMd,
         child: InkWell(
           borderRadius: AppRadius.allMd,
           onTap: onTap,
-          // 状态反馈(M3 state layer,全部走 token):hover 抬亮到 surfaceRaised;
-          // splash/highlight/focus 用 accent 低 alpha(8–12%),键盘焦点可见。
-          hoverColor: tokens.surfaceRaised,
+          // 状态反馈(M3 state layer,全部走 token):hover 底色保持玻璃(同值,
+          // 不跳实心);splash/highlight/focus 用 accent 低 alpha(8–12%),键盘焦点可见。
+          hoverColor: glass,
           splashColor: AppStateLayer.splashOf(tokens.accent),
           highlightColor: AppStateLayer.pressedOf(tokens.accent),
           focusColor: AppStateLayer.focusOf(tokens.accent),

@@ -70,6 +70,18 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                           .setThemeMode(mode),
                     ),
                   ),
+                  _SettingsRow(
+                    label: 'Aurora 氛围背景',
+                    hint: '深色模式下绘制平台色背景；关闭可降低 Windows 合成负担',
+                    trailing: Switch(
+                      key: const Key('settings-aurora-toggle'),
+                      value: settings.auroraEnabled,
+                      onChanged: (value) => ref
+                          .read(settingsProvider.notifier)
+                          .setAuroraEnabled(value),
+                      overlayColor: controlStateLayer(tokens),
+                    ),
+                  ),
                 ],
               ),
               _SettingsGroup(

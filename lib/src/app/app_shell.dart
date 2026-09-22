@@ -19,6 +19,7 @@ import '../shared/presentation/design_tokens.dart';
 import '../shared/presentation/platform_brands.dart';
 import '../shared/presentation/zishu_tokens.dart';
 import '../shared/presentation/widgets/ambient_glass.dart';
+import '../shared/presentation/widgets/ambient_aurora.dart';
 import '../shared/presentation/widgets/platform_icon.dart';
 
 part 'shell/hover_overlay.dart';
@@ -168,6 +169,7 @@ class _AppShellState extends ConsumerState<AppShell> {
     // 关注在播状态定时轮询常驻(播放页也常驻——顶栏在),无 refresher 时为 null。
     ref.watch(followStatusPollerProvider);
     final isPhone = MediaQuery.sizeOf(context).width < AppBreakpoints.phone;
+    final auroraEnabled = ref.watch(settingsProvider).auroraEnabled;
     // hover 中的平台:浮层宽度需要它的分类数据(见 _platformFlyoutLayoutFor)。
     final hoveredPlatform = _hoveredPlatform ?? '';
     // 沉浸态(播放页网页全屏/全屏/画中画)不渲染 chrome:浮层也一并停用,
@@ -183,24 +185,37 @@ class _AppShellState extends ConsumerState<AppShell> {
       children: [
         Scaffold(
           backgroundColor: context.tokens.background,
-          body: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          body: Stack(
             children: [
-              if (showChrome)
-                if (isPhone)
-                  _PlatformStrip(currentSite: widget.site)
-                else
-                  _TopNav(
-                    currentSite: widget.site,
-                    onPlatformHover: _openPlatform,
-                    onPlatformHoverEnd: _scheduleClose,
-                    onFollowHover: _openFollow,
-                    onFollowHoverEnd: _scheduleClose,
-                    onMyCategoryHover: _openMyCategory,
-                    onMyCategoryTap: _toggleMyCategory,
-                    onMyCategoryHoverEnd: _scheduleClose,
+              // 批1 Aurora 氛围背景(DESIGN.md §2.4):wash + 三色团 + grain,
+              // 铺在壳层最底 —— 顶栏薄玻璃与半透明内容直接透出平台色氛围;
+              // IgnorePointer 在 widget 内,不挡任何手势。
+              if (auroraEnabled)
+                Positioned.fill(
+                  child: RepaintBoundary(
+                    child: AmbientAuroraBackground(site: widget.site),
                   ),
-              Expanded(child: widget.child),
+                ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  if (showChrome)
+                    if (isPhone)
+                      _PlatformStrip(currentSite: widget.site)
+                    else
+                      _TopNav(
+                        currentSite: widget.site,
+                        onPlatformHover: _openPlatform,
+                        onPlatformHoverEnd: _scheduleClose,
+                        onFollowHover: _openFollow,
+                        onFollowHoverEnd: _scheduleClose,
+                        onMyCategoryHover: _openMyCategory,
+                        onMyCategoryTap: _toggleMyCategory,
+                        onMyCategoryHoverEnd: _scheduleClose,
+                      ),
+                  Expanded(child: widget.child),
+                ],
+              ),
             ],
           ),
           bottomNavigationBar: showChrome && isPhone

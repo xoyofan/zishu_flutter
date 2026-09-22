@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:zishu_flutter/src/shared/presentation/design_tokens.dart';
+import 'package:zishu_flutter/src/shared/presentation/platform_brands.dart';
 
 void main() {
   group('AppColors 契约', () {
@@ -301,6 +302,96 @@ void main() {
         surface.withValues(alpha: AmbientBlur.glassSurfaceAlpha).a,
         closeTo(0.85, 1e-9),
       );
+    });
+
+    test('glassThinAlpha = 0.55(薄档,批1;严格小于 85% 厚档)', () {
+      // 薄档给顶栏等 aurora 兜底场景,85% 厚档保留给清单 3.2 侧栏面板;
+      // 薄档一旦 ≥ 厚档,"两档分工"就不存在了,故断言严格小于。
+      expect(AmbientBlur.glassThinAlpha, 0.55);
+      expect(
+        AmbientBlur.glassThinAlpha,
+        lessThan(AmbientBlur.glassSurfaceAlpha),
+      );
+    });
+  });
+
+  group('AmbientAurora 契约(批1,DESIGN.md §2.4)', () {
+    // 真源: preview/glass-preview.html Demo F(用户拍板默认值);
+    // 上限即 DESIGN.md §2.4 表中值,超限即违规。
+    test('washAlpha = 0.2(上限 0.25)', () {
+      expect(AmbientAurora.washAlpha, 0.2);
+      expect(AmbientAurora.washAlpha, lessThanOrEqualTo(0.25));
+    });
+
+    test('三团 alpha 精确值与上限(0.78≤0.8 / 0.4≤0.5 / 0.34≤0.4)', () {
+      expect(AmbientAurora.primaryBlobAlpha, 0.78);
+      expect(AmbientAurora.primaryBlobAlpha, lessThanOrEqualTo(0.8));
+      expect(AmbientAurora.accentBlobAlpha, 0.4);
+      expect(AmbientAurora.accentBlobAlpha, lessThanOrEqualTo(0.5));
+      expect(AmbientAurora.balanceBlobAlpha, 0.34);
+      expect(AmbientAurora.balanceBlobAlpha, lessThanOrEqualTo(0.4));
+    });
+
+
+    test('grainAlpha = 0.06(噪点覆层上限 6%)', () {
+      expect(AmbientAurora.grainAlpha, 0.06);
+      expect(AmbientAurora.grainAlpha, lessThanOrEqualTo(0.06));
+    });
+  });
+
+  group('AmbientCardGlass 契约(批3,DESIGN.md §2.4 内容卡条目)', () {
+    test('hairline 边框:白 9% 常态 / 白 22% hover(hover 更亮)', () {
+      expect(AmbientCardGlass.border.a, closeTo(0.09, 0.01));
+      expect(AmbientCardGlass.borderHover.a, closeTo(0.22, 0.01));
+      expect(
+        AmbientCardGlass.borderHover.a,
+        greaterThan(AmbientCardGlass.border.a),
+      );
+    });
+
+  });
+
+  group('AmbientAuroraPalette 契约(批1,DESIGN.md §2.4)', () {
+    const accent = Color(0xFF7C4DFF);
+
+    AmbientAuroraPalette paletteFor(String site) =>
+        AmbientAuroraPalette.forSite(site, accent: accent);
+
+    test('团1 与 PlatformBrandCatalog 逐平台一致(all 特判取 accent)', () {
+      for (final b in PlatformBrandCatalog.navPlatforms) {
+        final expected = b.id == 'all' ? accent : b.color;
+        expect(paletteFor(b.id).primary, expected, reason: 'site=${b.id}');
+      }
+    });
+
+    test('聚合页 all 与未收录站点团1 = accent(不铺品牌金,防土黄)', () {
+      expect(paletteFor('all').primary, accent);
+      final p = paletteFor('not-a-site');
+      expect(p.primary, accent);
+      // 团3 冷青默认不变(紫青对比)。
+      expect(p.balance, const Color(0xFF00D2D3));
+    });
+
+    test('团2 恒等于传入 accent(切平台不变)', () {
+      for (final b in PlatformBrandCatalog.navPlatforms) {
+        expect(paletteFor(b.id).accent, accent, reason: 'site=${b.id}');
+      }
+    });
+
+    test('团3 配对表抽查:黄/橙亮底平台配冷色,冷平台配暖点缀', () {
+      expect(paletteFor('all').balance, const Color(0xFF00D2D3));
+      expect(paletteFor('douyu').balance, const Color(0xFF00D2D3));
+      expect(paletteFor('huya').balance, const Color(0xFF48DBFB));
+      expect(paletteFor('yy').balance, const Color(0xFF54A0FF));
+      expect(paletteFor('bilibili').balance, const Color(0xFF54A0FF));
+      expect(paletteFor('douyin').balance, const Color(0xFF00D2D3));
+      expect(paletteFor('twitch').balance, const Color(0xFF00D2D3));
+      expect(paletteFor('kuaishou').balance, const Color(0xFF00D2D3));
+      expect(paletteFor('xhs').balance, const Color(0xFF00D2D3));
+      expect(paletteFor('youtube').balance, const Color(0xFF00D2D3));
+      // 本就冷色的平台反过来配暖色点缀,冷暖平衡。
+      expect(paletteFor('soop').balance, const Color(0xFFFF6BCB));
+      expect(paletteFor('iptv').balance, const Color(0xFFFF9F43));
     });
   });
 

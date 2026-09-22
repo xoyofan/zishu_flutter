@@ -86,6 +86,7 @@ class SettingsState {
     required this.chatEnabled,
     required this.preferredLineFormat,
     required this.serverUrl,
+    this.auroraEnabled = false,
     this.defaultQualityBySite = const {},
     this.roomVolumes = const {},
     this.globalMuted = false,
@@ -102,6 +103,9 @@ class SettingsState {
   });
 
   final ThemeModeChoice themeMode;
+
+  /// 深色 Aurora 氛围背景开关；默认关闭，避免 Windows 低端 GPU 上增加合成负担。
+  final bool auroraEnabled;
 
   /// 全平台默认画质(与播放页 fixture 画质名对齐)。
   final String defaultQuality;
@@ -250,6 +254,7 @@ class SettingsState {
 
   SettingsState copyWith({
     ThemeModeChoice? themeMode,
+    bool? auroraEnabled,
     String? defaultQuality,
     Map<String, String>? defaultQualityBySite,
     Map<String, double>? roomVolumes,
@@ -271,6 +276,7 @@ class SettingsState {
   }) {
     return SettingsState(
       themeMode: themeMode ?? this.themeMode,
+      auroraEnabled: auroraEnabled ?? this.auroraEnabled,
       defaultQuality: defaultQuality ?? this.defaultQuality,
       defaultQualityBySite: defaultQualityBySite ?? this.defaultQualityBySite,
       roomVolumes: roomVolumes ?? this.roomVolumes,
@@ -297,6 +303,7 @@ class SettingsState {
 class SettingsController extends Notifier<SettingsState> {
   // SharedPreferencesAsync 的存储键(带前缀避免与其他模块冲突)。
   static const String _kThemeMode = 'zishu.settings.themeMode';
+  static const String _kAuroraEnabled = 'zishu.settings.auroraEnabled';
   static const String _kDefaultQuality = 'zishu.settings.defaultQuality';
 
   /// 按平台默认画质,存 JSON `Map<String, String>`(site → 画质名)。
@@ -347,6 +354,7 @@ class SettingsController extends Notifier<SettingsState> {
       // 不依赖旧版 SharedPreferences 单例缓存)。
       final prefs = SharedPreferencesAsync();
       final mode = await prefs.getString(_kThemeMode);
+      final auroraEnabled = await prefs.getBool(_kAuroraEnabled);
       final quality = await prefs.getString(_kDefaultQuality);
       final bySiteRaw = await prefs.getString(_kDefaultQualityBySite);
       final danmaku = await prefs.getBool(_kDanmakuEnabled);
@@ -365,6 +373,7 @@ class SettingsController extends Notifier<SettingsState> {
       final defaultVolume = await prefs.getDouble(_kDefaultVolume);
       state = state.copyWith(
         themeMode: mode == null ? null : ThemeModeChoice.fromName(mode),
+        auroraEnabled: auroraEnabled,
         defaultQuality:
             quality != null && SettingsState.qualityOptions.contains(quality)
             ? quality
@@ -409,6 +418,14 @@ class SettingsController extends Notifier<SettingsState> {
       // 平台存储不可用等异常:静默保留默认值,页面不崩溃。
       state = state.copyWith(hydrated: true);
     }
+  }
+
+  /// 设置 Aurora 氛围背景并持久化。
+  Future<void> setAuroraEnabled(bool enabled) async {
+    state = state.copyWith(auroraEnabled: enabled);
+    try {
+      await SharedPreferencesAsync().setBool(_kAuroraEnabled, enabled);
+    } catch (_) {}
   }
 
   /// 设置主题模式并持久化。

@@ -40,18 +40,24 @@ class _TopNav extends StatelessWidget implements PreferredSizeWidget {
     final width = MediaQuery.sizeOf(context).width;
     final showLabels = width >= AppBreakpoints.desktop;
     final tokens = context.tokens;
-    // 3.1 毛玻璃顶栏:`surface` 85% + blur 16(AmbientBlur.navSigma ≤ 上限 20)。
+    // 顶栏薄玻璃(批1):`surface` 55%(`AmbientBlur.glassThinAlpha`)+
+    // blur 16(`AmbientBlur.navSigma` ≤ 上限 20)。
     //
-    // 静止观感≈现状:顶栏是 `Column` 里的兄弟节点(内容不从它底下穿过),
-    // 背后只有画布底色 `#181818`,于是 85% `#1F1F1F` 叠在它上面只差 1/255
-    // (不透明 `surface` → 30/255);blur 在有内容透出的场景才有观感 —— 即
-    // 后续如果把舞台/列表改成从顶栏下穿过,这套玻璃直接生效。
+    // 背后由壳层 Aurora 兜底(`AmbientAurora`,DESIGN.md §2.4:wash 全屏
+    // 平台色薄雾 + 左上平台色大团 + accent/平衡色点缀)——顶栏仍是
+    // `Column` 兄弟节点(内容不从它底下穿过),但薄档 45% 透出率直接
+    // 透出平台色氛围,静止即可感知,不再依赖内容穿过。alpha 用薄档而非
+    // 清单 3.2 侧栏面板的 85% 厚档(底下是视频,15% 透出已够)。
     return AmbientGlass(
       sigma: AmbientBlur.navSigma,
       child: Container(
         height: AppSpacing.topNavHeight,
         decoration: BoxDecoration(
-          color: AmbientGlass.tintOf(context, tokens.surface),
+          color: AmbientGlass.tintOf(
+            context,
+            tokens.surface,
+            alpha: AmbientBlur.glassThinAlpha,
+          ),
           border: Border(bottom: BorderSide(color: tokens.border)),
         ),
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),

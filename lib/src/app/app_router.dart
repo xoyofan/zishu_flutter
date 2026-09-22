@@ -248,6 +248,7 @@ final routerProvider = Provider<GoRouter>((ref) {
             site,
             HomeView(site: site),
             title: _siteLabel(site),
+            instant: true,
           );
         },
       ),
@@ -257,11 +258,13 @@ final routerProvider = Provider<GoRouter>((ref) {
 
 /// 除播放页外的页面都包在应用壳层里。
 ///
-/// 过渡为 **fade-through**(清单 §3.5):opacity 0→1 + y +8→0,反向对称。
+/// 普通壳层页面使用 **fade-through**(清单 §3.5):opacity 0→1 + y +8→0,
+/// 反向对称。平台首页切换(`instant: true`)直切，避免旧/新两个大网格在
+/// 180ms 内同时做 opacity + transform 合成；Aurora 自己仍保留平台色 700ms 色变。
 /// 刻意不做横向大位移滑动(清单 §4:桌面端晕动)。
 ///
 /// 实现取 `CustomTransitionPage`(`NoTransitionPage` 的父类):`_shellPage` 的
-/// 每一处调用都返回本函数的结果,过渡因此**统一生效**;
+/// 每一处调用都返回本函数的结果,过渡因此统一受控;
 /// `_RouteFallback`(404)与播放页 `NoTransitionPage` 不在本项范围内,未动。
 Page<dynamic> _shellPage(
   BuildContext context,
@@ -269,6 +272,7 @@ Page<dynamic> _shellPage(
   String site,
   Widget child, {
   required String title,
+  bool instant = false,
 }) {
   // 时长单一来源:必须经 `AmbientMotion.of`(清单 1.4 / DESIGN.md §6),
   // `reduce_motion` 时为零时长 —— 此时配合下面的直出分支,与改造前的
@@ -276,10 +280,10 @@ Page<dynamic> _shellPage(
   final spec = AmbientMotion.of(context);
   return CustomTransitionPage<dynamic>(
     key: state.pageKey,
-    transitionDuration: spec.pageTransition,
-    reverseTransitionDuration: spec.pageTransition,
+    transitionDuration: instant ? Duration.zero : spec.pageTransition,
+    reverseTransitionDuration: instant ? Duration.zero : spec.pageTransition,
     transitionsBuilder: (context, animation, secondaryAnimation, child) =>
-        spec.reduced
+        instant || spec.reduced
         ? child
         : _fadeThrough(animation, child: child),
     child: _WindowTitle(

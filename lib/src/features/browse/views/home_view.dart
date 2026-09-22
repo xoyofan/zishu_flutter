@@ -25,6 +25,10 @@ class HomeView extends ConsumerStatefulWidget {
 }
 
 class _HomeViewState extends ConsumerState<HomeView> {
+  // 平台切换采用 stale-while-revalidate:新平台首屏请求期间保留上一次
+  // 已渲染的网格,避免整块内容变成 loading 再重建。
+  static RoomListResult? _lastVisibleRooms;
+
   @override
   Widget build(BuildContext context) {
     final query = BrowseRoomQuery(site: widget.site);
@@ -36,17 +40,23 @@ class _HomeViewState extends ConsumerState<HomeView> {
     final isPhone = MediaQuery.sizeOf(context).width < AppBreakpoints.phone;
     final tokens = context.tokens;
 
-    // 房间网格主体(下拉刷新 + 滚动加载 + 空态/错误)。
+    // 房间网格主体(下拉刷新 + 滚动加载 + 空态/错误)。切平台时新 provider
+    // 先进入 loading,继续显示旧网格;新数据到达后只替换 RoomSummary。
     final body = switch (roomsAsync) {
-      AsyncValue(:final value?) => _body(
+      AsyncValue(:final value?) => _rememberAndBuild(
         context,
-        rooms: value.rooms,
-        hasMore: value.hasMore,
+        value: value,
       ),
-      AsyncValue(:final error?) => _ErrorRetry(
-        message: '房间列表加载失败：$error',
-        onRetry: controller.refresh,
-      ),
+      AsyncValue(:final error?) => _lastVisibleRooms != null
+          ? _body(
+              context,
+              rooms: _lastVisibleRooms!.rooms,
+              hasMore: _lastVisibleRooms!.hasMore,
+            )
+          : _ErrorRetry(
+              message: '房间列表加载失败：$error',
+              onRetry: controller.refresh,
+            ),
       _ => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
     };
 
@@ -57,6 +67,18 @@ class _HomeViewState extends ConsumerState<HomeView> {
         if (!isPhone) Container(width: 1, color: tokens.border),
         Expanded(child: body),
       ],
+    );
+  }
+
+  Widget _rememberAndBuild(
+    BuildContext context, {
+    required RoomListResult value,
+  }) {
+    _lastVisibleRooms = value;
+    return _body(
+      context,
+      rooms: value.rooms,
+      hasMore: value.hasMore,
     );
   }
 
