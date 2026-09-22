@@ -174,7 +174,7 @@ class _SideHeader extends ConsumerWidget {
                           // 尚未刷新回填,显示「—」)。
                           _StatValue(
                             key: const Key('play-side-stat-audience'),
-                            icon: Icons.people_alt_outlined,
+                            icon: AppIcons.eye,
                             value: audienceText,
                             color: context.tokens.statAudience,
                           ),
@@ -183,7 +183,7 @@ class _SideHeader extends ConsumerWidget {
                           // douyin 会员、soop 订阅;其余平台上游无 → 「—」)。
                           _StatValue(
                             key: const Key('play-side-stat-vip'),
-                            icon: Icons.workspace_premium_outlined,
+                            icon: AppIcons.crown,
                             value: vipText,
                             color: context.tokens.statVip,
                           ),
@@ -195,7 +195,7 @@ class _SideHeader extends ConsumerWidget {
                           // 不额外占宽度)。
                           _StatValue(
                             key: const Key('play-side-stat-svip'),
-                            icon: Icons.diamond_outlined,
+                            icon: AppIcons.gem,
                             value: svipText,
                             color: context.tokens.statSvip,
                             tooltip: '${_svipStatLabel(site)} $svipText',

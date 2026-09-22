@@ -24,6 +24,7 @@ import '../application/room_stats_provider.dart';
 import '../../follow/application/follow_sort.dart';
 import '../../follow/application/settings_provider.dart';
 import '../../../platforms/common/open_external_url.dart';
+import '../../../shared/presentation/app_icons.dart';
 import '../../../shared/domain/category_display.dart';
 import '../../../shared/application/translation/translation_provider.dart';
 import '../../../shared/presentation/design_tokens.dart';

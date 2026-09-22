@@ -11,14 +11,31 @@ library;
 
 import 'dart:io';
 
+import 'package:flutter/services.dart' show FontLoader, rootBundle;
 import 'package:flutter_test/flutter_test.dart';
 
 Future<void> testExecutable(Future<void> Function() testMain) async {
-  // 在设置全局桩【之前】构造唯一的真实回环 client,供桩转发;
+  // 在设置全局桩【之前】构造唯一的真实回环 client,供转发;
   // global 设置后 new HttpClient() 会递归回到桩。
   _sharedRealClient = HttpClient();
   HttpOverrides.global = _NoNetworkHttpOverrides();
+  // 加载自定义图标字体:测试环境**不会**自动加载 pubspec 里声明的字体,
+  // 不加载的话播放页统计行的 crown/gem/eye 会渲染成豆腐块,
+  // golden 也就失去比对意义。
+  TestWidgetsFlutterBinding.ensureInitialized();
+  // ⚠️ 必须在 ensureInitialized() **之后**重装一次全局桩:
+  // TestWidgetsFlutterBinding 会自带 HttpOverrides 并覆盖这里设的值,
+  // 而 twitch 广告过滤的 loopback 测试依赖本文件“回环放行”的桩。
+  HttpOverrides.global = _NoNetworkHttpOverrides();
+  await _loadIconFonts();
   await testMain();
+}
+
+/// 装载 [AppIcons] 用的 Font Awesome 字形(仅测试环境;应用运行时由 pubspec 声明自动加载)。
+Future<void> _loadIconFonts() async {
+  final loader = FontLoader('FontAwesome')
+    ..addFont(rootBundle.load('assets/fonts/fa-solid-900.ttf'));
+  await loader.load();
 }
 
 /// 唯一的真实 HttpClient(仅回环流量):进程级共享,退出时由运行时回收。

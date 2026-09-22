@@ -53,3 +53,12 @@ flutter:
     - assets/badges/huya/vip/v2/
     - assets/badges/soop/
     - assets/badges/twitch/
+
+  # Font Awesome Free 6 (Solid):仅供 web 真源也用 FA 的平台统计图标
+  # (crown / gem / eye,见 lib/src/shared/presentation/app_icons.dart)。
+  # 字体为 Font Awesome Free,许可见 assets/fonts/LICENSE-fontawesome.txt。
+  # Flutter 构建时会按使用到的字形做 tree-shaking,发布包只含这几个字形。
+  fonts:
+    - family: FontAwesome
+      fonts:
+        - asset: assets/fonts/fa-solid-900.ttf
