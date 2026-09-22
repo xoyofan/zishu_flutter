@@ -42,6 +42,10 @@ class _PlatformCategorySheet extends ConsumerWidget {
                   key: const Key('platform-cat-sheet-close'),
                   tooltip: '关闭',
                   onPressed: () => Navigator.of(context).pop(),
+                  hoverColor: tokens.surfaceRaised,
+                  focusColor: tokens.surfaceRaised,
+                  splashColor: _pressTint(context),
+                  highlightColor: _pressTint(context),
                   icon: Icon(
                     Icons.close_rounded,
                     size: 18,
@@ -60,7 +64,10 @@ class _PlatformCategorySheet extends ConsumerWidget {
               error: (_, _) => Center(
                 child: Text(
                   '分类加载失败',
-                  style: TextStyle(fontSize: AppFontSize.bodySecondary, color: tokens.textSecondary),
+                  style: TextStyle(
+                    fontSize: AppFontSize.bodySecondary,
+                    color: tokens.textSecondary,
+                  ),
                 ),
               ),
               data: (result) {
@@ -96,32 +103,51 @@ class _PlatformCategorySheet extends ConsumerWidget {
                         runSpacing: 8,
                         children: [
                           for (final item in group.items)
-                            InkWell(
-                              key: Key('platform-cat-item-${item.cid}'),
-                              borderRadius: AppRadius.allMd,
-                              onTap: () {
-                                Navigator.of(context).pop();
-                                context.go(_categoryRoute(site, cid: item.cid));
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 10,
-                                  vertical: 6,
+                            // chip 底色不透明:InkWell 的叠色必须画在填色**之上**,
+                            // 故用 `Ink` 把底色铺进 Material 的 ink 层
+                            // (同 follow_avatars.dart 的 _FollowAvatarTile)。
+                            Ink(
+                              decoration: BoxDecoration(
+                                color: tokens.surfaceRaised,
+                                borderRadius: AppRadius.allMd,
+                                border: Border.all(color: tokens.border),
+                              ),
+                              child: InkWell(
+                                key: Key('platform-cat-item-${item.cid}'),
+                                borderRadius: AppRadius.allMd,
+                                // 底色已是抬升顶档 surfaceRaised,没有更亮的灰阶可抬:
+                                // hover 改走强调色 12% 淡染(同浮层内分类 chip 口径)。
+                                hoverColor: tokens.accent.withValues(
+                                  alpha: AppDirectoryDrawer.activeChipAlpha,
                                 ),
-                                decoration: BoxDecoration(
-                                  color: tokens.surfaceRaised,
-                                  borderRadius: AppRadius.allMd,
-                                  border: Border.all(color: tokens.border),
-                                ),
-                                child: Text(
-                                  displayCategoryName(
-                                    site,
-                                    item.name,
-                                    item.cid,
+                                // 焦点:底色与 surfaceRaised 同值会看不见,
+                                // 故取 AppFocus 环的光晕色(accent 24%,直接取自 token)。
+                                focusColor: AppFocus.ring(tokens.accent)
+                                    .first
+                                    .color,
+                                splashColor: _pressTint(context),
+                                highlightColor: _pressTint(context),
+                                onTap: () {
+                                  Navigator.of(context).pop();
+                                  context.go(
+                                    _categoryRoute(site, cid: item.cid),
+                                  );
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
                                   ),
-                                  style: TextStyle(
-                                    fontSize: AppFontSize.bodySecondary,
-                                    color: tokens.textPrimary,
+                                  child: Text(
+                                    displayCategoryName(
+                                      site,
+                                      item.name,
+                                      item.cid,
+                                    ),
+                                    style: TextStyle(
+                                      fontSize: AppFontSize.bodySecondary,
+                                      color: tokens.textPrimary,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -407,16 +433,23 @@ class _CategoryChipState extends State<_CategoryChip> {
 
   @override
   Widget build(BuildContext context) {
+    // hover 底色改由 InkWell 的 hoverColor 承担:原先 Container 在 hover 时
+    // 自填 accent 12%,会把 InkWell 的叠色盖在下面(且叠加 M3 默认 8%,两层不可控);
+    // `_hovering` 现在只负责文字转强调色(web `.nav-platform-menu__item:hover`
+    // 的“金底 + 金字”:金底走 hoverColor,金字走这里)。
     return MouseRegion(
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
       child: InkWell(
         onTap: widget.onTap,
-        child: Container(
+        hoverColor: context.tokens.accent.withValues(
+          alpha: AppDirectoryDrawer.activeChipAlpha,
+        ),
+        focusColor: context.tokens.surfaceRaised,
+        splashColor: _pressTint(context),
+        highlightColor: _pressTint(context),
+        child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 0.64, vertical: 1.28),
-          color: _hovering
-              ? context.tokens.accent.withValues(alpha: 0.12)
-              : null,
           child: Text(
             widget.label,
             maxLines: 1,

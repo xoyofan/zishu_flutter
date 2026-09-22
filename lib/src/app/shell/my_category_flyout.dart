@@ -56,7 +56,9 @@ class _MyCategoryFlyout extends ConsumerWidget {
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     foregroundColor: context.tokens.accent,
-                    textStyle: const TextStyle(fontSize: AppFontSize.bodySecondary),
+                    textStyle: const TextStyle(
+                      fontSize: AppFontSize.bodySecondary,
+                    ),
                   ),
                   child: const Text('管理分类'),
                 ),
@@ -110,53 +112,60 @@ class _MyCategoryChipState extends State<_MyCategoryChip> {
   @override
   Widget build(BuildContext context) {
     final gold = _hovering;
+    // 底色/描边铺进 ink 层(`Ink`),InkWell 的 hover/按下叠色才能画在它之上;
+    // `_hovering` 只负责描边与星形/文字转品牌色(web `.nav-my-cat-menu__tag:hover`
+    // 的“金描边 + 金字”,hover 底色由 InkWell 的 hoverColor 承担)。
     return MouseRegion(
       onEnter: (_) => setState(() => _hovering = true),
       onExit: (_) => setState(() => _hovering = false),
-      child: InkWell(
-        borderRadius: AppRadius.allPill,
-        onTap: widget.onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 9.6, vertical: 4.8),
-          decoration: BoxDecoration(
+      child: Ink(
+        decoration: BoxDecoration(
+          color: context.tokens.surfaceSoft,
+          border: Border.all(
             color: gold
-                ? context.tokens.brand.withValues(alpha: 0.1)
-                : context.tokens.surfaceSoft,
-            border: Border.all(
-              color: gold
-                  ? context.tokens.brand.withValues(alpha: 0.55)
-                  : context.tokens.border,
-            ),
-            borderRadius: AppRadius.allPill,
+                ? context.tokens.brand.withValues(alpha: 0.55)
+                : context.tokens.border,
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                Icons.star_rounded,
-                size: 12,
-                color: gold
-                    ? context.tokens.brand
-                    : context.tokens.textSecondary,
-              ),
-              SizedBox(width: 4),
-              Text(
-                // 旧快照可能存的是英文/韩文原名:渲染时按 (site,cid) 再映射
-                // 一次中文名,不重写存储(与 web 展示层归一同口径)。
-                displayCategoryName(
-                  widget.entry.site,
-                  widget.entry.name,
-                  widget.entry.cid,
-                ),
-                style: TextStyle(
-                  fontSize: AppFontSize.subtitle,
-                  fontWeight: FontWeight.w500,
+          borderRadius: AppRadius.allPill,
+        ),
+        child: InkWell(
+          borderRadius: AppRadius.allPill,
+          onTap: widget.onTap,
+          hoverColor: context.tokens.brand.withValues(alpha: 0.1),
+          focusColor: context.tokens.surfaceRaised,
+          splashColor: context.tokens.brand.withValues(alpha: 0.12),
+          highlightColor: context.tokens.brand.withValues(alpha: 0.2),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 9.6, vertical: 4.8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.star_rounded,
+                  size: 12,
                   color: gold
                       ? context.tokens.brand
-                      : context.tokens.textPrimary,
+                      : context.tokens.textSecondary,
                 ),
-              ),
-            ],
+                SizedBox(width: 4),
+                Text(
+                  // 旧快照可能存的是英文/韩文原名:渲染时按 (site,cid) 再映射
+                  // 一次中文名,不重写存储(与 web 展示层归一同口径)。
+                  displayCategoryName(
+                    widget.entry.site,
+                    widget.entry.name,
+                    widget.entry.cid,
+                  ),
+                  style: TextStyle(
+                    fontSize: AppFontSize.subtitle,
+                    fontWeight: FontWeight.w500,
+                    color: gold
+                        ? context.tokens.brand
+                        : context.tokens.textPrimary,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -179,7 +188,10 @@ class _MyCategoryManageDialog extends ConsumerWidget {
       backgroundColor: context.tokens.surface,
       title: Text(
         '我的分类(${favorites.length}/${MyCategoryController.maxCount})',
-        style: TextStyle(fontSize: AppFontSize.subtitle, color: context.tokens.textPrimary),
+        style: TextStyle(
+          fontSize: AppFontSize.subtitle,
+          color: context.tokens.textPrimary,
+        ),
       ),
       content: SizedBox(
         width: 420,
@@ -337,11 +349,18 @@ class _RemovableChip extends StatelessWidget {
           Text(
             // 同 _MyCategoryChip:旧快照英文名渲染时再映射一次中文。
             displayCategoryName(entry.site, entry.name, entry.cid),
-            style: TextStyle(fontSize: AppFontSize.body, color: context.tokens.brand),
+            style: TextStyle(
+              fontSize: AppFontSize.body,
+              color: context.tokens.brand,
+            ),
           ),
           InkWell(
             borderRadius: AppRadius.allPill,
             onTap: onRemove,
+            hoverColor: context.tokens.surfaceRaised,
+            focusColor: context.tokens.surfaceRaised,
+            splashColor: _pressTint(context),
+            highlightColor: _pressTint(context),
             child: Padding(
               padding: EdgeInsets.all(3),
               child: Icon(
@@ -371,43 +390,52 @@ class _PickableChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      borderRadius: AppRadius.allPill,
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9.6, vertical: 5),
-        decoration: BoxDecoration(
+    return Ink(
+      decoration: BoxDecoration(
+        color: selected
+            ? context.tokens.brand.withValues(alpha: 0.12)
+            : context.tokens.surfaceSoft,
+        border: Border.all(
           color: selected
-              ? context.tokens.brand.withValues(alpha: 0.12)
-              : context.tokens.surfaceSoft,
-          border: Border.all(
-            color: selected
-                ? context.tokens.brand.withValues(alpha: 0.55)
-                : context.tokens.border,
-          ),
-          borderRadius: AppRadius.allPill,
+              ? context.tokens.brand.withValues(alpha: 0.55)
+              : context.tokens.border,
         ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              selected ? Icons.star_rounded : Icons.star_border_rounded,
-              size: 13,
-              color: selected
-                  ? context.tokens.brand
-                  : context.tokens.textSecondary,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: AppFontSize.body,
+        borderRadius: AppRadius.allPill,
+      ),
+      child: InkWell(
+        borderRadius: AppRadius.allPill,
+        onTap: onTap,
+        // 选中态底色已是品牌金 12%:hover / 按下 / 焦点全部取品牌金淡染
+        // (选中再叠金只是更深,不会把“已选”状态盖掉);
+        // 焦点色直接取 AppFocus 环的光晕档(品牌金 24%),不另造数值。
+        hoverColor: context.tokens.brand.withValues(alpha: 0.1),
+        focusColor: AppFocus.ring(context.tokens.brand).first.color,
+        splashColor: context.tokens.brand.withValues(alpha: 0.12),
+        highlightColor: context.tokens.brand.withValues(alpha: 0.2),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 9.6, vertical: 5),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                selected ? Icons.star_rounded : Icons.star_border_rounded,
+                size: 13,
                 color: selected
                     ? context.tokens.brand
-                    : context.tokens.textPrimary,
+                    : context.tokens.textSecondary,
               ),
-            ),
-          ],
+              const SizedBox(width: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: AppFontSize.body,
+                  color: selected
+                      ? context.tokens.brand
+                      : context.tokens.textPrimary,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

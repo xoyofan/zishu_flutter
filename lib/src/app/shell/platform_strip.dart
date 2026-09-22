@@ -156,6 +156,9 @@ class _StripItem extends StatelessWidget {
                   key: Key('platform-tab-${brand.id}'),
                   onTap: () => context.go(_platformRoute(brand.id)),
                   hoverColor: tokens.surfaceRaised,
+                  focusColor: tokens.surfaceRaised,
+                  splashColor: _pressTint(context),
+                  highlightColor: _pressTint(context),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 4.8,
@@ -178,6 +181,9 @@ class _StripItem extends StatelessWidget {
                   key: Key('platform-strip-cat-${brand.id}'),
                   onTap: () => _openCategorySheet(context, brand.id),
                   hoverColor: tokens.surfaceRaised,
+                  focusColor: tokens.surfaceRaised,
+                  splashColor: _pressTint(context),
+                  highlightColor: _pressTint(context),
                   child: SizedBox(
                     width: arrowWidth,
                     height: iconSize + 12,
@@ -248,9 +254,13 @@ class _PlatformTabs extends StatelessWidget {
                         key: Key('platform-tab-${brand.id}'),
                         borderRadius: AppRadius.allSm,
                         hoverColor: context.tokens.surfaceSoft,
+                        focusColor: context.tokens.surfaceRaised,
+                        splashColor: _pressTint(context),
+                        highlightColor: _pressTint(context),
                         onTap: () => context.go(_platformRoute(brand.id)),
                         child: AnimatedContainer(
                           duration: AppMotion.fast,
+                          curve: AppMotion.curve,
                           width: 34,
                           height: 34,
                           alignment: Alignment.center,
