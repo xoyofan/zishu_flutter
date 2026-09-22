@@ -95,27 +95,57 @@ class _SideHeader extends ConsumerWidget {
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 5),
+              padding: const EdgeInsets.symmetric(vertical: 2),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 主播名中文化(韩/日名翻,英文/中文名原样)。
-                  TranslatedText(
-                    anchor,
-                    translateName: true,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: AppFontSize.subtitle,
-                      height: 1.08,
-                      fontWeight: FontWeight.w600,
-                      color: isLive ? tokens.liveBadge : tokens.textPrimary,
-                    ),
+                  // 第一行:主播名(中文化) + 右侧「关注」。
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TranslatedText(
+                          anchor,
+                          translateName: true,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: AppFontSize.subtitle,
+                            height: 1.08,
+                            fontWeight: FontWeight.w600,
+                            color: isLive
+                                ? tokens.liveBadge
+                                : tokens.textPrimary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: AppSpacing.xs),
+                      SizedBox(
+                        width: 59,
+                        height: 22,
+                        child: _SideActionButton(
+                          key: const Key('play-side-follow-btn'),
+                          icon: followed
+                              ? Icons.favorite_rounded
+                              : Icons.favorite_border_rounded,
+                          label: followed ? '已关注' : '关注',
+                          selected: followed,
+                          colors: _ActionChipColors(
+                            background: tokens.playFollowBg,
+                            hoverBackground: tokens.playFollowBgHover,
+                            activeBackground: tokens.playFollowBgActive,
+                            border: tokens.playFollowBorder,
+                            foreground: tokens.playFollowText,
+                            activeForeground: tokens.playFollowTextActive,
+                          ),
+                          onPressed: onToggleFollow,
+                        ),
+                      ),
+                    ],
                   ),
                   // 分类显示在主播名后面那一行(用户口径 2026-09-19);
                   // 关注数与人气/VIP 合并到同一统计行,控制头高不溢出。
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 1),
                   Row(
                     children: [
                       Flexible(
@@ -128,17 +158,19 @@ class _SideHeader extends ConsumerWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            fontSize: AppFontSize.label,
-                            height: 1.15,
+                            fontSize: AppFontSize.bodySecondary,
+                            height: 1.1,
                           ),
                         ),
                       ),
-                      // 开播提醒 + 外链(用户口径 2026-09-20:从头像悬浮挪到
-                      // 第二排分类名后,不再遮头像;显示改为文字)。
+                      // 提醒(铃铛) + 网页(浏览器图标)。
                       const SizedBox(width: 4),
                       _SideTextAction(
                         key: const Key('play-side-notify'),
-                        label: remindOn ? '直播提醒中' : '直播提醒',
+                        icon: remindOn
+                            ? Icons.notifications_active_rounded
+                            : Icons.notifications_none_rounded,
+                        label: remindOn ? '提醒中' : '提醒',
                         tooltip: followed
                             ? (remindOn ? '已开启开播/下播提醒，点击关闭' : '开启开播/下播提醒')
                             : '关注后可开启开播提醒',
@@ -148,7 +180,8 @@ class _SideHeader extends ConsumerWidget {
                       const SizedBox(width: 3),
                       _SideTextAction(
                         key: const Key('play-side-external'),
-                        label: '跳转',
+                        icon: Icons.open_in_browser_rounded,
+                        label: '网页',
                         tooltip: '打开直播间页面',
                         onPressed: externalUrl == null
                             ? null
@@ -156,7 +189,7 @@ class _SideHeader extends ConsumerWidget {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 3),
+                  const SizedBox(height: 1),
                   // 统计行:「关注 N」+ 人气 + VIP + 第 3 列(SVIP 档)。
                   // 整行收进一个 FittedBox(scaleDown)兜底 —— 328px 面板
                   // 配 1.3x 系统字号时四段内容会顶到行宽上限,等比缩放优于
@@ -175,7 +208,7 @@ class _SideHeader extends ConsumerWidget {
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
-                              fontSize: AppFontSize.caption,
+                              fontSize: AppFontSize.bodySecondary,
                               height: 1.08,
                             ),
                           ),
@@ -226,14 +259,12 @@ class _SideHeader extends ConsumerWidget {
           const SizedBox(width: AppSpacing.xs),
           Padding(
             padding: const EdgeInsets.only(
-              top: 5,
-              bottom: 5,
+              top: 2,
+              bottom: 2,
               right: AppSpacing.sm,
             ),
             child: _SideActions(
-              followed: followed,
               superFollowed: superFollowed,
-              onToggleFollow: onToggleFollow,
               onToggleSuperFollow: onToggleSuperFollow,
             ),
           ),
@@ -348,20 +379,22 @@ class _SideAvatar extends StatelessWidget {
   }
 }
 
-/// 侧栏头第二排的小文字按钮(用户口径 2026-09-20:开播提醒/跳转显示为
-/// 文字而非 icon)。描边 pill;[active] 时走品牌紫强调。
+/// 侧栏头第二排的小文字按钮:提醒/网页显示为图标 + 文字。描边 pill;
+/// [active] 时走品牌紫强调。
 ///
 /// 交互态:hover 抬一档底/highlight+splash 走 accent 低 alpha+键盘焦点走
 /// accent 覆盖色(均只改颜色,不动尺寸;禁用态由 InkWell 自行忽略交互)。
 class _SideTextAction extends StatelessWidget {
   const _SideTextAction({
     super.key,
+    required this.icon,
     required this.label,
     required this.tooltip,
     required this.onPressed,
     this.active = false,
   });
 
+  final IconData icon;
   final String label;
   final String tooltip;
 
@@ -404,14 +437,21 @@ class _SideTextAction extends StatelessWidget {
           focusColor: AppStateLayer.focusOf(tokens.accent),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-            child: Text(
-              label,
-              style: TextStyle(
-                fontSize: AppFontSize.label,
-                height: 1.2,
-                fontWeight: FontWeight.w600,
-                color: fg,
-              ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 12, color: fg),
+                const SizedBox(width: 2),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: AppFontSize.label,
+                    height: 1.2,
+                    fontWeight: FontWeight.w600,
+                    color: fg,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
@@ -420,17 +460,14 @@ class _SideTextAction extends StatelessWidget {
   }
 }
 
+/// 侧栏头右侧只保留「超关」;「关注」已移到昵称那一行。
 class _SideActions extends StatelessWidget {
   const _SideActions({
-    required this.followed,
     required this.superFollowed,
-    required this.onToggleFollow,
     required this.onToggleSuperFollow,
   });
 
-  final bool followed;
   final bool superFollowed;
-  final VoidCallback onToggleFollow;
   final VoidCallback onToggleSuperFollow;
 
   @override
@@ -438,49 +475,27 @@ class _SideActions extends StatelessWidget {
     final tokens = context.tokens;
     return SizedBox(
       width: 59,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Expanded(
-            child: _SideActionButton(
-              key: const Key('play-side-follow-btn'),
-              icon: followed
-                  ? Icons.favorite_rounded
-                  : Icons.favorite_border_rounded,
-              label: followed ? '已关注' : '关注',
-              selected: followed,
-              colors: _ActionChipColors(
-                background: tokens.playFollowBg,
-                hoverBackground: tokens.playFollowBgHover,
-                activeBackground: tokens.playFollowBgActive,
-                border: tokens.playFollowBorder,
-                foreground: tokens.playFollowText,
-                activeForeground: tokens.playFollowTextActive,
-              ),
-              onPressed: onToggleFollow,
+      child: Center(
+        child: SizedBox(
+          height: 22,
+          child: _SideActionButton(
+            key: const Key('play-side-super-follow'),
+            icon: superFollowed
+                ? Icons.star_rounded
+                : Icons.star_border_rounded,
+            label: superFollowed ? '已超关' : '超关',
+            selected: superFollowed,
+            colors: _ActionChipColors(
+              background: tokens.playSuperBg,
+              hoverBackground: tokens.playSuperBgHover,
+              activeBackground: tokens.playSuperBgActive,
+              border: tokens.playSuperBorder,
+              foreground: tokens.playSuperText,
+              activeForeground: tokens.playSuperTextActive,
             ),
+            onPressed: onToggleSuperFollow,
           ),
-          const SizedBox(height: 2),
-          Expanded(
-            child: _SideActionButton(
-              key: const Key('play-side-super-follow'),
-              icon: superFollowed
-                  ? Icons.star_rounded
-                  : Icons.star_border_rounded,
-              label: superFollowed ? '已超关' : '超关',
-              selected: superFollowed,
-              colors: _ActionChipColors(
-                background: tokens.playSuperBg,
-                hoverBackground: tokens.playSuperBgHover,
-                activeBackground: tokens.playSuperBgActive,
-                border: tokens.playSuperBorder,
-                foreground: tokens.playSuperText,
-                activeForeground: tokens.playSuperTextActive,
-              ),
-              onPressed: onToggleSuperFollow,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
