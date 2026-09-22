@@ -39,12 +39,17 @@ const String _baselineGeneratedBy =
 ///   - platform_brands.dart: 各平台品牌色表(数据,不是 UI 代码的取值)。
 ///   - category_colors.dart: 分类色映射表(同上)。
 ///   - danmaku_style.dart: 弹幕样式纯数据模型(颜色/字号的领域默认值)。
+///   - chat_badges.dart: 聊天徽章的平台渐变/等级色表(对齐 web `badgeHelpers.ts` 的
+///     LEVEL_TIER_GRADIENTS 与 HUYA_BAR_GRADIENTS)——是平台数据,不是 UI 取值。
+///     更干净的做法是把色表搬到独立数据文件;本次先白名单止血,避免 54 条假债
+///     把真实债务淹掉。
 const Set<String> _whitelistedFiles = <String>{
   'lib/src/shared/presentation/design_tokens.dart',
   'lib/src/shared/presentation/zishu_tokens.dart',
   'lib/src/shared/presentation/platform_brands.dart',
   'lib/src/shared/presentation/category_colors.dart',
   'lib/src/features/danmaku/domain/danmaku_style.dart',
+  'lib/src/features/play/widgets/side_panel/chat_badges.dart',
 };
 
 /// 一条规则 = 稳定字符串 id + 人类可读说明 + 正则。
