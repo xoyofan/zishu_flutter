@@ -81,7 +81,7 @@ class SettingsSliderRow extends StatelessWidget {
             display,
             textAlign: TextAlign.end,
             style: TextStyle(
-              fontSize: 10.5,
+              fontSize: AppFontSize.caption,
               fontFeatures: const [FontFeature.tabularFigures()],
               color: context.tokens.accent,
             ),

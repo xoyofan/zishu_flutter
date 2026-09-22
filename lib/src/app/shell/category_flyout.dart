@@ -32,7 +32,7 @@ class _PlatformCategorySheet extends ConsumerWidget {
                   child: Text(
                     '${brand?.name ?? site} · 分类',
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: AppFontSize.body,
                       fontWeight: FontWeight.w700,
                       color: tokens.textPrimary,
                     ),
@@ -60,7 +60,7 @@ class _PlatformCategorySheet extends ConsumerWidget {
               error: (_, _) => Center(
                 child: Text(
                   '分类加载失败',
-                  style: TextStyle(fontSize: 12, color: tokens.textSecondary),
+                  style: TextStyle(fontSize: AppFontSize.bodySecondary, color: tokens.textSecondary),
                 ),
               ),
               data: (result) {
@@ -70,7 +70,7 @@ class _PlatformCategorySheet extends ConsumerWidget {
                     child: Text(
                       '暂无分类数据',
                       style: TextStyle(
-                        fontSize: 12,
+                        fontSize: AppFontSize.bodySecondary,
                         color: tokens.textSecondary,
                       ),
                     ),
@@ -85,7 +85,7 @@ class _PlatformCategorySheet extends ConsumerWidget {
                         child: Text(
                           displayCategoryGroupName(site, group.name),
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: AppFontSize.bodySecondary,
                             fontWeight: FontWeight.w700,
                             color: tokens.textSecondary,
                           ),
@@ -120,7 +120,7 @@ class _PlatformCategorySheet extends ConsumerWidget {
                                     item.cid,
                                   ),
                                   style: TextStyle(
-                                    fontSize: 12,
+                                    fontSize: AppFontSize.bodySecondary,
                                     color: tokens.textPrimary,
                                   ),
                                 ),
@@ -197,7 +197,7 @@ class _FlyoutHint extends StatelessWidget {
         text,
         textAlign: TextAlign.center,
         style: TextStyle(
-          fontSize: 12.5,
+          fontSize: AppFontSize.body,
           color: danger ? context.tokens.error : context.tokens.textSecondary,
         ),
       ),
@@ -343,7 +343,7 @@ class _CategoryBoardState extends State<_CategoryBoard> {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            fontSize: 11.5,
+                            fontSize: AppFontSize.bodySecondary,
                             fontWeight: FontWeight.w700,
                             color: context.tokens.textSecondary,
                           ),
@@ -422,7 +422,7 @@ class _CategoryChipState extends State<_CategoryChip> {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 11.84,
+              fontSize: AppFontSize.bodySecondary,
               color: _hovering
                   ? context.tokens.accent
                   : context.tokens.textPrimary,

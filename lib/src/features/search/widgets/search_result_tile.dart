@@ -56,7 +56,7 @@ class SearchResultTile extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: context.textTitle.copyWith(
-                            fontSize: 14,
+                            fontSize: AppFontSize.subtitle,
                             color: tokens.textPrimary,
                           ),
                         ),

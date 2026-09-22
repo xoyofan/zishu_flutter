@@ -113,7 +113,7 @@ class PlayMetaBar extends ConsumerWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: AppFontSize.body,
                       height: 1.05,
                       fontWeight: FontWeight.w600,
                       color: isLive ? tokens.liveBadge : tokens.textPrimary,
@@ -238,7 +238,7 @@ class _MetaAvatar extends StatelessWidget {
               child: Text(
                 fallback,
                 style: TextStyle(
-                  fontSize: 14,
+                  fontSize: AppFontSize.subtitle,
                   fontWeight: FontWeight.w700,
                   color: live ? tokens.liveBadge : tokens.textSecondary,
                 ),
@@ -251,7 +251,7 @@ class _MetaAvatar extends StatelessWidget {
                 child: Text(
                   fallback,
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: AppFontSize.subtitle,
                     fontWeight: FontWeight.w700,
                     color: live ? tokens.liveBadge : tokens.textSecondary,
                   ),
@@ -291,7 +291,7 @@ class _MetaStat extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
-              fontSize: 10.5,
+              fontSize: AppFontSize.caption,
               height: 1.05,
               color: tokens.textSecondary,
             ),
@@ -410,7 +410,7 @@ class _MetaActionButton extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 10.5,
+                      fontSize: AppFontSize.caption,
                       height: 1.1,
                       fontWeight: FontWeight.w600,
                       color: foreground,

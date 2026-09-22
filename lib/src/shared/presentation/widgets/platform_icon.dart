@@ -82,7 +82,7 @@ class PlatformIcon extends StatelessWidget {
                     overflow: TextOverflow.clip,
                     style: TextStyle(
                       color: id == 'yy' ? const Color(0xFF1A1A1A) : Colors.white,
-                      fontSize: id == 'yy' ? size * 0.36 : size * 0.42,
+                      fontSize: id == 'yy' ? size * 0.36 : size * 0.42, // ignore: design_token 几何比例(字母字形随图标盒缩放),非排版字号档
                       fontWeight: FontWeight.w800,
                       height: 1,
                     ),
@@ -101,7 +101,7 @@ class PlatformIcon extends StatelessWidget {
                       fallback,
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: size * 0.42,
+                        fontSize: size * 0.42, // ignore: design_token 几何比例(字母字形随图标盒缩放),非排版字号档
                         fontWeight: FontWeight.w800,
                         height: 1,
                       ),

@@ -47,7 +47,7 @@ class _BottomNav extends StatelessWidget {
                     '薯',
                     style: TextStyle(
                       color: Colors.black,
-                      fontSize: 14,
+                      fontSize: AppFontSize.subtitle,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
@@ -155,7 +155,7 @@ class _BottomItem extends StatelessWidget {
                 fit: BoxFit.scaleDown,
                 child: Text(
                   label,
-                  style: TextStyle(fontSize: 11, color: color),
+                  style: TextStyle(fontSize: AppFontSize.caption, color: color),
                 ),
               ),
             ],

@@ -52,7 +52,7 @@ class _UserAvatar extends ConsumerWidget {
             Text(
               label,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: AppFontSize.bodySecondary,
                 fontWeight: FontWeight.w500,
                 color: authenticated
                     ? context.tokens.textPrimary
@@ -99,7 +99,7 @@ class _UserAvatar extends ConsumerWidget {
                 Text(
                   '平台凭证',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppFontSize.bodySecondary,
                     color: context.tokens.textPrimary,
                   ),
                 ),
@@ -120,7 +120,7 @@ class _UserAvatar extends ConsumerWidget {
                 Text(
                   '退出登录',
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: AppFontSize.bodySecondary,
                     color: context.tokens.textPrimary,
                   ),
                 ),
@@ -199,7 +199,7 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
       title: Text(
         '登录账号',
         style: TextStyle(
-          fontSize: 14,
+          fontSize: AppFontSize.subtitle,
           fontWeight: FontWeight.w600,
           color: context.tokens.textPrimary,
         ),
@@ -214,12 +214,12 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
           children: [
             TextField(
               controller: _userController,
-              style: TextStyle(fontSize: 13, color: context.tokens.textPrimary),
+              style: TextStyle(fontSize: AppFontSize.body, color: context.tokens.textPrimary),
               decoration: InputDecoration(
                 isDense: true,
                 labelText: '用户名',
                 labelStyle: TextStyle(
-                  fontSize: 12,
+                  fontSize: AppFontSize.bodySecondary,
                   color: context.tokens.textSecondary,
                 ),
                 prefixIcon: const Icon(Icons.person_outline_rounded, size: 18),
@@ -233,12 +233,12 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
               controller: _passController,
               obscureText: true,
               onSubmitted: (_) => _submit(),
-              style: TextStyle(fontSize: 13, color: context.tokens.textPrimary),
+              style: TextStyle(fontSize: AppFontSize.body, color: context.tokens.textPrimary),
               decoration: InputDecoration(
                 isDense: true,
                 labelText: '密码',
                 labelStyle: TextStyle(
-                  fontSize: 12,
+                  fontSize: AppFontSize.bodySecondary,
                   color: context.tokens.textSecondary,
                 ),
                 prefixIcon: Icon(Icons.lock_outline_rounded, size: 18),
@@ -264,7 +264,7 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
                   Text(
                     '记住密码(下次打开自动登录)',
                     style: TextStyle(
-                      fontSize: 12,
+                      fontSize: AppFontSize.bodySecondary,
                       color: context.tokens.textSecondary,
                     ),
                   ),
@@ -276,7 +276,7 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
                 padding: EdgeInsets.only(top: 2, bottom: 4),
                 child: Text(
                   lastError,
-                  style: TextStyle(fontSize: 12, color: context.tokens.error),
+                  style: TextStyle(fontSize: AppFontSize.bodySecondary, color: context.tokens.error),
                 ),
               ),
           ],
@@ -287,7 +287,7 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
           onPressed: () => Navigator.of(context).pop(),
           child: Text(
             '取消',
-            style: TextStyle(fontSize: 12, color: context.tokens.textSecondary),
+            style: TextStyle(fontSize: AppFontSize.bodySecondary, color: context.tokens.textSecondary),
           ),
         ),
         FilledButton(
@@ -295,7 +295,7 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
           style: FilledButton.styleFrom(
             backgroundColor: context.tokens.accent,
             foregroundColor: Colors.white,
-            textStyle: const TextStyle(fontSize: 12),
+            textStyle: const TextStyle(fontSize: AppFontSize.bodySecondary),
           ),
           child: _busy
               ? const SizedBox(

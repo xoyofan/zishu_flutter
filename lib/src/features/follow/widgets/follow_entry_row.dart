@@ -109,7 +109,7 @@ class FollowEntryRow extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.clip,
                     style: context.textCaption.copyWith(
-                      fontSize: 10,
+                      fontSize: AppFontSize.label,
                       color: tokens.textSecondary,
                     ),
                   ),
@@ -132,7 +132,7 @@ class FollowEntryRow extends StatelessWidget {
                           site: room.site,
                           name: room.anchorName,
                           live: live,
-                          fontSize: 11,
+                          fontSize: AppFontSize.caption,
                         ),
                       ),
                     ),
@@ -166,7 +166,7 @@ class FollowEntryRow extends StatelessWidget {
                     Text(
                       room.online,
                       style: context.textCaption.copyWith(
-                        fontSize: 10,
+                        fontSize: AppFontSize.label,
                         color: tokens.textSecondary,
                         fontFeatures: const [FontFeature.tabularFigures()],
                       ),
@@ -188,7 +188,7 @@ class FollowEntryRow extends StatelessWidget {
                     Text(
                       '未开播',
                       style: context.textCaption.copyWith(
-                        fontSize: 10,
+                        fontSize: AppFontSize.label,
                         color: tokens.textSecondary,
                       ),
                     ),

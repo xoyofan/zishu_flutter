@@ -56,7 +56,7 @@ class _MyCategoryFlyout extends ConsumerWidget {
                     minimumSize: Size.zero,
                     tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     foregroundColor: context.tokens.accent,
-                    textStyle: const TextStyle(fontSize: 12),
+                    textStyle: const TextStyle(fontSize: AppFontSize.bodySecondary),
                   ),
                   child: const Text('管理分类'),
                 ),
@@ -149,7 +149,7 @@ class _MyCategoryChipState extends State<_MyCategoryChip> {
                   widget.entry.cid,
                 ),
                 style: TextStyle(
-                  fontSize: 14.4,
+                  fontSize: AppFontSize.subtitle,
                   fontWeight: FontWeight.w500,
                   color: gold
                       ? context.tokens.brand
@@ -179,7 +179,7 @@ class _MyCategoryManageDialog extends ConsumerWidget {
       backgroundColor: context.tokens.surface,
       title: Text(
         '我的分类(${favorites.length}/${MyCategoryController.maxCount})',
-        style: TextStyle(fontSize: 15, color: context.tokens.textPrimary),
+        style: TextStyle(fontSize: AppFontSize.subtitle, color: context.tokens.textPrimary),
       ),
       content: SizedBox(
         width: 420,
@@ -192,7 +192,7 @@ class _MyCategoryManageDialog extends ConsumerWidget {
               Text(
                 '已收藏(点击 × 移除)',
                 style: TextStyle(
-                  fontSize: 12,
+                  fontSize: AppFontSize.bodySecondary,
                   color: context.tokens.textSecondary,
                 ),
               ),
@@ -214,7 +214,7 @@ class _MyCategoryManageDialog extends ConsumerWidget {
             Text(
               '分类目录(点击收藏/取消)',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: AppFontSize.bodySecondary,
                 color: context.tokens.textSecondary,
               ),
             ),
@@ -253,7 +253,7 @@ class _MyCategoryManageDialog extends ConsumerWidget {
                           Text(
                             displayCategoryGroupName(site, group.name),
                             style: TextStyle(
-                              fontSize: 12,
+                              fontSize: AppFontSize.bodySecondary,
                               fontWeight: FontWeight.w700,
                               color: context.tokens.textSecondary,
                             ),
@@ -337,7 +337,7 @@ class _RemovableChip extends StatelessWidget {
           Text(
             // 同 _MyCategoryChip:旧快照英文名渲染时再映射一次中文。
             displayCategoryName(entry.site, entry.name, entry.cid),
-            style: TextStyle(fontSize: 13, color: context.tokens.brand),
+            style: TextStyle(fontSize: AppFontSize.body, color: context.tokens.brand),
           ),
           InkWell(
             borderRadius: AppRadius.allPill,
@@ -401,7 +401,7 @@ class _PickableChip extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                fontSize: 13,
+                fontSize: AppFontSize.body,
                 color: selected
                     ? context.tokens.brand
                     : context.tokens.textPrimary,

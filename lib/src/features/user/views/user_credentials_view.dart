@@ -36,7 +36,7 @@ class UserCredentialsView extends ConsumerWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('用户', style: context.textTitle.copyWith(fontSize: 18)),
+              Text('用户', style: context.textTitle.copyWith(fontSize: AppFontSize.headline)),
               const SizedBox(height: AppSpacing.lg),
               const _Group(title: '账号', children: [_AccountRow()]),
               _Group(

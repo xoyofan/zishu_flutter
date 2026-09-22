@@ -174,7 +174,7 @@ class _FollowViewState extends ConsumerState<FollowView> {
       ),
       child: Row(
         children: [
-          Text('我的关注', style: context.textTitle.copyWith(fontSize: 18)),
+          Text('我的关注', style: context.textTitle.copyWith(fontSize: AppFontSize.headline)),
           const Spacer(),
           Flexible(
             child: Wrap(
@@ -354,7 +354,7 @@ class _FollowViewState extends ConsumerState<FollowView> {
               ),
               textStyle: WidgetStatePropertyAll(
                 context.textBody.copyWith(
-                  fontSize: 12,
+                  fontSize: AppFontSize.bodySecondary,
                   fontWeight: FontWeight.w600,
                 ),
               ),

@@ -91,7 +91,7 @@ class AnchorLiveCard extends StatelessWidget {
                         room.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: context.textTitle.copyWith(fontSize: 15),
+                        style: context.textTitle.copyWith(fontSize: AppFontSize.subtitle),
                       ),
                     ),
                     if (room.category.isNotEmpty) ...[
@@ -124,7 +124,7 @@ class AnchorLiveCard extends StatelessWidget {
                           Text(
                             '进入直播间',
                             style: context.textTitle.copyWith(
-                              fontSize: 15,
+                              fontSize: AppFontSize.subtitle,
                               fontWeight: FontWeight.w700,
                               color: tokens.surfaceSoft,
                             ),

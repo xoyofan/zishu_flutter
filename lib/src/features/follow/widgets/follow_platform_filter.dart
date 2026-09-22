@@ -173,7 +173,7 @@ class _PlatformChip extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: context.textBody.copyWith(
-                    fontSize: compact ? 10 : 12,
+                    fontSize: compact ? AppFontSize.label : AppFontSize.bodySecondary,
                     fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
                     color: selected ? tokens.textPrimary : tokens.textSecondary,
                   ),
@@ -185,7 +185,7 @@ class _PlatformChip extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: context.textBody.copyWith(
-                  fontSize: compact ? 10 : 12,
+                  fontSize: compact ? AppFontSize.label : AppFontSize.bodySecondary,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
                   color: selected ? tokens.textPrimary : tokens.textSecondary,
                 ),

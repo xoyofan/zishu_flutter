@@ -155,7 +155,7 @@ class _FanBadgeState extends State<_FanBadge> {
         child: Text(
           '$level',
           style: const TextStyle(
-            fontSize: 11,
+            fontSize: AppFontSize.caption,
             height: 1.1,
             color: Colors.white,
             fontWeight: FontWeight.w800,
@@ -184,7 +184,7 @@ class _FanBadgeState extends State<_FanBadge> {
               child: Text(
                 '$level',
                 style: const TextStyle(
-                  fontSize: 9.4,
+                  fontSize: AppFontSize.overline,
                   height: 1.1,
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
@@ -196,7 +196,7 @@ class _FanBadgeState extends State<_FanBadge> {
               Text(
                 name.trim(),
                 style: const TextStyle(
-                  fontSize: 11,
+                  fontSize: AppFontSize.caption,
                   height: 1.1,
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
@@ -224,7 +224,7 @@ class _FanBadgeState extends State<_FanBadge> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 12.6,
+                  fontSize: AppFontSize.body,
                   height: 1.1,
                   color: resolvedTextColor,
                   fontWeight: FontWeight.w700,
@@ -235,7 +235,7 @@ class _FanBadgeState extends State<_FanBadge> {
           Text(
             '$level',
             style: TextStyle(
-              fontSize: 12.6,
+              fontSize: AppFontSize.body,
               height: 1.1,
               color: resolvedLevelColor,
               fontWeight: FontWeight.w700,
@@ -318,7 +318,7 @@ class _FanBadgeState extends State<_FanBadge> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 10.9, // web 0.78em
+                      fontSize: AppFontSize.caption, // web 0.78em
                       height: 1.1,
                       color: resolvedTextColor,
                       fontWeight: FontWeight.w600,
@@ -348,7 +348,7 @@ class _FanBadgeState extends State<_FanBadge> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            fontSize: 9,
+            fontSize: AppFontSize.overline,
             height: 1.1,
             color: Colors.white,
             fontWeight: FontWeight.w700,
@@ -365,7 +365,7 @@ class _FanBadgeState extends State<_FanBadge> {
       child: Text(
         label(site, name, hasName, level),
         style: TextStyle(
-          fontSize: 9,
+          fontSize: AppFontSize.overline,
           height: 1.1,
           color: tokens.brand,
           fontWeight: FontWeight.w700,
@@ -451,7 +451,7 @@ class _UserLevelBadgeState extends State<_UserLevelBadge> {
               child: Text(
                 '$level',
                 style: const TextStyle(
-                  fontSize: 8.1,
+                  fontSize: AppFontSize.overline,
                   height: 1,
                   color: Colors.white,
                   fontWeight: FontWeight.w700,
@@ -505,7 +505,7 @@ class _UserLevelBadgeState extends State<_UserLevelBadge> {
       child: Text(
         label,
         style: const TextStyle(
-          fontSize: 9,
+          fontSize: AppFontSize.overline,
           height: 1.1,
           color: Colors.white,
           fontWeight: FontWeight.w700,

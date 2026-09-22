@@ -96,7 +96,7 @@ class _SideHeader extends ConsumerWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: 14,
+                      fontSize: AppFontSize.subtitle,
                       height: 1.08,
                       fontWeight: FontWeight.w600,
                       color: isLive ? tokens.liveBadge : tokens.textPrimary,
@@ -116,7 +116,7 @@ class _SideHeader extends ConsumerWidget {
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 10, height: 1.15),
+                          style: const TextStyle(fontSize: AppFontSize.label, height: 1.15),
                         ),
                       ),
                       // 开播提醒 + 外链(用户口径 2026-09-20:从头像悬浮挪到
@@ -151,7 +151,7 @@ class _SideHeader extends ConsumerWidget {
                           key: const Key('play-side-stat-followers'),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 11, height: 1.08),
+                          style: const TextStyle(fontSize: AppFontSize.caption, height: 1.08),
                         ),
                       ),
                       const SizedBox(width: AppSpacing.sm),
@@ -256,7 +256,7 @@ class _SideAvatar extends StatelessWidget {
                         child: Text(
                           fallback,
                           style: TextStyle(
-                            fontSize: 20,
+                            fontSize: AppFontSize.display,
                             fontWeight: FontWeight.w700,
                             color: live
                                 ? tokens.liveBadge
@@ -274,7 +274,7 @@ class _SideAvatar extends StatelessWidget {
                           child: Text(
                             fallback,
                             style: TextStyle(
-                              fontSize: 20,
+                              fontSize: AppFontSize.display,
                               fontWeight: FontWeight.w700,
                               color: live
                                   ? tokens.liveBadge
@@ -340,7 +340,7 @@ class _SideTextAction extends StatelessWidget {
             child: Text(
               label,
               style: TextStyle(
-                fontSize: 9.5,
+                fontSize: AppFontSize.label,
                 height: 1.2,
                 fontWeight: FontWeight.w600,
                 color: fg,
@@ -456,7 +456,7 @@ class _SideActionButton extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 10,
+                    fontSize: AppFontSize.label,
                     height: 1,
                     fontWeight: FontWeight.w600,
                     color: foreground,
@@ -492,7 +492,7 @@ class _StatValue extends StatelessWidget {
         Text(
           value,
           style: TextStyle(
-            fontSize: 10,
+            fontSize: AppFontSize.label,
             height: 1,
             color: color,
             fontFeatures: const [FontFeature.tabularFigures()],

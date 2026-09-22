@@ -40,7 +40,7 @@ class TimelineView extends ConsumerWidget {
                   Text(
                     '动态时间线',
                     style: context.textTitle.copyWith(
-                      fontSize: 20,
+                      fontSize: AppFontSize.display,
                       fontWeight: FontWeight.w700,
                     ),
                   ),

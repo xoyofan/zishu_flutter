@@ -23,7 +23,7 @@ class _SettingsPanel extends ConsumerWidget {
                 isDense: true,
                 underline: const SizedBox.shrink(),
                 dropdownColor: tokens.surfaceRaised,
-                style: TextStyle(fontSize: 11, color: tokens.textPrimary),
+                style: TextStyle(fontSize: AppFontSize.caption, color: tokens.textPrimary),
                 items: [
                   for (final format in PreferredLineFormat.values)
                     DropdownMenuItem(value: format, child: Text(format.label)),
@@ -149,7 +149,7 @@ class _SettingsGroup extends StatelessWidget {
             title,
             style: TextStyle(
               // 对齐 web .settings-group__title(.78rem ≈ 12.5)。
-              fontSize: 12.5,
+              fontSize: AppFontSize.body,
               height: 1.2,
               color: context.tokens.accent,
               fontWeight: FontWeight.w600,

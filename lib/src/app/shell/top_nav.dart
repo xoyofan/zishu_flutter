@@ -228,7 +228,7 @@ class _Logo extends StatelessWidget {
                     '薯',
                     style: TextStyle(
                       color: Colors.black,
-                      fontSize: 16,
+                      fontSize: AppFontSize.title,
                       fontWeight: FontWeight.w900,
                     ),
                   ),
@@ -239,7 +239,7 @@ class _Logo extends StatelessWidget {
                 Text(
                   '紫薯直播',
                   style: TextStyle(
-                    fontSize: 14,
+                    fontSize: AppFontSize.subtitle,
                     fontWeight: FontWeight.w600,
                     color: context.tokens.textPrimary,
                   ),
@@ -330,7 +330,7 @@ class _NavAction extends StatelessWidget {
                         Text(
                           label,
                           style: TextStyle(
-                            fontSize: 12,
+                            fontSize: AppFontSize.bodySecondary,
                             fontWeight: active
                                 ? FontWeight.w600
                                 : FontWeight.w500,

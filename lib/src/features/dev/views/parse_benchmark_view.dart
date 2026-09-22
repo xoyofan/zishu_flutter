@@ -241,7 +241,7 @@ class _ParseBenchmarkViewState extends ConsumerState<ParseBenchmarkView> {
             Text(
               '解析耗时',
               style: context.textTitle.copyWith(
-                fontSize: 20,
+                fontSize: AppFontSize.display,
                 fontWeight: FontWeight.w700,
               ),
             ),
@@ -331,7 +331,7 @@ class _ParseBenchmarkViewState extends ConsumerState<ParseBenchmarkView> {
                         ),
                         child: Text(
                           _running ? '测试中…' : '运行基准',
-                          style: const TextStyle(fontSize: 12),
+                          style: const TextStyle(fontSize: AppFontSize.bodySecondary),
                         ),
                       ),
                       OutlinedButton(
@@ -344,7 +344,7 @@ class _ParseBenchmarkViewState extends ConsumerState<ParseBenchmarkView> {
                         ),
                         child: const Text(
                           '重新解析(绕缓存)',
-                          style: TextStyle(fontSize: 12),
+                          style: TextStyle(fontSize: AppFontSize.bodySecondary),
                         ),
                       ),
                     ],

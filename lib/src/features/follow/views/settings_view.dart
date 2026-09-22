@@ -44,7 +44,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('设置', style: context.textTitle.copyWith(fontSize: 18)),
+              Text('设置', style: context.textTitle.copyWith(fontSize: AppFontSize.headline)),
               const SizedBox(height: AppSpacing.lg),
               _SettingsGroup(title: '账号', children: [_AccountSettingRow()]),
               _SettingsGroup(

@@ -12,6 +12,7 @@ library;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../../../shared/presentation/widgets/settings_slider_row.dart';
 import '../../follow/application/settings_provider.dart';
@@ -58,7 +59,7 @@ class DanmakuSettingsPanel extends ConsumerWidget {
           child: Text(
             '飘屏弹幕',
             style: TextStyle(
-              fontSize: 12,
+              fontSize: AppFontSize.bodySecondary,
               fontWeight: FontWeight.w600,
               color: context.tokens.accent,
             ),

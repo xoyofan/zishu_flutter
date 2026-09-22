@@ -662,7 +662,7 @@ class _DanmakuMark extends StatelessWidget {
           child: Text(
             '弹',
             style: TextStyle(
-              fontSize: 13,
+              fontSize: AppFontSize.body,
               height: 1,
               fontWeight: FontWeight.w700,
               color: color,
@@ -675,7 +675,7 @@ class _DanmakuMark extends StatelessWidget {
             child: Text(
               '√',
               style: TextStyle(
-                fontSize: 8,
+                fontSize: AppFontSize.overline,
                 height: 1,
                 fontWeight: FontWeight.w800,
                 color: context.tokens.accent,
@@ -720,7 +720,7 @@ class _TranslateMark extends StatelessWidget {
           child: Text(
             '译',
             style: TextStyle(
-              fontSize: 13,
+              fontSize: AppFontSize.body,
               height: 1,
               fontWeight: FontWeight.w700,
               color: color,
@@ -743,7 +743,7 @@ class _TranslateMark extends StatelessWidget {
               child: Text(
                 '√',
                 style: TextStyle(
-                  fontSize: 8,
+                  fontSize: AppFontSize.overline,
                   height: 1,
                   fontWeight: FontWeight.w800,
                   color: context.tokens.accent,
@@ -907,7 +907,7 @@ class _DanmakuSettingsButtonState
     child: Text(
       '飘屏弹幕',
       style: TextStyle(
-        fontSize: 11.5,
+        fontSize: AppFontSize.bodySecondary,
         fontWeight: FontWeight.w600,
         color: context.tokens.accent,
       ),
@@ -1009,7 +1009,7 @@ class _DanmakuSettingsButtonState
                     0.25 => '1/4',
                     _ => '全屏',
                   },
-                  style: const TextStyle(fontSize: 11, color: AppOnVideo.text),
+                  style: const TextStyle(fontSize: AppFontSize.caption, color: AppOnVideo.text),
                 ),
                 const Icon(
                   Icons.arrow_drop_down_rounded,

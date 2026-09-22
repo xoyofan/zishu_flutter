@@ -80,7 +80,7 @@ class _NavFollowAvatar extends StatelessWidget {
       child: Text(
         room.anchorName.isEmpty ? '?' : room.anchorName.substring(0, 1),
         style: TextStyle(
-          fontSize: size * 0.5,
+          fontSize: size * 0.5, // ignore: design_token 几何比例(头像首字母随容器缩放),非排版字号档
           color: context.tokens.textSecondary,
         ),
       ),
@@ -124,7 +124,7 @@ class _FollowFlyout extends ConsumerWidget {
   static const double _kAvatarSize = 29.6;
 
   /// 名字 .56rem ≈ 9px。
-  static const double _kNameSize = 8.96;
+  static const double _kNameSize = AppFontSize.overline;
 
   /// 行间距 .22rem ≈ 3.52px;列间距 .06rem ≈ 0.96px。
   static const double _kRowGap = 3.52;
@@ -237,7 +237,7 @@ class _FollowAvatarTile extends StatelessWidget {
       backgroundColor: context.tokens.surfaceRaised,
       child: Text(
         room.anchorName.isEmpty ? '?' : room.anchorName.substring(0, 1),
-        style: TextStyle(fontSize: 12, color: context.tokens.textSecondary),
+        style: TextStyle(fontSize: AppFontSize.bodySecondary, color: context.tokens.textSecondary),
       ),
     );
     if (room.cover.isEmpty) return fallback;

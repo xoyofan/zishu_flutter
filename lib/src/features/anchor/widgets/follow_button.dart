@@ -97,7 +97,7 @@ class AnchorAvatar extends StatelessWidget {
               child: Text(
                 label.isEmpty ? '?' : label.substring(0, 1),
                 style: context.textTitle.copyWith(
-                  fontSize: 26,
+                  fontSize: AppFontSize.display,
                   color: tokens.textSecondary,
                 ),
               ),

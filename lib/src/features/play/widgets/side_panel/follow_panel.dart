@@ -207,7 +207,7 @@ class _PanelHint extends StatelessWidget {
             Text(
               title,
               style: TextStyle(
-                fontSize: 12,
+                fontSize: AppFontSize.bodySecondary,
                 fontWeight: FontWeight.w600,
                 color: tokens.textPrimary,
               ),

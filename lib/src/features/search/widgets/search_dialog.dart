@@ -100,7 +100,7 @@ class _SearchDialogFrame extends StatelessWidget {
                   Text(
                     '搜索',
                     style: context.textTitle.copyWith(
-                      fontSize: 15,
+                      fontSize: AppFontSize.subtitle,
                       color: tokens.textPrimary,
                     ),
                   ),

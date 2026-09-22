@@ -566,7 +566,7 @@ class _ChatTabState extends ConsumerState<_ChatTab>
                       Text(
                         '刷新',
                         style: TextStyle(
-                          fontSize: 11,
+                          fontSize: AppFontSize.caption,
                           height: 1,
                           color: tokens.textSecondary,
                         ),
@@ -662,7 +662,7 @@ class _NewMessagesButton extends StatelessWidget {
           child: Text(
             '$count 条新消息',
             style: const TextStyle(
-              fontSize: 12,
+              fontSize: AppFontSize.bodySecondary,
               height: 1.1,
               color: Colors.white,
               fontWeight: FontWeight.w600,

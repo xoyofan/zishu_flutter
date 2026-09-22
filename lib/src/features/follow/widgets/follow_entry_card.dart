@@ -110,7 +110,7 @@ class FollowEntryCard extends StatelessWidget {
                                 site: room.site,
                                 name: room.anchorName,
                                 live: live,
-                                fontSize: 12.5,
+                                fontSize: AppFontSize.body,
                               ),
                             ),
                           ],
@@ -122,7 +122,7 @@ class FollowEntryCard extends StatelessWidget {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: context.textSecondary.copyWith(
-                          fontSize: 11,
+                          fontSize: AppFontSize.caption,
                           color: tokens.textSecondary,
                         ),
                       ),
@@ -163,7 +163,7 @@ class FollowEntryCard extends StatelessWidget {
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
                                 style: context.textCaption.copyWith(
-                                  fontSize: 10,
+                                  fontSize: AppFontSize.label,
                                   color: live
                                       ? tokens.textPrimary
                                       : (replay
@@ -242,7 +242,7 @@ class FollowEntryCard extends StatelessWidget {
                   // 跨平台统一中文分类名:命中映射用 canonical 名,否则回落平台原名。
                   displayCategoryName(room.site, room.category, room.cid),
                   style: context.textCaption.copyWith(
-                    fontSize: 10,
+                    fontSize: AppFontSize.label,
                     color: tokens.surfaceSoft,
                     fontWeight: FontWeight.w700,
                   ),
@@ -258,7 +258,7 @@ class FollowEntryCard extends StatelessWidget {
               child: Text(
                 brand?.name ?? room.site,
                 style: context.textCaption.copyWith(
-                  fontSize: 10,
+                  fontSize: AppFontSize.label,
                   color: tokens.surfaceSoft,
                   fontWeight: FontWeight.w700,
                 ),
@@ -303,7 +303,7 @@ class FollowEntryCard extends StatelessWidget {
                     Text(
                       room.online,
                       style: context.textCaption.copyWith(
-                        fontSize: 10,
+                        fontSize: AppFontSize.label,
                         color: tokens.textPrimary,
                       ),
                     ),
@@ -329,7 +329,7 @@ class FollowEntryCard extends StatelessWidget {
                     Text(
                       '轮播',
                       style: context.textCaption.copyWith(
-                        fontSize: 10,
+                        fontSize: AppFontSize.label,
                         color: kFollowReplayAccent,
                         fontWeight: FontWeight.w600,
                       ),
@@ -352,7 +352,7 @@ class FollowEntryCard extends StatelessWidget {
                   // 与元信息行同源:有记录显示「上次开播」,否则「未开播」。
                   offlineLastLiveLabel(entry.lastLiveAt),
                   style: context.textCaption.copyWith(
-                    fontSize: 10,
+                    fontSize: AppFontSize.label,
                     color: tokens.surface,
                     fontWeight: FontWeight.w600,
                   ),

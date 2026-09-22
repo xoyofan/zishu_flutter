@@ -200,7 +200,7 @@ class PlayRoomCard extends StatelessWidget {
                           child: Text(
                             '未开播',
                             style: context.textCaption.copyWith(
-                              fontSize: 10.5,
+                              fontSize: AppFontSize.caption,
                               color: tokens.coverScrimText,
                               fontWeight: FontWeight.w600,
                             ),
@@ -223,7 +223,7 @@ class PlayRoomCard extends StatelessWidget {
                       site: room.site,
                       name: room.anchorName,
                       live: _live,
-                      fontSize: 11,
+                      fontSize: AppFontSize.caption,
                     ),
                     const SizedBox(height: 1),
                     TranslatedText(
@@ -231,7 +231,7 @@ class PlayRoomCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: context.textSecondary.copyWith(
-                        fontSize: 10,
+                        fontSize: AppFontSize.label,
                         color: tokens.textSecondary,
                       ),
                     ),

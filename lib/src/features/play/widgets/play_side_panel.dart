@@ -294,12 +294,12 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
                 indicatorWeight: 2,
                 dividerColor: tokens.border,
                 labelStyle: const TextStyle(
-                  fontSize: 12.5,
+                  fontSize: AppFontSize.body,
                   fontWeight: FontWeight.w600,
                   height: 1.15,
                 ),
                 unselectedLabelStyle: const TextStyle(
-                  fontSize: 12.5,
+                  fontSize: AppFontSize.body,
                   fontWeight: FontWeight.w500,
                   height: 1.15,
                 ),

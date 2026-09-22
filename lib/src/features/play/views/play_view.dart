@@ -759,7 +759,7 @@ class _RoomHeader extends StatelessWidget {
                       Text(
                         categoryLabel.isNotEmpty ? categoryLabel : '直播',
                         style: context.textBody.copyWith(
-                          fontSize: 12.5,
+                          fontSize: AppFontSize.body,
                           height: 1,
                           color: badgeFg,
                           fontWeight: FontWeight.w600,
@@ -807,7 +807,7 @@ class _RoomHeader extends StatelessWidget {
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: context.textTitle.copyWith(fontSize: 15),
+                style: context.textTitle.copyWith(fontSize: AppFontSize.subtitle),
               ),
             ),
           ),
