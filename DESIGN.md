@@ -112,23 +112,31 @@ UI 文件里写死 `AppColors.*` 会被 `test/ui/light_theme_test.dart` 的静�
 
 平台的品牌色定义在 `lib/src/shared/presentation/platform_brands.dart`
 （`PlatformBrandCatalog`），取值与证据见 `docs/ui-parity/spec-tokens.md` §3。
-平台色只用于平台 tab、卡片角标、平台图标，**不得**用于通用控件强调。
+平台色只用于平台 tab、卡片角标、平台图标、侧栏标签，**不得**用于通用控件强调。
 
-**平台色有\*\*两个真源家族\*\***，不能混用（2026-09-21 核实，web 出处逐条给出）：
+**单一真源**：对齐 web `config/platformCatalog.ts` 的 `PLATFORM_BRAND_COLORS[id].bg` ——
+图标底色、顶栏 tab 描边/光晕、封面角标、侧栏标签**全部**用这一个值。
 
-| 家族 | web 出处 | 用于 | 哔哩 | 斗鱼 |
-|---|---|---|---|---|
-| `PlatformBrand.accentColor` | `styles/theme.css:9-16` 的 `--platform-{id}` | 平台**图标**底色、顶栏平台 tab 的描边与光晕、头像环 | **蓝 `#00a1d6`** | `#ff6b00` |
-| `PlatformBrand.color` | `config/platformCatalog.ts:12-25` 的 `bg` | 封面**角标** / chip 底色 | **粉 `#fb7299`** | `#ff6a00` |
+> ⚠️ **易踩陷阱（2026-09-21 实测踩过）**：web 的 `theme.css` / `main.css` 里还有一份
+> 同名静态变量，而且**值不同**：
+>
+> | | 静态 CSS（theme.css:12 / main.css:146） | 色表 `platformCatalog.ts`（真源） |
+> |---|---|---|
+> | `--platform-bilibili` | `#00a1d6` **蓝** | `#fb7299` **粉** |
+> | `--platform-douyu` | `#ff6b00` | `#ff6a00` |
+>
+> 但 web 启动时 `main.js:57` 会调 `initPlatformBrandVars()`
+> （`utils/ui/platformBrandVars.ts`），把 `info.bg` **内联注入 `:root`**，覆盖那些静态值
+> —— 注入代码自己的注释就写着“覆盖 theme.css/main.css 中**旧** 4 个平台的同名变量”。
+>
+> 所以：**静态 CSS 里那份是被覆盖的旧值，不是第二个真源**。哔哩实渲染色是**粉**。
+> 只看 CSS 文件会得出“两个家族”的错误结论（本人据此改错过一次，见 §11.2）。
 
-两家族仅在少数平台不同色（哔哩蓝/粉差异显著、斗鱼差 1/255），其余同值，故
-`accentColor` 默认回退到 `color`。**混用的后果**：顶栏 tab 与平台图标会串成角标色
-（哔哩会从蓝变粉）。
-
-同理，平台色块/图标上的**前景**按平台硬编码在 `PlatformBrand.chipForeground`
-（web `platformCatalog.ts` 的 `fg`）—— 虎牙/YY/全平台这类**亮底**用深色 `#1a1a1a`，
-其余用白。禁止改成“按背景亮度自动算”或“统一黑 87%”：前者会在橙色上给出深色字、
-后者会在黄/金底上给出低对比度白字，两者都与真源不符。
+平台色块/图标上的**前景**按平台硬编码在 `PlatformBrand.chipForeground`
+（web `PLATFORM_BRAND_COLORS[id].fg`）—— 虎牙 / YY 这类**亮底**用深色 `#1a1a1a`，
+其余用白；“全平台”是品牌金底、web 无对应条目，按同族亮底用深色。禁止改成
+“按背景亮度自动算”或“统一黑 87%”：前者会在橙色上给出深色字、后者会在黄/金底上
+给出低对比度白字，两者都与真源不符。
 
 ---
 
@@ -507,6 +515,7 @@ AppElevation / AppFocus / AppOnVideo / AppControls / AppDirectoryDrawer / AppRoo
 |---|---|---|---|
 | §10 第 8 条「统计项无底色」 | 断言 web 有 `--play-stat-{audience,vip,svip}-bg` 用在统计行，zishu 未实现 | ❌ 这两个变量只在 `styles/theme.css:36-41,129-134` **定义**；全仓唯一消费者是 dev 徽章目录页 `apps/web/public/dev/badge-catalog.html` 的 `.play-stat-item--*` 芯片。真播放页 `SideHeader.vue` 的 `.room-stat-icon-row--*` / `.room-stat-data-line--*` **无任何背景规则** | 条目作废；zishu 不加底色才是对齐真源 |
 | §4.2 hover 规则 | 「hover 底色抬到 `surfaceRaised`」 | ❌ 过度概括。web `.nav-brand:hover{background:var(--bg-soft)}`（`#141414`，**更暗**）、`.nav-item:hover{color:var(--amber)}`（**文字变琥珀**，不是底色）、`--dark-6` `#2A2A2A` 用于卡片/浮层 | 规则改为“按组件语义取”，并补记导航项文字变色 |
+| §2.3 平台色家族 | 断言“web 有两个平台色真源家族（CSS 变量 vs platformCatalog），哔哩图标用蓝、角标用粉” | ❌ **只有一个真源**。`main.js:57` 的 `initPlatformBrandVars()` 把 platformCatalog 的 `bg` 内联注入 `:root`，**覆盖**了 theme.css/main.css 的静态同名变量；哔哩的蓝 `#00a1d6` 是被覆盖的**旧值**（注入代码自己的注释就写着“覆盖…旧 4 个平台的同名变量”） | 撑回 `accentColor` 字段与三处调用（四象限、tab 光晕）；哔哩恢复**粉 `#fb7299`**；规则改为“单一真源 + 静态 CSS 是被覆盖的旧值” |
 
 教训：**规范作者也会错**。所以“代码与规范不一致”时两种可能都要查——可能是代码漂了，
 也可能是**规范写错了**。上面第二条就差点导致把已经对齐真源的顶栏 hover 改坏

@@ -41,6 +41,15 @@
 
 ## 3. 平台站点色（8 个，zishu 全部缺失）
 
+> ⚠️ **本表列的是 web 静态 CSS 里的值，其中至少两项已被运行时覆盖，不是真源**
+> （2026-09-21 实测）：web 启动时 `main.js:57` 调 `initPlatformBrandVars()`，把
+> `config/platformCatalog.ts` 的 `PLATFORM_BRAND_COLORS[id].bg` 内联注入 `:root`，
+> **覆盖**本表所列的静态同名变量。已确认不同值的至少两处：
+> `--platform-bilibili` 静态 `#00a1d6`（蓝）→ 实际 **粉 `#fb7299`**；
+> `--platform-douyu` 静态 `#ff6b00` → 实际 `#ff6a00`。
+> **真源以 `platformCatalog.ts` 为准**；本表只作历史参考，不要直接照抄。
+> 详见 `DESIGN.md` §2.3。
+
 来源 `styles/theme.css:9-16`
 
 | 变量 | 值 | 变量 | 值 |
