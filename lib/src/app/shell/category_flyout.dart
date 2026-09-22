@@ -167,13 +167,7 @@ class _FlyoutPanel extends StatelessWidget {
         color: context.tokens.surface,
         border: Border.all(color: context.tokens.border),
         borderRadius: AppRadius.allMd,
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x3D000000),
-            blurRadius: 16,
-            offset: Offset(0, 4),
-          ),
-        ],
+        boxShadow: AppElevation.popover,
       ),
       child: Material(
         // 浮层挂在 Stack 顶层,不在 Scaffold 的 Material 子树内,

@@ -49,10 +49,160 @@ void main() {
     test('railWidth 保持 52(不要改成 28)', () {
       // 真源:`apps/web/src/components/layout/DirectoryDrawer.vue:660`
       //   `width: var(--directory-rail-width);` -> `--directory-rail-width: 52px`
+      //   (main.css:39);AppLayout.vue:216 的 margin-left 同源。
       //
       // 防回归:内部看板 `tasks-ui-refine.md` 曾声称视觉宽约 28px,
-      // 那与真源不符;52 才是展开态里 rail 容器的实际宽度。
+      // 那与真源不符;28px 属于顶栏平台 tab 在 768–1080 的收缩值
+      // (`docs/ui-reference/README.md:39`),2026-09-21 已回写文档。
       expect(AppDirectoryDrawer.railWidth, 52);
+    });
+  });
+
+  group('AppTypography 契约', () {
+    // 真源:`lib/src/shared/presentation/design_tokens.dart` 既有档位;
+    // 这几档被大量组件引用,任何改动都会连带 golden/布局漂移,故逐项钉死。
+    test('title 保持 16/1.35/w600', () {
+      expect(AppTypography.title.fontSize, 16);
+      expect(AppTypography.title.height, 1.35);
+      expect(AppTypography.title.fontWeight, FontWeight.w600);
+    });
+
+    test('body 保持 13/1.4(无显式字重)', () {
+      expect(AppTypography.body.fontSize, 13);
+      expect(AppTypography.body.height, 1.4);
+      expect(AppTypography.body.fontWeight, isNull);
+    });
+
+    test('bodySecondary 保持 12/1.4(无显式字重)', () {
+      expect(AppTypography.bodySecondary.fontSize, 12);
+      expect(AppTypography.bodySecondary.height, 1.4);
+      expect(AppTypography.bodySecondary.fontWeight, isNull);
+    });
+
+    test('caption 保持 11/1.3(无显式字重)', () {
+      expect(AppTypography.caption.fontSize, 11);
+      expect(AppTypography.caption.height, 1.3);
+      expect(AppTypography.caption.fontWeight, isNull);
+    });
+
+    group('新增 5 档阶梯(8–22px 阶梯的补充档)', () {
+      test('display = 22px + letterSpacing -0.3', () {
+        expect(AppTypography.display.fontSize, 22);
+        expect(AppTypography.display.letterSpacing, -0.3);
+        expect(AppTypography.display.height, 1.2);
+        expect(AppTypography.display.fontWeight, FontWeight.w600);
+      });
+
+      test('headline = 18px + letterSpacing -0.1', () {
+        expect(AppTypography.headline.fontSize, 18);
+        expect(AppTypography.headline.letterSpacing, -0.1);
+        expect(AppTypography.headline.height, 1.3);
+        expect(AppTypography.headline.fontWeight, FontWeight.w600);
+      });
+
+      test('subtitle = 15px + letterSpacing 0', () {
+        expect(AppTypography.subtitle.fontSize, 15);
+        expect(AppTypography.subtitle.letterSpacing, 0);
+        expect(AppTypography.subtitle.height, 1.35);
+        expect(AppTypography.subtitle.fontWeight, FontWeight.w500);
+      });
+
+      test('label = 10px + letterSpacing 0.3', () {
+        expect(AppTypography.label.fontSize, 10);
+        expect(AppTypography.label.letterSpacing, 0.3);
+        expect(AppTypography.label.height, 1.3);
+        expect(AppTypography.label.fontWeight, FontWeight.w500);
+      });
+
+      test('overline = 9px + letterSpacing 0.5', () {
+        expect(AppTypography.overline.fontSize, 9);
+        expect(AppTypography.overline.letterSpacing, 0.5);
+        expect(AppTypography.overline.height, 1.2);
+        expect(AppTypography.overline.fontWeight, FontWeight.w600);
+      });
+    });
+  });
+
+  group('AppElevation 契约', () {
+    // 这里逐字段写死期望值:token 只是把组件里的裸 BoxShadow 搬了个家,
+    // 一旦有一项不等价(颜色/模糊/偏移/扩散),对应 golden 就会漂。
+    test('popover = 黑 24% / blur 16 / y+4(来源 category_flyout.dart:171)', () {
+      expect(AppElevation.popover.length, 1);
+      final shadow = AppElevation.popover.single;
+      expect(shadow.color, const Color(0x3D000000));
+      expect(shadow.blurRadius, 16);
+      expect(shadow.offset, const Offset(0, 4));
+      expect(shadow.spreadRadius, 0);
+    });
+
+    test('hairline = 黑 35% / blur 0 / spread 1', () {
+      // 来源:`lib/src/features/play/widgets/player_controls.dart:738` 与 `:781`
+      // (on-video 角标的 1px 贴边描边)。
+      expect(AppElevation.hairline.length, 1);
+      final shadow = AppElevation.hairline.single;
+      expect(shadow.color, const Color(0x59000000));
+      expect(shadow.blurRadius, 0);
+      expect(shadow.offset, Offset.zero);
+      expect(shadow.spreadRadius, 1);
+    });
+
+    test('sheet = 黑 55% / blur 28 / x-6(来源 play_immersive_side_sheet.dart:126)', () {
+      // 注意:alpha 必须是 `withValues(alpha: 0.55)` 的浮点值,不能换成
+      // `Color(0x8C000000)` —— 0x8C/255 = 0.5490…,两者可能差 1/255。
+      expect(AppElevation.sheet.length, 1);
+      final shadow = AppElevation.sheet.single;
+      expect(shadow.color.a, closeTo(0.55, 1e-9));
+      expect(shadow.color.r, 0);
+      expect(shadow.color.g, 0);
+      expect(shadow.color.b, 0);
+      expect(shadow.blurRadius, 28);
+      expect(shadow.offset, const Offset(-6, 0));
+      expect(shadow.spreadRadius, 0);
+    });
+
+    test('accentGlow = 强调色 22% / blur 8 / y+2(来源 platform_strip.dart:269)', () {
+      const accent = Color(0xFF8B5CF6);
+      expect(AppElevation.accentGlow(accent).length, 1);
+      final shadow = AppElevation.accentGlow(accent).single;
+      expect(shadow.color.a, closeTo(0.22, 1e-9));
+      expect(shadow.color, accent.withValues(alpha: 0.22));
+      expect(shadow.blurRadius, 8);
+      expect(shadow.offset, const Offset(0, 2));
+      expect(shadow.spreadRadius, 0);
+    });
+  });
+
+  group('AppFocus 契约', () {
+    test('ring 返回 2 圈阴影,spread 分别为 4 与 2', () {
+      // Windows 桌面键盘可达性基线:2px 实环 + 2px 间隙的外扩环。
+      // ringWidth(2)+ ringOffset(2) 是外层半透明圈,内层实圈即 ringWidth。
+      const accent = Color(0xFF8B5CF6);
+      final ring = AppFocus.ring(accent);
+      expect(ring.length, 2);
+      expect(ring[0].spreadRadius, 4);
+      expect(ring[0].spreadRadius, AppFocus.ringWidth + AppFocus.ringOffset);
+      expect(ring[0].blurRadius, 0);
+      expect(ring[0].color, accent.withValues(alpha: 0.24));
+      expect(ring[1].spreadRadius, 2);
+      expect(ring[1].spreadRadius, AppFocus.ringWidth);
+      expect(ring[1].blurRadius, 0);
+      expect(ring[1].color, accent);
+      expect(AppFocus.ringWidth, 2);
+      expect(AppFocus.ringOffset, 2);
+    });
+  });
+
+  group('on-video 字幕胶囊契约', () {
+    // 真源:字幕胶囊/状态胶囊原来是 4 处裸值(`Color(0xCC101010)` +
+    // `BorderRadius.circular(10)`),抽成 token 后像素不变(值逐字相同),
+    // 但守卫不再放行第 5 处。
+    test('AppOnVideo.captionPillBg = 黑 80%(不随主题翻转)', () {
+      expect(AppOnVideo.captionPillBg, const Color(0xCC101010));
+    });
+
+    test('AppRadius.captionPill = 10(具名例外,只用于字幕胶囊)', () {
+      expect(AppRadius.captionPill, 10);
+      expect(AppRadius.allCaptionPill, BorderRadius.circular(10));
     });
   });
 }

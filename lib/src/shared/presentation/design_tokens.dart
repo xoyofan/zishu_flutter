@@ -17,6 +17,12 @@ abstract final class AppOnVideo {
 
   /// on-video 次级文字/图标(白 55%)。
   static const Color textMuted = Color(0x8CFFFFFF);
+
+  /// on-video 字幕胶囊底(黑 80%,`Color(0xCC101010)`)。
+  ///
+  /// 用于压在视频画面上的字幕文字底(字幕句胶囊 / 状态胶囊)。
+  /// 与 [scrim]/[bar] 同属"永远暗底"语义,不随主题翻转。
+  static const Color captionPillBg = Color(0xCC101010);
 }
 
 abstract final class AppColors {
@@ -122,10 +128,93 @@ abstract final class AppRadius {
   /// (chip / badge / 头像,源码中出现 7 次)。
   static const double pill = 999;
 
+  /// on-video 字幕胶囊圆角(10px)。
+  ///
+  /// web 真源为 10px,不落在 4/8/12 三档内,故单列具名例外;
+  /// **只用于字幕胶囊**,禁止扩散到常规容器(见 `DESIGN.md` §5.4 例外登记)。
+  static const double captionPill = 10;
+
   static final BorderRadius allSm = BorderRadius.circular(sm);
   static final BorderRadius allMd = BorderRadius.circular(md);
   static final BorderRadius allLg = BorderRadius.circular(lg);
   static final BorderRadius allPill = BorderRadius.circular(pill);
+  static final BorderRadius allCaptionPill = BorderRadius.circular(captionPill);
+}
+
+/// 阴影(elevation)基线。
+///
+/// 三类语义 —— popover(下拉浮层)/ hairline(on-video 控件贴边描边)/
+/// sheet(侧滑面板投影)—— 数值均从组件里的裸 `BoxShadow` 逐字搬家而来,
+/// 外加 [accentGlow] 表达平台/分类选中态的强调色光晕。
+///
+/// 数值必须与来源逐字一致,否则 golden 会漂。
+abstract final class AppElevation {
+  /// 下拉菜单/flyout 浮层的投影(黑 24%、blur 16、y+4)。
+  ///
+  /// 来源:`lib/src/app/shell/category_flyout.dart:171`。
+  /// 数值必须与来源逐字一致,否则 golden 会漂。
+  static const List<BoxShadow> popover = [
+    BoxShadow(color: Color(0x3D000000), blurRadius: 16, offset: Offset(0, 4)),
+  ];
+
+  /// on-video 控件贴边的 1px 描边(黑 35%、blur 0、spread 1)。
+  ///
+  /// 来源:`lib/src/features/play/widgets/player_controls.dart:738` 与 `:781`。
+  /// 数值必须与来源逐字一致,否则 golden 会漂。
+  static const List<BoxShadow> hairline = [
+    BoxShadow(color: Color(0x59000000), blurRadius: 0, spreadRadius: 1),
+  ];
+
+  /// 沉浸模式侧滑面板向左投射的投影(黑 55%、blur 28、x-6)。
+  ///
+  /// 来源:`lib/src/features/play/widgets/play_immersive_side_sheet.dart:126`。
+  /// 数值必须与来源逐字一致,否则 golden 会漂。
+  ///
+  /// 刻意保留 `static final` + `Colors.black.withValues(alpha: 0.55)`:换成
+  /// `0x8C` 字面量在像素上可能有 1/255 的差异。
+  static final List<BoxShadow> sheet = [
+    BoxShadow(
+      color: Colors.black.withValues(alpha: 0.55),
+      blurRadius: 28,
+      offset: const Offset(-6, 0),
+    ),
+  ];
+
+  /// 平台/分类选中态的强调色光晕(强调色 22%、blur 8、y+2)。
+  ///
+  /// 来源:`lib/src/app/shell/platform_strip.dart:269`。
+  /// 数值必须与来源逐字一致,否则 golden 会漂。
+  static List<BoxShadow> accentGlow(Color accent) => [
+    BoxShadow(
+      color: accent.withValues(alpha: 0.22),
+      blurRadius: 8,
+      offset: const Offset(0, 2),
+    ),
+  ];
+}
+
+/// 键盘焦点环基线(Windows 桌面键盘可达性)。
+///
+/// 替代 Material 默认聚焦态:两圈 `BoxShadow` 拼出「2px 实环 + 2px 间隙」的
+/// 外扩环,不占布局空间、不改变控件盒模型。
+///
+/// 本阶段只提供 token,不改组件默认焦点(避免大面积视觉变化,留给后续迁移)。
+abstract final class AppFocus {
+  /// 焦点环实体宽度。
+  static const double ringWidth = 2;
+
+  /// 焦点环与控件边缘之间的间隙。
+  static const double ringOffset = 2;
+
+  /// 用强调色构造焦点环:外层半透明(24%)撑出间隙,内层实色为 2px 环。
+  static List<BoxShadow> ring(Color accent) => [
+    BoxShadow(
+      color: accent.withValues(alpha: 0.24),
+      blurRadius: 0,
+      spreadRadius: ringWidth + ringOffset,
+    ),
+    BoxShadow(color: accent, blurRadius: 0, spreadRadius: ringWidth),
+  ];
 }
 
 /// 字号/行高/字重基线。
@@ -134,6 +223,13 @@ abstract final class AppRadius {
 /// `context.textCaption` 等,见 zishu_tokens.dart)。写死颜色会让浅色主题下
 /// 出现白底白字 —— 深色基线色 `AppColors.textPrimary` 只是恰好与
 /// `ZishuTokens.dark` 同值。
+///
+/// 阶梯共 9 档,覆盖 8–22px:`overline`(9)/`label`(10)/`caption`(11)/
+/// `bodySecondary`(12)/`body`(13)/`subtitle`(15)/`title`(16)/
+/// `headline`(18)/`display`(22)。
+///
+/// 代码中现存的 12.5/12.6/11.5/11.84/10.9/9.4/9.5/8.1 等散值属
+/// 「存量待归一」,本阶段不批量改写调用点(避免 golden 漂移)。
 abstract final class AppTypography {
   /// 默认字体:微软雅黑(Windows 产品基线)。
   ///
@@ -162,6 +258,46 @@ abstract final class AppTypography {
   static const TextStyle bodySecondary = TextStyle(fontSize: 12, height: 1.4);
 
   static const TextStyle caption = TextStyle(fontSize: 11, height: 1.3);
+
+  /// 最大标题档(22px/1.2/w600/-0.3):页面主标题。
+  static const TextStyle display = TextStyle(
+    fontSize: 22,
+    height: 1.2,
+    fontWeight: FontWeight.w600,
+    letterSpacing: -0.3,
+  );
+
+  /// 区块标题档(18px/1.3/w600/-0.1):弹窗标题、面板标题。
+  static const TextStyle headline = TextStyle(
+    fontSize: 18,
+    height: 1.3,
+    fontWeight: FontWeight.w600,
+    letterSpacing: -0.1,
+  );
+
+  /// 次级标题档(15px/1.35/w500/0):卡片标题、设置项标题。
+  static const TextStyle subtitle = TextStyle(
+    fontSize: 15,
+    height: 1.35,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0,
+  );
+
+  /// 小标签档(10px/1.3/w500/+0.3):角标、紧凑控件标签。
+  static const TextStyle label = TextStyle(
+    fontSize: 10,
+    height: 1.3,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0.3,
+  );
+
+  /// 最小全大写标签档(9px/1.2/w600/+0.5):分组眉标、极小角标。
+  static const TextStyle overline = TextStyle(
+    fontSize: 9,
+    height: 1.2,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.5,
+  );
 
   /// 未接入主题时的兜底色(仅在拿不到 BuildContext 的极少数场景使用)。
   static const Color fallbackPrimary = AppColors.textPrimary;
@@ -226,6 +362,10 @@ abstract final class AppDirectoryDrawer {
   static const double width = 220;
 
   /// 收起态宽度(`--directory-rail-width: 52px`)。
+  ///
+  /// 真源:`DirectoryDrawer.vue:660` `.directory-drawer { width: var(...) }` +
+  /// `main.css:39`。内部看板曾误作「视觉 ≈28px」(那是顶栏平台 tab 的窄屏
+  /// 收缩值,见 `docs/ui-reference/README.md:39`),2026-09-21 核对后废弃。
   static const double railWidth = 52;
 
   // ---- 收藏星区(__follow-wrap / __follow-icon) ----

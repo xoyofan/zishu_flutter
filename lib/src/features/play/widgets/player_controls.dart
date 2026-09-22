@@ -738,13 +738,7 @@ class _TranslateMark extends StatelessWidget {
               decoration: BoxDecoration(
                 color: const Color(0xF2121212),
                 borderRadius: BorderRadius.circular(3),
-                boxShadow: const [
-                  BoxShadow(
-                    color: Color(0x59000000),
-                    blurRadius: 0,
-                    spreadRadius: 1,
-                  ),
-                ],
+                boxShadow: AppElevation.hairline,
               ),
               child: Text(
                 '√',
@@ -781,9 +775,7 @@ class _DanmakuCornerBadge extends StatelessWidget {
         decoration: BoxDecoration(
           color: background,
           borderRadius: BorderRadius.circular(3),
-          boxShadow: const [
-            BoxShadow(color: Color(0x59000000), blurRadius: 0, spreadRadius: 1),
-          ],
+          boxShadow: AppElevation.hairline,
         ),
         child: child,
       ),

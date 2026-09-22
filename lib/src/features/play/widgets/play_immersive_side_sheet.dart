@@ -122,14 +122,8 @@ class PlayImmersiveSideSheet extends StatelessWidget {
                           border: Border(
                             left: BorderSide(color: tokens.border),
                           ),
-                          boxShadow: [
-                            BoxShadow(
-                              // web: -6px 0 28px rgba(0,0,0,.55)。
-                              color: Colors.black.withValues(alpha: 0.55),
-                              offset: const Offset(-6, 0),
-                              blurRadius: 28,
-                            ),
-                          ],
+                          // web: -6px 0 28px rgba(0,0,0,.55)。
+                          boxShadow: AppElevation.sheet,
                         ),
                         // 指针按下/移动/滚轮 + 滚动:重置自动收起计时。
                         child: Listener(

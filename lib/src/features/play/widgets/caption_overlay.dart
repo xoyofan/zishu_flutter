@@ -14,6 +14,7 @@ import 'package:speech2zh/speech2zh.dart';
 
 import '../application/caption_lines.dart';
 import '../application/speech_caption_provider.dart';
+import '../../../shared/presentation/design_tokens.dart';
 
 /// 模型下载确认弹窗:未下载 → 下载;有 `.part` → 断点续传。
 class CaptionDownloadDialog extends StatelessWidget {
@@ -158,8 +159,8 @@ class _SentencePill extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
       decoration: BoxDecoration(
-        color: const Color(0xCC101010),
-        borderRadius: BorderRadius.circular(10),
+        color: AppOnVideo.captionPillBg,
+        borderRadius: AppRadius.allCaptionPill,
       ),
       child: Text(
         text,
@@ -183,8 +184,8 @@ class _StatusPill extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         constraints: const BoxConstraints(maxWidth: 720),
         decoration: BoxDecoration(
-          color: const Color(0xCC101010),
-          borderRadius: BorderRadius.circular(10),
+          color: AppOnVideo.captionPillBg,
+          borderRadius: AppRadius.allCaptionPill,
         ),
         child: Text(
           text,
