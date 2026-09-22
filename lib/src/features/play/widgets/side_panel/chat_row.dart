@@ -15,12 +15,9 @@ class _ChatRow extends StatelessWidget {
   /// 消息字号(web chatSettings.fontSize,12-24;用户名与正文同字号)。
   final double fontSize;
 
-  Color _userColor() {
-    var hash = 0;
-    for (final unit in data.user.codeUnits) {
-      hash = (hash * 31 + unit) % 360;
-    }
-    return HSLColor.fromAHSL(1, hash.toDouble(), 0.6, 0.68).toColor();
+  Color _userColor(BuildContext context) {
+    if (data.color == 0) return context.tokens.textSecondary;
+    return DanmakuStyle.resolveColor(data.color);
   }
 
   /// 正文段 spans:按 [DanmakuSegment] 富文本段展开(抖音表情图消息)。
@@ -109,7 +106,7 @@ class _ChatRow extends StatelessWidget {
           TextSpan(
             text: data.user,
             style: context.textSecondary.copyWith(
-              color: _userColor(),
+              color: _userColor(context),
               fontWeight: FontWeight.w600,
               fontSize: fontSize,
               height: _kChatLineHeight,

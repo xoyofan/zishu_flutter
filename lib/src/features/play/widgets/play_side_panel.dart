@@ -19,6 +19,7 @@ import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 
 import '../../danmaku/application/danmaku_session_provider.dart';
+import '../../danmaku/domain/danmaku_style.dart';
 import '../../follow/application/follow_provider.dart';
 import '../application/room_stats_provider.dart';
 import '../../follow/application/follow_sort.dart';
