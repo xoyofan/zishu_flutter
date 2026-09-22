@@ -164,9 +164,11 @@ Future<void> _pumpFrames(WidgetTester tester, int times) async {
 Future<({GoRouter router, ProviderContainer container})> _pumpFollowTab(
   WidgetTester tester, {
   String location = _playLocation,
+  double width = 1600,
+  double height = 1200,
 }) async {
   tester.view.devicePixelRatio = 1.0;
-  tester.view.physicalSize = const Size(1600, 1200);
+  tester.view.physicalSize = Size(width, height);
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
 
@@ -535,7 +537,7 @@ void main() {
       matching: find.text(text),
     );
 
-    testWidgets('已关注:关注数/人气/VIP 显示关注条目刷新回填的值', (tester) async {
+    testWidgets('已关注:关注数/人气/VIP/第 3 列显示关注条目刷新回填的值', (tester) async {
       SharedPreferencesAsyncPlatform.instance =
           InMemorySharedPreferencesAsync.withData(<String, Object>{
             'zishu.follow.list': jsonEncode([
@@ -544,7 +546,8 @@ void main() {
                 online: '8.9万',
               )
                 ..['followers'] = '123456'
-                ..['vip'] = '321',
+                ..['vip'] = '321'
+                ..['diamondFans'] = '1300',
             ]),
           });
 
@@ -559,10 +562,20 @@ void main() {
       expect(headerTextOf('关注 12.3万'), findsOneWidget);
       expect(headerTextOf('8.9万'), findsOneWidget, reason: '人气取关注条目 online');
       expect(headerTextOf('321'), findsOneWidget, reason: 'VIP 取关注条目 vip');
+      // 第 3 列(tone=svip)取关注条目 diamondFans;用户报的「好多 SVIP
+      // 没显示」就是这一列此前根本没渲染。
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('play-side-stat-svip')),
+          matching: find.text('1300'),
+        ),
+        findsOneWidget,
+        reason: '第 3 列取 RoomSummary.diamondFans',
+      );
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('未关注/无数据:统计回退「—」占位(不伪造)', (tester) async {
+    testWidgets('未关注/无数据:三列统计均回退「—」占位(不伪造)', (tester) async {
       SharedPreferencesAsyncPlatform.instance =
           InMemorySharedPreferencesAsync.withData(<String, Object>{
             'zishu.follow.list': jsonEncode(<Object>[]),
@@ -575,16 +588,73 @@ void main() {
 
       expect(find.byKey(const Key('play-side-header')), findsOneWidget);
       expect(headerTextOf('关注 —'), findsOneWidget);
-      // 人气/VIP 两个 _StatValue 在无数据时各显示「—」。
+      // 人气/VIP/第 3 列三个 _StatValue 在无数据时各显示「—」(不是 0)。
+      for (final key in const [
+        'play-side-stat-audience',
+        'play-side-stat-vip',
+        'play-side-stat-svip',
+      ]) {
+        expect(
+          find.descendant(
+            of: find.byKey(Key(key)),
+            matching: find.text('—'),
+          ),
+          findsOneWidget,
+          reason: '$key 无数据必须显示「—」,不伪造 0',
+        );
+      }
+      // 三列统计 = 信息头内 3 个独立的「—」文本(「关注 —」是单个
+      // 拼接文本,不单独匹配 find.text('—'))。
       expect(
         find.descendant(
           of: find.byKey(const Key('play-side-header')),
           matching: find.text('—'),
         ),
-        findsNWidgets(2),
-        reason: '人气与 VIP 均无数据,显示两个「—」',
+        findsNWidgets(3),
+        reason: '人气/VIP/第 3 列三列均无数据,显示三个「—」',
       );
       expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('第 3 列始终渲染(平台无该列时也不隐藏)', (tester) async {
+      SharedPreferencesAsyncPlatform.instance =
+          InMemorySharedPreferencesAsync.withData(<String, Object>{
+            'zishu.follow.list': jsonEncode([
+              _seedEntry(roomId: '63136', site: 'soop'),
+            ]),
+          });
+
+      await _pumpFollowTab(tester, location: '/soop/play/63136');
+      await _pumpFrames(tester, 2);
+
+      expect(find.byKey(const Key('play-side-header')), findsOneWidget);
+      expect(
+        find.byKey(const Key('play-side-stat-svip')),
+        findsOneWidget,
+        reason: '口径与上两列一致:始终渲染,取不到值显示「—」',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('最窄侧栏(768 视口 → 328px 面板)+ 超长统计值不溢出', (tester) async {
+      // _SideHeader 只在非 stack 布局(视口 ≥ 768)出现,328px 是其最窄档;
+      // 加第 3 列后四段内容会顶到行宽上限,这里守住 RenderFlex 溢出。
+      SharedPreferencesAsyncPlatform.instance =
+          InMemorySharedPreferencesAsync.withData(<String, Object>{
+            'zishu.follow.list': jsonEncode([
+              _seedEntry(roomId: '63136', online: '123.4万')
+                ..['followers'] = '9876543'
+                ..['vip'] = '12.3万'
+                ..['diamondFans'] = '12.3万',
+            ]),
+          });
+
+      final play = await _pumpFollowTab(tester, width: 768);
+      await _awaitFollowRestored(tester, play.container, 1);
+      await _pumpFrames(tester, 2);
+
+      expect(find.byKey(const Key('play-side-header')), findsOneWidget);
+      expect(tester.takeException(), isNull, reason: '四段统计不得溢出');
     });
   });
 }

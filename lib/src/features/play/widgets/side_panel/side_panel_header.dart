@@ -64,6 +64,10 @@ class _SideHeader extends ConsumerWidget {
     final followersText = _formatFollowersText(stats?.followers);
     final audienceText = _statText(stats?.online);
     final vipText = _statText(stats?.vip);
+    // 第 3 列(tone=svip):web `ROOM_STAT_COLUMNS` 的 `field: "diamondFans"`
+    // 槽位,douyu 钻粉 / huya 超粉 / douyin 会员 / bilibili 大航海。
+    // 与上两列同口径:始终渲染,上游未提供 → '—'(数据诚实性,不伪造 0)。
+    final svipText = _statText(stats?.diamondFans);
 
     // 信息头高度随系统字号缩放:固定 64px 在大字体(1.15x/1.3x)下会把
     // 中间三行元信息挤出容器底部(移动端实测 1px RenderFlex 溢出)。
@@ -143,34 +147,62 @@ class _SideHeader extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 3),
-                  Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          '关注 $followersText',
-                          key: const Key('play-side-stat-followers'),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: AppFontSize.caption, height: 1.08),
-                        ),
+                  // 统计行:「关注 N」+ 人气 + VIP + 第 3 列(SVIP 档)。
+                  // 整行收进一个 FittedBox(scaleDown)兜底 —— 328px 面板
+                  // 配 1.3x 系统字号时四段内容会顶到行宽上限,等比缩放优于
+                  // RenderFlex 溢出(本项目有过溢出史)。列间距用 xs 而非
+                  // sm,为第 3 列腾出宽度。
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '关注 $followersText',
+                            key: const Key('play-side-stat-followers'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: AppFontSize.caption,
+                              height: 1.08,
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                          // 人气/观众(web stats[0]「观众」列;online 为空 = 离线或
+                          // 尚未刷新回填,显示「—」)。
+                          _StatValue(
+                            key: const Key('play-side-stat-audience'),
+                            icon: Icons.people_alt_outlined,
+                            value: audienceText,
+                            color: context.tokens.statAudience,
+                          ),
+                          const SizedBox(width: AppSpacing.xs),
+                          // VIP/贵宾(web stats[1] vip 列;douyu/huya 贵宾、
+                          // douyin 会员、soop 订阅;其余平台上游无 → 「—」)。
+                          _StatValue(
+                            key: const Key('play-side-stat-vip'),
+                            icon: Icons.workspace_premium_outlined,
+                            value: vipText,
+                            color: context.tokens.statVip,
+                          ),
+                          const SizedBox(width: AppSpacing.xs),
+                          // 第 3 列(web stats[2],tone 恒为 svip):
+                          // douyu 钻粉 / huya 超粉 / douyin 会员 / bilibili
+                          // 大航海,同一字段 [RoomSummary.diamondFans] 承载。
+                          // 语义随平台变,故挂 Tooltip 说明列名(图标仅一个,
+                          // 不额外占宽度)。
+                          _StatValue(
+                            key: const Key('play-side-stat-svip'),
+                            icon: Icons.diamond_outlined,
+                            value: svipText,
+                            color: context.tokens.statSvip,
+                            tooltip: '${_svipStatLabel(site)} $svipText',
+                          ),
+                        ],
                       ),
-                      const SizedBox(width: AppSpacing.sm),
-                      // 人气/观众(web stats[0]「观众」列;online 为空 = 离线或
-                      // 尚未刷新回填,显示「—」)。
-                      _StatValue(
-                        icon: Icons.people_alt_outlined,
-                        value: audienceText,
-                        color: context.tokens.statAudience,
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      // VIP/贵宾(web stats[1] vip 列;douyu/huya 贵宾、
-                      // douyin 会员、soop 订阅;其余平台上游无 → 「—」)。
-                      _StatValue(
-                        icon: Icons.workspace_premium_outlined,
-                        value: vipText,
-                        color: context.tokens.statVip,
-                      ),
-                    ],
+                    ),
                   ),
                   if (title.isNotEmpty && title != anchor)
                     Semantics(
@@ -206,6 +238,20 @@ String _statText(String? value) {
   final text = value?.trim() ?? '';
   return text.isEmpty ? '—' : text;
 }
+
+/// 第 3 统计列(tone=svip)在各平台的列名,逐字对齐 web
+/// `ROOM_STAT_COLUMNS`(SFVideoLive `apps/web/src/config/platformCatalog.ts:29`):
+/// douyu 钻粉 / huya 超粉 / douyin 会员 / bilibili 大航海。
+/// 未登记该列的平台(xhs / youtube / soop / twitch 等)无专属语义,
+/// 回落通用「会员」;这些平台的 [RoomSummary.diamondFans] 恒为空,
+/// 列值显示「—」,不伪造。
+String _svipStatLabel(String site) => switch (site) {
+  'douyu' => '钻粉',
+  'huya' => '超粉',
+  'douyin' => '会员',
+  'bilibili' => '大航海',
+  _ => '会员',
+};
 
 /// 关注数显示格式(用户口径 2026-09-20):纯数字 ≥1万 显示「X.X万」
 /// (≥100万 收敛为整数万);已带单位或非数字文本原样返回,不伪造。
@@ -473,18 +519,23 @@ class _SideActionButton extends StatelessWidget {
 
 class _StatValue extends StatelessWidget {
   const _StatValue({
+    super.key,
     required this.icon,
     required this.value,
     required this.color,
+    this.tooltip,
   });
 
   final IconData icon;
   final String value;
   final Color color;
 
+  /// 悬浮说明(第 3 列的列名随平台变,需要显式标注);null = 不加 Tooltip。
+  final String? tooltip;
+
   @override
   Widget build(BuildContext context) {
-    return Row(
+    final content = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 11, color: color.withValues(alpha: 0.88)),
@@ -500,5 +551,8 @@ class _StatValue extends StatelessWidget {
         ),
       ],
     );
+    final message = tooltip;
+    if (message == null) return content;
+    return Tooltip(message: message, child: content);
   }
 }

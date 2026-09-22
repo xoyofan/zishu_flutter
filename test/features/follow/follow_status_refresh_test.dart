@@ -16,6 +16,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:live_parser/live_parser.dart'
     show RoomPayload, RoomState, RoomSummary;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:zishu_flutter/src/features/follow/application/follow_provider.dart';
@@ -73,6 +74,7 @@ Map<String, Object> _seedEntry({
   String category = '网游',
   String followers = '',
   String vip = '',
+  String diamondFans = '',
 }) => {
   'site': site,
   'roomId': roomId,
@@ -84,6 +86,7 @@ Map<String, Object> _seedEntry({
   'online': online,
   'followers': followers,
   'vip': vip,
+  'diamondFans': diamondFans,
   'isSpecial': false,
   'remindOn': false,
   'followedAt': '2026-09-01T00:00:00.000Z',
@@ -100,6 +103,7 @@ RoomSummary _fresh({
   String category = '新分类',
   String followers = '',
   String vip = '',
+  String diamondFans = '',
   RoomState roomState = RoomState.offline,
 }) => RoomSummary(
   site: site,
@@ -112,6 +116,7 @@ RoomSummary _fresh({
   cover: cover,
   followers: followers,
   vip: vip,
+  diamondFans: diamondFans,
   roomState: roomState,
 );
 
@@ -230,6 +235,7 @@ void main() {
             online: '5千',
             followers: '654321',
             vip: '99',
+            diamondFans: '1300',
           ),
         ],
         refresher: fake,
@@ -241,6 +247,64 @@ void main() {
       final entry = container.read(followProvider).single;
       expect(entry.room.followers, '654321', reason: '上游缺字段不得冲掉旧值');
       expect(entry.room.vip, '99');
+      expect(
+        entry.room.diamondFans,
+        '1300',
+        reason: '第 3 列(svip 档)同上:vip 没取到超粉数时不得把已有值冲成空',
+      );
+    });
+
+    test('第 3 列(svip 档)刷新回填:diamondFans 随刷新落地', () async {
+      final fake = FakeRefresher(
+        results: {
+          '1001': _fresh(roomId: '1001', online: '2.2万', diamondFans: '1300'),
+        },
+      );
+      final container = await _container(
+        seed: [_seedEntry(roomId: '1001', online: '5千')],
+        refresher: fake,
+        overrideRefresher: true,
+      );
+
+      await container.read(followProvider.notifier).refreshStatuses();
+
+      final entry = container.read(followProvider).single;
+      expect(
+        entry.room.diamondFans,
+        '1300',
+        reason: 'huya 超粉/douyu 钻粉走 diamondFans,合并时不得丢掉',
+      );
+    });
+
+    test('刷新后 diamondFans 不丢:合并结果与落盘都保留', () async {
+      final fake = FakeRefresher(
+        results: {'1001': _fresh(roomId: '1001', online: '2.2万')},
+      );
+      final container = await _container(
+        seed: [
+          _seedEntry(roomId: '1001', online: '5千', diamondFans: '1300'),
+        ],
+        refresher: fake,
+        overrideRefresher: true,
+      );
+
+      await container.read(followProvider.notifier).refreshStatuses();
+
+      expect(
+        container.read(followProvider).single.room.diamondFans,
+        '1300',
+        reason: '刷新链路必须带上 diamondFans,否则第 3 列刷一轮就空',
+      );
+
+      // 落盘往返:重启后第 3 列仍要有值。
+      final raw = await SharedPreferencesAsync().getString('zishu.follow.list');
+      expect(raw, isNotNull);
+      final payload = jsonDecode(raw!) as List;
+      expect(
+        (payload.single as Map)['diamondFans'],
+        '1300',
+        reason: '落盘结构必须带 diamondFans,否则重启即丢第 3 列',
+      );
     });
 
     test('单条失败保留原值:不得把在播刷成离线', () async {

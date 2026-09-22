@@ -367,6 +367,11 @@ class FollowController extends Notifier<List<FollowEntry>> {
           ? fresh.followers
           : current.followers,
       vip: fresh.vip.trim().isNotEmpty ? fresh.vip : current.vip,
+      // 第 3 列(web `ROOM_STAT_COLUMNS` 的 `diamondFans` 槽)同 vip 口径:
+      // 上游没取到(huya wup 失败 / 平台未实现)时保留已有值,不抹成空。
+      diamondFans: fresh.diamondFans.trim().isNotEmpty
+          ? fresh.diamondFans
+          : current.diamondFans,
     );
   }
 
@@ -442,6 +447,7 @@ class FollowController extends Notifier<List<FollowEntry>> {
                     ),
                     followers: item['followers']?.toString() ?? '',
                     vip: item['vip']?.toString() ?? '',
+                    diamondFans: item['diamondFans']?.toString() ?? '',
                   ),
                   isSpecial: item['isSpecial'] == true,
                   remindOn: item['remindOn'] == true,
@@ -534,7 +540,7 @@ class FollowController extends Notifier<List<FollowEntry>> {
   /// 把关注列表序列化为 JSON 字符串写入本地存储;[syncRemote] 时随后整表推云端。
   ///
   /// 字段契约:{site, roomId, title, uname, cover} + 元信息(cid/category/
-  /// online/roomState/followers/vip,刷新回填后随落盘保留)+ 本地标记
+  /// online/roomState/followers/vip/diamondFans,刷新回填后随落盘保留)+ 本地标记
   /// (isSpecial/remindOn/followedAt),与任务卡 A8 约定的关注落库结构一致。
   Future<void> _persist({bool syncRemote = true}) async {
     try {
@@ -552,6 +558,7 @@ class FollowController extends Notifier<List<FollowEntry>> {
             'roomState': entry.room.roomState.name,
             'followers': entry.room.followers,
             'vip': entry.room.vip,
+            'diamondFans': entry.room.diamondFans,
             'isSpecial': entry.isSpecial,
             'remindOn': entry.remindOn,
             'followedAt': entry.followedAt.toIso8601String(),
