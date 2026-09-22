@@ -1,5 +1,7 @@
 # SFVideoLive Web → zishu_flutter 布局几何规格（spec-layout）
 
+> 视觉真源已收敛到项目根 `DESIGN.md`；本文是推导来源与证据链，冲突时以 `DESIGN.md` 为准。
+
 > 抽取范围：SFVideoLive `web` 前端的**可量化布局几何**规格，用于 Flutter（Windows 优先）1:1 复刻。
 > 口径：仅记录源码中明确写出的数值；推断值标注「推断」并给依据；源码未声明写「未声明」。
 > rem 默认根字号 16px（1rem = 16px），4pt 栅格判定基准为 4/8/12/16/20/24/32px。

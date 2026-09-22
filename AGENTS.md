@@ -25,6 +25,14 @@
 - UI 与解析双轨通过稳定 Dart models/interfaces 和 JSON fixtures 解耦，禁止 UI 直接消费松散 `Map<String, dynamic>`。
 - 每次结构性修改至少运行 `flutter analyze` 和相关测试；Windows 主链路修改还需运行 `flutter build windows --debug -t lib/main.dart`。
 
+## 视觉真源
+- 视觉真源是项目根 `DESIGN.md`（格式取自 Google Stitch 的 DESIGN.md）：色板、字号阶梯、间距/圆角、elevation、组件状态矩阵、响应式断点、Do's and Don'ts 都在那里。
+- 改任何颜色/字号/间距/圆角/阴影前，先改 `DESIGN.md`，再改 token 文件（`lib/src/shared/presentation/design_tokens.dart` / `zishu_tokens.dart`）与 `test/shared/design_tokens_test.dart` 契约断言，最后改调用点。
+- `docs/ui-parity/spec-tokens.md` / `spec-layout.md` 是**推导来源与证据链**，冲突时以 `DESIGN.md` 为准。
+- 裸值（裸色值、裸阴影、裸字号、裸圆角）由 `dart run tool/check_design_tokens.dart` 机械守卫，存量基线在 `tool/design_token_baseline.json`，只允许降低不允许增长。
+- 外部品牌设计系统只作结构参考：`.agents/skills/awesome-design-md/`（74 套），一次只选一套、只取结构不取品牌色/字体/logo；具体流程见 `.agents/skills/ui-from-design-md/SKILL.md`。
+- **看板与实测笔记不是真源**：`tasks-ui-refine.md`、`docs/ui-reference/README.md` 只能当线索；核对视觉必须回到 `SFVideoLive/apps/web/src` 的 CSS/模板原文或官方截图（已有两处反例，见 `DESIGN.md` §11.1）。
+
 ## GitHub 提交与推送
 - GitHub 侧操作**优先使用 github MCP**（统一网关 `http://127.0.0.1:8800/mcp/github`，工具前缀 `mcp__github__`）：查询提交/远程状态、PR、issue，以及小规模文件提交（`push_files` / `create_or_update_file`）。
 - 本地大批量提交仍用 `git commit`；若 `git push` 缺少已存凭据，用 MCP 网关 `gateway.env.cmd` 中的 `GITHUB_PERSONAL_ACCESS_TOKEN` 做一次性凭据（临时 remote URL 或一次性 credential helper），**禁止把 token 写入仓库文件、`.git/config` 持久化或任何输出**。
