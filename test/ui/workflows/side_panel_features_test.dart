@@ -855,7 +855,7 @@ void main() {
             of: find.byKey(const Key('play-side-notify')),
             matching: find.byType(InkWell),
           ));
-      // 用户口径(2026-09-20):提醒入口显示为文字,激活态为「直播提醒中」。
+      // 用户口径:提醒入口显示为「提醒」,并在文字前显示铃铛图标。
       String? notifyLabel() {
         final texts = tester.widgetList<Text>(find.descendant(
           of: find.byKey(const Key('play-side-notify')),
@@ -866,7 +866,7 @@ void main() {
 
       // 未关注:无提醒目标,按钮禁用(bell-off 态);点按不产生关注条目。
       expect(notifyInkWell().onTap, isNull);
-      expect(notifyLabel(), '直播提醒');
+      expect(notifyLabel(), '提醒');
       await tester.tap(find.byKey(const Key('play-side-notify')),
           warnIfMissed: false);
       await _pumpFrames(tester, 2);
@@ -877,7 +877,7 @@ void main() {
       await tester.tap(find.byKey(const Key('play-side-follow-btn')));
       await _pumpFrames(tester, 2);
       expect(notifyInkWell().onTap, isNotNull);
-      expect(notifyLabel(), '直播提醒');
+      expect(notifyLabel(), '提醒');
 
       // 点亮:remindOn 翻 true + bell 态,且写盘。
       await tester.tap(find.byKey(const Key('play-side-notify')));
@@ -889,7 +889,7 @@ void main() {
             .remindOn,
         isTrue,
       );
-      expect(notifyLabel(), '直播提醒中');
+      expect(notifyLabel(), '提醒中');
       final rawOn = await SharedPreferencesAsync().getString('zishu.follow.list');
       final storedOn = (jsonDecode(rawOn!) as List)
           .firstWhere((e) => e['roomId'] == '606118') as Map;
@@ -905,7 +905,7 @@ void main() {
             .remindOn,
         isFalse,
       );
-      expect(notifyLabel(), '直播提醒');
+      expect(notifyLabel(), '提醒');
       expect(tester.takeException(), isNull);
     });
   });
