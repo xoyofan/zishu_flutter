@@ -1,5 +1,5 @@
 /// 虎牙房间状态轻量刷新:只读 profileRoom(必要时补一次页面判定)+ 在播时的
-/// wup 贵宾查询,不签名取流。
+/// wup 贵宾/超粉查询,不签名取流。
 ///
 /// 关键断言:刷新路径**不得**请求播放页/签名接口 —— 关注列表定时刷新若触碰
 /// anti_code 签名,会把播放链路最贵的一段搬到列表刷新里。
@@ -10,7 +10,11 @@ import 'package:live_parser/src/platforms/huya/huya_site.dart';
 import 'package:test/test.dart';
 
 import '../../../support/fake_huya_api.dart';
-import 'huya_wup_test.dart' show buildFakeVipResponse;
+import 'huya_wup_test.dart'
+    show
+        buildFakeSuperFansInfoResponse,
+        buildFakeSuperFansRankPanelResponse,
+        buildFakeVipResponse;
 
 Map<String, Object?> _profile({
   required String liveStatus,
@@ -81,6 +85,11 @@ void main() {
       '',
       reason: 'wup 不可达(fake 未配置响应)时静默留空,不伪造',
     );
+    expect(
+      summary.diamondFans,
+      '',
+      reason: '超粉同口径:wup 不可达留空,不回填 0',
+    );
     expect(summary.roomState, RoomState.live);
 
     // 只打 mp.huya.com 元信息与 wup 贵宾网关:没有播放页、没有签名。
@@ -105,10 +114,71 @@ void main() {
 
     expect(summary.vip, '75', reason: 'SideHeader「贵宾」行 = iTotalNum');
     expect(
-      fake.requests.where((r) => r.url.contains('cdnws.api.huya.com')),
+      fake.wupFuncNames.where((name) => name == 'getVipBarList'),
       hasLength(1),
-      reason: '在播时恰好一次 wup 查询',
+      reason: '在播时恰好一次贵宾查询',
     );
+    expect(
+      fake.wupFuncNames,
+      unorderedEquals(<String>[
+        'getVipBarList',
+        'getSuperFansInfo',
+        'getSuperFansRankPanel',
+      ]),
+      reason: 'web fetchHuyaSnapshot:仅 isLive 时并发发 3 个 wup,不重复也不额外',
+    );
+  });
+
+  test('在播且 wup 可用:diamondFans 取超粉人数(第 3 列 svip tone「超粉」)', () async {
+    fake.profileRoomResponse = _profile(liveStatus: 'ON');
+    fake.wupResponseBytes = buildFakeVipResponse(total: 75, totalNum: 75);
+    fake.wupResponseByFunc['getSuperFansInfo'] =
+        buildFakeSuperFansInfoResponse(superFansNum: 1288, yearSuperFansNum: 12);
+    fake.wupResponseByFunc['getSuperFansRankPanel'] =
+        buildFakeSuperFansRankPanelResponse(num: 999, plusNum: 0);
+
+    final summary = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'huya', roomIdOrUrl: '9527'),
+    );
+
+    expect(
+      summary.diamondFans,
+      '1300',
+      reason: 'iSuperFansNum + iYearSuperFansNum(info 优先,web formatCount 同口径)',
+    );
+    expect(summary.vip, '75');
+    expect(summary.toJson()['diamondFans'], '1300');
+  });
+
+  test('在播但超粉为 0:diamondFans 留空(数据诚实性,不伪造 0)', () async {
+    fake.profileRoomResponse = _profile(liveStatus: 'ON');
+    fake.wupResponseBytes = buildFakeVipResponse(total: 75, totalNum: 75);
+    fake.wupResponseByFunc['getSuperFansInfo'] =
+        buildFakeSuperFansInfoResponse(superFansNum: 0, yearSuperFansNum: 0);
+    fake.wupResponseByFunc['getSuperFansRankPanel'] =
+        buildFakeSuperFansRankPanelResponse(num: 0, plusNum: 0);
+
+    final summary = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'huya', roomIdOrUrl: '9527'),
+    );
+
+    expect(summary.diamondFans, '');
+    expect(summary.toJson().containsKey('diamondFans'), isFalse, reason: '空串不写 JSON');
+  });
+
+  test('在播但超粉接口只给 panel 时:diamondFans 回退 rankPanel', () async {
+    fake.profileRoomResponse = _profile(liveStatus: 'ON');
+    fake.wupResponseBytes = buildFakeVipResponse(total: 75, totalNum: 75);
+    fake.wupResponseByFunc['getSuperFansInfo'] =
+        buildFakeSuperFansInfoResponse(superFansNum: 0, yearSuperFansNum: 0);
+    fake.wupResponseByFunc['getSuperFansRankPanel'] =
+        buildFakeSuperFansRankPanelResponse(num: 61, plusNum: 1);
+
+    final summary = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'huya', roomIdOrUrl: '9527'),
+    );
+
+    expect(summary.diamondFans, '62', reason: 'iNum + iPlusNum');
   });
 
   test('在播但贵宾为 0:vip 留空(web formatCount(0) 同口径)', () async {
@@ -160,11 +230,13 @@ void main() {
 
     expect(summary.online, '');
     expect(summary.vip, '');
+    expect(summary.diamondFans, '');
     expect(
       fake.requests.where((request) => request.url.contains('cdnws.api.huya.com')),
       isEmpty,
-      reason: 'web fetchHuyaSnapshot 仅 isLive 时查询贵宾',
+      reason: 'web fetchHuyaSnapshot 仅 isLive 时查询贵宾/超粉',
     );
+    expect(fake.wupFuncNames, isEmpty);
   });
 
   test('录播(replay):roomState=replay,online 契约同离线为空串', () async {
@@ -183,6 +255,12 @@ void main() {
       '',
       reason: '轮播不是实时直播,不得当作在播',
     );
+    expect(
+      summary.diamondFans,
+      '',
+      reason: '轮播同样不查 wup(仅 isLive)',
+    );
+    expect(fake.wupFuncNames, isEmpty);
   });
 
   test('离线补 roomState:OFF 且无流时 roomState=offline', () async {

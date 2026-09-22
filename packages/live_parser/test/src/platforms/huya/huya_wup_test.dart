@@ -14,6 +14,8 @@ import 'package:live_parser/src/platforms/huya/huya_wup.dart';
 import 'package:live_parser/src/platforms/huya/tars_codec.dart';
 import 'package:test/test.dart';
 
+import '../../../support/fake_huya_api.dart';
+
 /// 线上实测请求(liveui/getVipBarList,requestId=12345)。
 const String _kGoldenRequestHex =
     '0000006510032c3c41303956066c6976657569660d6765745669704261724c697374'
@@ -70,6 +72,23 @@ Uint8List _hexBytes(String hex) {
   return result;
 }
 
+/// 超粉请求 golden:由 web 真源同源代码(`@tars/stream` 2.0.3 的 Tup +
+/// huya-wup.ts 的 GetSuperFansInfoReq/GetSuperFansRankPanelReq 逐字面复制)
+/// 在同一组参数(presenterUid=channelId=1394575534、requestId=12345)下
+/// 生成,作为字节级对齐基准(本机执行:
+/// `node -e "...new Tup().writeStruct('tReq', req)..."`)。
+const String _kGoldenSuperFansInfoRequestHex =
+    '0000006310032c3c413039560577757075696610676574537570657246616e73'
+    '496e666f7d0000360800010604745265711d0000290a0a361477656268352630'
+    '2e302e30266f6666696369616c0b12531f88ae22531f88ae32531f88ae0b8c98'
+    '0ca80c';
+
+const String _kGoldenSuperFansRankPanelRequestHex =
+    '0000006110032c3c413039560577757075696615676574537570657246616e73'
+    '52616e6b50616e656c7d00002f0800010604745265711d0000220a0a36147765'
+    '62683526302e302e30266f6666696369616c0b12531f88ae2c30010b8c980ca8'
+    '0c';
+
 /// 构造最小可用 wup 响应(sBuffer = {"tRsp": struct{3: total, 10: totalNum}})。
 Uint8List buildFakeVipResponse({required int total, required int totalNum}) {
   final rspStruct = TarsWriter()
@@ -82,6 +101,46 @@ Uint8List buildFakeVipResponse({required int total, required int totalNum}) {
   return buildTupPacket(
     servant: 'liveui',
     func: 'getVipBarList',
+    requestId: 7,
+    sBuffer: sBuffer.takeBytes(),
+  );
+}
+
+/// 构造 getSuperFansInfo 响应(sBuffer = {"tRsp": struct{1: superFans, 2: year}})。
+Uint8List buildFakeSuperFansInfoResponse({
+  required int superFansNum,
+  required int yearSuperFansNum,
+}) {
+  final rspStruct = TarsWriter()
+    ..writeStruct((writer) {
+      writer.writeInt(superFansNum, 1);
+      writer.writeInt(yearSuperFansNum, 2);
+    }, 0);
+  final sBuffer = TarsWriter()
+    ..writeBytesMap({'tRsp': rspStruct.takeBytes()}, 0);
+  return buildTupPacket(
+    servant: 'wupui',
+    func: 'getSuperFansInfo',
+    requestId: 7,
+    sBuffer: sBuffer.takeBytes(),
+  );
+}
+
+/// 构造 getSuperFansRankPanel 响应(sBuffer = {"tRsp": struct{5: num, 10: plus}})。
+Uint8List buildFakeSuperFansRankPanelResponse({
+  required int num,
+  required int plusNum,
+}) {
+  final rspStruct = TarsWriter()
+    ..writeStruct((writer) {
+      writer.writeInt(num, 5);
+      writer.writeInt(plusNum, 10);
+    }, 0);
+  final sBuffer = TarsWriter()
+    ..writeBytesMap({'tRsp': rspStruct.takeBytes()}, 0);
+  return buildTupPacket(
+    servant: 'wupui',
+    func: 'getSuperFansRankPanel',
     requestId: 7,
     sBuffer: sBuffer.takeBytes(),
   );
@@ -155,5 +214,173 @@ void main() {
     addTearDown(client.close);
     expect(await client.fetchVipBarCount(presenterUid: 0, channelId: 1), isNull);
     expect(await client.fetchVipBarCount(presenterUid: -1, channelId: 1), isNull);
+  });
+
+  group('超粉(wupui/getSuperFansInfo + getSuperFansRankPanel)', () {
+    test('请求构造:与 web @tars/stream 输出逐字节一致', () {
+      expect(
+        buildSuperFansInfoRequest(
+          presenterUid: 1394575534,
+          channelId: 1394575534,
+          requestId: 12345,
+        ),
+        _hexBytes(_kGoldenSuperFansInfoRequestHex),
+        reason: 'GetSuperFansInfoReq:tag0 tUserId / tag1 lPid / tag2 lTid / tag3 lSid',
+      );
+      expect(
+        buildSuperFansRankPanelRequest(
+          presenterUid: 1394575534,
+          requestId: 12345,
+        ),
+        _hexBytes(_kGoldenSuperFansRankPanelRequestHex),
+        reason: 'GetSuperFansRankPanelReq:tag0 tUserId / tag1 lPid / tag2 iPage=0 / tag3 iCount=1',
+      );
+    });
+
+    test('响应解析:getSuperFansInfo tag1/tag2 各归各位并求和', () {
+      final info = parseSuperFansInfoResponse(
+        buildFakeSuperFansInfoResponse(superFansNum: 123, yearSuperFansNum: 7),
+      );
+      expect(info.superFansNum, 123);
+      expect(info.yearSuperFansNum, 7);
+      expect(info.total, 130);
+    });
+
+    test('响应解析:getSuperFansRankPanel tag5/tag10 求和', () {
+      final panel = parseSuperFansRankPanelResponse(
+        buildFakeSuperFansRankPanelResponse(num: 40, plusNum: 2),
+      );
+      expect(panel.num, 40);
+      expect(panel.plusNum, 2);
+      expect(panel.total, 42);
+    });
+
+    test('响应解析:字段缺失 → 0(不抛),由调用方留空', () {
+      final emptyStruct = TarsWriter()..writeStruct((_) {}, 0);
+      final sBuffer = TarsWriter()
+        ..writeBytesMap({'tRsp': emptyStruct.takeBytes()}, 0);
+      final packet = buildTupPacket(
+        servant: 'wupui',
+        func: 'getSuperFansInfo',
+        requestId: 1,
+        sBuffer: sBuffer.takeBytes(),
+      );
+      final info = parseSuperFansInfoResponse(packet);
+      expect(info.total, 0);
+    });
+
+    test('响应解析:缺 tRsp / 包过短一律抛 TarsDecodeException', () {
+      expect(
+        () => parseSuperFansInfoResponse(Uint8List.fromList([0, 0, 0, 4])),
+        throwsA(anything),
+      );
+      expect(
+        () => parseSuperFansRankPanelResponse(
+          Uint8List.fromList(List<int>.filled(64, 0xff)),
+        ),
+        throwsA(anything),
+      );
+    });
+
+    test('可信度:>0、不等于 presenterUid、≤ 500 万(web 同口径)', () {
+      expect(isPlausibleHuyaSuperFanCount(130, 1394575534), isTrue);
+      expect(isPlausibleHuyaSuperFanCount(0, 1), isFalse);
+      expect(isPlausibleHuyaSuperFanCount(-3, 1), isFalse);
+      expect(
+        isPlausibleHuyaSuperFanCount(1394575534, 1394575534),
+        isFalse,
+        reason: 'uid 原样回显视为脏值',
+      );
+      expect(isPlausibleHuyaSuperFanCount(5000001, 1), isFalse);
+      expect(isPlausibleHuyaSuperFanCount(5000000, 1), isTrue);
+    });
+
+    test('fetchSuperFanCount:info 可用时优先,两者都不可信返回 null', () async {
+      final fake = FakeHuyaApi();
+      fake.wupResponseByFunc['getSuperFansInfo'] =
+          buildFakeSuperFansInfoResponse(superFansNum: 88, yearSuperFansNum: 12);
+      fake.wupResponseByFunc['getSuperFansRankPanel'] =
+          buildFakeSuperFansRankPanelResponse(num: 5, plusNum: 0);
+      final client = HuyaWupClient(httpClient: fake);
+      expect(
+        await client.fetchSuperFanCount(presenterUid: 1394575534, channelId: 1),
+        100,
+        reason: 'web:info 可信则用 info,不看 panel',
+      );
+      expect(fake.wupFuncNames, containsAll(<String>['getSuperFansInfo', 'getSuperFansRankPanel']));
+
+      final zeroFake = FakeHuyaApi();
+      zeroFake.wupResponseByFunc['getSuperFansInfo'] =
+          buildFakeSuperFansInfoResponse(superFansNum: 0, yearSuperFansNum: 0);
+      zeroFake.wupResponseByFunc['getSuperFansRankPanel'] =
+          buildFakeSuperFansRankPanelResponse(num: 0, plusNum: 0);
+      final zeroClient = HuyaWupClient(httpClient: zeroFake);
+      expect(
+        await zeroClient.fetchSuperFanCount(presenterUid: 1394575534, channelId: 1),
+        isNull,
+        reason: '0 不展示,由调用方留空(不伪造)',
+      );
+    });
+
+    test('fetchSuperFanCount:info 不可信(uid 回显)时回退 panel', () async {
+      final fake = FakeHuyaApi();
+      fake.wupResponseByFunc['getSuperFansInfo'] =
+          buildFakeSuperFansInfoResponse(superFansNum: 1394575534, yearSuperFansNum: 0);
+      fake.wupResponseByFunc['getSuperFansRankPanel'] =
+          buildFakeSuperFansRankPanelResponse(num: 61, plusNum: 1);
+      final client = HuyaWupClient(httpClient: fake);
+      expect(
+        await client.fetchSuperFanCount(presenterUid: 1394575534, channelId: 1),
+        62,
+      );
+    });
+
+    test('真实线上报文(2026 真机探针,tool/_probe_huya_superfans.dart)', () {
+      // 房间 148743(presenterUid=channelId=1199526316552)实测响应:
+      // getSuperFansInfo 把 uid 原样回显到 tag1(总计数等于 uid 时
+      // isPlausibleHuyaSuperFanCount 判脏),真值在 rankPanel
+      // (iNum=0 + iPlusNum=4)。
+      final info = parseSuperFansInfoResponse(
+        _hexBytes(
+          '0000005d10032c3c413039560577757075696610676574537570657246616e73'
+          '496e666f7d00003008000206001d0000010c0604745273701d00001c0a030000'
+          '011749570a08130000011749570a082c3c4c5c6c7c8c9c0b8c980ca80c',
+        ),
+      );
+      expect(info.superFansNum, 1199526316552, reason: 'tag1 实测为 uid 回显');
+      expect(info.yearSuperFansNum, 0, reason: 'tag2 缺失按 0');
+      expect(
+        isPlausibleHuyaSuperFanCount(info.total, 1199526316552),
+        isFalse,
+        reason: 'web isPlausibleHuyaSuperFanCount:total === presenterUid 视为脏值',
+      );
+
+      final panel = parseSuperFansRankPanelResponse(
+        _hexBytes(
+          '0000011d10032c3c413039560577757075696615676574537570657246616e73'
+          '52616e6b50616e656c7d000100ea08000206001d0000010c0604745273701d00'
+          '0100d50a0900010a030000000087706d281614e4b883e4b883e380903932e6'
+          '9f92e69f92e38091266168747470733a2f2f68757961696d672e6d7373746174'
+          '69632e636f6d2f6176617461722f313039372f37302f396363323533623865'
+          '6437333563333732643833316639326466306138305f3138305f3133352e6a'
+          '70673f3137383736323033373039214001506e6a00011c0b7001800c9ca001'
+          'b0020b130000011749570a0820013001414f5d5c6a0c1c2c3c4c5c6c76008c9c'
+          '0b7606e99fa9e4bd8f830000011749570a089a06001c20020ba0040b8c980ca8'
+          '0c',
+        ),
+      );
+      expect(panel.num, 0, reason: 'tag5 实测 0');
+      expect(panel.plusNum, 4, reason: 'tag10 实测 4(含 struct list 跳字段)');
+      expect(panel.total, 4);
+    });
+
+    test('fetchSuperFanCount:wup 不可达返回 null(不伪造)', () async {
+      final client = HuyaWupClient(httpClient: FakeHuyaApi());
+      expect(
+        await client.fetchSuperFanCount(presenterUid: 1394575534, channelId: 1),
+        isNull,
+      );
+      expect(await client.fetchSuperFansInfo(presenterUid: 0, channelId: 1), isNull);
+    });
   });
 }

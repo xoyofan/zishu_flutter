@@ -25,9 +25,18 @@
 ///   用 formatCount(rsp.iTotalNum || rsp.iTotal))。
 ///
 /// SVIP 口径说明(web 真源里没有「SVIP 文本」判定,不得伪造):
-/// - SideHeader 的 svip tone 行是「超粉人数」(wupui/getSuperFansInfo +
-///   getSuperFansRankPanel),不是身份档位;本轮未实现,RoomSummary 无
-///   对应字段。
+/// - SideHeader 的 svip tone 行(`ROOM_STAT_COLUMNS.huya` 第 3 列,
+///   `field: "diamondFans"` / label「超粉」)是**超粉人数**,不是身份档位:
+///   servant `wupui` 的 `getSuperFansInfo`(`iSuperFansNum +
+///   iYearSuperFansNum`,tag1/tag2)为主,为 0/不可信时回退
+///   `getSuperFansRankPanel`(`iNum` tag5 + `iPlusNum` tag10);两请求并发
+///   发出,口径与 web `fetchHuyaSuperFanCount` 完全一致(含
+///   `isPlausibleHuyaSuperFanCount` 置信度校验)。承载字段为
+///   [RoomSummary.diamondFans](沿用 web `FollowStatus.diamondFans` 键名)。
+/// - 两请求的 RequestPacket 结构与 `liveui/getVipBarList` 完全相同
+///   (仅 servant/func/sBuffer 内的 struct 字段编号不同),字节级 golden 见
+///   `test/src/platforms/huya/huya_wup_test.dart`(与 web `@tars/stream`
+///   同参数输出逐字节一致)。
 /// - 聊天行的 VIP/SVIP 是虎牙消费等级(11200 ConsumeLevelBadgeInfo
 ///   iLevel,弹幕侧已提取为 DanmakuMessage.userLevel)渲染的 emblem 图,
 ///   消费等级 → 7 档 identity 映射(≤4→1、≤7→2、≤10→3、≤13→4、≤16→11、
@@ -124,8 +133,102 @@ class HuyaVipBarCount {
   final int totalNum;
 }
 
-/// 解析 getVipBarList 响应;结构不符时抛 [TarsDecodeException]。
-HuyaVipBarCount parseVipBarListResponse(Uint8List bytes) {
+/// wupui/getSuperFansInfo 请求体(含 4 字节包长)。
+///
+/// GetSuperFansInfoReq(单个 struct):tag0 tUserId{tag3 sHuyaUserId=
+/// `webh5&0.0.0&official`}、tag1 lPid=presenterUid、tag2 lTid=channelId、
+/// tag3 lSid=channelId(注意字段编号与 VipListReq 不同)。
+Uint8List buildSuperFansInfoRequest({
+  required int presenterUid,
+  required int channelId,
+  int requestId = 1,
+}) {
+  final req = TarsWriter()
+    ..writeStruct((writer) {
+      writer.writeStruct((userId) => userId.writeString(_kUserToken, 3), 0);
+      writer.writeInt(presenterUid, 1);
+      writer.writeInt(channelId, 2);
+      writer.writeInt(channelId, 3);
+    }, 0);
+  final sBuffer = TarsWriter()..writeBytesMap({'tReq': req.takeBytes()}, 0);
+  return buildTupPacket(
+    servant: 'wupui',
+    func: 'getSuperFansInfo',
+    requestId: requestId,
+    sBuffer: sBuffer.takeBytes(),
+  );
+}
+
+/// wupui/getSuperFansRankPanel 请求体(含 4 字节包长)。
+///
+/// GetSuperFansRankPanelReq(单个 struct):tag0 tUserId、tag1 lPid=
+/// presenterUid、tag2 iPage=0、tag3 iCount=1(web 真源只填 lPid,
+/// 不发 channelId)。
+Uint8List buildSuperFansRankPanelRequest({
+  required int presenterUid,
+  int page = 0,
+  int count = 1,
+  int requestId = 1,
+}) {
+  final req = TarsWriter()
+    ..writeStruct((writer) {
+      writer.writeStruct((userId) => userId.writeString(_kUserToken, 3), 0);
+      writer.writeInt(presenterUid, 1);
+      writer.writeInt(page, 2);
+      writer.writeInt(count, 3);
+    }, 0);
+  final sBuffer = TarsWriter()..writeBytesMap({'tReq': req.takeBytes()}, 0);
+  return buildTupPacket(
+    servant: 'wupui',
+    func: 'getSuperFansRankPanel',
+    requestId: requestId,
+    sBuffer: sBuffer.takeBytes(),
+  );
+}
+
+/// getSuperFansInfo 响应的超粉计数(整数;展示层自行格式化)。
+class HuyaSuperFansInfo {
+  const HuyaSuperFansInfo({
+    required this.superFansNum,
+    required this.yearSuperFansNum,
+  });
+
+  /// 超粉数(GetSuperFansInfoRsp.iSuperFansNum,tag1)。
+  final int superFansNum;
+
+  /// 年超粉数(GetSuperFansInfoRsp.iYearSuperFansNum,tag2)。
+  final int yearSuperFansNum;
+
+  /// web 口径:`iSuperFansNum + iYearSuperFansNum`。
+  int get total => superFansNum + yearSuperFansNum;
+}
+
+/// getSuperFansRankPanel 响应的超粉计数。
+class HuyaSuperFansPanel {
+  const HuyaSuperFansPanel({required this.num, required this.plusNum});
+
+  /// 当前页超粉数(GetSuperFansRankPanelRsp.iNum,tag5)。
+  final int num;
+
+  /// 附加超粉数(GetSuperFansRankPanelRsp.iPlusNum,tag10)。
+  final int plusNum;
+
+  /// web 口径:`iNum + iPlusNum`。
+  int get total => num + plusNum;
+}
+
+/// web `isPlausibleHuyaSuperFanCount`:>0、不等于 presenterUid(uid 原样
+/// 回显视为脏值)、且 ≤ 5_000_000;不满足即视为不可信,不得展示。
+bool isPlausibleHuyaSuperFanCount(int total, int presenterUid) {
+  if (total <= 0) return false;
+  if (total == presenterUid) return false;
+  if (total > 5000000) return false;
+  return true;
+}
+
+/// 取出 wup 响应里 `tRsp` 的 struct 编码(包长头 → sBuffer → tRsp);
+/// 结构不符时抛 [TarsDecodeException]。
+Uint8List _readResponseStruct(Uint8List bytes) {
   if (bytes.length < 8) {
     throw const TarsDecodeException('wup packet too short');
   }
@@ -139,6 +242,50 @@ HuyaVipBarCount parseVipBarListResponse(Uint8List bytes) {
   if (rsp == null || rsp.isEmpty) {
     throw const TarsDecodeException('wup response without tRsp');
   }
+  return rsp;
+}
+
+/// 解析 getSuperFansInfo 响应;结构不符时抛 [TarsDecodeException]。
+///
+/// 字段缺失按 0 读(tag 不存在 → 0),与 web `readInt32(tag, false, 0)` 同口径;
+/// 0 由调用方按「数据诚实性」留空,不回填。
+HuyaSuperFansInfo parseSuperFansInfoResponse(Uint8List bytes) {
+  var seen = false;
+  int? superFansNum;
+  int? yearSuperFansNum;
+  TarsReader(_readResponseStruct(bytes)).readStruct(0, (reader) {
+    seen = true;
+    superFansNum = reader.readInt(1);
+    yearSuperFansNum = reader.readInt(2);
+  });
+  if (!seen || superFansNum == null || yearSuperFansNum == null) {
+    throw const TarsDecodeException('wup response without tRsp struct');
+  }
+  return HuyaSuperFansInfo(
+    superFansNum: superFansNum!,
+    yearSuperFansNum: yearSuperFansNum!,
+  );
+}
+
+/// 解析 getSuperFansRankPanel 响应;结构不符时抛 [TarsDecodeException]。
+HuyaSuperFansPanel parseSuperFansRankPanelResponse(Uint8List bytes) {
+  var seen = false;
+  int? num;
+  int? plusNum;
+  TarsReader(_readResponseStruct(bytes)).readStruct(0, (reader) {
+    seen = true;
+    num = reader.readInt(5);
+    plusNum = reader.readInt(10);
+  });
+  if (!seen || num == null || plusNum == null) {
+    throw const TarsDecodeException('wup response without tRsp struct');
+  }
+  return HuyaSuperFansPanel(num: num!, plusNum: plusNum!);
+}
+
+/// 解析 getVipBarList 响应;结构不符时抛 [TarsDecodeException]。
+HuyaVipBarCount parseVipBarListResponse(Uint8List bytes) {
+  final rsp = _readResponseStruct(bytes);
   int? total;
   int? totalNum;
   TarsReader(rsp).readStruct(0, (reader) {
@@ -171,19 +318,112 @@ class HuyaWupClient {
     required int channelId,
   }) async {
     if (presenterUid <= 0) return null;
-    final request = buildVipBarListRequest(
-      presenterUid: presenterUid,
-      channelId: channelId <= 0 ? presenterUid : channelId,
-      requestId: DateTime.now().microsecondsSinceEpoch % 1000000,
+    final bytes = await _exchange(
+      buildVipBarListRequest(
+        presenterUid: presenterUid,
+        channelId: channelId <= 0 ? presenterUid : channelId,
+        requestId: _nextRequestId(),
+      ),
     );
+    if (bytes == null) return null;
+    try {
+      return parseVipBarListResponse(bytes).totalNum;
+    } on TarsDecodeException {
+      return null;
+    }
+  }
+
+  /// wupui/getSuperFansInfo → 超粉原始计数;失败返回 null(不伪造 0)。
+  Future<HuyaSuperFansInfo?> fetchSuperFansInfo({
+    required int presenterUid,
+    required int channelId,
+  }) async {
+    if (presenterUid <= 0) return null;
+    final bytes = await _exchange(
+      buildSuperFansInfoRequest(
+        presenterUid: presenterUid,
+        channelId: channelId <= 0 ? presenterUid : channelId,
+        requestId: _nextRequestId(),
+      ),
+    );
+    if (bytes == null) return null;
+    try {
+      return parseSuperFansInfoResponse(bytes);
+    } on TarsDecodeException {
+      return null;
+    }
+  }
+
+  /// wupui/getSuperFansRankPanel → 超粉榜单计数;失败返回 null。
+  Future<HuyaSuperFansPanel?> fetchSuperFansRankPanel({
+    required int presenterUid,
+    int page = 0,
+    int count = 1,
+  }) async {
+    if (presenterUid <= 0) return null;
+    final bytes = await _exchange(
+      buildSuperFansRankPanelRequest(
+        presenterUid: presenterUid,
+        page: page,
+        count: count,
+        requestId: _nextRequestId(),
+      ),
+    );
+    if (bytes == null) return null;
+    try {
+      return parseSuperFansRankPanelResponse(bytes);
+    } on TarsDecodeException {
+      return null;
+    }
+  }
+
+  /// 超粉人数(`RoomSummary.diamondFans` 口径):web
+  /// `fetchHuyaSuperFanCount` 的等价实现 ——
+  /// `getSuperFansInfo`(iSuperFansNum + iYearSuperFansNum)与
+  /// `getSuperFansRankPanel`(iNum + iPlusNum)**并发**发出(对齐真源
+  /// `Promise.all`,仅在播时调用,不给关注刷新链路重复发请求),
+  /// 取第一个通过 [isPlausibleHuyaSuperFanCount] 的结果;
+  /// 都不可信(或请求失败)返回 null —— 调用方留空,不回填 0。
+  Future<int?> fetchSuperFanCount({
+    required int presenterUid,
+    required int channelId,
+  }) async {
+    if (presenterUid <= 0) return null;
+    try {
+      final (info, panel) = await (
+        fetchSuperFansInfo(presenterUid: presenterUid, channelId: channelId),
+        fetchSuperFansRankPanel(presenterUid: presenterUid),
+      ).wait;
+      final fromInfo = info?.total ?? 0;
+      if (isPlausibleHuyaSuperFanCount(fromInfo, presenterUid)) {
+        return fromInfo;
+      }
+      final fromPanel = panel?.total ?? 0;
+      if (isPlausibleHuyaSuperFanCount(fromPanel, presenterUid)) {
+        return fromPanel;
+      }
+      return null;
+    } on Exception {
+      return null;
+    }
+  }
+
+  /// POST 一次 wup 请求并返回原始报文;非 200/超时/网络异常统一 null。
+  Future<Uint8List?> _exchange(Uint8List request) async {
     try {
       final response = await _client
           .post(Uri.parse(kHuyaWupUrl), headers: kHuyaWupHeaders, body: request)
           .timeout(const Duration(seconds: 10));
       if (response.statusCode != 200) return null;
-      return parseVipBarListResponse(response.bodyBytes).totalNum;
+      return response.bodyBytes;
     } on Exception {
       return null;
     }
   }
+
+  /// 请求 id(服务端原样回显、不校验);同一次刷新内的并发请求取不同值。
+  int _nextRequestId() =>
+      (DateTime.now().microsecondsSinceEpoch + _requestSeq++) % 1000000;
+
+  static int _requestSeq = 0;
 }

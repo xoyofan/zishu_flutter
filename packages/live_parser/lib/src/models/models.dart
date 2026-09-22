@@ -297,6 +297,7 @@ class RoomSummary {
     this.promoTag,
     this.followers = '',
     this.vip = '',
+    this.diamondFans = '',
     this.roomState = RoomState.offline,
   });
 
@@ -339,7 +340,30 @@ class RoomSummary {
   ///   真源本身无此字段,恒为空。
   final String vip;
 
-  /// 房间三态(在播/离线/轮播),`refresher` 与列表共同承载 replay 语义。
+  /// 第 3 列「SVIP 档」计数文案(已格式化,如「1.2万」)。
+  ///
+  /// 字段名沿用 web 真源的同一个键 `FollowStatus.diamondFans`
+  /// (SFVideoLive `packages/shared/src/types/follow.ts:27`)与
+  /// `ROOM_STAT_COLUMNS` 的第 3 列 `field: "diamondFans"`
+  /// (`platformCatalog.ts:9`);**不做平台专属重命名**,因为真源本身就是
+  /// 一个字段承载各平台不同语义 —— 故此处保留 `diamondFans` 以便
+  /// douyu/douyin/bilibili 后续按同一键复用(映射关系与真源一致):
+  /// - huya(本轮实现):`tone=svip` 列 label「超粉」= **超粉人数**;
+  /// - douyu:label「钻粉」(`functionShow.giftCard.dFansInfo.curDfansNum`);
+  /// - douyin:label「会员」;bilibili:label「大航海」;
+  ///   (后三站按 web 真源另有取数链路,本包尚未实现,恒为空)。
+  ///
+  /// 虎牙取数(对齐 web `fetchHuyaSuperFanCount`,SFVideoLive
+  /// `services/streaming-server/src/follow/huya-wup.ts:199`):仅在播时走
+  /// `wupui/getSuperFansInfo`(`iSuperFansNum + iYearSuperFansNum`,Tars wup
+  /// 二进制协议,见 `platforms/huya/huya_wup.dart`),为 0/不可信时回退
+  /// `wupui/getSuperFansRankPanel`(`iNum + iPlusNum`);置信度校验沿用
+  /// web `isPlausibleHuyaSuperFanCount`。失败、字段缺失、计数为 0
+  /// **一律留空串**(展示层渲染「—」;数据诚实性:不伪造、不回填 0)。
+  /// 列表/浏览行不逐房发 wup,恒为空串。
+  final String diamondFans;
+
+  /// 房间三态(在播/离线/轮播)，`refresher` 与列表共同承载 replay 语义。
   ///
   /// 口径对齐 web 关注快照 `FollowState = live|replay|offline`
   /// (SFVideoLive `follow/status.ts:42`):
@@ -369,6 +393,7 @@ class RoomSummary {
     if (promoTag != null) 'promoTag': promoTag,
     if (followers.isNotEmpty) 'followers': followers,
     if (vip.isNotEmpty) 'vip': vip,
+    if (diamondFans.isNotEmpty) 'diamondFans': diamondFans,
   };
 
   factory RoomSummary.fromJson(Map<String, dynamic> json) => RoomSummary(
@@ -388,6 +413,7 @@ class RoomSummary {
     promoTag: json['promoTag']?.toString(),
     followers: json['followers']?.toString() ?? '',
     vip: json['vip']?.toString() ?? '',
+    diamondFans: json['diamondFans']?.toString() ?? '',
   );
 }
 

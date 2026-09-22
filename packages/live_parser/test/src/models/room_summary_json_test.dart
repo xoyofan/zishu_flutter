@@ -64,4 +64,49 @@ void main() {
       expect(unknown.roomState, RoomState.offline);
     });
   });
+
+  group('RoomSummary diamondFans JSON(第 3 列 svip 档)', () {
+    test('roundtrip:非空写入并在读回后保留', () {
+      const summary = RoomSummary(
+        site: 'huya',
+        roomId: '9527',
+        title: '标题',
+        anchorName: '主播',
+        cid: '1',
+        category: '英雄联盟',
+        online: '12.3万',
+        cover: '',
+        vip: '75',
+        diamondFans: '1300',
+      );
+
+      final json = summary.toJson();
+      expect(json['diamondFans'], '1300');
+
+      final restored = RoomSummary.fromJson(json);
+      expect(restored.diamondFans, '1300');
+      expect(restored.vip, '75');
+    });
+
+    test('空串不写键(旧 JSON 与空值形态兼容)', () {
+      const summary = RoomSummary(
+        site: 'huya',
+        roomId: '9527',
+        title: '',
+        anchorName: '',
+        cid: '',
+        category: '',
+        online: '',
+        cover: '',
+      );
+
+      expect(summary.diamondFans, '');
+      expect(summary.toJson().containsKey('diamondFans'), isFalse);
+      expect(
+        RoomSummary.fromJson(const {'site': 'huya', 'roomId': '9527'}).diamondFans,
+        '',
+        reason: '无该键的旧 JSON 回落空串(展示为「—」)',
+      );
+    });
+  });
 }

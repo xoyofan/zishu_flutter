@@ -63,8 +63,14 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver, RoomSummar
   /// 真源 `follow/huya-wup.ts` 走 Tars wup 协议 `liveui/getVipBarList`
   /// (见 [HuyaWupClient]),presenterUid 取 `profileInfo.uid ?? liveData.uid`、
   /// channelId 取 `liveData.liveChannel ?? liveData.channel ?? uid`;
-  /// wup 失败/为 0 一律留空(数据诚实性:不伪造)。超粉(svip tone 行)
-  /// web 侧走 getSuperFansInfo,本轮未实现。
+  /// wup 失败/为 0 一律留空(数据诚实性:不伪造)。
+  ///
+  /// 超粉数([RoomSummary.diamondFans],`ROOM_STAT_COLUMNS.huya` 第 3 列
+  /// `svip` tone「超粉」):同样仅在播时取,`wupui/getSuperFansInfo`
+  /// (iSuperFansNum + iYearSuperFansNum)为主、`getSuperFansRankPanel`
+  /// (iNum + iPlusNum)兜底,两个 wup 与贵宾查询**并发**发出(对齐 web
+  /// `fetchHuyaSnapshot` 的 `Promise.all`,不在刷新链路上重复请求);
+  /// 失败/为 0/不可信一律留空。
   @override
   Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
     final http = _client.parserHttp;
@@ -119,15 +125,27 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver, RoomSummar
       liveData['liveChannel'],
       liveData['channel'],
     ]);
+    final wupChannelId = channelId > 0 ? channelId : presenterUid;
     var vip = '';
+    var diamondFans = '';
     if (state == HuyaRoomState.live && presenterUid > 0) {
-      final count = await _client.wup.fetchVipBarCount(
-        presenterUid: presenterUid,
-        channelId: channelId > 0 ? channelId : presenterUid,
-      );
-      if (count != null && count > 0) {
-        vip = '$count';
+      // 两个 wup 并发(对齐 web `Promise.all([fetchHuyaVipCount,
+      // fetchHuyaSuperFanCount])`):串行会把列表刷新的网络等待翻倍。
+      final (vipCount, superFanCount) = await (
+        _client.wup.fetchVipBarCount(
+          presenterUid: presenterUid,
+          channelId: wupChannelId,
+        ),
+        _client.wup.fetchSuperFanCount(
+          presenterUid: presenterUid,
+          channelId: wupChannelId,
+        ),
+      ).wait;
+      if (vipCount != null && vipCount > 0) {
+        vip = '$vipCount';
       }
+      // 超粉:web formatCount 口径(完整数字,0/失败留空)。
+      diamondFans = formatExactCount(superFanCount);
     }
 
     return RoomSummary(
@@ -147,6 +165,7 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver, RoomSummar
         profileInfo['activityCount'] ?? liveData['activityCount'],
       ),
       vip: vip,
+      diamondFans: diamondFans,
       // 三态透传:huyaRoomState 的 replay(录播循环)不再折进 offline。
       roomState: switch (state) {
         HuyaRoomState.live => RoomState.live,

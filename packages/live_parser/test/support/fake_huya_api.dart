@@ -7,6 +7,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
+import 'package:live_parser/src/platforms/huya/tars_codec.dart';
 
 import 'fake_douyu_api.dart' show RecordedRequest;
 
@@ -26,6 +27,13 @@ class FakeHuyaApi extends http.BaseClient {
 
   /// cdnws.api.huya.com wup 响应原始字节(null → HTTP 500,模拟 wup 不可达)。
   Uint8List? wupResponseBytes;
+
+  /// 按 wup func 名(如 `getSuperFansInfo`)路由的响应;未命中的 func
+  /// 回退 [wupResponseBytes]。用于同一次刷新里多个 servant/func 混发。
+  final Map<String, Uint8List> wupResponseByFunc = {};
+
+  /// 已收到的 wup 请求 func 名(按到达顺序),用于断言请求次数与种类。
+  final List<String> wupFuncNames = [];
 
   final List<RecordedRequest> requests = [];
 
@@ -77,11 +85,23 @@ class FakeHuyaApi extends http.BaseClient {
       return _json(searchResponse);
     }
     if (url.host == 'cdnws.api.huya.com') {
-      final bytes = wupResponseBytes;
+      final func = _wupFunc(request.bodyBytes);
+      wupFuncNames.add(func);
+      final bytes = wupResponseByFunc[func] ?? wupResponseBytes;
       if (bytes == null) return http.Response('wup unavailable', 500);
       return http.Response.bytes(bytes, 200);
     }
     return http.Response('fake route missing: $url', 500);
+  }
+}
+
+/// 从 TUP 包体里取 func 名(RequestPacket tag6);解码失败回退空串。
+String _wupFunc(Uint8List body) {
+  if (body.length < 6) return '';
+  try {
+    return TarsReader(Uint8List.sublistView(body, 4)).readString(6);
+  } on Exception {
+    return '';
   }
 }
 
