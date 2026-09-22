@@ -12,7 +12,7 @@ void main() {
       ..watchHtml = youtubeFixture('watch_live.html');
   });
 
-  test('浏览:/live 页提取 videoId、标题与缩略图', () async {
+  test('浏览:/live 页提取 videoId、标题与列表封面变体', () async {
     final browse = YoutubeBrowseRepository(ParserHttp(client: fake));
     final result = await browse.fetchRooms(
       const RoomListRequest(site: 'youtube', page: 1, limit: 10),
@@ -21,10 +21,14 @@ void main() {
     expect(result.rooms, hasLength(2));
     expect(result.rooms.first.roomId, 'AAAAAAAAAAA');
     expect(result.rooms.first.title, '房间一');
+    // 列表卡片固定用 16:9 原生的 mqdefault(320×180,实测 11.8KB):
+    // ytInitialData 的 hq720 是 1280×720/170KB,而卡片实宽仅 226~320px。
     expect(
       result.rooms.first.cover,
-      'https://i.ytimg.com/vi/AAAAAAAAAAA/hqdefault.jpg',
+      'https://i.ytimg.com/vi/AAAAAAAAAAA/mqdefault.jpg',
+      reason: '列表封面应改用小变体,不得直接用 ytInitialData 的大图 URL',
     );
+    expect(result.rooms[1].cover, 'https://i.ytimg.com/vi/BBBBBBBBBBB/mqdefault.jpg');
     expect(result.rooms.first.category, '正在直播');
     expect(result.hasMore, isFalse);
 
