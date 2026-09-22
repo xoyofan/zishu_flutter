@@ -10,6 +10,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/presentation/design_tokens.dart';
+import '../../../shared/presentation/widgets/widgets.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../../../shared/application/providers.dart';
 import '../application/follow_provider.dart';
@@ -184,10 +185,13 @@ class _FollowViewState extends ConsumerState<FollowView> {
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 if (_refreshing)
+                  // 清单 §3.6:刷新中的 16×16 加载圈换成同尺寸骨架块。位置、
+                  // 尺寸与出现时机与替换前逐项一致(刷新按钮位),reduce_motion
+                  // 时退为静态占位矩形、不扫光。
                   const SizedBox(
                     width: 16,
                     height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
+                    child: ShimmerSkeleton(child: SkeletonBox()),
                   )
                 else
                   IconButton(

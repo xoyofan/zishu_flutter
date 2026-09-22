@@ -8,11 +8,15 @@ import 'package:live_parser/live_parser.dart';
 
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
+import '../../../shared/presentation/widgets/widgets.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../application/search_provider.dart';
 import '../widgets/search_direct_tile.dart';
 import '../widgets/search_platform_chips.dart';
 import '../widgets/search_result_tile.dart';
+
+/// 首屏骨架行数(清单 §3.6):与一屏可见结果行数量级一致即可。
+const int _skeletonRowCount = 5;
 
 /// 搜索档位:主播 / 房间。对齐 web `SearchDialog.vue` 的 `activeTab`。
 ///
@@ -324,16 +328,20 @@ class _SearchViewState extends ConsumerState<SearchView> {
                 ),
                 const SizedBox(height: AppSpacing.md),
               ],
+              // 首屏加载(清单 §3.6):原先的「搜索中…」文本占位换成结果行形状的
+              // 骨架(时机 = 原占位出现的时机,判定分支不动);骨架行与
+              // SearchResultTile 等高,结果落地时列表不跳动。
+              // 顶部 LinearProgressIndicator 保留:增量搜索仍需要连续在转的
+              // 「进行中」反馈,骨架行表达不了。
               if (search.searching && search.hits.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
-                  child: Center(
-                    child: Text(
-                      '搜索中…',
-                      style: context.textSecondary.copyWith(
-                        color: tokens.textSecondary,
-                      ),
-                    ),
+                Semantics(
+                  label: '搜索中…',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      for (var i = 0; i < _skeletonRowCount; i++)
+                        SkeletonRow(key: Key('search-skeleton-$i')),
+                    ],
                   ),
                 ),
               for (final (index, item) in search.hits.indexed)
