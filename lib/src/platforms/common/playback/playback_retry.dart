@@ -73,6 +73,17 @@ class PlaybackRetryPolicy {
   String progressLabel(int attempts) =>
       retryProgressLabel(attempts, maxAttempts);
 
+  /// 一次中断(进入缓冲 / 重开)时的归零判定:只有**连续健康播放**已满
+  /// [healthWindow] 才允许把连续失败计数归零。
+  ///
+  /// 为什么需要它:出帧后 mpv 常紧接着再报一次 `buffering`,旧实现直接撤掉
+  /// 健康计时器,于是计数在整个会话里只涨不落——退避逐步涨到 [maxDelay]。
+  /// 实测日志(虎牙会话):健康播放 35s 后中断,计数仍停在 1,下一次退避
+  /// 已从 8s 涨到 12s。改为按「已健康播满」结算后,自愈型抖动不再累积退避,
+  /// 也不会被无关故障凑满 [maxAttempts] 而错误放弃。
+  bool shouldResetOnInterrupt(Duration healthyElapsed) =>
+      healthyElapsed >= healthWindow;
+
   /// 放弃自动重试时的最终文案:由最后一次**已归类**的错误类型给出处置建议。
   ///
   /// 刻意接收 [kind] 而非原始字符串:原始诊断可能是可自愈噪音,依据它生成

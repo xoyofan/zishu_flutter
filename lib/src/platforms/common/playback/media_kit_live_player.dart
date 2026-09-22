@@ -113,6 +113,10 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   /// 连续重开计数:健康窗口走完才归零,超过上限停止自动重试(交还手动重连)。
   int _stallRetries = 0;
 
+  /// 本轮「连续健康播放」的起点:出帧时置位,中断(缓冲/重开/离房)时结算。
+  /// 见 [_settleHealthyWindow]。
+  DateTime? _playingSince;
+
   /// 最后一次**终局**错误的类别:用于自动重试耗尽后给出对症的处置建议。
   /// 刻意不存原始诊断文本 —— 那是 mpv 日志原文,其中大量条目是可自愈噪音。
   PlayerErrorKind _lastErrorKind = PlayerErrorKind.native;
@@ -257,7 +261,8 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   /// 计数只由 [PlaybackRetryPolicy.healthWindow] 观察窗确认健康后归零。
   void _onBuffering(bool buffering) {
     if (buffering) {
-      _cancelHealthTimer();
+      // 进入缓冲先结算健康窗(已播满观察窗就归零),再起看门狗。
+      _settleHealthyWindow(reason: 'buffering_interrupt');
       _armStallTimer();
     } else {
       _stallTimer?.cancel();
@@ -273,18 +278,39 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     _stallTimer = null;
     _emit((s) => s.copyWith(error: null));
     final retries = _stallRetries;
+    // 健康播放起点:重复的 playing 事件不重置,免得连续抖动永远凑不满观察窗。
+    _playingSince ??= DateTime.now();
     if (retries > 0) {
       // 出帧即记:配合 reopen/recover 事件,日志里能直接量出每次中断到恢复的耗时。
       PlaybackLog.write('playing_ok', {'afterRetries': retries});
       _healthTimer?.cancel();
       _healthTimer = Timer(_policy.healthWindow, () {
-        _healthTimer = null;
         if (_disposed) return;
-        _stallRetries = 0;
-        // 计数归零后进度文案要跟着退场,否则会残留"自动重连中 2/6"。
-        _emit((s) => s.copyWith(retryAttempt: 0));
+        _settleHealthyWindow(reason: 'window_elapsed');
       });
     }
+  }
+
+  /// 结算健康观察窗:连续健康播放满 [PlaybackRetryPolicy.healthWindow] 才把
+  /// 连续失败计数归零。
+  ///
+  /// 旧实现在进入缓冲时直接撤销计时器,而 mpv 出帧后常紧接着再报一次
+  /// `buffering`,于是计数只涨不落:退避随会话单调增长(实测 8→12→16→20s),
+  /// 且无关故障会凑满上限而错误放弃。改为按已播时长结算后,能自愈的抖动
+  /// 不再计入失败。
+  void _settleHealthyWindow({required String reason}) {
+    final since = _playingSince;
+    _cancelHealthTimer();
+    if (since == null) return;
+    _playingSince = null;
+    if (!_policy.shouldResetOnInterrupt(DateTime.now().difference(since))) {
+      return;
+    }
+    if (_stallRetries == 0) return;
+    _stallRetries = 0;
+    PlaybackLog.write('health_reset', {'reason': reason});
+    // 计数归零后进度文案要跟着退场,否则会残留"自动重连中 2/6"。
+    _emit((s) => s.copyWith(retryAttempt: 0));
   }
 
   /// 按当前连续失败次数起看门狗。
@@ -395,7 +421,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       'lines': _currentLines.length,
       'host': _hostOf(_currentLines.first),
     });
-    _cancelHealthTimer();
+    _settleHealthyWindow(reason: 'reopen');
     unawaited(open(_currentLines.first, _currentLines.skip(1).toList(), false));
   }
 
@@ -471,6 +497,11 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       for (final (name, value) in kLiveTuningProperties) {
         await platform.setProperty(name, value);
       }
+      // 把实际生效的缓冲参数落盘:下一次会话可直接核对"配置是否真的注入",
+      // 不必再从二进制/源码反推(排查卡顿时缺的正是这一环)。
+      PlaybackLog.write('mpv_tuning', {
+        for (final (name, value) in kLiveTuningProperties) name: value,
+      });
       // 每次 open 只按当前线路主机重设代理,避免上一个源的代理策略残留。
       final cacheDir =
           '${Directory.systemTemp.path}${Platform.pathSeparator}zishu_demuxer_cache';
@@ -588,6 +619,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       _stallTimer?.cancel();
       _stallTimer = null;
       _cancelHealthTimer();
+      _playingSince = null;
       // 保留已出画面的宽高:自动重连期间 PiP 小窗要沿用原宽高比,不该退回 16:9。
       // 错误文案的区别对待很关键:用户主动切源([resetRetries] 为 true)才清错误,
       // 让卡片退出;自动重连([resetRetries] 为 false)要**留着**错误 + 计数,
@@ -680,11 +712,13 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       _stallTimer?.cancel();
       _stallTimer = null;
       _cancelHealthTimer();
+      _playingSince = null;
       _currentLines = const [];
       // 离房即重置恢复节流与重试记账:下一次进房从干净状态开始,
       // 而不是继承上一间的窗口 / 已放弃闩锁(否则重进同一间永不自动重连)。
       _lastRecoverAt = null;
       _stallRetries = 0;
+      _playingSince = null;
       _givenUp = false;
       _adHoldSince = null;
       _lastErrorKind = PlayerErrorKind.native;

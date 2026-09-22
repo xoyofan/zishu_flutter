@@ -96,6 +96,25 @@ void main() {
       // 否则计数被反复清零,重试上限形同虚设。
       expect(policy.healthWindow.inSeconds, greaterThanOrEqualTo(5));
     });
+
+    test('中断时只有已连续健康播满观察窗才归零(防退避无限增长)', () {
+      const policy = PlaybackRetryPolicy();
+      // 未满观察窗:mpv 出帧后紧接的 buffering 不得把计数归零。
+      expect(
+        policy.shouldResetOnInterrupt(const Duration(seconds: 3)),
+        isFalse,
+      );
+      // 已满观察窗:健康播放 35s 后的中断应归零(否则退避 8→12→16… 单调增长)。
+      expect(
+        policy.shouldResetOnInterrupt(const Duration(seconds: 35)),
+        isTrue,
+      );
+      expect(
+        policy.shouldResetOnInterrupt(policy.healthWindow),
+        isTrue,
+        reason: '恰好等于观察窗即视为健康',
+      );
+    });
   });
 
   group('进度文案', () {
