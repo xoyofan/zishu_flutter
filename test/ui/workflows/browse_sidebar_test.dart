@@ -21,6 +21,8 @@ import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 import 'package:zishu_flutter/src/shared/presentation/design_tokens.dart';
 
+import '../../support/page_transition.dart';
+
 /// 测试替身:VM 下替代 MediaKitLivePlayer,快照立即给一帧,方法只记录调用。
 class FakeLivePlayer implements LivePlayer {
   FakeLivePlayer();
@@ -153,9 +155,8 @@ void main() {
 
     // 4) 点平台锚点切换路由与选中态。
     await tester.tap(find.byKey(const Key('home-platform-chip-bilibili')));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
+    // 页面过渡(氛围轨 §3.5)结束后旧页才卸载:否则 room-card 锚点会数到两份。
+    await pumpPageTransition(tester);
     expect(router.routeInformationProvider.value.uri.path, '/bilibili');
     expect(
       tester.widget<FilterChip>(
@@ -270,9 +271,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     await tester.tap(find.byKey(const Key('home-platform-chip-douyu')));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
+    // 页面过渡结束后旧页("全平台")才卸载,否则首页 chip 会数到两份。
+    await pumpPageTransition(tester);
     expect(router.routeInformationProvider.value.uri.path, '/douyu');
     expect(
       tester

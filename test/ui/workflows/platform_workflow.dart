@@ -37,6 +37,8 @@ import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/features/play/widgets/play_side_panel.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 
+import '../../support/page_transition.dart';
+
 /// 统一 pump 步长,与既有锚点测试保持一致。
 const Duration _kFrame = Duration(milliseconds: 50);
 
@@ -139,6 +141,9 @@ Future<GoRouter> pumpPlatformApp(WidgetTester tester, String location) async {
   if (location != router.routeInformationProvider.value.uri.path) {
     router.go(location);
     await _pumpFrames(tester, 2, where: 'pumpPlatformApp/go');
+    // 交还 router 时应用应已稳定:页面过渡(氛围轨 §3.5,180ms)结束前旧页仍在
+    // 树上,调用方按锚点取到的可能是旧页的元素。
+    await pumpPageTransition(tester);
   }
   return router;
 }
@@ -291,6 +296,10 @@ Future<({int ms, int frames})> openRoomLatency(
   final router = _routerOf(tester);
   router.go('/$site');
   await _pumpFrames(tester, 2, where: 'latency/$site/home');
+  // 等页面过渡走完(docs/ui-refine/ambient-effect-inventory.md §3.5):过渡中新旧
+  // 两页同时在树上,room-card 锚点会取到旧页的,点错页则后续进房路径失效。
+  // 本次推进在 stopwatch 起跳**之前**,不进耗时/帧数指标。
+  await pumpPageTransition(tester);
 
   final cards = anchorKeysWithPrefix(tester, 'room-card-');
   expect(cards, isNotEmpty, reason: '$site 首页无 room-card-* 锚点可点');

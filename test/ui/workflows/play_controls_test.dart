@@ -26,6 +26,8 @@ import 'package:zishu_flutter/src/features/follow/application/settings_provider.
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/features/play/widgets/player_controls.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
+
+import '../../support/page_transition.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/play_screen_mode.dart';
 
 /// 深链播放页(fixture 样例房间,与 layout/danmaku 基线同房间)。
@@ -598,8 +600,12 @@ void main() {
     _player.calls.clear();
 
     // 返回首页:PlayController 随页面 autoDispose,应下发 stop 卸载媒体源。
+    // 播放页要等**页面过渡**(氛围轨清单 §3.5,180ms)结束才被 Navigator 卸载,
+    // 故按过渡时长推进(原 3 帧 = 150ms 不足以让旧页卸载)。
     play.router.go('/all');
-    await _pumpFrames(tester, 3);
+    await pumpPageTransition(tester);
+    // 再推两帧:让 autoDispose 触发的 stop() 落到 calls。
+    await _pumpFrames(tester, 2);
 
     expect(
       _player.calls,

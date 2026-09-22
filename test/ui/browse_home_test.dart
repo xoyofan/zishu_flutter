@@ -15,6 +15,8 @@ import 'package:zishu_flutter/src/app/app_router.dart';
 import 'package:zishu_flutter/src/apps/windows/windows_app.dart';
 import 'package:zishu_flutter/src/shared/application/fixture_sources.dart';
 
+import '../support/page_transition.dart';
+
 void main() {
   /// pump WindowsApp 并返回 router,便于导航到目标路由。
   ///
@@ -51,8 +53,9 @@ void main() {
   testWidgets('初始 /douyu:渲染全部 fixture 房间卡片', (tester) async {
     final router = await pumpApp(tester);
     router.go('/douyu');
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
+    // 页面过渡(氛围轨 §3.5)结束后旧页才卸载:否则按锚点计数会把
+    // 旧页(全平台首页)的 10 张卡片一并数进去。
+    await pumpPageTransition(tester);
 
     // 每个样例房间都有唯一 room-card 锚点(等价于锚点总数 == kFixtureRooms.length)。
     for (final room in kFixtureRooms) {
@@ -70,8 +73,7 @@ void main() {
     final router = await pumpApp(tester);
 
     await tester.tap(find.byKey(const Key('home-platform-chip-bilibili')));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
+    await pumpPageTransition(tester);
 
     // 路由已切到 /bilibili(fixture 数据源不按 site 过滤,网格仍渲染全部样例)。
     expect(router.routeInformationProvider.value.uri.path, '/bilibili');

@@ -19,6 +19,8 @@ import 'package:zishu_flutter/src/features/play/views/play_view.dart';
 import 'package:zishu_flutter/src/features/user/views/user_credentials_view.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 
+import '../../support/page_transition.dart';
+
 class _FakeLivePlayer implements LivePlayer {
   @override
   Stream<PlayerSnapshot> get snapshots =>
@@ -87,12 +89,11 @@ Future<GoRouter> _pumpApp(WidgetTester tester) async {
   return ProviderScope.containerOf(element).read(routerProvider);
 }
 
-/// `go` 到 [location] 并推进若干帧(重定向都是同步的,两帧足够挂载页面)。
+/// `go` 到 [location],并等到「页面过渡」走完(重定向都是同步的,
+/// 但新页面要等 fade-through 过渡结束才会卸载前一页 —— 见 [pumpPageTransition])。
 Future<void> _go(WidgetTester tester, GoRouter router, String location) async {
   router.go(location);
-  for (var i = 0; i < 3; i++) {
-    await tester.pump(const Duration(milliseconds: 50));
-  }
+  await pumpPageTransition(tester);
 }
 
 String _pathOf(GoRouter router) =>
@@ -200,9 +201,9 @@ void main() {
     expect(find.text('页面不存在'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('route-fallback-home')));
-    for (var i = 0; i < 3; i++) {
-      await tester.pump(const Duration(milliseconds: 50));
-    }
+    // 兜底页不是壳层页面(无过渡),但回首页是:等过渡结束再断言,否则
+    // 旧页(初始 /all 首页)与新页会同时命中 HomeView。
+    await pumpPageTransition(tester);
     expect(find.byType(HomeView), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

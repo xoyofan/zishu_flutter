@@ -84,14 +84,15 @@ final routerProvider = Provider<GoRouter>((ref) {
       // ---- 固定路由(声明在 /:site 之前,保证优先匹配)----
       GoRoute(
         path: '/follow',
-        pageBuilder: (_, state) =>
-            _shellPage(state, 'all', const FollowView(), title: '我的关注'),
+        pageBuilder: (context, state) =>
+            _shellPage(context, state, 'all', const FollowView(), title: '我的关注'),
       ),
       // `/time` 语义对齐 web(`router.js` → `TimeView.vue`):解析耗时基准页
       // (冷解析 vs 缓存命中的客户端墙钟对比),**不是**动态时间线。
       GoRoute(
         path: '/time',
-        pageBuilder: (_, state) => _shellPage(
+        pageBuilder: (context, state) => _shellPage(
+          context,
           state,
           'all',
           const ParseBenchmarkView(),
@@ -102,20 +103,25 @@ final routerProvider = Provider<GoRouter>((ref) {
       // 顶/底栏「动态」入口同步指向它。
       GoRoute(
         path: '/timeline',
-        pageBuilder: (_, state) =>
-            _shellPage(state, 'all', const TimelineView(), title: '动态时间线'),
+        pageBuilder: (context, state) =>
+            _shellPage(context, state, 'all', const TimelineView(), title: '动态时间线'),
       ),
       GoRoute(
         path: '/settings',
-        pageBuilder: (_, state) =>
-            _shellPage(state, 'all', const SettingsView(), title: '设置'),
+        pageBuilder: (context, state) =>
+            _shellPage(context, state, 'all', const SettingsView(), title: '设置'),
       ),
       // 用户/平台凭证页:保存 YouTube / 小红书 等平台的登录态 cookie/token
       // (web 的 `/user` 只是弹登录框;桌面端收敢成一页统一管理)。
       GoRoute(
         path: '/user',
-        pageBuilder: (_, state) =>
-            _shellPage(state, 'all', const UserCredentialsView(), title: '平台凭证'),
+        pageBuilder: (context, state) => _shellPage(
+          context,
+          state,
+          'all',
+          const UserCredentialsView(),
+          title: '平台凭证',
+        ),
       ),
       // 搜索已改为全局对话框(见 features/search/widgets/search_dialog.dart):
       // `/search` 与 web 一样不再承载页面,保留深链兼容 → 重定向到平台首页。
@@ -124,19 +130,30 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: '/search', redirect: (_, _) => '/all'),
       GoRoute(
         path: '/all',
-        pageBuilder: (_, state) =>
-            _shellPage(state, 'all', const HomeView(site: 'all'), title: '全平台首页'),
+        pageBuilder: (context, state) => _shellPage(
+          context,
+          state,
+          'all',
+          const HomeView(site: 'all'),
+          title: '全平台首页',
+        ),
       ),
       // 分类落地页(不带子分类):对齐 SFVideoLive `/${site}/category`,
       // 进入后由 CategoryView 默认选中第一组。
       GoRoute(
         path: '/all/category',
-        pageBuilder: (_, state) =>
-            _shellPage(state, 'all', const CategoryView(site: 'all'), title: '跨平台分类'),
+        pageBuilder: (context, state) => _shellPage(
+          context,
+          state,
+          'all',
+          const CategoryView(site: 'all'),
+          title: '跨平台分类',
+        ),
       ),
       GoRoute(
         path: '/all/category/:key',
-        pageBuilder: (_, state) => _shellPage(
+        pageBuilder: (context, state) => _shellPage(
+          context,
           state,
           'all',
           CategoryView(site: 'all', categoryKey: state.pathParameters['key']),
@@ -172,7 +189,8 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/:site/anchor/:id',
-        pageBuilder: (_, state) => _shellPage(
+        pageBuilder: (context, state) => _shellPage(
+          context,
           state,
           state.pathParameters['site']!,
           AnchorView(
@@ -188,9 +206,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             PlatformBrandCatalog.supportsBrowse(state.pathParameters['site']!)
             ? null
             : '/all',
-        pageBuilder: (_, state) {
+        pageBuilder: (context, state) {
           final site = state.pathParameters['site']!;
           return _shellPage(
+            context,
             state,
             site,
             CategoryView(site: site),
@@ -204,9 +223,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             PlatformBrandCatalog.supportsBrowse(state.pathParameters['site']!)
             ? null
             : '/all',
-        pageBuilder: (_, state) {
+        pageBuilder: (context, state) {
           final site = state.pathParameters['site']!;
           return _shellPage(
+            context,
             state,
             site,
             CategoryView(site: site, cid: state.pathParameters['cid']),
@@ -220,9 +240,10 @@ final routerProvider = Provider<GoRouter>((ref) {
             PlatformBrandCatalog.supportsBrowse(state.pathParameters['site']!)
             ? null
             : '/all',
-        pageBuilder: (_, state) {
+        pageBuilder: (context, state) {
           final site = state.pathParameters['site']!;
           return _shellPage(
+            context,
             state,
             site,
             HomeView(site: site),
@@ -235,18 +256,67 @@ final routerProvider = Provider<GoRouter>((ref) {
 });
 
 /// 除播放页外的页面都包在应用壳层里。
+///
+/// 过渡为 **fade-through**(清单 §3.5):opacity 0→1 + y +8→0,反向对称。
+/// 刻意不做横向大位移滑动(清单 §4:桌面端晕动)。
+///
+/// 实现取 `CustomTransitionPage`(`NoTransitionPage` 的父类):`_shellPage` 的
+/// 每一处调用都返回本函数的结果,过渡因此**统一生效**;
+/// `_RouteFallback`(404)与播放页 `NoTransitionPage` 不在本项范围内,未动。
 Page<dynamic> _shellPage(
+  BuildContext context,
   GoRouterState state,
   String site,
   Widget child, {
   required String title,
-}) => NoTransitionPage(
-  key: state.pageKey,
-  child: _WindowTitle(
-    title: '$title · $_kAppTitle',
-    child: AppShell(site: site, child: child),
-  ),
-);
+}) {
+  // 时长单一来源:必须经 `AmbientMotion.of`(清单 1.4 / DESIGN.md §6),
+  // `reduce_motion` 时为零时长 —— 此时配合下面的直出分支,与改造前的
+  // `NoTransitionPage`(零时长 + identity builder)**逐帧等价**。
+  final spec = AmbientMotion.of(context);
+  return CustomTransitionPage<dynamic>(
+    key: state.pageKey,
+    transitionDuration: spec.pageTransition,
+    reverseTransitionDuration: spec.pageTransition,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+        spec.reduced
+        ? child
+        : _fadeThrough(animation, child: child),
+    child: _WindowTitle(
+      title: '$title · $_kAppTitle',
+      child: AppShell(site: site, child: child),
+    ),
+  );
+}
+
+/// fade-through 的纵向位移幅度(y +8 → 0,清单 §3.5)。
+///
+/// 页面过渡专属的几何值,不进 token 层:token 层只收时长/easing(清单 1.1),
+/// 而本值只服务路由过渡这一处,故就近具名常量。
+const double _kPageTransitionOffset = 8;
+
+/// 页面进入/退出过渡:fade-through(清单 §3.5)。
+///
+/// [animation] 由 0→1 表示「进入」、由 1→0 表示「退出」,同一段 tween 同时表达
+/// `y +8→0`(进入)与 `y 0→+8`(退出),故**天然反向对称**;
+/// easing 复用 web 真源曲线 [AppMotion.curve](清单 1.1:不新造曲线)。
+///
+/// 用 `Animation.drive` 而不是 `CurvedAnimation`:前者不注册监听、无需 dispose,
+/// 适合在 `transitionsBuilder`(每次路由状态变化都会被调用)里现场构造。
+Widget _fadeThrough(Animation<double> animation, {required Widget child}) {
+  final progress = animation.drive(CurveTween(curve: AppMotion.curve));
+  return AnimatedBuilder(
+    animation: progress,
+    child: child,
+    builder: (_, child) => Opacity(
+      opacity: progress.value,
+      child: Transform.translate(
+        offset: Offset(0, _kPageTransitionOffset * (1 - progress.value)),
+        child: child,
+      ),
+    ),
+  );
+}
 
 /// 播放页宿主:壳层 + 播放页。
 ///

@@ -10,6 +10,8 @@ import 'package:zishu_flutter/src/app/app_router.dart';
 import 'package:zishu_flutter/src/apps/windows/windows_app.dart';
 import 'package:zishu_flutter/src/features/browse/widgets/browse_sidebar.dart';
 
+import '../support/page_transition.dart';
+
 void main() {
   /// pump WindowsApp 并返回 router,便于导航到目标路由。
   Future<GoRouter> pumpApp(WidgetTester tester) async {
@@ -44,8 +46,9 @@ void main() {
     tester.view.physicalSize = const Size(1280, 900);
     var router = await pumpApp(tester);
     router.go('/douyu/category');
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
+    // 页面过渡(氛围轨 §3.5)结束后旧页才卸载;否则 findsOneWidget /
+    // findsNothing 会把旧页的同类控件一并数进去。
+    await pumpPageTransition(tester);
     expect(
       find.byType(BrowseSidebar),
       findsOneWidget,
@@ -56,8 +59,7 @@ void main() {
     tester.view.physicalSize = const Size(390, 844);
     router = await pumpApp(tester);
     router.go('/douyu/category');
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
+    await pumpPageTransition(tester);
     expect(
       find.byType(BrowseSidebar),
       findsNothing,
@@ -72,8 +74,7 @@ void main() {
     // 用户口径 2026-09-19:带 cid 的路由直达房间列表;只有裸分类路由
     // (索引形态)才渲染分组 tabs + 子分类网格。
     router.go('/douyu/category');
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
+    await pumpPageTransition(tester);
 
     // 左侧分组锚点存在(fixture 3 组)。
     expect(keyCount(tester, 'category-group-'), greaterThan(0));
@@ -96,13 +97,11 @@ void main() {
       (tester) async {
     final router = await pumpApp(tester);
     router.go('/douyu/category');
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
+    await pumpPageTransition(tester);
 
     // 默认选中第一组(网游竞技),点其中 fixture 有房间数据的「英雄联盟」tile。
     await tester.tap(find.byKey(const Key('category-item-1')));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
+    await pumpPageTransition(tester);
 
     // 对齐 web CategoryIndexView:tile 是 RouterLink,点击路由跳转到
     // /douyu/category/1 纯房间页,索引页的分组 tabs/tile 不再保留。
