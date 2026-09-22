@@ -279,6 +279,14 @@ abstract final class AmbientGlow {
   /// 氛围光晕的模糊半径(64,清单 1.2)。
   static const double haloBlur = 64;
 
+  /// 壳层顶部光带的 accent 不透明度(6%,清单 3.4)。
+  ///
+  /// 光带是 top_nav 下沿的极淡渐变过渡带:只给颜色本体
+  /// (`accent.withValues(alpha: AmbientGlow.topBandAlpha)`)+ 调用点的
+  /// `LinearGradient` 展开,**不配 helper** —— 它是渐变底而不是外发光,
+  /// 没有 blur/offset 可派生。取值上限即 6%,不得调高(清单 3.4)。
+  static const double topBandAlpha = 0.06;
+
   /// 卡片 hover 发光(accent 18%、blur 12;清单 2.1 的消费点)。
   static List<BoxShadow> cardHover(Color accent) => [
     BoxShadow(
@@ -312,6 +320,19 @@ abstract final class AmbientBlur {
   /// 可接受上界;具体用点(如 top_nav blur 16、侧栏 blur 12,见清单 3.1/3.2)
   /// 必须 ≤ 本值,且 sigma 一律取自 token、禁止在 Widget 里手写裸数字。
   static const double maxSigma = 20;
+
+  /// 顶栏毛玻璃的模糊档(16,清单 3.1):底色 `surface` 85% + 本档 sigma。
+  static const double navSigma = 16;
+
+  /// 侧栏 / 侧滑面板毛玻璃的模糊档(12,清单 3.2)。
+  static const double panelSigma = 12;
+
+  /// 毛玻璃底色的不透明度(surface 85%,清单 3.1)。
+  ///
+  /// 毛玻璃只改**底色透明度**,不新造色值 —— 色相仍由调用点给的基色
+  /// (`context.tokens.surface`)决定;取值走 `AmbientGlass.tintOf` helper,
+  /// 别在 Widget 里散写 `withValues(alpha: 0.85)`。
+  static const double glassSurfaceAlpha = 0.85;
 }
 
 /// 键盘焦点环基线(Windows 桌面键盘可达性)。

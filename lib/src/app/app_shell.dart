@@ -18,6 +18,7 @@ import '../shared/domain/category_display.dart';
 import '../shared/presentation/design_tokens.dart';
 import '../shared/presentation/platform_brands.dart';
 import '../shared/presentation/zishu_tokens.dart';
+import '../shared/presentation/widgets/ambient_glass.dart';
 import '../shared/presentation/widgets/platform_icon.dart';
 
 part 'shell/hover_overlay.dart';
