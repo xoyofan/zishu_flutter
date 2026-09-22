@@ -35,6 +35,8 @@ import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 import 'package:zishu_flutter/src/shared/application/auth_provider.dart';
 
+import '../../support/page_transition.dart';
+
 /// 测试替身:VM 下替代 MediaKitLivePlayer,不触碰任何原生播放内核。
 class _FakeLivePlayer implements LivePlayer {
   _FakeLivePlayer();
@@ -175,16 +177,18 @@ void main() {
     fail('settingsProvider 未在限定帧数内完成 hydrated');
   }
 
-  /// 深链/跳转到 [location] 并稳定数帧(NoTransitionPage 无过渡动画)。
+  /// 深链/跳转到 [location] 并等到「页面过渡」走完。
+  ///
+  /// `_shellPage` 现在是 fade-through 过渡(氛围轨清单 §3.5,180ms):过渡进行中
+  /// 新旧两个页面**同时在树上**,顶导航锚点这类唯一性断言不等过渡结束会数到两份。
+  /// 详见 [pumpPageTransition]。
   Future<void> goAndStabilize(
     WidgetTester tester,
     GoRouter router,
     String location,
   ) async {
     router.go(location);
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
+    await pumpPageTransition(tester);
   }
 
   /// 断言应用壳层顶导航四个锚点齐全。
@@ -251,8 +255,8 @@ void main() {
     await tester.ensureVisible(benchEntry);
     await tester.pump(const Duration(milliseconds: 50));
     await tester.tap(benchEntry);
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
+    // push 也是壳层页面:过渡结束前设置页仍在树上,锚点 findsNothing 会落空。
+    await pumpPageTransition(tester);
     expect(find.byKey(const Key('bench-run')), findsOneWidget);
     expect(find.byKey(const Key('settings-parse-benchmark')), findsNothing);
     expect(tester.takeException(), isNull);
@@ -343,9 +347,8 @@ void main() {
 
     // Step 1:点 nav-follow → 关注页;前一页网格锚点消失,关注条目出现。
     await tester.tap(find.byKey(const Key('nav-follow')));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
+    // 页面过渡(180ms)走完旧页才卸载,否则 findsNothing/findsOneWidget 会数到两份。
+    await pumpPageTransition(tester);
     expect(router.routeInformationProvider.value.uri.path, '/follow');
     expect(find.text('我的关注'), findsOneWidget);
     expect(find.byKey(const Key('follow-entry-douyu-63136')), findsOneWidget);
@@ -354,8 +357,7 @@ void main() {
 
     // Step 2:点 nav-settings → 设置页;关注页文案/条目锚点消失。
     await tester.tap(find.byKey(const Key('nav-settings')));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
+    await pumpPageTransition(tester);
     expect(router.routeInformationProvider.value.uri.path, '/settings');
     expect(find.text('主题模式'), findsOneWidget);
     expect(find.text('我的关注'), findsNothing);
@@ -364,9 +366,7 @@ void main() {
 
     // Step 3:点 nav-home 回首页;设置文案消失,房间网格恢复。
     await tester.tap(find.byKey(const Key('nav-home')));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
+    await pumpPageTransition(tester);
     expect(router.routeInformationProvider.value.uri.path, '/all');
     expect(find.byKey(const Key('room-card-douyu-63136')), findsOneWidget);
     expect(find.text('主题模式'), findsNothing);
@@ -396,8 +396,7 @@ void main() {
 
     // Step 5:从搜索页点 nav-home 收尾回首页,导航锚点全程可用。
     await tester.tap(find.byKey(const Key('nav-home')));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
+    await pumpPageTransition(tester);
     expect(router.routeInformationProvider.value.uri.path, '/all');
     expect(find.byKey(const Key('room-card-douyu-63136')), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -417,9 +416,7 @@ void main() {
 
     // 点 platform-tab-huya → 路由切到 /huya,虎牙 chip 选中、全平台取消。
     await tester.tap(find.byKey(const Key('home-platform-chip-huya')));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
+    await pumpPageTransition(tester);
     expect(router.routeInformationProvider.value.uri.path, '/huya');
     expect(
       tester
@@ -437,9 +434,7 @@ void main() {
 
     // 点 platform-tab-all → 回 /all,全平台 chip 恢复选中,房间网格可用。
     await tester.tap(find.byKey(const Key('home-platform-chip-all')));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
+    await pumpPageTransition(tester);
     expect(router.routeInformationProvider.value.uri.path, '/all');
     expect(
       tester
