@@ -100,8 +100,8 @@ void main() {
         expect(AppTypography.headline.fontWeight, FontWeight.w600);
       });
 
-      test('subtitle = 15px + letterSpacing 0', () {
-        expect(AppTypography.subtitle.fontSize, 15);
+      test('subtitle = 14px + letterSpacing 0', () {
+        expect(AppTypography.subtitle.fontSize, 14);
         expect(AppTypography.subtitle.letterSpacing, 0);
         expect(AppTypography.subtitle.height, 1.35);
         expect(AppTypography.subtitle.fontWeight, FontWeight.w500);
@@ -189,6 +189,51 @@ void main() {
       expect(ring[1].color, accent);
       expect(AppFocus.ringWidth, 2);
       expect(AppFocus.ringOffset, 2);
+    });
+  });
+
+  group('AppFontSize 契约（字号阶梯唯一来源）', () {
+    // 9 档覆盖 9–22px。新增/改动字号必须同时改 DESIGN.md §3.2 与本组断言。
+    test('九档数值', () {
+      expect(AppFontSize.overline, 9);
+      expect(AppFontSize.label, 10);
+      expect(AppFontSize.caption, 11);
+      expect(AppFontSize.bodySecondary, 12);
+      expect(AppFontSize.body, 13);
+      expect(AppFontSize.subtitle, 14);
+      expect(AppFontSize.title, 16);
+      expect(AppFontSize.headline, 18);
+      expect(AppFontSize.display, 22);
+    });
+
+    test('AppTypography 的 fontSize 逐档取自 AppFontSize（单一来源）', () {
+      expect(AppTypography.overline.fontSize, AppFontSize.overline);
+      expect(AppTypography.label.fontSize, AppFontSize.label);
+      expect(AppTypography.caption.fontSize, AppFontSize.caption);
+      expect(AppTypography.bodySecondary.fontSize, AppFontSize.bodySecondary);
+      expect(AppTypography.body.fontSize, AppFontSize.body);
+      expect(AppTypography.subtitle.fontSize, AppFontSize.subtitle);
+      expect(AppTypography.title.fontSize, AppFontSize.title);
+      expect(AppTypography.headline.fontSize, AppFontSize.headline);
+      expect(AppTypography.display.fontSize, AppFontSize.display);
+    });
+
+    test('单调递增且两两可区分，总数恰为 9（type-scale skill 的校验项）', () {
+      const sizes = <double>[
+        AppFontSize.overline,
+        AppFontSize.label,
+        AppFontSize.caption,
+        AppFontSize.bodySecondary,
+        AppFontSize.body,
+        AppFontSize.subtitle,
+        AppFontSize.title,
+        AppFontSize.headline,
+        AppFontSize.display,
+      ];
+      for (var i = 1; i < sizes.length; i += 1) {
+        expect(sizes[i], greaterThan(sizes[i - 1]));
+      }
+      expect(sizes.toSet().length, 9);
     });
   });
 

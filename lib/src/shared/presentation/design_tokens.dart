@@ -217,6 +217,48 @@ abstract final class AppFocus {
   ];
 }
 
+/// 字号阶梯:全项目**唯一**的字号数值来源。
+///
+/// 9 档覆盖 9–22px 的全部文字需求。任何 `fontSize:` 都必须引用本类或
+/// [AppTypography] 的同名 `TextStyle`（裸字面量由 `tool/check_design_tokens.dart` 拦下）。
+///
+/// 两者分工：[AppTypography] 给“字号 + 行高 + 字重”成组样式；本类只给数值，
+/// 供需要自定义 height/weight/letterSpacing 的调用点使用。
+///
+/// **收敛记录（2026-09-21）**：代码里原有 **18 种**字号，含 8 / 8.1 / 9.4 / 9.5 /
+/// 10.5 / 10.9 / 11.5 / 11.84 / 12.5 / 12.6 / 14.4 / 15 / 20 / 26 等散值，现全部
+/// 归一到本阶梯（就近取档）4 字；两处平局按语义定档：
+/// - `15 → 14`：与 subtitle 合并（两档只差 1px，无独立语义）；
+/// - `20 → 22`：页面标题与头像首字母属 display 档。
+abstract final class AppFontSize {
+  /// 全大写眉标 / 极小角标。
+  static const double overline = 9;
+
+  /// 角标 / 紧凑控件标签。
+  static const double label = 10;
+
+  /// 辅助说明。
+  static const double caption = 11;
+
+  /// 次级正文。
+  static const double bodySecondary = 12;
+
+  /// 正文默认。
+  static const double body = 13;
+
+  /// 卡片 / 设置项标题。
+  static const double subtitle = 14;
+
+  /// 区块标题。
+  static const double title = 16;
+
+  /// 弹窗 / 面板标题。
+  static const double headline = 18;
+
+  /// 页面主标题 / 大字号数字。
+  static const double display = 22;
+}
+
 /// 字号/行高/字重基线。
 ///
 /// **不含颜色**:文字颜色统一由主题 tokens 提供(`context.textTitle` /
@@ -224,12 +266,9 @@ abstract final class AppFocus {
 /// 出现白底白字 —— 深色基线色 `AppColors.textPrimary` 只是恰好与
 /// `ZishuTokens.dark` 同值。
 ///
-/// 阶梯共 9 档,覆盖 8–22px:`overline`(9)/`label`(10)/`caption`(11)/
-/// `bodySecondary`(12)/`body`(13)/`subtitle`(15)/`title`(16)/
-/// `headline`(18)/`display`(22)。
-///
-/// 代码中现存的 12.5/12.6/11.5/11.84/10.9/9.4/9.5/8.1 等散值属
-/// 「存量待归一」,本阶段不批量改写调用点(避免 golden 漂移)。
+/// 阶梯共 9 档,字号数值一律取自 [AppFontSize]（单一来源）：`overline`(9)/
+/// `label`(10)/`caption`(11)/`bodySecondary`(12)/`body`(13)/`subtitle`(14)/
+/// `title`(16)/`headline`(18)/`display`(22)。
 abstract final class AppTypography {
   /// 默认字体:微软雅黑(Windows 产品基线)。
   ///
@@ -248,20 +287,29 @@ abstract final class AppTypography {
   ];
 
   static const TextStyle title = TextStyle(
-    fontSize: 16,
+    fontSize: AppFontSize.title,
     height: 1.35,
     fontWeight: FontWeight.w600,
   );
 
-  static const TextStyle body = TextStyle(fontSize: 13, height: 1.4);
+  static const TextStyle body = TextStyle(
+    fontSize: AppFontSize.body,
+    height: 1.4,
+  );
 
-  static const TextStyle bodySecondary = TextStyle(fontSize: 12, height: 1.4);
+  static const TextStyle bodySecondary = TextStyle(
+    fontSize: AppFontSize.bodySecondary,
+    height: 1.4,
+  );
 
-  static const TextStyle caption = TextStyle(fontSize: 11, height: 1.3);
+  static const TextStyle caption = TextStyle(
+    fontSize: AppFontSize.caption,
+    height: 1.3,
+  );
 
   /// 最大标题档(22px/1.2/w600/-0.3):页面主标题。
   static const TextStyle display = TextStyle(
-    fontSize: 22,
+    fontSize: AppFontSize.display,
     height: 1.2,
     fontWeight: FontWeight.w600,
     letterSpacing: -0.3,
@@ -269,15 +317,15 @@ abstract final class AppTypography {
 
   /// 区块标题档(18px/1.3/w600/-0.1):弹窗标题、面板标题。
   static const TextStyle headline = TextStyle(
-    fontSize: 18,
+    fontSize: AppFontSize.headline,
     height: 1.3,
     fontWeight: FontWeight.w600,
     letterSpacing: -0.1,
   );
 
-  /// 次级标题档(15px/1.35/w500/0):卡片标题、设置项标题。
+  /// 次级标题档(14px/1.35/w500/0):卡片标题、设置项标题。
   static const TextStyle subtitle = TextStyle(
-    fontSize: 15,
+    fontSize: AppFontSize.subtitle,
     height: 1.35,
     fontWeight: FontWeight.w500,
     letterSpacing: 0,
@@ -285,7 +333,7 @@ abstract final class AppTypography {
 
   /// 小标签档(10px/1.3/w500/+0.3):角标、紧凑控件标签。
   static const TextStyle label = TextStyle(
-    fontSize: 10,
+    fontSize: AppFontSize.label,
     height: 1.3,
     fontWeight: FontWeight.w500,
     letterSpacing: 0.3,
@@ -293,7 +341,7 @@ abstract final class AppTypography {
 
   /// 最小全大写标签档(9px/1.2/w600/+0.5):分组眉标、极小角标。
   static const TextStyle overline = TextStyle(
-    fontSize: 9,
+    fontSize: AppFontSize.overline,
     height: 1.2,
     fontWeight: FontWeight.w600,
     letterSpacing: 0.5,

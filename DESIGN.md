@@ -111,33 +111,111 @@ on-video 层（叠在视频画面上的控件，恒定暗色语义，**不随主
 
 ## 3. Typography Rules
 
+> 本节按 `type-scale` / `line-height-grid` / `spacing-system` 三个 skill 的规则制定（已 vendor 到
+> `.agents/skills/`）。核心纪律：**字号与行高都不是手挑值**——字号来自一个声明的阶梯，
+> 行高来自公式并**吸附到网格**。
+
+### 3.1 字体族
+
 | 项 | 值 |
 |---|---|
 | 字体族 | `Microsoft YaHei`（`AppTypography.family`） |
 | 回退链 | `Microsoft YaHei UI` → `PingFang SC` → `Noto Sans CJK SC` → `Source Han Sans SC` → `Segoe UI` |
-| 字体接线 | `app_theme.dart` 的 `textTheme.apply(fontFamily, fontFamilyFallback)` |
+| 接线 | `app_theme.dart` 的 `textTheme.apply(fontFamily, fontFamilyFallback)` |
 
-九档阶梯（`AppTypography`，8→22px）：
+### 3.2 字号阶梯（9 档，整数 px）
 
-| 档位 | fontSize | 字重 | 行高 | letterSpacing | 用途 |
-|---|---|---|---|---|---|
-| `overline` | 9 | w600 | 1.2 | +0.5 | 分组眉标、极小角标 |
-| `label` | 10 | w500 | 1.3 | +0.3 | 角标、紧凑控件标签 |
-| `caption` | 11 | w400 | 1.3 | 0 | 辅助说明 |
-| `bodySecondary` | 12 | w400 | 1.4 | 0 | 次级正文 |
-| `body` | 13 | w400 | 1.4 | 0 | 正文默认 |
-| `subtitle` | 15 | w500 | 1.35 | 0 | 卡片 / 设置项标题 |
-| `title` | 16 | w600 | 1.35 | 0 | 区块标题 |
-| `headline` | 18 | w600 | 1.3 | −0.1 | 弹窗 / 面板标题 |
-| `display` | 22 | w600 | 1.2 | −0.3 | 页面主标题 |
+**整数 px 是源头，比例是推导物**。`type-scale` skill 的取整规则：先算 px、四舍五入到整数、
+**最后**才推 rem（反过来先取整 rem 会累积漂移）——本项目原先的 `8.1 / 9.4 / 10.9 / 11.84 /
+12.6 / 14.4` 正是“把 web 的 rem 换算值当源头”造成的。
 
-**颜色不进 `AppTypography`**。Widget 一律用 `context.textTitle` / `context.textBody` /
-`context.textSecondary` / `context.textCaption`（`zishu_tokens.dart` 的
-`ZishuTypographyContext`），由 `ZishuTokens` 提供颜色——写死颜色会在浅色主题下白底白字。
+| 档位 | px | 阶梯区段 | 用途 |
+|---|---|---|---|
+| `overline` | 9 | 密集段 | 全大写眉标 / 极小角标 |
+| `label` | 10 | 密集段 | 角标 / 紧凑控件标签 |
+| `caption` | 11 | 密集段 | 辅助说明 |
+| `bodySecondary` | 12 | 密集段 | 次级正文 |
+| `body` | 13 | 密集段（基准） | 正文默认 |
+| `subtitle` | 14 | 密集段上界 | 卡片 / 设置项标题 |
+| `title` | 16 | 标题段 | 区块标题 |
+| `headline` | 18 | 标题段 | 弹窗 / 面板标题 |
+| `display` | 22 | 标题段 | 页面主标题 / 大字号数字 |
+
+**比例声明**（两段式，属 skill 允许的 “Document the choice” 情形）：
+
+- 密集段 `9→14`：**1px 步进**（比值 ≈ 1.08）。`type-scale` 最紧预设为 1.067（minor second，
+  用于 “very dense UI”），但在 9–14px 区间直接取整会两两碰撞（违反 skill 的单调性/可区分性校验），
+  故显式声明为 1px 步进。
+- 标题段 `14→16→18`：**1.125（major second）**；`18→22` 为 1.222（单个跳档）。
+- 上限校验：最大比值 1.222 远低于 skill 给出的产品 UI 上限 1.5 ✅
+
+**硬规则**：
+
+- 任何 `fontSize:` 只能取 `AppFontSize` 里的 9 个数（裸字面量由守卫拦下）。
+- 新增字号 = 新增阶梯档，必须先改本节 + `AppFontSize` + 契约测试，并有比例依据。
+
+### 3.3 行高（两轨 + 网格吸附）
+
+`line-height-grid` skill 的公式（**不是自由乘数**）：
+
+```
+lh-ui(size)    = ceil(size × 1.20) 向上吸附到网格
+lh-prose(size) = ceil(size × 1.50) 向上吸附到网格
+```
+
+- **1.20 → UI 轨**：标题 / 按钮 / 标签 / 表单元信息等单行、不需要连贯阅读的文字。
+- **1.50 → prose 轨**：段落正文（聊天消息、描述、长文本）；低于 1.45 会读得累。
+- **网格单位取 2px**（不是 4px）。本项目 spacing 的 minor unit 是 4，但字号密集段只有 1px 步进，
+  按 4px 吸附会把 11px 字号的 lh 抬到 16px（1.45×，密集行明显变肿）。skill 明确允许按密度选
+  pairing（2/4、4/8、4/16），故 type grid 取 **2px**。
+
+Flutter 的 `TextStyle.height` 是**倍数**，所以吸附后的 px 要除回字号：`height = snappedPx / fontSize`。
+
+| 字号 | lh-ui px | `height`(UI 轨) | lh-prose px | `height`(prose 轨) |
+|---|---|---|---|---|
+| 9 | 12 | 1.3333 | 16 | 1.7778 |
+| 10 | 12 | 1.2000 | 16 | 1.6000 |
+| 11 | 14 | 1.2727 | 18 | 1.6364 |
+| 12 | 16 | 1.3333 | 18 | 1.5000 |
+| 13 | 16 | 1.2308 | 20 | 1.5385 |
+| 14 | 18 | 1.2857 | 22 | 1.5714 |
+| 16 | 20 | 1.2500 | 24 | 1.5000 |
+| 18 | 22 | 1.2222 | 28 | 1.5556 |
+| 22 | 28 | 1.2727 | 34 | 1.5455 |
+
+**何时用哪轨**：问“用户会连着读多行吗？”——会（聊天 / 描述 / 正文）用 prose；
+不会（标题 / 按钮 / 标签 / 表单）用 UI。
+
+**密集单行例外**：表格行、控制条、导航项等**永不换行**的单行容器可保留 ≤1.15 的紧行高
+（不吸附）——依据是 skill 的 "When NOT to use" 明确豁免 inline / 由父级掌控行高的上下文。
+此类值必须记在本节下方，不得散在各文件里。
+
+### 3.4 字重与字间距
+
+| 项 | 值 |
+|---|---|
+| 字重 | 只用 `w400 / w500 / w600 / w700`；`w800 / w900` 仅用于图示字符（如角标 `√`） |
+| letterSpacing | 正字间距只给**全大写 / 极小字号**（`overline +0.5`、`label +0.3`）；负字间距只给**大标题**（`headline −0.1`、`display −0.3`）；正文与密集段一律 0 |
+
+### 3.5 文字颜色
+
+**颜色不进 `AppTypography`**。Widget 一律用 `context.textTitle` / `textBody` /
+`textSecondary` / `textCaption`（`zishu_tokens.dart` 的 `ZishuTypographyContext`），
+由 `ZishuTokens` 提供颜色——写死颜色会在浅色主题下白底白字。
 `AppTypography.fallbackPrimary/Secondary` 只在拿不到 `BuildContext` 时兜底。
 
-**存量待归一**：代码里仍有 `12.5 / 12.6 / 11.5 / 11.84 / 10.9 / 9.4 / 9.5 / 8.1` 等散值，
-属历史遗留。新增代码不得再引入新散值；归一化分批进行，避免 golden 一次性大漂。
+### 3.6 收敛记录与存量
+
+原代码共 **18 种**字号（含 `8 / 8.1 / 9.4 / 9.5 / 10.5 / 10.9 / 11.5 / 11.84 / 12.5 / 12.6 /
+14.4 / 15 / 20 / 26`），已归一到本节的 9 档。映射规则：**就近取档**，两处平局按语义定档：
+
+- `15 → 14`：与 `subtitle` 合并（两档只差 1px，无独立语义）。
+- `20 → 22`：页面标题与头像首字母属 `display` 档。
+
+尾部边界：`8 → 9`、`26 → 22`。
+
+> 根因：web 真源自身有 **~28 种** font-size（`.52rem`=8.32px 到 `2.4rem`=38.4px，精度到
+> 0.01rem）。**“字号数量收敛”是对 web 的有意偏离**，已登记到 §10。
 
 ---
 
@@ -353,6 +431,8 @@ AppElevation / AppFocus / AppOnVideo / AppControls / AppDirectoryDrawer / AppRoo
 
 | 7 | 统计项缺值显示 | web `utils/browse/platformRoomStats.ts` 的 `statDisplay`：空值显示**「0」** | zishu 显示**「—」** | 数据诚实性：不伪造未取得的数值（用户口径） | 2026-09-21 |
 | 8 | 统计项无底色 | web 有 `--play-stat-{audience,vip,svip}-bg`（暗色预计算 `#243F5B` / `#7B572C` / `#432660`） | 只落了 `playStat*Text` 文字色，没有底色 chip | **未实现**（待补），不是有意偏离 | 2026-09-21 |
+| 9 | 字号总数 | web 真源自身有 **~28 种** font-size（`.52rem`=8.32px 到 `2.4rem`=38.4px，精度 0.01rem） | **9 档**整数 px 阶梯（`AppFontSize`），且行高按 `line-height-grid` 公式取整吸附 | 收敛字号数量、消除 0.5px 级散值；参见 §3.2/§3.6 | 2026-09-21 |
+| 10 | 行高取值 | web 用无单位乘数散写（1 / 1.2 / 1.15 / 1.35 / 1.08 … 共 13 种） | 两轨公式（UI ×1.20 / prose ×1.50）吸附到 2px 网格，Flutter 侧以 `height = snappedPx / fontSize` 表达 | 让行高可推导、可校验；参见 §3.3 | 2026-09-21 |
 
 ---
 
