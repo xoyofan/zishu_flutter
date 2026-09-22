@@ -90,6 +90,13 @@ on-video 层（叠在视频画面上的控件，恒定暗色语义，**不随主
 不随深浅主题变）；而随主题变化的颜色**必须**走 `ZishuTokens` —— 在 `lib/src` 的
 UI 文件里写死 `AppColors.*` 会被 `test/ui/light_theme_test.dart` 的静态守则拦下。
 
+毛玻璃（氛围轨清单 3.1/3.2）：底色**不是新色值**，而是「基色 + 透明度」——
+`context.tokens.surface` **85%**（`AmbientBlur.glassSurfaceAlpha`，清单 3.1 的精确值），
+配 `BackdropFilter` sigma ≤ `AmbientBlur.maxSigma`（顶栏 `navSigma` 16 / 侧栏
+`panelSigma` 12）。取色一律走 `AmbientGlass.tintOf(context, tokens.surface)`，不在
+Widget 里散写 alpha；全站只两处（`top_nav` + 播放页侧栏），不做全站 surface
+毛玻璃（清单 §4「明确不做」）。
+
 ### 2.2 浅色主题（同步维护，非验收基线）
 
 取自 `ZishuTokens.light`。深色值与旧常量逐位相同，浅色分套：
@@ -433,6 +440,8 @@ golden 差 2074px，整块底色/描边都变）。需要更明显的交互态�
 
 - **阴影/发光只用这七档**（`AppElevation` 四档 + `AmbientGlow` 三档），禁止在 Widget 里新写 `BoxShadow(...)`（守卫脚本会拦）；发光一律经 `AmbientGlow.*` helper 由 accent 派生。
 - 毛玻璃 `BackdropFilter` 的 sigma 上限 `AmbientBlur.maxSigma = 20`（Windows 性能约束），**超限即违规**；具体用点的 sigma 必须 ≤ 本值且取自 token。
+- 毛玻璃用点档位：`AmbientBlur.navSigma = 16`（顶栏，清单 3.1）、`AmbientBlur.panelSigma = 12`（侧栏 / 沉浸侧滑面板，清单 3.2）；底色透明度 `AmbientBlur.glassSurfaceAlpha = 0.85`（`surface` 85%，清单 3.1）。两档 sigma 均 ≤ `maxSigma`，且不得在 Widget 里手写裸数字。
+- 壳层顶部光带 `AmbientGlow.topBandAlpha = 0.06`（清单 3.4，**上限即 6%**）：它是 `top_nav` 下沿的**渐变底**（accent 由全透明渐入 6%），不是外发光，故不配 helper、只给颜色本体常量。
 - 抬升层级用"底色档位"表达优先于加大阴影：`surfaceSoft` < `background` < `surface` < `surfaceRaised`。
 - 不用 Material `Card` 默认 elevation（`app_theme.dart` 已置 0）。
 

@@ -39,37 +39,91 @@ class _TopNav extends StatelessWidget implements PreferredSizeWidget {
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
     final showLabels = width >= AppBreakpoints.desktop;
-    return Container(
-      height: AppSpacing.topNavHeight,
-      decoration: BoxDecoration(
-        color: context.tokens.surface,
-        border: Border(bottom: BorderSide(color: context.tokens.border)),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
-      child: Row(
-        children: [
-          _TopNavLeading(
-            currentSite: currentSite,
-            showLabels: showLabels,
-            onMyCategoryHover: onMyCategoryHover,
-            onMyCategoryTap: onMyCategoryTap,
-            onMyCategoryHoverEnd: onMyCategoryHoverEnd,
-          ),
-          Expanded(
-            child: Center(
-              child: _PlatformTabs(
-                currentSite: currentSite,
-                onHover: onPlatformHover,
-                onHoverEnd: onPlatformHoverEnd,
-              ),
+    final tokens = context.tokens;
+    // 3.1 毛玻璃顶栏:`surface` 85% + blur 16(AmbientBlur.navSigma ≤ 上限 20)。
+    //
+    // 静止观感≈现状:顶栏是 `Column` 里的兄弟节点(内容不从它底下穿过),
+    // 背后只有画布底色 `#181818`,于是 85% `#1F1F1F` 叠在它上面只差 1/255
+    // (不透明 `surface` → 30/255);blur 在有内容透出的场景才有观感 —— 即
+    // 后续如果把舞台/列表改成从顶栏下穿过,这套玻璃直接生效。
+    return AmbientGlass(
+      sigma: AmbientBlur.navSigma,
+      child: Container(
+        height: AppSpacing.topNavHeight,
+        decoration: BoxDecoration(
+          color: AmbientGlass.tintOf(context, tokens.surface),
+          border: Border(bottom: BorderSide(color: tokens.border)),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+        child: Stack(
+          // expand:原实现靠 Container 把内容撑满 43px(扣 1px 底边框);
+          // Stack 默认 loose 会把导航项按自身高度顶部对齐,故必须 expand。
+          fit: StackFit.expand,
+          children: [
+            // 3.4 壳层顶部光带:下沿 accent 极淡渐变过渡带(≤6%),画在导航项
+            // **下面**(装饰层而非前景),高度只占底边框上方那一条,
+            // 不占布局、不挤压导航项、不遮内容。
+            const Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              height: _kTopGlowBandHeight,
+              child: IgnorePointer(child: _TopGlowBand()),
             ),
-          ),
-          _TopNavTools(
-            showLabels: showLabels,
-            onFollowHover: onFollowHover,
-            onFollowHoverEnd: onFollowHoverEnd,
-          ),
-        ],
+            Row(
+              children: [
+                _TopNavLeading(
+                  currentSite: currentSite,
+                  showLabels: showLabels,
+                  onMyCategoryHover: onMyCategoryHover,
+                  onMyCategoryTap: onMyCategoryTap,
+                  onMyCategoryHoverEnd: onMyCategoryHoverEnd,
+                ),
+                Expanded(
+                  child: Center(
+                    child: _PlatformTabs(
+                      currentSite: currentSite,
+                      onHover: onPlatformHover,
+                      onHoverEnd: onPlatformHoverEnd,
+                    ),
+                  ),
+                ),
+                _TopNavTools(
+                  showLabels: showLabels,
+                  onFollowHover: onFollowHover,
+                  onFollowHoverEnd: onFollowHoverEnd,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 顶部光带高度(6px):只覆盖顶栏最下沿那一条,不进入导航项的垂直范围
+/// (36–40px 的点击目标居中后最低仍留 3.5px 余量)。
+const double _kTopGlowBandHeight = 6;
+
+/// 3.4 壳层顶部光带:accent 自上而下由全透明渐入 [AmbientGlow.topBandAlpha]
+/// (≤6%),给「发光的顶」一个接近阈下的感知 —— 弱到不干扰内容。
+class _TopGlowBand extends StatelessWidget {
+  const _TopGlowBand();
+
+  @override
+  Widget build(BuildContext context) {
+    final accent = context.tokens.accent;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            accent.withValues(alpha: 0),
+            accent.withValues(alpha: AmbientGlow.topBandAlpha),
+          ],
+        ),
       ),
     );
   }

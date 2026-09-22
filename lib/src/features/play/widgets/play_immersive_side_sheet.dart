@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../shared/presentation/design_tokens.dart';
+import '../../../shared/presentation/widgets/ambient_glass.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 
 /// 沉浸态右缘侧抽屉,对齐 SFVideoLive web `PlayImmersiveSideSheet.vue`。
@@ -124,30 +125,41 @@ class PlayImmersiveSideSheet extends StatelessWidget {
                         ),
                       ),
                       // 面板:全高、左边框 + 左投影(web __panel)。
-                      Container(
-                        key: const Key('play-immersive-panel'),
-                        width: panelWidth,
-                        height: double.infinity,
-                        decoration: BoxDecoration(
-                          color: tokens.surface,
-                          border: Border(
-                            left: BorderSide(color: tokens.border),
+                      // 3.2 毛玻璃:blur 12(`AmbientBlur.panelSigma` ≤ 上限 20)
+                      // + `surface` 85%,面板下透出播放器画面(虚化)。
+                      // 这是沉浸侧栏里**唯一**一层 BackdropFilter:内层侧栏根 /
+                      // 侧栏头部在玻璃面上时不再铺不透明底(见 `AmbientGlass`),
+                      // 否则它们会把透出的画面整块挡死。
+                      AmbientGlass(
+                        sigma: AmbientBlur.panelSigma,
+                        child: Container(
+                          key: const Key('play-immersive-panel'),
+                          width: panelWidth,
+                          height: double.infinity,
+                          decoration: BoxDecoration(
+                            color: AmbientGlass.tintOf(
+                              context,
+                              tokens.surface,
+                            ),
+                            border: Border(
+                              left: BorderSide(color: tokens.border),
+                            ),
+                            // web: -6px 0 28px rgba(0,0,0,.55)。
+                            boxShadow: AppElevation.sheet,
                           ),
-                          // web: -6px 0 28px rgba(0,0,0,.55)。
-                          boxShadow: AppElevation.sheet,
-                        ),
-                        // 指针按下/移动/滚轮 + 滚动:重置自动收起计时。
-                        child: Listener(
-                          onPointerDown: (_) => onInteract(),
-                          onPointerHover: (_) => onInteract(),
-                          onPointerMove: (_) => onInteract(),
-                          onPointerSignal: (_) => onInteract(),
-                          child: NotificationListener<ScrollNotification>(
-                            onNotification: (_) {
-                              onInteract();
-                              return false;
-                            },
-                            child: child,
+                          // 指针按下/移动/滚轮 + 滚动:重置自动收起计时。
+                          child: Listener(
+                            onPointerDown: (_) => onInteract(),
+                            onPointerHover: (_) => onInteract(),
+                            onPointerMove: (_) => onInteract(),
+                            onPointerSignal: (_) => onInteract(),
+                            child: NotificationListener<ScrollNotification>(
+                              onNotification: (_) {
+                                onInteract();
+                                return false;
+                              },
+                              child: child,
+                            ),
                           ),
                         ),
                       ),

@@ -271,11 +271,36 @@ void main() {
       expect(shadow.offset, Offset.zero);
       expect(shadow.spreadRadius, 0);
     });
+
+    test('topBandAlpha = 6%(壳层顶部光带上限,清单 3.4)', () {
+      // 光带是渐变底不是外发光:只有颜色本体常量(无 blur/offset helper),
+      // 调用点拼 `accent.withValues(alpha: AmbientGlow.topBandAlpha)`。
+      // 清单 3.4 的「≤6%」即本值,调高即违规。
+      expect(AmbientGlow.topBandAlpha, 0.06);
+      expect(accent.withValues(alpha: AmbientGlow.topBandAlpha).a, closeTo(0.06, 1e-9));
+    });
   });
 
   group('AmbientBlur 契约(毛玻璃上限,清单 1.3)', () {
     test('maxSigma = 20(BackdropFilter 超限即违规)', () {
       expect(AmbientBlur.maxSigma, 20);
+    });
+
+    test('具体用点档位:navSigma 16 / panelSigma 12(清单 3.1/3.2)', () {
+      // 值逐字取自清单 3.1/3.2;两者都必须 ≤ maxSigma(硬上限)。
+      expect(AmbientBlur.navSigma, 16);
+      expect(AmbientBlur.panelSigma, 12);
+      expect(AmbientBlur.navSigma, lessThanOrEqualTo(AmbientBlur.maxSigma));
+      expect(AmbientBlur.panelSigma, lessThanOrEqualTo(AmbientBlur.maxSigma));
+    });
+
+    test('glassSurfaceAlpha = 0.85(surface 85%,清单 3.1)', () {
+      expect(AmbientBlur.glassSurfaceAlpha, 0.85);
+      const surface = Color(0xFF1F1F1F);
+      expect(
+        surface.withValues(alpha: AmbientBlur.glassSurfaceAlpha).a,
+        closeTo(0.85, 1e-9),
+      );
     });
   });
 

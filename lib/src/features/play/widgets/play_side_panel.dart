@@ -28,6 +28,7 @@ import '../../../shared/presentation/app_icons.dart';
 import '../../../shared/domain/category_display.dart';
 import '../../../shared/application/translation/translation_provider.dart';
 import '../../../shared/presentation/design_tokens.dart';
+import '../../../shared/presentation/widgets/ambient_glass.dart';
 import '../../../shared/presentation/widgets/compact_switch.dart';
 import '../../../shared/presentation/widgets/translated_text.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -226,7 +227,13 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
     return Container(
       key: const Key('play-side-panel'),
       decoration: BoxDecoration(
-        color: tokens.surface,
+        // 3.2 毛玻璃侧栏:根与头部/面板同处一个玻璃平面。
+        // 在玻璃面上(沉浸侧滑面板内,面板已给 blur 12 + surface 85%)时不再
+        // 铺不透明底,否则会把面板透出的画面整块挡死;
+        // 常规布局下背后只有画布底色,保持不透明 `surface` → 像素零变化。
+        color: AmbientGlass.onGlass(context)
+            ? tokens.surface.withValues(alpha: 0)
+            : tokens.surface,
         border: Border(left: BorderSide(color: tokens.border)),
       ),
       child: DefaultTabController(

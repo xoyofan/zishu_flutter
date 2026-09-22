@@ -193,23 +193,97 @@ class _FlyoutPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: context.tokens.surface,
-        border: Border.all(color: context.tokens.border),
-        borderRadius: AppRadius.allMd,
-        boxShadow: AppElevation.popover,
-      ),
-      child: Material(
-        // 浮层挂在 Stack 顶层,不在 Scaffold 的 Material 子树内,
-        // 需自带 Material 才能承载内部 InkWell。
-        type: MaterialType.transparency,
-        child: ConstrainedBox(
-          constraints: BoxConstraints(maxHeight: maxHeight),
-          child: Padding(padding: padding, child: child),
+    // 3.7 浮层入场:opacity 0→1 + scale 0.98→1。
+    // 接在面板容器上而非三个浮层各自实现:平台分类 / 我的关注 / 我的分类共用
+    // 本容器,一处接线三处生效。
+    return _FlyoutEntrance(
+      child: Container(
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: context.tokens.surface,
+          border: Border.all(color: context.tokens.border),
+          borderRadius: AppRadius.allMd,
+          boxShadow: AppElevation.popover,
+        ),
+        child: Material(
+          // 浮层挂在 Stack 顶层,不在 Scaffold 的 Material 子树内,
+          // 需自带 Material 才能承载内部 InkWell。
+          type: MaterialType.transparency,
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: Padding(padding: padding, child: child),
+          ),
         ),
       ),
+    );
+  }
+}
+
+/// 3.7 浮层入场:opacity 0→1 + scale 0.98→1,时长 [AppMotion.normal]
+/// (250ms)+ [AppMotion.curve];**只加透明度与缩放**(浮层已有的位移/定位
+/// 一概不动)。
+///
+/// 三条纪律:
+/// - `reduce_motion`([AmbientMotion.of].reduced)时**不建 controller**,直接
+///   返回 child(等价现状无过渡)—— 不拿零时长去建 `AnimationController`;
+/// - 动画跑完(t == 1)后同样直接返回 child:不残留 `Opacity`/`Transform` 层,
+///   静止态像素与加动效之前完全一致(golden 零噪音);
+/// - 缩放锚点取**顶边中点**:浮层挂在触发点下方,从锚点一侧“长出来”比从
+///   几何中心缩放更贴合“从顶上掉下来”的感知。
+class _FlyoutEntrance extends StatefulWidget {
+  const _FlyoutEntrance({required this.child});
+
+  final Widget child;
+
+  @override
+  State<_FlyoutEntrance> createState() => _FlyoutEntranceState();
+}
+
+class _FlyoutEntranceState extends State<_FlyoutEntrance>
+    with SingleTickerProviderStateMixin {
+  /// 入场起始缩放(清单 3.7 的精确值)。
+  static const double _kBeginScale = 0.98;
+
+  AnimationController? _controller;
+  Animation<double>? _animation;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // reduce_motion / 静态环境:不建 controller,直出终态。
+    if (_controller != null || AmbientMotion.of(context).reduced) return;
+    _controller = AnimationController(
+      vsync: this,
+      duration: AppMotion.normal,
+    )..forward();
+    _animation = CurvedAnimation(parent: _controller!, curve: AppMotion.curve);
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final animation = _animation;
+    if (animation == null) return widget.child;
+    return AnimatedBuilder(
+      animation: animation,
+      builder: (context, child) {
+        final t = animation.value;
+        if (t >= 1) return child!;
+        return Opacity(
+          opacity: t,
+          child: Transform.scale(
+            scale: _kBeginScale + (1 - _kBeginScale) * t,
+            alignment: Alignment.topCenter,
+            child: child,
+          ),
+        );
+      },
+      child: widget.child,
     );
   }
 }

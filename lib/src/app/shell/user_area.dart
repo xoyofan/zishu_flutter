@@ -73,6 +73,18 @@ class _UserAvatar extends ConsumerWidget {
         tooltip: '账号',
         offset: const Offset(0, 30),
         color: context.tokens.surface,
+        // 3.7 浮层入场:`AppMotion.normal` + `AppMotion.curve` 档。
+        //
+        // 边界(已核 SDK `popup_menu.dart`):`PopupMenuButton` **没有**
+        // `transitionBuilder`,公开 API 只能改时长/曲线 —— opacity 0→1 由
+        // Material 菜单自己提供(`_PopupMenu` 的 FadeTransition + 尺寸展开),
+        // 而清单 3.7 的 scale 0.98→1 **在本落点不可得**(要拿就得自绘
+        // PopupRoute 重写定位/点外关闭/键盘可达/语义,回归风险 >> 视觉收益,
+        // 已裁决放弃)。自绘的 flyout(分类/我的分类)那边 opacity+scale 双全。
+        popUpAnimationStyle: const AnimationStyle(
+          duration: AppMotion.normal,
+          curve: AppMotion.curve,
+        ),
         onSelected: (action) {
           if (action == 'logout') {
             ref.read(authProvider.notifier).logout();

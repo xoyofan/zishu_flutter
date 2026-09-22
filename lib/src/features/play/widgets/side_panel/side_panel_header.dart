@@ -76,7 +76,14 @@ class _SideHeader extends ConsumerWidget {
       key: const Key('play-side-header'),
       height: headerHeight,
       decoration: BoxDecoration(
-        color: context.tokens.surface,
+        // 3.2 毛玻璃侧栏:头部与面板同处**一个**玻璃平面。
+        // 在玻璃面上(沉浸侧滑面板内)时不再铺不透明底 —— 否则会把面板透出的
+        // 画面整块挡住(实测:只改面板一层滤镜时,画面被根/头部两层不透明底
+        // 挡死,虚化完全看不见)。常规布局下面板背后只有画布底色,头部保持
+        // 不透明 `surface` → 像素与改动前完全一致。
+        color: AmbientGlass.onGlass(context)
+            ? tokens.surface.withValues(alpha: 0)
+            : tokens.surface,
         border: Border(bottom: BorderSide(color: tokens.border)),
       ),
       child: Row(

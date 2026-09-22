@@ -57,9 +57,16 @@ class PlayView extends ConsumerStatefulWidget {
   ConsumerState<PlayView> createState() => _PlayViewState();
 }
 
-class _PlayViewState extends ConsumerState<PlayView> {
+class _PlayViewState extends ConsumerState<PlayView>
+    with WidgetsBindingObserver {
   late final PlayParams _params = (site: widget.site, roomId: widget.roomId);
   bool _sidePanelVisible = true;
+
+  /// 窗口是否在前台(`AppLifecycleState.resumed`)。
+  ///
+  /// 桌面端失焦 → `inactive`。清单 3.3 的「窗口失焦不渲染」是性能/注意力
+  /// 守卫:没人看时不烧 GPU(光晕是 blur 64 的全屏级卷积)。
+  bool _windowFocused = true;
 
   /// 舞台宿主键:沉浸态切换时舞台会在 Row/Column 与全屏 SizedBox 间换位,
   /// 用 GlobalKey 保活元素与内部焦点节点,使快捷键在进出全屏后仍可达。
@@ -99,13 +106,23 @@ class _PlayViewState extends ConsumerState<PlayView> {
   void initState() {
     super.initState();
     _screen = ref.read(playScreenProvider.notifier);
+    // 3.3 氛围光晕的「窗口失焦不渲染」守卫(见 [_windowFocused])。
+    WidgetsBinding.instance.addObserver(this);
     // Esc 走全局键盘 handler(见 _onGlobalKey),与 Space/M/F/W 的
     // CallbackShortcuts 分工:字母键尊重输入框焦点,Esc 必须不依赖焦点。
     HardwareKeyboard.instance.addHandler(_onGlobalKey);
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    final focused = state == AppLifecycleState.resumed;
+    if (!mounted || focused == _windowFocused) return;
+    setState(() => _windowFocused = focused);
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     HardwareKeyboard.instance.removeHandler(_onGlobalKey);
     _hideTimer?.cancel();
     _immersiveSideLockTimer?.cancel();
@@ -410,8 +427,34 @@ class _PlayViewState extends ConsumerState<PlayView> {
     final stageRadius = BorderRadius.circular(
       size.width < AppBreakpoints.compact ? 0 : 12,
     );
-    Widget stageInFrame(Widget child) =>
-        ClipRRect(borderRadius: stageRadius, child: child);
+    // 3.3 氛围光晕:舞台容器**外圈** accent 8% / blur 64
+    // (`AmbientGlow.halo`,清单 3.3)。
+    //
+    // 渲染条件(brief 的「窗口失焦/非全屏时不渲染」经裁决按清单**意图**执行):
+    // - 窗口失焦不渲染:性能/注意力守卫,见 [_windowFocused];
+    // - 沉浸态(全屏/网页全屏/PiP)不渲染:此时舞台是 `SizedBox.expand` 铺满
+    //   窗口,外发光整个落在窗口外(看不见),渲染等于白烧一次 blur 64;
+    //   能看见它的只有常规布局 —— 舞台内缩、外圈是页面画布。
+    // 字面读法(只在全屏渲染)会让效果恒不可见,与清单意图相拒,故取意图。
+    final showStageHalo = _windowFocused && !screen.hidesChrome;
+    Widget stageInFrame(Widget child) {
+      final framed = ClipRRect(borderRadius: stageRadius, child: child);
+      if (!showStageHalo) return framed;
+      return DecoratedBox(
+        decoration: BoxDecoration(
+          // 底色 = 画布底色。BoxShadow 画在盒子**后面**:盒子内容不透明时它只在
+          // 外圈可见;而舞台在解析中/失败/无线路态是**透明**的
+          // (`_StagePlaceholder` 只画居中图标与文字),不铺这层底就会看到光晕
+          // 从盒子内部透出来(实测:fixture 舞台整块被 accent 染紫,
+          // play_style_* golden 差 72%)。铺底后与现状像素一致(画布底色本就
+          // 是那里的背景),光晕只留外圈。
+          color: context.tokens.background,
+          borderRadius: stageRadius,
+          boxShadow: AmbientGlow.halo(context.tokens.accent),
+        ),
+        child: framed,
+      );
+    }
 
     // 舞台整块挂 MouseRegion:鼠标在视频任意位置移动都唤醒控制条(隐藏
     // chrome 态下重新排程自动隐藏),这是"淡出后移动鼠标即唤出"的入口。
