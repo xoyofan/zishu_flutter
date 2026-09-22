@@ -62,6 +62,29 @@ awesome-design-md/
     └── ...
 ```
 
+## 安装位置（重要，改前先读）
+
+本 skill **只装在项目侧** `.agents/skills/awesome-design-md/`。不要同时往 `~/.pi/agent/skills/` 再装一份。
+
+pi 的技能发现规则是**同名冲突时第一个胜出、另一份丢弃并告警**（`dist/core/skills.js` 的
+`name "X" collision` 诊断），而全局目录**先于**项目目录扫描。两处都装时实测结果：
+
+```
+collision: name "awesome-design-md" collision
+  winner: C:\Users\XXF\.pi\agent\skills\awesome-design-md\SKILL.md
+  loser : D:\zishu_flutter\.agents\skills\awesome-design-md\SKILL.md
+```
+
+也就是说：**仓库里这份（版本化的、其它 harness 读的、`ui-from-design-md` 引用的）被静默忽略**，
+改它不生效——正好是本项目一直在防的"同一份东西两个源头"。
+
+还有一个陷阱：**不要只删这里的 `SKILL.md` 而保留 `references/`**。pi 对 `.agents/skills/` 下
+**非根目录**的 `.md` 会当成技能加载（`dist/core/package-manager.js` 的
+`mode === "agents" && dir !== root`），而本目录有 64 个 references 带 `name`/`description`
+frontmatter，会被注册成 64 个垃圾技能。所以 `SKILL.md` 必须留在这里。
+
+需要在项目外也用？把本文件所在目录加进 settings 的 `skills` 数组，而不是再装一份。
+
 ## 可用设计系统（74 套）
 
 | 品牌 | 风格要点 |
