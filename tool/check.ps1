@@ -28,6 +28,8 @@ if (-not (Test-Path -LiteralPath $Flutter)) {
 $steps = @(
     @{ Title = 'flutter pub get';   Args = @('pub', 'get') },
     @{ Title = 'flutter analyze';   Args = @('analyze') },
+    # 裸值守卫(裸色值/裸阴影/裸字号/裸圆角): 纯 Dart 脚本, 用 Command 覆盖可执行文件。
+    @{ Title = 'design token guard'; Command = 'dart'; Args = @('run', 'tool/check_design_tokens.dart') },
     @{ Title = 'flutter test';      Args = @('test') },
     @{ Title = 'flutter build web (legacy UI)'; Args = @('build', 'web', '--target', 'lib/legacy/main_web.dart') }
 )
@@ -36,6 +38,9 @@ $failed = $false
 foreach ($step in $steps) {
     Write-Host ''
     Write-Host "======== [$($step.Title)] ========" -ForegroundColor Cyan
+
+    # 步骤可用可选的 Command 覆盖可执行文件; 缺省仍是 flutter.bat, 老步骤行为不变。
+    $cmd = if ($step.Command) { $step.Command } else { $Flutter }
 
     $previousPreference = $ErrorActionPreference
     $nativePreferenceVariable = Get-Variable PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue
@@ -46,7 +51,7 @@ foreach ($step in $steps) {
         # abort the script. Use the process exit code as the single source of truth.
         $ErrorActionPreference = 'Continue'
         if ($nativePreferenceVariable) { $PSNativeCommandUseErrorActionPreference = $false }
-        & $Flutter @($step.Args)
+        & $cmd @($step.Args)
         $exitCode = $LASTEXITCODE
     } finally {
         if ($nativePreferenceVariable) { $PSNativeCommandUseErrorActionPreference = $previousNativePreference }

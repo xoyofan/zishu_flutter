@@ -59,6 +59,38 @@ Select-String -Path $log -Pattern 'resolve_|give_up|stall' | Select-Object -Last
 | `caption_fail` / `caption_unsupported` | 失败原因(下载/引擎/平台不支持) |
 | `prefetch_start/ok/empty/fail ms` | 其他画质线路后台预取结果与耗时 |
 
+## 裸值守卫(check_design_tokens.dart)
+
+阻止 `lib/src/**` 里继续出现裸色值/裸阴影/裸字号/裸圆角。纯 Dart（只依赖 `dart:io`、
+`dart:convert`），不依赖 Flutter，可直接 `dart run`。
+
+```bash
+# 跑一次(默认:对比基线,发现新增违规即 exit 1)
+dart run tool/check_design_tokens.dart
+
+# 确认清零后刷新基线(排序稳定,便于 diff)
+dart run tool/check_design_tokens.dart --update-baseline
+```
+
+规则与判定：
+
+| 规则 id | 拦截内容 |
+|---|---|
+| `raw_color` | `Color(0x...)` 字面量、`Colors.<name>` |
+| `raw_shadow` | `BoxShadow(...)` |
+| `raw_font_size` | `fontSize: <数字字面量>`（引用 token 不算） |
+| `raw_radius` | `BorderRadius.circular(<数字>)` / `Radius.circular(<数字>)` |
+
+- 整文件白名单：`design_tokens.dart`、`zishu_tokens.dart`、`platform_brands.dart`、
+  `category_colors.dart`、`danmaku_style.dart`（token 定义层 / 纯数据表）。
+- 行内豁免：违规所在行或**上一行**写 `// ignore: design_token` 即跳过。
+- 基线 key 与行号无关，格式 `相对路径|规则id|去空白的字面量文本`，value 是出现次数。
+  只允许**小于等于**基线：新 key 或计数增长 -> exit 1；计数下降 -> 提示可刷新基线。
+- 退出码：通过 `0`，发现新增违规 `1`，脚本自身异常 `2`。
+
+已接入：`tool/check.ps1` 全量门禁（`flutter analyze` 之后一步）与
+`.github/workflows/guards.yml`（push/PR 到 `master`）。
+
 ## 文件清单
 
 | 文件/目录 | 用途 | 入库 |
@@ -70,7 +102,9 @@ Select-String -Path $log -Pattern 'resolve_|give_up|stall' | Select-Object -Last
 | `screenshots/zishu/app_*.log` | exe 运行日志 | ❌(`*.log` 全局忽略) |
 | `sfvideo_*.mjs` | 参考截图抓取脚本(Playwright 无头) | ✅ |
 | `extra_screenshots.mjs` `test_*.mjs` `quick_test.mjs` | 参考站多视口截图辅助 | ✅ |
-| `check.ps1` | 全量门禁:pub get → analyze → test → build web | ✅ |
+| `check.ps1` | 全量门禁:pub get → analyze → design token guard → test → build web | ✅ |
+| `check_design_tokens.dart` | 裸值守卫（裸色值/阴影/字号/圆角），比对 `design_token_baseline.json` | ✅ |
+| `design_token_baseline.json` | 裸值存量基线（与行号无关的稳定 key） | ✅ |
 | `build-web.ps1` | legacy Web UI 构建(build/web) | ✅ |
 | `e7_run.mjs` | douyu E2E 无头验证(legacy web 链路) | ✅ |
 | `smoke_play.mjs` | 播放冒烟(legacy web 链路) | ✅ |

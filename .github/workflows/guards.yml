@@ -1,0 +1,34 @@
+name: guards
+
+# 设计 token 裸值守卫:阻止 lib/src/** 里继续出现裸色值/裸阴影/裸字号/裸圆角。
+# 纯 Dart 脚本,不依赖 Flutter SDK 之外的任何东西(仅 dart:io / dart:convert)。
+# 存量违规固化在 tool/design_token_baseline.json;新增违规即失败。
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+permissions:
+  contents: read
+
+jobs:
+  design-tokens:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # 与 release-windows.yml 保持同一版本,避免两份工作流各用一套 Flutter。
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.1
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Design token guard (no bare colors/shadows/font sizes/radii)
+        run: dart run tool/check_design_tokens.dart
