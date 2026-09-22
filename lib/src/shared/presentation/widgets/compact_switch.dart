@@ -33,7 +33,7 @@ class CompactSwitch extends StatelessWidget {
           height: 16,
           decoration: BoxDecoration(
             color: value ? track : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: AppRadius.allMd,
             border: Border.all(color: value ? track : offBorder),
           ),
           child: AnimatedAlign(

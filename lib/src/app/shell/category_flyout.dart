@@ -385,7 +385,7 @@ class _FlyoutScrollbar extends StatelessWidget {
       controller: controller,
       thumbVisibility: true,
       thickness: 4,
-      radius: const Radius.circular(999),
+      radius: const Radius.circular(AppRadius.pill),
       child: child,
     );
   }

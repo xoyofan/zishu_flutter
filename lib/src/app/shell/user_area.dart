@@ -195,7 +195,7 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
     final lastError = ref.watch(authProvider).lastError;
     return AlertDialog(
       backgroundColor: context.tokens.surface,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.allLg),
       title: Text(
         '登录账号',
         style: TextStyle(
@@ -224,7 +224,7 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
                 ),
                 prefixIcon: const Icon(Icons.person_outline_rounded, size: 18),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: AppRadius.allMd,
                 ),
               ),
             ),
@@ -243,7 +243,7 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
                 ),
                 prefixIcon: Icon(Icons.lock_outline_rounded, size: 18),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: AppRadius.allMd,
                 ),
               ),
             ),
