@@ -32,6 +32,11 @@ class SearchResultTile extends StatelessWidget {
     final stateColor = _isLive ? tokens.liveBadge : tokens.textSecondary;
     return InkWell(
       onTap: onRowTap,
+      // 状态反馈(全部走 token):hover 抬亮;焦点/按压用 accent 低 alpha。
+      hoverColor: tokens.surfaceRaised,
+      splashColor: tokens.accent.withValues(alpha: 0.12),
+      highlightColor: tokens.accent.withValues(alpha: 0.10),
+      focusColor: tokens.accent.withValues(alpha: 0.10),
       child: Container(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.lg,
@@ -153,27 +158,31 @@ class _Avatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    return GestureDetector(
-      onTap: onTap,
-      child: Tooltip(
-        message: '查看主播主页',
-        child: ClipRRect(
-          borderRadius: AppRadius.allSm,
-          child: Container(
-            width: 40,
-            height: 40,
-            color: tokens.surfaceRaised,
-            child: hit.avatar.isEmpty
-                ? _fallback(context)
-                : CachedNetworkImage(
-                    imageUrl: hit.avatar,
-                    width: 40,
-                    height: 40,
-                    fit: BoxFit.cover,
-                    placeholder: (_, _) =>
-                        ColoredBox(color: tokens.surfaceRaised),
-                    errorWidget: (_, _, _) => _fallback(context),
-                  ),
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        onTap: onTap,
+        // 可点头像:补指针光标。
+        child: Tooltip(
+          message: '查看主播主页',
+          child: ClipRRect(
+            borderRadius: AppRadius.allSm,
+            child: Container(
+              width: 40,
+              height: 40,
+              color: tokens.surfaceRaised,
+              child: hit.avatar.isEmpty
+                  ? _fallback(context)
+                  : CachedNetworkImage(
+                      imageUrl: hit.avatar,
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
+                      placeholder: (_, _) =>
+                          ColoredBox(color: tokens.surfaceRaised),
+                      errorWidget: (_, _, _) => _fallback(context),
+                    ),
+            ),
           ),
         ),
       ),
@@ -206,6 +215,11 @@ class _EnterButton extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: AppRadius.allSm,
+      // 描边按钮:状态层取自身强调色(不盖掉描边语义),焦点可见。
+      hoverColor: tokens.accent.withValues(alpha: 0.10),
+      splashColor: tokens.accent.withValues(alpha: 0.12),
+      highlightColor: tokens.accent.withValues(alpha: 0.10),
+      focusColor: tokens.accent.withValues(alpha: 0.10),
       child: Container(
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,

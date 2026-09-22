@@ -134,6 +134,15 @@ class _PlatformChip extends StatelessWidget {
       key: itemKey,
       borderRadius: AppRadius.allSm,
       onTap: onTap,
+      // 状态反馈(全部走 token):未选中 hover 抬亮到 surfaceRaised;
+      // 已选中的底本身就是 accent 淡底,hover 用 accent 低 alpha 加深而非盖掉选中色。
+      // splash/highlight/focus 统一取本 chip 的 accent(全平台/平台品牌色)。
+      hoverColor: selected
+          ? accent.withValues(alpha: 0.12)
+          : tokens.surfaceRaised,
+      splashColor: accent.withValues(alpha: 0.12),
+      highlightColor: accent.withValues(alpha: 0.10),
+      focusColor: accent.withValues(alpha: 0.10),
       child: AnimatedContainer(
         duration: AppMotion.fast,
         curve: AppMotion.curve,
@@ -173,7 +182,9 @@ class _PlatformChip extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: context.textBody.copyWith(
-                    fontSize: compact ? AppFontSize.label : AppFontSize.bodySecondary,
+                    fontSize: compact
+                        ? AppFontSize.label
+                        : AppFontSize.bodySecondary,
                     fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
                     color: selected ? tokens.textPrimary : tokens.textSecondary,
                   ),
@@ -185,7 +196,9 @@ class _PlatformChip extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: context.textBody.copyWith(
-                  fontSize: compact ? AppFontSize.label : AppFontSize.bodySecondary,
+                  fontSize: compact
+                      ? AppFontSize.label
+                      : AppFontSize.bodySecondary,
                   fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
                   color: selected ? tokens.textPrimary : tokens.textSecondary,
                 ),

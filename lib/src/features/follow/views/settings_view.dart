@@ -15,6 +15,7 @@ import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../application/settings_provider.dart';
+import '../widgets/follow_common.dart';
 
 class SettingsView extends ConsumerStatefulWidget {
   const SettingsView({super.key});
@@ -44,7 +45,12 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('设置', style: context.textTitle.copyWith(fontSize: AppFontSize.headline)),
+              Text(
+                '设置',
+                style: context.textTitle.copyWith(
+                  fontSize: AppFontSize.headline,
+                ),
+              ),
               const SizedBox(height: AppSpacing.lg),
               _SettingsGroup(title: '账号', children: [_AccountSettingRow()]),
               _SettingsGroup(
@@ -94,6 +100,12 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                       onPressed: () => setState(
                         () => _platformQualityExpanded =
                             !_platformQualityExpanded,
+                      ),
+                      // 状态层走 token:hover 抬亮;键盘焦点/按压用 accent 低 alpha。
+                      style: IconButton.styleFrom(
+                        hoverColor: tokens.surfaceRaised,
+                        highlightColor: tokens.accent.withValues(alpha: 0.10),
+                        focusColor: tokens.accent.withValues(alpha: 0.10),
                       ),
                       icon: Icon(
                         _platformQualityExpanded
@@ -151,6 +163,8 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                       onChanged: (value) => ref
                           .read(settingsProvider.notifier)
                           .setDanmakuEnabled(value),
+                      // hover/焦点/按压状态层走 token(默认是 ThemeData 白 4%/12%)。
+                      overlayColor: controlStateLayer(tokens),
                     ),
                   ),
                 ],
@@ -160,7 +174,8 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                 children: [
                   _SettingsRow(
                     label: '翻译为中文',
-                    hint: '首页/播放页标题与弹幕自动译为中文;走公共翻译服务,'
+                    hint:
+                        '首页/播放页标题与弹幕自动译为中文;走公共翻译服务,'
                         '失败或已是中文时显示原文',
                     trailing: Switch(
                       key: const Key('settings-translation-toggle'),
@@ -168,6 +183,8 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                       onChanged: (value) => ref
                           .read(settingsProvider.notifier)
                           .setTranslationEnabled(value),
+                      // hover/焦点/按压状态层走 token(默认是 ThemeData 白 4%/12%)。
+                      overlayColor: controlStateLayer(tokens),
                     ),
                   ),
                   _TranslationEndpointRow(
@@ -449,6 +466,11 @@ class _TranslationEndpointRowState
               borderRadius: AppRadius.allSm,
               borderSide: BorderSide(color: tokens.border),
             ),
+            // 键盘焦点可见:描边转 accent(与搜索页输入框同法,不新增色值)。
+            focusedBorder: OutlineInputBorder(
+              borderRadius: AppRadius.allSm,
+              borderSide: BorderSide(color: tokens.accent),
+            ),
             enabledBorder: OutlineInputBorder(
               borderRadius: AppRadius.allSm,
               borderSide: BorderSide(color: tokens.border),
@@ -457,7 +479,11 @@ class _TranslationEndpointRowState
               key: const Key('settings-translation-endpoint-save'),
               tooltip: '保存',
               onPressed: _commit,
-              icon: Icon(Icons.check_rounded, size: 16, color: tokens.textSecondary),
+              icon: Icon(
+                Icons.check_rounded,
+                size: 16,
+                color: tokens.textSecondary,
+              ),
             ),
           ),
         ),

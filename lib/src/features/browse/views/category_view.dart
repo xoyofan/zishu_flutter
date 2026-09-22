@@ -263,6 +263,12 @@ class _GroupTab extends StatelessWidget {
       color: selected ? tokens.surfaceRaised : Colors.transparent,
       child: InkWell(
         onTap: onTap,
+        // 分组 tab:选中底已是 surfaceRaised,此时 hover 只能退一档到 surface;
+        // 未选中为透明底, hover 抬到 surfaceRaised。
+        hoverColor: selected ? tokens.surface : tokens.surfaceRaised,
+        splashColor: tokens.accent.withValues(alpha: 0.12),
+        highlightColor: tokens.accent.withValues(alpha: 0.10),
+        focusColor: tokens.accent.withValues(alpha: 0.10),
         child: Padding(
           padding: const EdgeInsets.symmetric(
             horizontal: AppSpacing.lg,
@@ -375,6 +381,11 @@ class _CategoryTile extends ConsumerWidget {
         key: Key('category-item-${item.cid}'),
         borderRadius: AppRadius.allMd,
         onTap: onTap,
+        // 状态反馈(全部走 token):hover 抬亮;焦点/按压用 accent 低 alpha。
+        hoverColor: tokens.surfaceRaised,
+        splashColor: tokens.accent.withValues(alpha: 0.12),
+        highlightColor: tokens.accent.withValues(alpha: 0.10),
+        focusColor: tokens.accent.withValues(alpha: 0.10),
         child: Column(
           children: [
             Stack(
@@ -431,6 +442,11 @@ class _CategoryTile extends ConsumerWidget {
                                 name: displayName,
                               ),
                             ),
+                        // 收藏星:底为 surface,hover 抬亮;焦点/按压用 accent 低 alpha。
+                        hoverColor: tokens.surfaceRaised,
+                        splashColor: tokens.accent.withValues(alpha: 0.12),
+                        highlightColor: tokens.accent.withValues(alpha: 0.10),
+                        focusColor: tokens.accent.withValues(alpha: 0.10),
                         child: Container(
                           padding: const EdgeInsets.all(2),
                           decoration: BoxDecoration(

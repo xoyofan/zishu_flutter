@@ -65,6 +65,11 @@ class _RelatedCard extends StatelessWidget {
         child: InkWell(
           borderRadius: AppRadius.allMd,
           onTap: onTap,
+          // 状态反馈(全部走 token):hover 抬亮;焦点/按压用 accent 低 alpha。
+          hoverColor: tokens.surfaceRaised,
+          splashColor: tokens.accent.withValues(alpha: 0.12),
+          highlightColor: tokens.accent.withValues(alpha: 0.10),
+          focusColor: tokens.accent.withValues(alpha: 0.10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -72,7 +77,11 @@ class _RelatedCard extends StatelessWidget {
                 aspectRatio: 16 / 9,
                 child: NetworkCover(
                   url: room.cover,
-                  fallbackLabel: displayCategoryName(room.site, room.category, room.cid),
+                  fallbackLabel: displayCategoryName(
+                    room.site,
+                    room.category,
+                    room.cid,
+                  ),
                 ),
               ),
               Padding(
@@ -84,7 +93,9 @@ class _RelatedCard extends StatelessWidget {
                       room.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: context.textBody.copyWith(fontWeight: FontWeight.w600),
+                      style: context.textBody.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Row(

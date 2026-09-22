@@ -83,7 +83,9 @@ class TimelineTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: AppSpacing.xs),
-            Expanded(child: _EntryCard(room: entry.room, onTap: onTap)),
+            Expanded(
+              child: _EntryCard(room: entry.room, onTap: onTap),
+            ),
           ],
         ),
       ),
@@ -108,6 +110,11 @@ class _EntryCard extends StatelessWidget {
       child: InkWell(
         borderRadius: AppRadius.allMd,
         onTap: onTap,
+        // 状态反馈(全部走 token):hover 抬亮;焦点/按压用 accent 低 alpha。
+        hoverColor: tokens.surfaceRaised,
+        splashColor: tokens.accent.withValues(alpha: 0.12),
+        highlightColor: tokens.accent.withValues(alpha: 0.10),
+        focusColor: tokens.accent.withValues(alpha: 0.10),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
@@ -116,7 +123,11 @@ class _EntryCard extends StatelessWidget {
               height: TimelineTile._coverHeight,
               child: NetworkCover(
                 url: room.cover,
-                fallbackLabel: displayCategoryName(room.site, room.category, room.cid),
+                fallbackLabel: displayCategoryName(
+                  room.site,
+                  room.category,
+                  room.cid,
+                ),
               ),
             ),
             Expanded(
@@ -133,7 +144,9 @@ class _EntryCard extends StatelessWidget {
                       room.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: context.textBody.copyWith(fontWeight: FontWeight.w600),
+                      style: context.textBody.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.xs),
                     Row(
@@ -151,7 +164,11 @@ class _EntryCard extends StatelessWidget {
                           CategoryChip(label: room.category, site: room.site),
                         ],
                         const Spacer(),
-                        Icon(Icons.visibility_rounded, size: 10, color: tokens.textSecondary),
+                        Icon(
+                          Icons.visibility_rounded,
+                          size: 10,
+                          color: tokens.textSecondary,
+                        ),
                         const SizedBox(width: 3),
                         Text(room.online, style: context.textCaption),
                       ],

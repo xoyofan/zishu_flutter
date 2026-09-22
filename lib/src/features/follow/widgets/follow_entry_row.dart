@@ -70,6 +70,11 @@ class FollowEntryRow extends StatelessWidget {
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
+        // 状态反馈(全部走 token):hover 抬亮;焦点/按压用 accent 低 alpha。
+        hoverColor: tokens.surfaceRaised,
+        splashColor: tokens.accent.withValues(alpha: 0.12),
+        highlightColor: tokens.accent.withValues(alpha: 0.10),
+        focusColor: tokens.accent.withValues(alpha: 0.10),
         child: Container(
           height: rowHeight,
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
@@ -92,6 +97,8 @@ class FollowEntryRow extends StatelessWidget {
                     activeColor: tokens.accent,
                     checkColor: tokens.surfaceSoft,
                     side: BorderSide(color: tokens.border),
+                    // hover/焦点/按压状态层走 token(默认是 ThemeData 的白 4%/12%)。
+                    overlayColor: controlStateLayer(tokens),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.xs),
@@ -126,13 +133,19 @@ class FollowEntryRow extends StatelessWidget {
                       const SizedBox(width: 2),
                     ],
                     Expanded(
-                      child: GestureDetector(
-                        onTap: onAnchorTap,
-                        child: FollowAnchorName(
-                          site: room.site,
-                          name: room.anchorName,
-                          live: live,
-                          fontSize: AppFontSize.caption,
+                      child: MouseRegion(
+                        cursor: onAnchorTap == null
+                            ? MouseCursor.defer
+                            : SystemMouseCursors.click,
+                        child: GestureDetector(
+                          onTap: onAnchorTap,
+                          // 可点主播名:补指针光标。
+                          child: FollowAnchorName(
+                            site: room.site,
+                            name: room.anchorName,
+                            live: live,
+                            fontSize: AppFontSize.caption,
+                          ),
                         ),
                       ),
                     ),

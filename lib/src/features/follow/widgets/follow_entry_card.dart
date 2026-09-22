@@ -77,6 +77,11 @@ class FollowEntryCard extends StatelessWidget {
         child: InkWell(
           onTap: onTap,
           onLongPress: onLongPress,
+          // 状态反馈(全部走 token):hover 抬亮;焦点/按压用 accent 低 alpha。
+          hoverColor: tokens.surfaceRaised,
+          splashColor: tokens.accent.withValues(alpha: 0.12),
+          highlightColor: tokens.accent.withValues(alpha: 0.10),
+          focusColor: tokens.accent.withValues(alpha: 0.10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
@@ -93,27 +98,34 @@ class FollowEntryCard extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // 主播名:参考实现的封面下一律先给主播。
-                      GestureDetector(
-                        onTap: onAnchorTap,
-                        child: Row(
-                          children: [
-                            if (entry.isSpecial) ...[
-                              Icon(
-                                Icons.star_rounded,
-                                size: 12,
-                                color: tokens.brand,
+                      // 可点主播名:补指针光标(现可点但无 click 光标)。
+                      MouseRegion(
+                        cursor: onAnchorTap == null
+                            ? MouseCursor.defer
+                            : SystemMouseCursors.click,
+                        child: GestureDetector(
+                          onTap: onAnchorTap,
+
+                          child: Row(
+                            children: [
+                              if (entry.isSpecial) ...[
+                                Icon(
+                                  Icons.star_rounded,
+                                  size: 12,
+                                  color: tokens.brand,
+                                ),
+                                const SizedBox(width: 2),
+                              ],
+                              Flexible(
+                                child: FollowAnchorName(
+                                  site: room.site,
+                                  name: room.anchorName,
+                                  live: live,
+                                  fontSize: AppFontSize.body,
+                                ),
                               ),
-                              const SizedBox(width: 2),
                             ],
-                            Flexible(
-                              child: FollowAnchorName(
-                                site: room.site,
-                                name: room.anchorName,
-                                live: live,
-                                fontSize: AppFontSize.body,
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                       const SizedBox(height: 2),
@@ -387,6 +399,8 @@ class _SelectBox extends StatelessWidget {
         activeColor: tokens.accent,
         checkColor: tokens.surfaceSoft,
         side: BorderSide(color: tokens.border),
+        // hover/焦点/按压状态层走 token(默认是 ThemeData 的白 4%/12%)。
+        overlayColor: controlStateLayer(tokens),
       ),
     );
   }

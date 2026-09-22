@@ -52,7 +52,18 @@ class _PlatformChip extends StatelessWidget {
     return InkWell(
       borderRadius: AppRadius.allSm,
       onTap: onTap,
-      child: Container(
+      // 状态反馈(全部走 token):未选中 hover 抬亮;已选中的底是平台色淡底,
+      // hover 用同一个平台色低 alpha 加深(不盖掉选中色)。
+      hoverColor: selected
+          ? brand.color.withValues(alpha: 0.12)
+          : tokens.surfaceRaised,
+      splashColor: brand.color.withValues(alpha: 0.12),
+      highlightColor: brand.color.withValues(alpha: 0.10),
+      focusColor: brand.color.withValues(alpha: 0.10),
+      // 选中切换的颜色过渡统一 AppMotion.fast + curve(不位移/不缩放)。
+      child: AnimatedContainer(
+        duration: AppMotion.fast,
+        curve: AppMotion.curve,
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.md,
           vertical: AppSpacing.xs,

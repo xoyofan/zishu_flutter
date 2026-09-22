@@ -289,6 +289,13 @@ class FollowIconAction extends StatelessWidget {
     return IconButton(
       tooltip: tooltip,
       onPressed: onPressed,
+      // 状态反馈(全部走 token):hover 抬亮到 surfaceRaised;
+      // 键盘焦点/按压用 accent 低 alpha(26×26 小目标也能看出焦点)。
+      style: IconButton.styleFrom(
+        hoverColor: tokens.surfaceRaised,
+        highlightColor: tokens.accent.withValues(alpha: 0.10),
+        focusColor: tokens.accent.withValues(alpha: 0.10),
+      ),
       visualDensity: VisualDensity.compact,
       padding: const EdgeInsets.all(AppSpacing.xs),
       constraints: const BoxConstraints(minWidth: 26, minHeight: 26),
@@ -296,6 +303,25 @@ class FollowIconAction extends StatelessWidget {
     );
   }
 }
+
+/// 表单控件(Switch / Checkbox)的状态层(hover / focus / pressed)统一取 token。
+///
+/// Material 的 M3 默认值取 `ThemeData.hoverColor`(白 4%)/ `focusColor`
+/// (白 12%)——既非 token 也非 accent;这里显式改为 accent 低 alpha(8–12%),
+/// 与全库其它 hover/焦点口径一致。未列状态返回 null = 不叠状态层(同原默认)。
+WidgetStateProperty<Color?> controlStateLayer(ZishuTokens tokens) =>
+    WidgetStateProperty.resolveWith((states) {
+      if (states.contains(WidgetState.focused)) {
+        return tokens.accent.withValues(alpha: 0.12);
+      }
+      if (states.contains(WidgetState.hovered)) {
+        return tokens.accent.withValues(alpha: 0.08);
+      }
+      if (states.contains(WidgetState.pressed)) {
+        return tokens.accent.withValues(alpha: 0.10);
+      }
+      return null;
+    });
 
 /// 离线卡的「上次开播」文案,语义对齐 web
 /// `apps/web/src/utils/follow/followDisplay.ts` 的 `offlineLastLiveLabel`。

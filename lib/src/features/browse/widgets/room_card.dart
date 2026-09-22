@@ -43,14 +43,18 @@ class RoomCard extends StatelessWidget {
       child: InkWell(
         borderRadius: AppRadius.allMd,
         onTap: onTap,
+        // 状态反馈(M3 state layer,全部走 token):hover 抬亮到 surfaceRaised;
+        // splash/highlight/focus 用 accent 低 alpha(8–12%),键盘焦点可见。
+        // 只改颜色,不位移/不缩放(DESIGN.md §7)。
+        hoverColor: tokens.surfaceRaised,
+        splashColor: tokens.accent.withValues(alpha: 0.12),
+        highlightColor: tokens.accent.withValues(alpha: 0.10),
+        focusColor: tokens.accent.withValues(alpha: 0.10),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             _Cover(room: room, showPlatformBadge: showPlatformBadge),
-            _RoomCardMeta(
-              room: room,
-              showPlatformBadge: showPlatformBadge,
-            ),
+            _RoomCardMeta(room: room, showPlatformBadge: showPlatformBadge),
           ],
         ),
       ),

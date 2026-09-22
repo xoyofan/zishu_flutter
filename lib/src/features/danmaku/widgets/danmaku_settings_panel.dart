@@ -79,6 +79,21 @@ class DanmakuSettingsPanel extends ConsumerWidget {
                 child: Switch(
                   value: danmakuEnabled,
                   onChanged: settingsController.setDanmakuEnabled,
+                  // hover/焦点/按压状态层走 token:Switch 的 M3 默认取
+                  // ThemeData 的白 4% / 12%(非 token、非 accent),这里改为
+                  // accent 低 alpha(8–12%);未列状态返回 null = 不叠状态层。
+                  overlayColor: WidgetStateProperty.resolveWith((states) {
+                    if (states.contains(WidgetState.focused)) {
+                      return context.tokens.accent.withValues(alpha: 0.12);
+                    }
+                    if (states.contains(WidgetState.hovered)) {
+                      return context.tokens.accent.withValues(alpha: 0.08);
+                    }
+                    if (states.contains(WidgetState.pressed)) {
+                      return context.tokens.accent.withValues(alpha: 0.10);
+                    }
+                    return null;
+                  }),
                 ),
               ),
             ],
@@ -96,7 +111,8 @@ class DanmakuSettingsPanel extends ConsumerWidget {
             value: settings.opacity.toDouble(),
             min: DanmakuSettings.kOpacityMin.toDouble(),
             max: DanmakuSettings.kOpacityMax.toDouble(),
-            divisions: DanmakuSettings.kOpacityMax - DanmakuSettings.kOpacityMin,
+            divisions:
+                DanmakuSettings.kOpacityMax - DanmakuSettings.kOpacityMin,
             onChanged: (v) => controller.setOpacity(v.round()),
           ),
         ),

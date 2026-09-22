@@ -123,6 +123,11 @@ class _FollowRow extends ConsumerWidget {
       color: Colors.transparent,
       child: InkWell(
         onTap: () => context.go('/follow'),
+        // 状态反馈(全部走 token):hover 抬亮;焦点/按压用 accent 低 alpha。
+        hoverColor: tokens.surfaceRaised,
+        splashColor: tokens.accent.withValues(alpha: 0.12),
+        highlightColor: tokens.accent.withValues(alpha: 0.10),
+        focusColor: tokens.accent.withValues(alpha: 0.10),
         child: Container(
           height: AppDirectoryDrawer.followRowHeight,
           padding: const EdgeInsets.only(
@@ -238,6 +243,12 @@ class _ToggleRail extends StatelessWidget {
             child: InkWell(
               onTap: onTap,
               customBorder: shape,
+              // 底已是 surfaceRaised(灰阶顶档)、无法再抬亮,只能退一档到
+              // surface;仍在更暗的抽屉画布(surfaceSoft)之上。
+              hoverColor: tokens.surface,
+              splashColor: tokens.accent.withValues(alpha: 0.12),
+              highlightColor: tokens.accent.withValues(alpha: 0.10),
+              focusColor: tokens.accent.withValues(alpha: 0.10),
               child: Icon(
                 open ? Icons.chevron_left_rounded : Icons.chevron_right_rounded,
                 size: 12,
@@ -329,10 +340,24 @@ class _PlatformTab extends StatelessWidget {
           materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
           padding: EdgeInsets.zero,
           labelPadding: EdgeInsets.zero,
-          backgroundColor: Colors.transparent,
-          selectedColor: tokens.accent.withValues(
-            alpha: AppDirectoryDrawer.activeChipAlpha,
-          ),
+          // 状态矩阵(全部走 token):未选中透明(对齐参考实现的无底 tab);
+          // hover 抬到 surfaceRaised;键盘焦点用 accent 低 alpha;选中用 accent 淡底。
+          // FilterChip 的状态层走 color 解析器(给 color 后 RawChip 不再叠默认
+          // hover 遮罩),因此不新增裸色值。
+          color: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return tokens.accent.withValues(
+                alpha: AppDirectoryDrawer.activeChipAlpha,
+              );
+            }
+            if (states.contains(WidgetState.focused)) {
+              return tokens.accent.withValues(alpha: 0.10);
+            }
+            if (states.contains(WidgetState.hovered)) {
+              return tokens.surfaceRaised;
+            }
+            return Colors.transparent;
+          }),
           checkmarkColor: tokens.accent,
           side: selected ? BorderSide(color: tokens.accent) : BorderSide.none,
           shape: RoundedRectangleBorder(borderRadius: AppRadius.allSm),
@@ -440,6 +465,12 @@ class _CategoryLeaf extends StatelessWidget {
           site == 'all' ? '/all/category/$cid' : '/$site/category/$cid',
         ),
         customBorder: shape,
+        // 底已是 surfaceRaised(灰阶顶档),hover 退一档到 surface
+        // (仍在抽屉画布 surfaceSoft 之上);焦点/按压用 accent 低 alpha。
+        hoverColor: tokens.surface,
+        splashColor: tokens.accent.withValues(alpha: 0.12),
+        highlightColor: tokens.accent.withValues(alpha: 0.10),
+        focusColor: tokens.accent.withValues(alpha: 0.10),
         child: Align(
           alignment: Alignment.center,
           child: Padding(

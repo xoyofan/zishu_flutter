@@ -45,10 +45,7 @@ class TimelineView extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.xs),
-                  Text(
-                    '主播开播动态流,按时间从近到远排列(样例数据)',
-                    style: context.textSecondary,
-                  ),
+                  Text('主播开播动态流,按时间从近到远排列(样例数据)', style: context.textSecondary),
                 ],
               ),
             ),
@@ -90,15 +87,11 @@ class TimelineView extends ConsumerWidget {
       return const Center(child: CircularProgressIndicator(strokeWidth: 2));
     }
     if (async.hasError) {
-      return Center(
-        child: Text('加载失败,请稍后重试', style: context.textSecondary),
-      );
+      return Center(child: Text('加载失败,请稍后重试', style: context.textSecondary));
     }
     final entries = async.value?.visible ?? const [];
     if (entries.isEmpty) {
-      return Center(
-        child: Text('该平台暂无动态', style: context.textSecondary),
-      );
+      return Center(child: Text('该平台暂无动态', style: context.textSecondary));
     }
     return ListView.builder(
       padding: const EdgeInsets.all(AppSpacing.lg),
@@ -142,8 +135,21 @@ class _SiteFilterChip extends StatelessWidget {
       onSelected: (_) => onTap(),
       showCheckmark: false,
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
-      backgroundColor: tokens.surface,
-      selectedColor: brand.color.withValues(alpha: 0.22),
+      // 状态矩阵(全部走 token):hover 抬到 surfaceRaised;键盘焦点用 accent
+      // 低 alpha;选中用平台色淡底。FilterChip 的状态层走 color 解析器
+      // (给 color 后 RawChip 不再叠默认 hover 遮罩)。
+      color: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.selected)) {
+          return brand.color.withValues(alpha: 0.22);
+        }
+        if (states.contains(WidgetState.focused)) {
+          return tokens.accent.withValues(alpha: 0.10);
+        }
+        if (states.contains(WidgetState.hovered)) {
+          return tokens.surfaceRaised;
+        }
+        return tokens.surface;
+      }),
       checkmarkColor: brand.color,
       side: BorderSide(color: selected ? brand.color : tokens.border),
       shape: RoundedRectangleBorder(borderRadius: AppRadius.allSm),

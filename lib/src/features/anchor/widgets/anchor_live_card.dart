@@ -91,7 +91,9 @@ class AnchorLiveCard extends StatelessWidget {
                         room.title,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: context.textTitle.copyWith(fontSize: AppFontSize.subtitle),
+                        style: context.textTitle.copyWith(
+                          fontSize: AppFontSize.subtitle,
+                        ),
                       ),
                     ),
                     if (room.category.isNotEmpty) ...[
@@ -112,6 +114,12 @@ class AnchorLiveCard extends StatelessWidget {
                     child: InkWell(
                       borderRadius: AppRadius.allMd,
                       onTap: onEnterRoom,
+                      // accent 实底 CTA:状态层取反白 on-accent
+                      // (accent 低 alpha 压在同色底上不可见),焦点可见。
+                      hoverColor: AppOnBright.white.withValues(alpha: 0.12),
+                      splashColor: AppOnBright.white.withValues(alpha: 0.12),
+                      highlightColor: AppOnBright.white.withValues(alpha: 0.10),
+                      focusColor: AppOnBright.white.withValues(alpha: 0.12),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [

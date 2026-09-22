@@ -15,6 +15,22 @@ class FollowButton extends StatefulWidget {
 class _FollowButtonState extends State<FollowButton> {
   bool _followed = false;
 
+  /// 键盘焦点可见环开关。
+  ///
+  /// Flutter 没有 CSS 的 `:focus-visible`,等效物是
+  /// [FocusHighlightMode.traditional]:Tab 键导航时为真,鼠标/触摸点击时为假,
+  /// 因此只有键盘访问才出环。
+  bool _focusRing = false;
+
+  void _handleFocusChange(bool focused) {
+    final keyboard =
+        FocusManager.instance.highlightMode == FocusHighlightMode.traditional;
+    final showRing = focused && keyboard;
+    if (showRing != _focusRing) {
+      setState(() => _focusRing = showRing);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
@@ -28,12 +44,22 @@ class _FollowButtonState extends State<FollowButton> {
         color: followed ? tokens.surfaceRaised : tokens.accent,
         borderRadius: AppRadius.allSm,
         border: followed ? Border.all(color: tokens.border) : null,
+        // focus: AppFocus.ring——2px 实环 + 2px 间隙,外扩不占布局,
+        // 不撑开盒子、不位移(DESIGN.md §4.2 / §7)。
+        boxShadow: _focusRing ? AppFocus.ring(tokens.accent) : null,
       ),
       child: Material(
         color: Colors.transparent,
         child: InkWell(
           borderRadius: AppRadius.allSm,
           onTap: () => setState(() => _followed = !_followed),
+          onFocusChange: _handleFocusChange,
+          // accent 实底按钮:状态层取反白 on-accent(accent 低 alpha 压在同色
+          // 底上不可见,等于没有反馈)。焦点只用外环,不叠 M3 内层 tint。
+          hoverColor: AppOnBright.white.withValues(alpha: 0.12),
+          splashColor: AppOnBright.white.withValues(alpha: 0.12),
+          highlightColor: AppOnBright.white.withValues(alpha: 0.10),
+          focusColor: tokens.accent.withValues(alpha: 0.0),
           child: Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.lg,
