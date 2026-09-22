@@ -84,6 +84,20 @@ Future<List<RoomSummary>> fetchYoutubeLiveRooms(
   }
 }
 
+/// 列表卡片封面:固定用 16:9 原生的 `mqdefault.jpg`(320×180)。
+///
+/// ytInitialData 里给的是 `hq720.jpg`(1280×720,2026-09-22 实测 **170259 字节**;
+/// 带 `sqp`/`rs` 签名的版本 41414 字节),而列表卡片实宽只有 **226~320px**
+/// (`AppRoomGrid.columnsFor` 最宽 7 列,扣左栏 rail 后),属于 3~4 倍过采样。
+///
+/// 换成 mqdefault(实测 **11776 字节**,小 3.5~14 倍)同时保住视觉:
+/// - 16:9 原生比例,不像 hqdefault(480×360,4:3)要靠 `BoxFit.cover` 裁掉上下黑边;
+/// - 320px 宽在 ≤7 列布局下与卡片尺寸基本 1:1,无需放大。
+///
+/// 仅用于**列表卡片**;播放页封面另走 room_api 的 videoDetails 缩略图,不受影响。
+String _listCoverUrl(String videoId) =>
+    'https://i.ytimg.com/vi/$videoId/mqdefault.jpg';
+
 List<RoomSummary> _roomsFromInitialData(String html, String categoryName) {
   final data = extractJsonObjectAfter(html, 'ytInitialData');
   if (data == null) return const [];
@@ -95,10 +109,7 @@ List<RoomSummary> _roomsFromInitialData(String html, String categoryName) {
     final videoId = '${renderer['videoId'] ?? ''}'.trim();
     if (!isValidYoutubeVideoId(videoId) || !seen.add(videoId)) continue;
     final title = _runsText(renderer['title']) ?? '';
-    final thumbnails = jsonListOf(jsonMapOf(renderer['thumbnail'])['thumbnails']);
-    final cover = thumbnails.isEmpty
-        ? 'https://i.ytimg.com/vi/$videoId/hqdefault.jpg'
-        : '${jsonMapOf(thumbnails.last)['url'] ?? ''}';
+    final cover = _listCoverUrl(videoId);
     rooms.add(
       RoomSummary(
         site: kYoutubeSiteId,
@@ -162,7 +173,7 @@ List<RoomSummary> _roomsFromRegex(String html, String categoryName) {
         cid: videoId,
         category: categoryName,
         online: '',
-        cover: 'https://i.ytimg.com/vi/$videoId/hqdefault.jpg',
+        cover: _listCoverUrl(videoId),
       ),
     );
   }
