@@ -82,11 +82,14 @@ final List<_Rule> _rules = <_Rule>[
     '裸阴影(BoxShadow(...))',
     RegExp(r'(?<lit>BoxShadow\()'),
   ),
-  // 裸字号: fontSize: <数字字面量>。fontSize: AppTypography.x 之类不算。
+  // 裸字号: fontSize: 后面直接跟数字字面量。
+  // 2026-09-21 扩包:原先只扫“首位是数字”的写法,导致 `fontSize: compact ? 10 : 12`
+  // 这类三元/表达式写法逃逸。现改为扫描 fontSize: 参数内（同行、到逗号/分号/换行止）
+  // 的任何数字字面量。几何比例（如 size * 0.5）属正当例外,用行内豁免标注理由。
   _Rule(
     'raw_font_size',
-    '裸字号(fontSize: <数字字面量>)',
-    RegExp(r'(?<lit>fontSize:[ \t]*\d+(?:\.\d+)?)'),
+    '裸字号(fontSize: 参数内含数字字面量)',
+    RegExp(r'(?<lit>fontSize:[^\n,;]*?\b\d+(?:\.\d+)?)'),
   ),
   // 裸圆角: BorderRadius.circular(<数字字面量>) / Radius.circular(<数字字面量>)。
   // 合并成一条正则,避免 BorderRadius.circular 被 Radius.circular 二次计数。
