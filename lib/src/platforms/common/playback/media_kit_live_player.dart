@@ -133,15 +133,14 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   /// 开流;mpv 属性在 loadfile 前设置即约束该次会话)。抽成常量表是让配置
   /// 可被单测直接断言(VM 测试无法实例化 NativePlayer)。
   ///
-  /// 缓冲上限的语义与取值依据(mpv 手册,DOCS/man/options.rst):
-  /// - `demuxer-max-bytes=33554432`(32 MiB):「This controls how much the
-  ///   demuxer is allowed to buffer ahead … The demuxer will stop reading
-  ///   additional packets as soon as one of the limits is reached」—— 前向
-  ///   字节硬顶;高码率(≥4.5 Mbps)下先于默认预读上限到达,内存上限约 32 MiB。
-  /// - `demuxer-max-back-bytes=4194304`(4 MiB):「This controls how much
-  ///   past data the demuxer is allowed to preserve … there is no control how
-  ///   many seconds are actually cached」—— 已播(回看)缓冲**只有字节上限、
-  ///   无秒级控制**,4 MiB 有界即可。
+  /// 缓冲上限的语义与取值依据(mpv 手册,DOCS/man/options.rst),恢复自
+  /// 2026-09-19 的稳定配置(b6be087):
+  /// - `cache=yes` + `cache-secs=60`:网络流启用有界前向缓存,避免 HLS 短时
+  ///   抖动直接把画面抽干;60s 是上限而非起播等待时间。
+  /// - `video-sync=audio`:直播以音频为同步基准,避免视频按显示时钟追帧造成
+  ///   周期性小回退。
+  /// - `demuxer-max-bytes=33554432`(32 MiB) / `demuxer-max-back-bytes=4194304`
+  ///   (4 MiB):前向与回看均有字节上限,不恢复后续被删除的主机深缓冲分档。
   static const List<(String, String)> kLiveTuningProperties = [
     ('force-seekable', 'yes'),
     (
@@ -152,10 +151,14 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     ('demuxer-lavf-analyzeduration', '2'),
     ('network-timeout', '15'),
     ('hwdec-software-fallback', '1'),
+    // 直播以音频为同步基准,恢复 b6be087 的稳定配置。
+    ('video-sync', 'audio'),
     ('volume-max', '100'),
+    ('cache', 'yes'),
     ('demuxer-max-bytes', '33554432'),
     ('demuxer-max-back-bytes', '4194304'),
     ('demuxer-readahead-secs', '2'),
+    ('cache-secs', '60'),
   ];
 
   /// 恢复重解析的节流策略:避免"重试→恢复→重试"高速空转。
