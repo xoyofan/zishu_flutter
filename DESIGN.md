@@ -275,7 +275,7 @@ Flutter 的 `TextStyle.height` 是**倍数**，所以吸附后的 px 要除回�
 |---|---|---|
 | default | `surface` / `surfaceSoft` 底，`border` 描边 | 圆角 `AppRadius.sm`(4) 或 `md`(8) |
 | hover（**底色**） | **按组件语义取，不是统一“抬升”**：导航品牌块压暗到 `surfaceSoft`（web `--bg-soft` `#141414`）、卡片/浮层抬到 `surfaceRaised`（web `--dark-6` `#2A2A2A`）、导航项 web 真源是**文字变琥珀**（`.nav-brand:hover{background:var(--bg-soft)}` / `.nav-item:hover{color:var(--amber)}`）；动效 `AppMotion.fast`(150ms) + `AppMotion.curve` | 颜色/边框过渡，**不位移、不缩放**（2026-09-21 裁决）；<br>2026-09-22 氛围分支 `ui/ambient-polish` 修订：清单 2.1 卡片 hover 允许 translateY(−2px) + `AmbientGlow.cardHover`，覆盖本条「不位移」条款，限定用于 `RoomCard` / `AnchorLiveCard` / `FollowEntryCard` / `PlayRoomCard` |
-| active / pressed | 在 hover 基础上再压一档（如 `playFollowBgActive`） | 仍不位移 |
+| active / pressed | 在 hover 基础上再压一档（如 `playFollowBgActive`） | 仍不位移；<br>2026-09-22 氛围分支修订：清单 2.5 两个主 CTA 例外允许 pressed 缩放 0.97（详见 §7），其余仍不位移不缩放 |
 | selected | `accent.withValues(alpha: 0.2)` 底（见 `app_theme.dart` 的 `navigationBarTheme.indicatorColor`）；平台/分类选中另加 `AppElevation.accentGlow` | — |
 | disabled | `textSecondary` 文字 + 不响应指针；不额外加灰罩 | — |
 | invalid | `error` = `#E55050` 描边 / 文字 | — |

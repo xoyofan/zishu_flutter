@@ -163,6 +163,13 @@ void main() {
 
     expect(find.byType(SkeletonRow), findsNWidgets(5));
     expect(find.byKey(const Key('search-skeleton-0')), findsOneWidget);
+    // 语义锚点(同 room_grid 口径):searching 且 hits 为空 → 骨架出现,
+    // 加载语义由 Semantics(label: '搜索中…') 承载。
+    expect(
+      find.bySemanticsLabel('搜索中…'),
+      findsOneWidget,
+      reason: 'searching 且 hits 为空时应出现带「搜索中…」语义的骨架',
+    );
     expect(find.text('搜索中…'), findsNothing);
     // 顶部「进行中」进度条保留(增量搜索仍要有连续反馈)。
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
@@ -171,6 +178,11 @@ void main() {
     await tester.pump(kSearchDebounce + const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
     expect(find.byType(SkeletonRow), findsNothing);
+    expect(
+      find.bySemanticsLabel('搜索中…'),
+      findsNothing,
+      reason: '结果落地后语义锚点随骨架双向退场',
+    );
   });
 
   /// 落点 3:关注页刷新中指示位 —— 同尺寸骨架块替换原 16×16 加载圈。

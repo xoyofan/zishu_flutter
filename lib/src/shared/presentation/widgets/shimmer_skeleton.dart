@@ -220,10 +220,7 @@ class SkeletonTile extends StatelessWidget {
 /// 行高/padding/底部分隔线与搜索结果行一致,故骨架行与真实结果行等高,
 /// 结果落地时列表不发生跳动。
 class SkeletonRow extends StatelessWidget {
-  const SkeletonRow({super.key, this.showDivider = true});
-
-  /// 是否画行底分隔线(列表中间行为 true)。
-  final bool showDivider;
+  const SkeletonRow({super.key});
 
   /// 头像块边长:对齐 `SearchResultTile._Avatar`(40)。
   static const double _leading = 40;
@@ -240,11 +237,9 @@ class SkeletonRow extends StatelessWidget {
         horizontal: AppSpacing.lg,
         vertical: AppSpacing.md,
       ),
-      decoration: showDivider
-          ? BoxDecoration(
-              border: Border(bottom: BorderSide(color: tokens.border)),
-            )
-          : null,
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: tokens.border)),
+      ),
       child: ShimmerSkeleton(
         child: Row(
           children: [

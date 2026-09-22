@@ -33,6 +33,9 @@ class _UserAvatar extends ConsumerWidget {
         ? (auth.session?.username ?? '已登录')
         : '登录';
 
+    // 1.4 降级:菜单入场时长按 AmbientMotion 规格取,reduce_motion 时归零。
+    final spec = AmbientMotion.of(context);
+
     final row = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       child: Row(
@@ -81,8 +84,8 @@ class _UserAvatar extends ConsumerWidget {
         // 而清单 3.7 的 scale 0.98→1 **在本落点不可得**(要拿就得自绘
         // PopupRoute 重写定位/点外关闭/键盘可达/语义,回归风险 >> 视觉收益,
         // 已裁决放弃)。自绘的 flyout(分类/我的分类)那边 opacity+scale 双全。
-        popUpAnimationStyle: const AnimationStyle(
-          duration: AppMotion.normal,
+        popUpAnimationStyle: AnimationStyle(
+          duration: spec.reduced ? Duration.zero : AppMotion.normal,
           curve: AppMotion.curve,
         ),
         onSelected: (action) {
