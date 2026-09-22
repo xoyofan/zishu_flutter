@@ -44,7 +44,7 @@ class _UserAvatar extends ConsumerWidget {
             child: Icon(
               Icons.person_outline_rounded,
               size: 16,
-              color: Colors.black87,
+              color: AppOnBright.text,
             ),
           ),
           if (showLabels) ...[
@@ -294,7 +294,7 @@ class _LoginDialogState extends ConsumerState<LoginDialog> {
           onPressed: _busy ? null : _submit,
           style: FilledButton.styleFrom(
             backgroundColor: context.tokens.accent,
-            foregroundColor: Colors.white,
+            foregroundColor: AppOnBright.white,
             textStyle: const TextStyle(fontSize: AppFontSize.bodySecondary),
           ),
           child: _busy

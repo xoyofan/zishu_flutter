@@ -664,7 +664,7 @@ class _NewMessagesButton extends StatelessWidget {
             style: const TextStyle(
               fontSize: AppFontSize.bodySecondary,
               height: 1.1,
-              color: Colors.white,
+              color: AppOnBright.white,
               fontWeight: FontWeight.w600,
             ),
           ),

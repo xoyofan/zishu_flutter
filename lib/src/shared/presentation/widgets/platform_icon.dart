@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../platform_brands.dart';
+
 /// SFVideoLive 风格平台图标。
 ///
 /// 优先使用 `assets/ui/platform-icons/` 下的品牌素材；`all` 使用四象限
@@ -42,18 +44,11 @@ class PlatformIcon extends StatelessWidget {
     'yy': 'YY',
   };
 
-  static const Map<String, Color> _colors = {
-    'bilibili': Color(0xFFFB7299),
-    'douyin': Color(0xFFFE2C55),
-    'douyu': Color(0xFFFF6A00),
-    'huya': Color(0xFFFFB800),
-    'iptv': Color(0xFF2B7FFF),
-    'kuaishou': Color(0xFFFF4906),
-    'soop': Color(0xFF00A8FF),
-    'twitch': Color(0xFF9146FF),
-    'xhs': Color(0xFFFF2442),
-    'youtube': Color(0xFFFF0000),
-    'yy': Color(0xFFFFD000),
+  /// 兜底字形的品牌色:取自 [PlatformBrandCatalog](平台色表的**唯一真源**),
+  /// 本文件不再复制一份色值(此前与真源重复定义,含 YY 的 `#FFD000`)。
+  static final Map<String, Color> _colors = {
+    for (final brand in PlatformBrandCatalog.navPlatforms)
+      brand.id: brand.color,
   };
 
   @override
@@ -64,6 +59,10 @@ class PlatformIcon extends StatelessWidget {
         ? 'assets/ui/platform-icons/$id.png'
         : null;
     final color = _colors[id] ?? Theme.of(context).colorScheme.primary;
+    // 字形前景:平台色表的约定档 —— YY 的黄底用深色字,其余品牌色底用白。
+    final glyphColor = id == 'yy'
+        ? PlatformBrandCatalog.chipForegroundDark
+        : PlatformBrandCatalog.chipForegroundLight;
     final fallback = _labels[id] ?? (id.isEmpty ? '?' : id.substring(0, 1));
     final radius = BorderRadius.circular(size * 0.22);
 
@@ -81,7 +80,7 @@ class PlatformIcon extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.clip,
                     style: TextStyle(
-                      color: id == 'yy' ? const Color(0xFF1A1A1A) : Colors.white,
+                      color: glyphColor,
                       fontSize: id == 'yy' ? size * 0.36 : size * 0.42, // ignore: design_token 几何比例(字母字形随图标盒缩放),非排版字号档
                       fontWeight: FontWeight.w800,
                       height: 1,
@@ -100,7 +99,7 @@ class PlatformIcon extends StatelessWidget {
                     child: Text(
                       fallback,
                       style: TextStyle(
-                        color: Colors.white,
+                        color: PlatformBrandCatalog.chipForegroundLight,
                         fontSize: size * 0.42, // ignore: design_token 几何比例(字母字形随图标盒缩放),非排版字号档
                         fontWeight: FontWeight.w800,
                         height: 1,

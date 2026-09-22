@@ -1,6 +1,7 @@
 /// 关注条目通用小部件:封面、平台圆点、分类标签、状态点、条目操作按钮。
 /// 颜色一律取自 context.tokens,唯一例外是轮播强调色 [kFollowReplayAccent]
-/// (web 真源 CSS 变量,tokens 尚无对应槽位,见其注释)。
+/// (web 真源 CSS 变量 `--follow-state-replay-accent`,已收敛到
+/// `AppColors.brandBright`)。
 library;
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -22,10 +23,8 @@ final ColorFilter kGrayscaleFilter = ColorFilter.matrix(<double>[
 
 /// 轮播(replay)状态强调色,对齐 web 真源 `--follow-state-replay-accent`
 /// (#f5dc70,SFVideoLive `apps/web/src/styles/main.css:133`):亮金黄,
-/// 与在播的 `tokens.liveBadge`(绿)区分。tokens 主题槽位未覆盖该语义色,
-/// 以命名常量收敛在此,关注三密度共用,禁止再散落第二份裸值。
-const Color kFollowReplayAccent = Color(0xFFF5DC70);
-
+/// 与在播的 `tokens.liveBadge`(绿)区分。
+///
 /// 「轮播」小标签:紧凑/单行行内元信息、卡片封面角标共用。
 ///
 /// 对齐 web 关注项的 replay 状态样式(follow-item--replay:金黄描边 +
@@ -37,7 +36,7 @@ class FollowReplayBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = kFollowReplayAccent;
+    final accent = context.tokens.brandBright;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
       decoration: BoxDecoration(

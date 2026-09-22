@@ -259,7 +259,7 @@ class _AccountSettingRow extends ConsumerWidget {
         backgroundColor: context.tokens.accent,
         child: Icon(
           authenticated ? Icons.person_rounded : Icons.person_outline_rounded,
-          color: Colors.black87,
+          color: AppOnBright.text,
           size: 18,
         ),
       ),

@@ -144,7 +144,7 @@ class FollowEntryCard extends StatelessWidget {
                               color: live
                                   ? tokens.liveBadge
                                   : (replay
-                                        ? kFollowReplayAccent
+                                        ? context.tokens.brandBright
                                         : tokens.textSecondary),
                             ),
                             const SizedBox(width: 2),
@@ -167,7 +167,7 @@ class FollowEntryCard extends StatelessWidget {
                                   color: live
                                       ? tokens.textPrimary
                                       : (replay
-                                            ? kFollowReplayAccent
+                                            ? context.tokens.brandBright
                                             : tokens.textSecondary),
                                 ),
                               ),
@@ -316,21 +316,21 @@ class FollowEntryCard extends StatelessWidget {
               right: 0,
               bottom: 0,
               child: FollowCoverTag(
-                accent: kFollowReplayAccent,
+                accent: context.tokens.brandBright,
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
                       Icons.repeat_rounded,
                       size: 10,
-                      color: kFollowReplayAccent,
+                      color: context.tokens.brandBright,
                     ),
                     const SizedBox(width: 3),
                     Text(
                       '轮播',
                       style: context.textCaption.copyWith(
                         fontSize: AppFontSize.label,
-                        color: kFollowReplayAccent,
+                        color: context.tokens.brandBright,
                         fontWeight: FontWeight.w600,
                       ),
                     ),

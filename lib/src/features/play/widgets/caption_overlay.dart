@@ -166,7 +166,7 @@ class _SentencePill extends StatelessWidget {
         text,
         textAlign: TextAlign.center,
         style: Theme.of(context).textTheme.bodyMedium
-            ?.copyWith(color: Colors.white, height: 1.35),
+            ?.copyWith(color: AppOnVideo.captionPillText, height: 1.35),
       ),
     );
   }
@@ -192,10 +192,8 @@ class _StatusPill extends StatelessWidget {
           textAlign: TextAlign.center,
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-            color: Colors.white.withValues(alpha: 0.8),
-            height: 1.35,
-          ),
+          style: Theme.of(context).textTheme.bodyMedium
+              ?.copyWith(color: AppOnVideo.captionPillTextMuted, height: 1.35),
         ),
       ),
     );

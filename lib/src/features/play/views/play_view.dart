@@ -1105,7 +1105,7 @@ class _PausedOverlay extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Colors.black.withValues(alpha: 0.35),
+      color: AppOnVideo.pauseScrim,
       alignment: Alignment.center,
       child: Opacity(
         opacity: 0.92,

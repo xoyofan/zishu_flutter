@@ -11,6 +11,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     required this.surfaceSoft,
     required this.surfaceRaised,
     required this.brand,
+    required this.brandBright,
     required this.accent,
     required this.textPrimary,
     required this.textSecondary,
@@ -18,6 +19,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     required this.liveBadge,
     required this.error,
     required this.success,
+    required this.barrier,
     required this.coverScrim,
     required this.coverScrimText,
     required this.promoBadge,
@@ -44,6 +46,13 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
   final Color surfaceRaised;
   final Color brand;
 
+  /// 「轮播/回放」强调色:比 [brand] 更亮一档的金黄(web 独立变量 `#f5dc70`)。
+  ///
+  /// 必须随主题切换:该色会当文字与描边用在卡片元信息上,浅色底上亮金
+  /// 几乎不可读。深色值逐位沿用 web `#F5DC70`(与旧常量 `kFollowReplayAccent`
+  /// 同值,深色渲染不变);浅色取同色系降明度值,待 a11y 轨复核。
+  final Color brandBright;
+
   /// 通用控件强调色(紫霄品牌紫):slider 填充/滑块、开关、复选、选中态、
   /// 进度与 CTA 等 Material 控件 accent 统一取此处;经 `app_theme.dart` 接入
   /// `colorScheme.primary/secondary`。
@@ -58,6 +67,12 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
   final Color liveBadge;
   final Color error;
   final Color success;
+
+  /// 模态遮罩色(弹出面板/对话框后的背景压暗)。
+  ///
+  /// 深浅两套都用黑色,但透明度不同:深色底需要更重的遮罩才能压出层次,
+  /// 浅色底用轻遮罩(重遮罩会把界面压成灰色)。
+  final Color barrier;
 
   /// 封面角标暗底(热度/平台等压在封面图上的底色)——
   /// 对齐 SFVideoLive `CoverBadges.vue` 的 `rgba(0,0,0,.72)`。
@@ -104,6 +119,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     surfaceSoft: Color(0xFF141414),
     surfaceRaised: Color(0xFF2A2A2A),
     brand: Color(0xFFF3D04E),
+    brandBright: Color(0xFFF5DC70),
     // 控件强调紫:Material Deep Purple Accent 200,深底上清晰且与 logo 紫调一致。
     accent: Color(0xFF7C4DFF),
     textPrimary: Color(0xDEFFFFFF),
@@ -112,6 +128,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     liveBadge: Color(0xFF32C874),
     error: Color(0xFFE55050),
     success: Color(0xFF67C23A),
+    barrier: Color(0x73000000),
     coverScrim: Color(0xB8000000),
     coverScrimText: Color(0xFFFFFFFF),
     promoBadge: Color(0xEBB45309),
@@ -140,6 +157,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     surfaceSoft: Color(0xFFECECEC),
     surfaceRaised: Color(0xFFE0E0E0),
     brand: Color(0xFFC9A227),
+    brandBright: Color(0xFF9A7B1A),
     // 控件强调紫:低明度档(Deep Purple 800),浅底上可读。
     accent: Color(0xFF6A1B9A),
     textPrimary: Color(0xE6121212),
@@ -148,6 +166,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     liveBadge: Color(0xFF32C874),
     error: Color(0xFFE55050),
     success: Color(0xFF4CA83D),
+    barrier: Color(0x4D000000),
     coverScrim: Color(0xB8000000),
     coverScrimText: Color(0xFFFFFFFF),
     promoBadge: Color(0xEBB45309),
@@ -178,6 +197,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     Color? surfaceSoft,
     Color? surfaceRaised,
     Color? brand,
+    Color? brandBright,
     Color? accent,
     Color? textPrimary,
     Color? textSecondary,
@@ -185,6 +205,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     Color? liveBadge,
     Color? error,
     Color? success,
+    Color? barrier,
     Color? coverScrim,
     Color? coverScrimText,
     Color? promoBadge,
@@ -210,6 +231,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
       surfaceSoft: surfaceSoft ?? this.surfaceSoft,
       surfaceRaised: surfaceRaised ?? this.surfaceRaised,
       brand: brand ?? this.brand,
+      brandBright: brandBright ?? this.brandBright,
       accent: accent ?? this.accent,
       textPrimary: textPrimary ?? this.textPrimary,
       textSecondary: textSecondary ?? this.textSecondary,
@@ -217,6 +239,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
       liveBadge: liveBadge ?? this.liveBadge,
       error: error ?? this.error,
       success: success ?? this.success,
+      barrier: barrier ?? this.barrier,
       coverScrim: coverScrim ?? this.coverScrim,
       coverScrimText: coverScrimText ?? this.coverScrimText,
       promoBadge: promoBadge ?? this.promoBadge,
@@ -248,6 +271,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
       surfaceSoft: mix(surfaceSoft, other.surfaceSoft),
       surfaceRaised: mix(surfaceRaised, other.surfaceRaised),
       brand: mix(brand, other.brand),
+      brandBright: mix(brandBright, other.brandBright),
       accent: mix(accent, other.accent),
       textPrimary: mix(textPrimary, other.textPrimary),
       textSecondary: mix(textSecondary, other.textSecondary),
@@ -255,6 +279,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
       liveBadge: mix(liveBadge, other.liveBadge),
       error: mix(error, other.error),
       success: mix(success, other.success),
+      barrier: mix(barrier, other.barrier),
       coverScrim: mix(coverScrim, other.coverScrim),
       coverScrimText: mix(coverScrimText, other.coverScrimText),
       promoBadge: mix(promoBadge, other.promoBadge),

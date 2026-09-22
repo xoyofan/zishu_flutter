@@ -227,7 +227,7 @@ class _Logo extends StatelessWidget {
                   child: const Text(
                     '薯',
                     style: TextStyle(
-                      color: Colors.black,
+                      color: AppOnBright.glyph,
                       fontSize: AppFontSize.title,
                       fontWeight: FontWeight.w900,
                     ),

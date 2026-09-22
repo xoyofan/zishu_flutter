@@ -38,7 +38,7 @@ class PlatformBadge extends StatelessWidget {
           fontWeight: FontWeight.w600,
           fontFamily: AppTypography.family,
           // 彩色底上统一黑 87% 保证可读性
-          color: Colors.black87,
+          color: AppOnBright.text,
         ),
       ),
     );

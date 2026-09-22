@@ -7,7 +7,7 @@ class PlatformBrand {
     required this.id,
     required this.name,
     required this.color,
-    this.chipForeground = const Color(0xFFFFFFFF),
+    this.chipForeground = PlatformBrandCatalog.chipForegroundLight,
     this.browseSupported = true,
   });
 
@@ -20,6 +20,9 @@ class PlatformBrand {
   /// 不能按背景亮度自动算:参考实现的 chip 前景是**按平台硬编码**的
   /// (`--platform-{id}-chip-fg`,如虎牙黄底用 `#1a1a1a`,斗鱼橙底用 `#fff`),
   /// 自动估算会在橙色上给出深色字,与参考不一致。
+  ///
+  /// 取值见 [PlatformBrandCatalog.chipForegroundLight] /
+  /// [PlatformBrandCatalog.chipForegroundDark]。
   final Color chipForeground;
 
   /// 该平台是否支持栏目浏览(不支持时展示房间号/URL 直达输入)。
@@ -31,6 +34,18 @@ class PlatformBrand {
 /// `navigationPlatforms` / `searchPlatforms` 在真实解析构建中从 live_parser
 /// 注册表能力动态裁剪；fixture 构建保留 `navPlatforms` 全量目录。
 abstract final class PlatformBrandCatalog {
+  /// 亮底平台色块/图标上的**白色**前景(`--platform-{id}-chip-fg: #fff`,
+  /// 深底平台的通用默认)。
+  ///
+  /// 平台数据,不是主题量:压在品牌色上的前景由平台自身决定,深浅主题共用。
+  static const Color chipForegroundLight = Color(0xFFFFFFFF);
+
+  /// 亮底平台色块/图标上的**深色**前景(`--platform-huya-chip-fg: #1a1a1a`,
+  /// 黄/橙等亮底平台用)。
+  ///
+  /// YY 的 `#FFD000` 底同样取这一档(见 `PlatformIcon` 的兜底字形)。
+  static const Color chipForegroundDark = Color(0xFF1A1A1A);
+
   static const PlatformBrand all = PlatformBrand(
     id: 'all',
     name: '全平台',
@@ -48,7 +63,7 @@ abstract final class PlatformBrandCatalog {
     name: '虎牙',
     color: Color(0xFFFFB800),
     // 对齐 `--platform-huya-chip-fg: #1a1a1a`(黄底用深色字)。
-    chipForeground: Color(0xFF1A1A1A),
+    chipForeground: chipForegroundDark,
   );
 
   static const PlatformBrand bilibili = PlatformBrand(

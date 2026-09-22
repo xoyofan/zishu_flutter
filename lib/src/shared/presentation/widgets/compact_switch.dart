@@ -22,7 +22,7 @@ class CompactSwitch extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = context.tokens;
     final track = tokens.accent;
-    const offBorder = Color(0xff3a3a3a);
+    final offBorder = tokens.border;
     return Semantics(
       toggled: value,
       child: GestureDetector(
@@ -45,7 +45,7 @@ class CompactSwitch extends StatelessWidget {
               height: 12,
               margin: const EdgeInsets.all(2),
               decoration: BoxDecoration(
-                color: value ? Colors.white : tokens.textSecondary,
+                color: value ? AppOnBright.white : tokens.textSecondary,
                 shape: BoxShape.circle,
               ),
             ),

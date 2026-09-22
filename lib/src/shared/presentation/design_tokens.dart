@@ -23,6 +23,42 @@ abstract final class AppOnVideo {
   /// 用于压在视频画面上的字幕文字底(字幕句胶囊 / 状态胶囊)。
   /// 与 [scrim]/[bar] 同属"永远暗底"语义,不随主题翻转。
   static const Color captionPillBg = Color(0xCC101010);
+
+  /// on-video 字幕胶囊主文字(纯白),压在 [captionPillBg] 上。
+  ///
+  /// 与 [text] 刻意不同值:字幕是叠在**暗底**上的纯白正文,取 100% 不透明度
+  /// (web 真源即 `color:#fff`),而 [text] 是 87% 的控件文字。
+  static const Color captionPillText = Color(0xFFFFFFFF);
+
+  /// on-video 字幕胶囊次级文字(白 80%):状态/提示胶囊。
+  static const Color captionPillTextMuted = Color(0xCCFFFFFF);
+
+  /// 暂停态整屏压暗遮罩(黑 35%),点击画面即恢复。
+  ///
+  /// 与 [scrim] 同属压视频画面的暗底语义,不随主题翻转。
+  /// 刻意保留 `static final` + `Colors.black.withValues(alpha: 0.35)`(理由同
+  /// `AppElevation.sheet`):换成 `0x59` 字面量在像素上可能有 1/255 的差异。
+  static final Color pauseScrim = Colors.black.withValues(alpha: 0.35);
+}
+
+/// 亮饱和底(强调色 accent / 品牌金 brand / 平台品牌色)上的前景色。
+///
+/// 与 [AppOnVideo] 对称:这些底色由**品牌 / 平台**决定,而不是主题决定,
+/// 深浅两套主题下取同一套前景,故前景是主题无关常量(深底上的前景才是随主题
+/// 切换的 `ZishuTokens.textPrimary` 那类语义)。
+///
+/// **已知对比度问题(既有取值,本轮只做同值换 token,未改数值)**:浅色主题的
+/// accent 是深紫 `#6A1B9A`,本类的 [text] / [glyph](黑系)压在其上对比度偏低;
+/// 浅色主题真正需要的是反白前景。是否按主题分套待裁决。
+abstract final class AppOnBright {
+  /// 实心字形(纯黑):logo 兜底字「薯」等需要最高对比度的字形。
+  static const Color glyph = Color(0xFF000000);
+
+  /// 文字与线条图标(黑 87%,对齐 Material `black87`)。
+  static const Color text = Color(0xDD000000);
+
+  /// 反白前景(纯白):强调色底上的 CTA 文字 / 开关滑块 / `colorScheme.onPrimary`。
+  static const Color white = Color(0xFFFFFFFF);
 }
 
 abstract final class AppColors {
@@ -40,6 +76,17 @@ abstract final class AppColors {
 
   // 主品牌金黄已并入主题 token:控件强调见 ZishuTokens.accent(品牌紫),
   // 收藏星等 web 对齐功能色见 ZishuTokens.brand。
+
+  /// 轮播(replay)亮金黄 `#F5DC70`,对齐 SFVideoLive web
+  /// `apps/web/src/styles/main.css:133` 的 `--follow-state-replay-accent`。
+  ///
+  /// 与 `ZishuTokens.brand`(`#F3D04E`,收藏星等 web 功能性金色)同色系但
+  /// **更亮一档**,是 web 真源里的独立变量,故单列而不并入 `brand`。
+  /// 此前裸在 `features/follow/widgets/follow_common.dart` 的
+  /// `kFollowReplayAccent`(该常量已删除)。UI 侧一律用
+  /// `context.tokens.brandBright`(随主题切换);在 `lib/src` 里直接引用本常量
+  /// 会被 `test/ui/light_theme_test.dart` 的静态守则拦下。
+  static const Color brandBright = Color(0xFFF5DC70);
 
   static const Color textPrimary = Color(0xDEFFFFFF); // white 87%
   static const Color textSecondary = Color(0x8CFFFFFF); // white 55%
@@ -76,6 +123,15 @@ abstract final class AppColors {
   static const Color error = Color(0xFFE55050);
 
   static const Color success = Color(0xFF67C23A);
+
+  /// 模态遮罩(对话框 / 抽屉的 `barrier`,黑 45%)。
+  ///
+  /// 深色主题的取值(浅色见 `ZishuTokens.light.barrier`)。
+  ///
+  /// 用 const ARGB `0x73`(115/255 ≈ 0.451)而不是 `withValues(alpha: 0.45)`:
+  /// `ZishuTokens.dark` 是 const 构造,遮罩值必须是编译期常量。两者相差
+  /// 1/255,且遮罩不会出现在任何 golden 里。
+  static const Color modalBarrier = Color(0x73000000);
 }
 
 abstract final class AppSpacing {

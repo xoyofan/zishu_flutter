@@ -35,7 +35,7 @@ Future<void> openSearchDialog(BuildContext context) async {
     context: context,
     // 锚点:搜索对话框根(测试与人工定位用)。
     barrierDismissible: true,
-    barrierColor: Colors.black.withValues(alpha: 0.45),
+    barrierColor: context.tokens.barrier,
     builder: (dialogContext) => _SearchDialogFrame(
       onClose: () => Navigator.of(dialogContext).pop(),
       onNavigate: (target) => Navigator.of(dialogContext).pop(target),

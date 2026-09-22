@@ -30,7 +30,7 @@ abstract final class ZishuTheme {
       // (tokens.accent);brand 金仅保留给收藏星等对齐 web 的功能性颜色。
       colorScheme: base.colorScheme.copyWith(
         primary: tokens.accent,
-        onPrimary: Colors.white,
+        onPrimary: AppOnBright.white,
         secondary: tokens.accent,
         surface: tokens.surface,
         onSurface: tokens.textPrimary,
