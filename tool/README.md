@@ -109,3 +109,17 @@ dart run tool/check_design_tokens.dart --update-baseline
 | `e7_run.mjs` | douyu E2E 无头验证(legacy web 链路) | ✅ |
 | `smoke_play.mjs` | 播放冒烟(legacy web 链路) | ✅ |
 | `serve_web.mjs` | 静态服务器(冒烟用,`node tool/serve_web.mjs [port] [dir]`) | ✅ |
+
+## 注意:check.ps1 刻意不设 pub 镜像
+
+`check.ps1` **不要**加 `PUB_HOSTED_URL` / `FLUTTER_STORAGE_BASE_URL`。
+
+pub 会把**实际使用的 hosted URL** 写进 `pubspec.lock`。若门禁里固定用 CN 镜像,
+每跑一次门禁就会把 3 个 lock(根 + `packages/live_parser` + `packages/speech2zh`)
+的 `url` 从 `https://pub.dev` 改写成镜像 URL,并顺带升传递依赖版本
+(实测一次 264 行改动,极易被误提交)。
+
+而 `.github/workflows/release-windows.yml` 在 GitHub runner(外网)上不设镜像 ——
+两边必须一致,所以 lock 必须是 `pub.dev` 版本。
+
+需要镜像/代理时,请在**调用方的 shell 或全局环境变量**里设置,脚本不再覆盖。

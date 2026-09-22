@@ -19,9 +19,12 @@ if ($env:ZISHU_DART) { $Dart = $env:ZISHU_DART }
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $repoRoot
 
-# Pub mirror (CN), same values used everywhere in this project.
-$env:PUB_HOSTED_URL = 'https://pub.flutter-io.cn'
-$env:FLUTTER_STORAGE_BASE_URL = 'https://storage.flutter-io.cn'
+# 刻意**不**在这里设置 PUB_HOSTED_URL / FLUTTER_STORAGE_BASE_URL:
+# pub 会把实际使用的 hosted URL 写进 pubspec.lock。若门禁里固定用 CN 镜像,
+# 每次跑门禁都会把 3 个 lock(根 + packages/live_parser + packages/speech2zh)
+# 的 url 从 pub.dev 改写成镜像 URL,并顺带升传递依赖版本(实测 264 行噪音);
+# 而 .github/workflows/release-windows.yml 在 GitHub runner(外网)上不设镜像,
+# 两边必须一致。需要镜像/代理时请在调用方的 shell 或全局环境变量里设置。
 
 if (-not (Test-Path -LiteralPath $Flutter)) {
     Write-Host "[check] flutter.bat not found: $Flutter" -ForegroundColor Red
