@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart' show DanmakuMessage, RoomPayload;
 
@@ -1170,14 +1171,11 @@ class _PausedOverlay extends StatelessWidget {
     return Container(
       color: AppOnVideo.pauseScrim,
       alignment: Alignment.center,
-      child: Opacity(
-        opacity: 0.92,
-        child: Image.asset(
-          'assets/ui/logo/logo-128.png',
-          width: 96,
-          height: 96,
-          filterQuality: FilterQuality.medium,
-        ),
+      child: SvgPicture.asset(
+        'assets/ui/icons/play-purple.svg',
+        width: 96,
+        height: 96,
+        semanticsLabel: '播放',
       ),
     );
   }

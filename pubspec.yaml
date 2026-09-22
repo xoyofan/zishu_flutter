@@ -17,6 +17,7 @@ dependencies:
   flutter_riverpod: ^3.0.0
   go_router: ^16.0.0
   cached_network_image: ^3.4.1
+  flutter_svg: ^2.3.0
   shared_preferences: ^2.3.2
   shared_preferences_platform_interface: ^2.4.1
   dio: ^5.7.0
@@ -41,6 +42,7 @@ flutter:
   assets:
     - assets/config/
     - assets/ui/logo/
+    - assets/ui/icons/
     - assets/ui/platform-icons/
     # 聊天徽章本地资产(SFVideoLive 官方样式;目录声明不递归,子目录逐个列出):
     - assets/badges/
