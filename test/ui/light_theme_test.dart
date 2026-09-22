@@ -33,8 +33,11 @@ class _FakeLivePlayer implements LivePlayer {
       const SizedBox.expand();
 
   @override
-  Future<void> open(StreamLine line,
-          [List<StreamLine> fallbacks = const [], bool resetRetries = true]) async {}
+  Future<void> open(
+    StreamLine line, [
+    List<StreamLine> fallbacks = const [],
+    bool resetRetries = true,
+  ]) async {}
 
   @override
   Future<void> play() async {}
@@ -87,14 +90,16 @@ Future<({ProviderContainer container, BuildContext context})> _pumpApp(
     await tester.pump(const Duration(milliseconds: 50));
   }
   final element = tester.element(find.byType(Scaffold).first);
-  return (
-    container: ProviderScope.containerOf(element),
-    context: element,
-  );
+  return (container: ProviderScope.containerOf(element), context: element);
 }
 
 /// 走完 AnimatedTheme(200ms)后方能读到新主题的 ThemeData。
 Future<void> _settleTheme(WidgetTester tester) async {
+  await tester.pump();
+  // 第二帧:`AnimatedContainer` 等隐式动画的 ticker 要在**首个 tick** 建立
+  // 起始时间,elapsed 从 0 开始;少了这一帧,后面那段 350ms 会被算进“首帧”,
+  // 动画值会停在初始颜色(实测:主题切浅色后 chip 内层 Container 仍是深色
+  // `#4F2C2C`,而声明值已是 `#F8E5E5`)。
   await tester.pump();
   await tester.pump(const Duration(milliseconds: 350));
 }
@@ -156,7 +161,10 @@ void main() {
   testWidgets('播放页关注/超关 chip 取主题 token(浅色下不再用深红/深紫)', (tester) async {
     final app = await _pumpApp(tester);
     // 播放页深色与浅色下的 chip 底色必须分别等于对应主题 token。
-    expect(ZishuTokens.light.playFollowBg, isNot(ZishuTokens.dark.playFollowBg));
+    expect(
+      ZishuTokens.light.playFollowBg,
+      isNot(ZishuTokens.dark.playFollowBg),
+    );
     expect(ZishuTokens.light.playSuperBg, isNot(ZishuTokens.dark.playSuperBg));
 
     app.container.read(routerProvider).go('/douyu/play/63136');
@@ -169,27 +177,41 @@ void main() {
     ///
     /// 控件层级会变(按钮是 `Material(color:)` 而不是 Container),故断言
     /// 「其中出现过期望色」,不绑定某个具体节点。
-    Set<Color?> colorsUnder(Key key) => {
+    ///
+    /// 注意:带动效的 chip 会把底色放在 `AnimatedContainer` 里,它内部构建的
+    /// `Container` 承载**动画当前值**。断言前必须让过渡跑完(见 [_settleTheme]
+    /// 为何要那额外的一帧),否则读到的是初始色。
+    Set<Color> colorsUnder(Key key) => <Color?>{
+      // 只取**声明值**(Material.color / AnimatedContainer.decoration),
+      // 不扫子树里被 `AnimatedContainer` 内部构建的那个 `Container` ——
+      // 它承载的是**动画当前值**,而该值的推进依赖 TickerMode:子树处于
+      // offstage / 非活动路由时 ticker 被静音,它会停在初始帧(实测:主题切
+      // 浅色后声明值已是 #F8E5E5,内层 Container 仍是深色 #4F2C2C)。
+      // 把「动画没跑完」误判成「写死了深色」会把测试变成噪声。
       for (final material in tester.widgetList<Material>(
         find.descendant(of: find.byKey(key), matching: find.byType(Material)),
       ))
         material.color,
-      for (final container in tester.widgetList<Container>(
-        find.descendant(of: find.byKey(key), matching: find.byType(Container)),
+      for (final animated in tester.widgetList<AnimatedContainer>(
+        find.descendant(
+          of: find.byKey(key),
+          matching: find.byType(AnimatedContainer),
+        ),
       ))
-        if (container.decoration is BoxDecoration)
-          (container.decoration! as BoxDecoration).color,
+        if (animated.decoration is BoxDecoration)
+          (animated.decoration! as BoxDecoration).color,
       if (tester.widget(find.byKey(key)) case final Container container)
         if (container.decoration is BoxDecoration)
           (container.decoration! as BoxDecoration).color,
-    };
+      if (tester.widget(find.byKey(key)) case final AnimatedContainer animated)
+        if (animated.decoration is BoxDecoration)
+          (animated.decoration! as BoxDecoration).color,
+      // 去掉 null:它表示「没有显式底色」(如 `MaterialType.transparency`),
+      // 不是「残留的深色」;它与深浅两集合都存在,会让 intersection 恒非空。
+    }.whereType<Color>().toSet();
 
     final followKey = const Key('play-side-follow-btn');
-    expect(
-      find.byKey(followKey),
-      findsOneWidget,
-      reason: '播放页侧栏应有「关注」按钮锚点',
-    );
+    expect(find.byKey(followKey), findsOneWidget, reason: '播放页侧栏应有「关注」按钮锚点');
     // 房间可能已是「已关注」态,故接受 常态/已关注 两种 token。
     final darkColors = colorsUnder(followKey);
     expect(
@@ -214,7 +236,8 @@ void main() {
             c == ZishuTokens.light.playFollowBgActive,
       ),
       isTrue,
-      reason: '浅色下关注按钮底应换成浅色 token(旧实现写死 AppColors.playFollowBg,切了也不变),实际:$lightColors',
+      reason:
+          '浅色下关注按钮底应换成浅色 token(旧实现写死 AppColors.playFollowBg,切了也不变),实际:$lightColors',
     );
     expect(
       lightColors.intersection(darkColors),

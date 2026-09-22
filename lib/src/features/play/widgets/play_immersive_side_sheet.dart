@@ -61,10 +61,14 @@ class PlayImmersiveSideSheet extends StatelessWidget {
             fit: StackFit.expand,
             children: [
               // 透明遮罩:抽屉开着时点击舞台空白区 = 关闭(web onBackdropClick)。
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: onClose,
-                child: const SizedBox.expand(),
+              MouseRegion(
+                cursor: SystemMouseCursors.click,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  // 遮罩本身可点(点空白关闭抽屉):补指针光标,与舞台一致。
+                  onTap: onClose,
+                  child: const SizedBox.expand(),
+                ),
               ),
               Positioned(
                 top: 0,
@@ -104,6 +108,13 @@ class PlayImmersiveSideSheet extends StatelessWidget {
                           ),
                           child: InkWell(
                             onTap: onClose,
+                            // hover / 按下 / 键盘焦点补全(只改覆盖色,不动尺寸)。
+                            hoverColor: tokens.surfaceRaised,
+                            splashColor: tokens.accent.withValues(alpha: 0.12),
+                            highlightColor: tokens.accent.withValues(
+                              alpha: 0.16,
+                            ),
+                            focusColor: tokens.accent.withValues(alpha: 0.24),
                             child: Icon(
                               Icons.chevron_right_rounded,
                               size: 13,

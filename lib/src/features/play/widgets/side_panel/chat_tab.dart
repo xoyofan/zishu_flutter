@@ -552,12 +552,33 @@ class _ChatTabState extends ConsumerState<_ChatTab>
                             .read(danmakuSessionProvider(params).notifier)
                             .reconnect()
                       : null,
-                  style: TextButton.styleFrom(
-                    minimumSize: const Size(0, 24),
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    foregroundColor: tokens.textSecondary,
-                  ),
+                  style:
+                      TextButton.styleFrom(
+                        minimumSize: const Size(0, 24),
+                        padding: const EdgeInsets.symmetric(horizontal: 4),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        foregroundColor: tokens.textSecondary,
+                        // 六态补全:hover 抬到 surfaceRaised、按下/键盘焦点走
+                        // accent 低 alpha(以前只有 M3 默认值,浅色主题下几乎看不见)。
+                        animationDuration: AppMotion.fast,
+                      ).copyWith(
+                        // 逐态 overlayColor 只能走 copyWith:`styleFrom` 的
+                        // `overlayColor` 参数类型是 `Color?`(单个颜色),不收 WidgetStateProperty。
+                        overlayColor: WidgetStateProperty.resolveWith<Color?>((
+                          Set<WidgetState> states,
+                        ) {
+                          if (states.contains(WidgetState.focused)) {
+                            return tokens.accent.withValues(alpha: 0.24);
+                          }
+                          if (states.contains(WidgetState.pressed)) {
+                            return tokens.accent.withValues(alpha: 0.16);
+                          }
+                          if (states.contains(WidgetState.hovered)) {
+                            return tokens.surfaceRaised;
+                          }
+                          return null;
+                        }),
+                      ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -642,6 +663,10 @@ class _ChatTabState extends ConsumerState<_ChatTab>
 
 /// 「N 条新消息」跳底按钮:用户离开底部且有新消息时浮在列表底部居中
 /// (对齐 web .chat-new-bar;字号 0.8rem→12)。
+///
+/// 交互态:浮层是 accent 实底,前景是 [AppOnBright.white],所以 hover /
+/// 按下 / 焦点三态都用**白色低 alpha 覆盖色**“提亮”(不引入新色相,也不改
+/// 尺寸;按下不位移/不缩放)。
 class _NewMessagesButton extends StatelessWidget {
   const _NewMessagesButton({required this.count, required this.onTap});
 
@@ -657,6 +682,11 @@ class _NewMessagesButton extends StatelessWidget {
         key: const Key('play-side-chat-jump-bottom'),
         borderRadius: AppRadius.allMd,
         onTap: onTap,
+        hoverColor: AppOnBright.white.withValues(alpha: 0.12),
+        splashColor: AppOnBright.white.withValues(alpha: 0.12),
+        highlightColor: AppOnBright.white.withValues(alpha: 0.18),
+        // 键盘焦点:accent 实底上再用白 24% 提亮一档(与 hover/pressed 同色系)。
+        focusColor: AppOnBright.white.withValues(alpha: 0.24),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
           child: Text(

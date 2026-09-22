@@ -27,7 +27,6 @@
     "lib/src/features/play/views/play_view.dart|raw_color|Colors.transparent": 2,
     "lib/src/features/play/widgets/play_immersive_side_sheet.dart|raw_color|Colors.transparent": 1,
     "lib/src/features/play/widgets/play_meta_bar.dart|raw_radius|Radius.circular(2": 1,
-    "lib/src/features/play/widgets/play_side_panel.dart|raw_color|Colors.transparent": 1,
     "lib/src/features/play/widgets/player_controls.dart|raw_color|Color(0x1FFFFFFF)": 1,
     "lib/src/features/play/widgets/player_controls.dart|raw_color|Color(0xF2121212)": 4,
     "lib/src/features/play/widgets/player_controls.dart|raw_radius|BorderRadius.circular(3": 2,

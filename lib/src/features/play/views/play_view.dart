@@ -722,6 +722,8 @@ class _RoomHeader extends StatelessWidget {
             onPressed: onBack,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            // 键盘焦点可见(Material 系 focusColor 覆盖色,不动盒模型)。
+            focusColor: tokens.accent.withValues(alpha: 0.24),
             icon: const Icon(Icons.arrow_back_rounded, size: 18),
           ),
           const SizedBox(width: AppSpacing.sm),
@@ -782,6 +784,14 @@ class _RoomHeader extends StatelessWidget {
                                   name: categoryLabel,
                                 ),
                               ),
+                          // 星标压在平台色徽章上:hover 用半透明白灰(不遮徽章本色),
+                          // 按下/焦点走 accent 低 alpha。
+                          hoverColor: tokens.surfaceRaised.withValues(
+                            alpha: 0.24,
+                          ),
+                          splashColor: tokens.accent.withValues(alpha: 0.12),
+                          highlightColor: tokens.accent.withValues(alpha: 0.16),
+                          focusColor: tokens.accent.withValues(alpha: 0.24),
                           child: Icon(
                             favorited
                                 ? Icons.star_rounded
@@ -807,7 +817,9 @@ class _RoomHeader extends StatelessWidget {
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: context.textTitle.copyWith(fontSize: AppFontSize.subtitle),
+                style: context.textTitle.copyWith(
+                  fontSize: AppFontSize.subtitle,
+                ),
               ),
             ),
           ),
@@ -818,6 +830,7 @@ class _RoomHeader extends StatelessWidget {
             onPressed: onToggleSidePanel,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            focusColor: tokens.accent.withValues(alpha: 0.24),
             icon: Icon(
               sidePanelVisible
                   ? Icons.keyboard_double_arrow_right_rounded
@@ -1071,26 +1084,31 @@ class _VideoStageState extends ConsumerState<_VideoStage> {
       key: const Key('play-stage-focus'),
       focusNode: _focusNode,
       autofocus: true,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        // onTapUp 而非 onTap:沉浸态分流需要点击在舞台内的相对位置
-        // (右缘 2/3 热区判定);常规态回调为空,退化为切播放/暂停。
-        onTapUp: (details) {
-          // 焦点交给舞台节点(自持 FocusNode),再处理点击语义。
-          _focusNode.requestFocus();
-          final handler = widget.onFrameTapUp;
-          if (handler != null) {
-            handler(details.localPosition);
-            return;
-          }
-          _onStageTap();
-        },
-        child: Container(
-          alignment: Alignment.center,
-          padding: payload == null || payload.source == 'fixture'
-              ? const EdgeInsets.all(AppSpacing.xl)
-              : EdgeInsets.zero,
-          child: content,
+      child: MouseRegion(
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          // 画面本身可点(切播放/暂停,沉浸态右缘热区开抽屉):补上指针光标
+          // (GestureDetector 不会自带 cursor,这是 G3 里“可点却没反应”的根因)。
+          // onTapUp 而非 onTap:沉浸态分流需要点击在舞台内的相对位置
+          // (右缘 2/3 热区判定);常规态回调为空,退化为切播放/暂停。
+          onTapUp: (details) {
+            // 焦点交给舞台节点(自持 FocusNode),再处理点击语义。
+            _focusNode.requestFocus();
+            final handler = widget.onFrameTapUp;
+            if (handler != null) {
+              handler(details.localPosition);
+              return;
+            }
+            _onStageTap();
+          },
+          child: Container(
+            alignment: Alignment.center,
+            padding: payload == null || payload.source == 'fixture'
+                ? const EdgeInsets.all(AppSpacing.xl)
+                : EdgeInsets.zero,
+            child: content,
+          ),
         ),
       ),
     );

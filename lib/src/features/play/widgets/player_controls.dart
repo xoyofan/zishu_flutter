@@ -37,6 +37,41 @@ import '../application/room_volume_provider.dart';
 import '../application/sleep_timer_provider.dart';
 import '../application/speech_caption_provider.dart' show supportsSpeechCaption;
 
+/// on-video 控件的 Material 墨色(控制条压在视频画面上)。
+///
+/// 控制条是**恒定暗底**(`AppOnVideo` 语义),所以 hover / pressed / focus 的
+/// 覆盖色也必须恒定亮色:用主题默认的 `colorScheme.onSurface` 会在浅色主题下
+/// 变成**深色**覆盖层 —— 压在暗 scrim 上等于没有反馈,键盘焦点更是完全看不见
+/// (Windows 键盘可达性验收项)。
+///
+/// `PopupMenuButton` 的 `child:` 形态内部自带 `InkWell` 且不暴露颜色参数,
+/// 它的 hover/focus 只能从 Theme 层统一给,故这里同时提供 Theme 版本。
+ThemeData _onVideoInkTheme(BuildContext context) => Theme.of(context).copyWith(
+  hoverColor: AppOnVideo.text.withValues(alpha: 0.12),
+  highlightColor: AppOnVideo.text.withValues(alpha: 0.18),
+  focusColor: AppOnVideo.text.withValues(alpha: 0.24),
+  splashColor: AppOnVideo.text.withValues(alpha: 0.12),
+);
+
+/// 控制条 `IconButton` 的状态覆盖色(`IconButton` 走 `colorScheme` 默认值,
+/// 不受 `Theme.hoverColor` 影响,必须逐个显式给)。
+/// `animationDuration` 用 [AppMotion.fast],与全局 hover 口径一致。
+ButtonStyle _onVideoButtonStyle() => ButtonStyle(
+  animationDuration: AppMotion.fast,
+  overlayColor: WidgetStateProperty.resolveWith<Color?>((states) {
+    if (states.contains(WidgetState.focused)) {
+      return AppOnVideo.text.withValues(alpha: 0.24);
+    }
+    if (states.contains(WidgetState.pressed)) {
+      return AppOnVideo.text.withValues(alpha: 0.18);
+    }
+    if (states.contains(WidgetState.hovered)) {
+      return AppOnVideo.text.withValues(alpha: 0.12);
+    }
+    return null;
+  }),
+);
+
 class PlayerControlsBar extends ConsumerStatefulWidget {
   const PlayerControlsBar({
     super.key,
@@ -102,21 +137,26 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
     // 不可在本组件内套 Scaffold:控制条位于无界高度的 Stack 内,Scaffold 的
     // CustomMultiChildLayout 会拿到无限高约束 → performLayout 断言失败,
     // 进而整页渲染不出来(实测连坐 50 个用例)。
-    return Material(
-      type: MaterialType.transparency,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
-        // 收缩判据用控制条「自身可用宽」而非视口宽:宽视口也可能因常驻
-        // 侧栏挤压出 ~390dp 的窄控制条(实测 800 视口 → 392dp 溢出)。
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final snapshot =
-                ref.watch(playerSnapshotProvider).value ??
-                const PlayerSnapshot();
-            final player = ref.read(playerProvider);
-            final compact = constraints.maxWidth < 560;
-            return buildRow(context, snapshot, player, compact, play);
-          },
+    // 控制条整体切到 on-video 墨色:hover/pressed/focus 用恒定亮色覆盖层
+    // (主题默认的 onSurface 在浅色主题下是深色,压在暗 scrim 上等于无反馈)。
+    return Theme(
+      data: _onVideoInkTheme(context),
+      child: Material(
+        type: MaterialType.transparency,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+          // 收缩判据用控制条「自身可用宽」而非视口宽:宽视口也可能因常驻
+          // 侧栏挤压出 ~390dp 的窄控制条(实测 800 视口 → 392dp 溢出)。
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final snapshot =
+                  ref.watch(playerSnapshotProvider).value ??
+                  const PlayerSnapshot();
+              final player = ref.read(playerProvider);
+              final compact = constraints.maxWidth < 560;
+              return buildRow(context, snapshot, player, compact, play);
+            },
+          ),
         ),
       ),
     );
@@ -152,6 +192,7 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
                 IconButton(
                   // 测试锚点:播放/暂停按钮。
                   key: const Key('play-toggle-play'),
+                  style: _onVideoButtonStyle(),
                   tooltip: snapshot.playing ? '暂停 (Space)' : '播放 (Space)',
                   onPressed: () =>
                       (snapshot.playing ? player.pause() : player.play()),
@@ -166,6 +207,7 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
                 IconButton(
                   // 测试锚点:刷新视频(重开当前线路,不重解析 payload)。
                   key: const Key('play-refresh-stream'),
+                  style: _onVideoButtonStyle(),
                   tooltip: '刷新视频',
                   onPressed: () {
                     // 复用 playControllerProvider 的 retry 通路:payload 已就位
@@ -198,6 +240,7 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
                     // 测试锚点:舞台弹幕叠加层显隐开关(SFVideo「弹」方块 +
                     // 右上 √ 角标;激活色 amber,复刻 ctrl-danmaku-mark)。
                     key: const Key('play-toggle-danmaku'),
+                    style: _onVideoButtonStyle(),
                     tooltip: widget.showDanmaku ? '隐藏弹幕' : '显示弹幕',
                     onPressed: widget.onDanmakuToggle,
                     padding: EdgeInsets.zero,
@@ -225,6 +268,7 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
                     // 测试锚点:语音字幕开关(SFVideo「弹」方块同款形态,
                     // 字为「译」+ √ 角标;全局设置持久化,默认关)。
                     key: const Key('play-toggle-caption'),
+                    style: _onVideoButtonStyle(),
                     tooltip: widget.speechCaptionEnabled ? '关闭语音字幕' : '开启语音字幕',
                     onPressed: widget.onCaptionToggle,
                     padding: EdgeInsets.zero,
@@ -246,6 +290,7 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
                 IconButton(
                   // 测试锚点:静音切换按钮。
                   key: const Key('play-toggle-mute'),
+                  style: _onVideoButtonStyle(),
                   tooltip: snapshot.muted ? '取消静音 (M)' : '静音 (M)',
                   onPressed: () => player.setMuted(!snapshot.muted),
                   icon: Icon(
@@ -333,6 +378,7 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
                   IconButton(
                     // 测试锚点:画中画切换。
                     key: const Key('play-toggle-pip'),
+                    style: _onVideoButtonStyle(),
                     tooltip: '画中画',
                     onPressed: widget.onTogglePip,
                     icon: Icon(
@@ -345,6 +391,7 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
                   IconButton(
                     // 测试锚点:网页全屏切换(视频铺满窗口,不动系统窗口)。
                     key: const Key('play-toggle-widescreen'),
+                    style: _onVideoButtonStyle(),
                     tooltip: widget.screenMode.isWidescreen
                         ? '退出网页全屏 (W)'
                         : '网页全屏 (W)',
@@ -362,6 +409,7 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
                 IconButton(
                   // 测试锚点:全屏切换按钮。图标随呈现态切换(对齐 pure_live)。
                   key: const Key('play-toggle-fullscreen'),
+                  style: _onVideoButtonStyle(),
                   tooltip: widget.screenMode.isFullscreen
                       ? '退出全屏 (F)'
                       : '全屏 (F)',
@@ -813,65 +861,72 @@ class _DanmakuSettingsButtonState
     return MenuAnchor(
       controller: _menu,
       menuChildren: [
-        Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _settingsTitle(),
-            _settingsRow(
-              label: '显示',
-              // 开关大小对齐侧栏「聊天弹幕」开关(全局 CompactSwitch 30×16)。
-              trailing: CompactSwitch(
-                value: widget.show,
-                onChanged: (_) => widget.onToggleShow(),
+        // 弹幕设置 popover 恒定暗底(0xF2121212):内部 Material 控件
+        // (CompactSwitch / 滑杆 / 区域 selectbox)的墨色同样切到 on-video,
+        // 否则浅色主题下 hover/focus 覆盖层是深色,压在暗底上看不见。
+        Theme(
+          data: _onVideoInkTheme(context),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _settingsTitle(),
+              _settingsRow(
+                label: '显示',
+                // 开关大小对齐侧栏「聊天弹幕」开关(全局 CompactSwitch 30×16)。
+                trailing: CompactSwitch(
+                  value: widget.show,
+                  onChanged: (_) => widget.onToggleShow(),
+                ),
               ),
-            ),
-            SettingsSliderRow(
-              // popover 恒定暗底(0xF2121212):标签用 AppOnVideo 亮色。
-              onVideo: true,
-              label: '透明度',
-              value: settings.opacity.toDouble(),
-              min: DanmakuSettings.kOpacityMin.toDouble(),
-              max: DanmakuSettings.kOpacityMax.toDouble(),
-              divisions:
-                  DanmakuSettings.kOpacityMax - DanmakuSettings.kOpacityMin,
-              display: '${settings.opacity}%',
-              onChanged: (v) => ref
-                  .read(danmakuSettingsProvider.notifier)
-                  .setOpacity(v.round()),
-            ),
-            SettingsSliderRow(
-              onVideo: true,
-              label: '字号',
-              value: settings.fontSize.toDouble(),
-              min: DanmakuSettings.kFontSizeMin.toDouble(),
-              max: DanmakuSettings.kFontSizeMax.toDouble(),
-              divisions:
-                  DanmakuSettings.kFontSizeMax - DanmakuSettings.kFontSizeMin,
-              display: '${settings.fontSize}',
-              onChanged: (v) => ref
-                  .read(danmakuSettingsProvider.notifier)
-                  .setFontSize(v.round()),
-            ),
-            SettingsSliderRow(
-              onVideo: true,
-              label: '速度',
-              value: settings.speed.toDouble(),
-              min: DanmakuSettings.kSpeedMin.toDouble(),
-              max: DanmakuSettings.kSpeedMax.toDouble(),
-              divisions: DanmakuSettings.kSpeedMax - DanmakuSettings.kSpeedMin,
-              display: '${settings.speed}',
-              onChanged: (v) => ref
-                  .read(danmakuSettingsProvider.notifier)
-                  .setSpeed(v.round()),
-            ),
-            _settingsAreaRow(
-              current: settings.displayAreaRatio,
-              onPick: (v) => ref
-                  .read(danmakuSettingsProvider.notifier)
-                  .setDisplayAreaRatio(v),
-            ),
-          ],
+              SettingsSliderRow(
+                // popover 恒定暗底(0xF2121212):标签用 AppOnVideo 亮色。
+                onVideo: true,
+                label: '透明度',
+                value: settings.opacity.toDouble(),
+                min: DanmakuSettings.kOpacityMin.toDouble(),
+                max: DanmakuSettings.kOpacityMax.toDouble(),
+                divisions:
+                    DanmakuSettings.kOpacityMax - DanmakuSettings.kOpacityMin,
+                display: '${settings.opacity}%',
+                onChanged: (v) => ref
+                    .read(danmakuSettingsProvider.notifier)
+                    .setOpacity(v.round()),
+              ),
+              SettingsSliderRow(
+                onVideo: true,
+                label: '字号',
+                value: settings.fontSize.toDouble(),
+                min: DanmakuSettings.kFontSizeMin.toDouble(),
+                max: DanmakuSettings.kFontSizeMax.toDouble(),
+                divisions:
+                    DanmakuSettings.kFontSizeMax - DanmakuSettings.kFontSizeMin,
+                display: '${settings.fontSize}',
+                onChanged: (v) => ref
+                    .read(danmakuSettingsProvider.notifier)
+                    .setFontSize(v.round()),
+              ),
+              SettingsSliderRow(
+                onVideo: true,
+                label: '速度',
+                value: settings.speed.toDouble(),
+                min: DanmakuSettings.kSpeedMin.toDouble(),
+                max: DanmakuSettings.kSpeedMax.toDouble(),
+                divisions:
+                    DanmakuSettings.kSpeedMax - DanmakuSettings.kSpeedMin,
+                display: '${settings.speed}',
+                onChanged: (v) => ref
+                    .read(danmakuSettingsProvider.notifier)
+                    .setSpeed(v.round()),
+              ),
+              _settingsAreaRow(
+                current: settings.displayAreaRatio,
+                onPick: (v) => ref
+                    .read(danmakuSettingsProvider.notifier)
+                    .setDisplayAreaRatio(v),
+              ),
+            ],
+          ),
         ),
       ],
       style: MenuStyle(
@@ -886,6 +941,8 @@ class _DanmakuSettingsButtonState
         return IconButton(
           // key 挂在外层 _DanmakuSettingsButton 上(勿在此重复)。
           tooltip: '飘屏弹幕设置',
+          // 控制条内按钮统一 on-video 墨色(hover/pressed/focus)。
+          style: _onVideoButtonStyle(),
           onPressed: () =>
               (controller.isOpen ? controller.close() : controller.open()),
           padding: EdgeInsets.zero,
@@ -1009,7 +1066,10 @@ class _DanmakuSettingsButtonState
                     0.25 => '1/4',
                     _ => '全屏',
                   },
-                  style: const TextStyle(fontSize: AppFontSize.caption, color: AppOnVideo.text),
+                  style: const TextStyle(
+                    fontSize: AppFontSize.caption,
+                    color: AppOnVideo.text,
+                  ),
                 ),
                 const Icon(
                   Icons.arrow_drop_down_rounded,

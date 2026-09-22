@@ -306,7 +306,24 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
                 ),
                 labelPadding: EdgeInsets.zero,
                 splashFactory: NoSplash.splashFactory,
-                overlayColor: const WidgetStatePropertyAll(Colors.transparent),
+                // hover / pressed / focus 三态此前被一刀切成透明(等于零反馈):
+                // 侧栏 tab 是键盘 Tab 链上的一站(Windows 可达性验收项),
+                // 必须可见。Material 系用覆盖色表达,不动盒模型;水波纹仍按
+                // web 真源关掉(NoSplash),按下靠 highlight 覆盖色。
+                overlayColor: WidgetStateProperty.resolveWith<Color?>((
+                  Set<WidgetState> states,
+                ) {
+                  if (states.contains(WidgetState.focused)) {
+                    return tokens.accent.withValues(alpha: 0.24);
+                  }
+                  if (states.contains(WidgetState.pressed)) {
+                    return tokens.accent.withValues(alpha: 0.16);
+                  }
+                  if (states.contains(WidgetState.hovered)) {
+                    return tokens.surfaceRaised;
+                  }
+                  return null;
+                }),
               ),
             ),
             Expanded(

@@ -120,7 +120,10 @@ class _SideHeader extends ConsumerWidget {
                           ),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: AppFontSize.label, height: 1.15),
+                          style: const TextStyle(
+                            fontSize: AppFontSize.label,
+                            height: 1.15,
+                          ),
                         ),
                       ),
                       // 开播提醒 + 外链(用户口径 2026-09-20:从头像悬浮挪到
@@ -340,6 +343,9 @@ class _SideAvatar extends StatelessWidget {
 
 /// 侧栏头第二排的小文字按钮(用户口径 2026-09-20:开播提醒/跳转显示为
 /// 文字而非 icon)。描边 pill;[active] 时走品牌紫强调。
+///
+/// 交互态:hover 抬一档底/highlight+splash 走 accent 低 alpha+键盘焦点走
+/// accent 覆盖色(均只改颜色,不动尺寸;禁用态由 InkWell 自行忽略交互)。
 class _SideTextAction extends StatelessWidget {
   const _SideTextAction({
     super.key,
@@ -360,6 +366,8 @@ class _SideTextAction extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = context.tokens;
     final enabled = onPressed != null;
+    // 开启态 = 有 accent 底色/描边;禁用态连底色都不给(§4.2「不额外加灰罩」)。
+    final on = active && enabled;
     final fg = !enabled
         ? tokens.textSecondary.withValues(alpha: 0.55)
         : active
@@ -368,19 +376,25 @@ class _SideTextAction extends StatelessWidget {
     return Tooltip(
       message: tooltip,
       child: Material(
-        color: active && enabled
-            ? tokens.accent.withValues(alpha: 0.14)
-            : Colors.transparent,
+        color: on ? tokens.accent.withValues(alpha: 0.14) : Colors.transparent,
         shape: StadiumBorder(
           side: BorderSide(
-            color: active && enabled
-                ? tokens.accent.withValues(alpha: 0.55)
-                : tokens.border,
+            color: on ? tokens.accent.withValues(alpha: 0.55) : tokens.border,
           ),
         ),
         child: InkWell(
           customBorder: const StadiumBorder(),
           onTap: onPressed,
+          // hover:开启态在 accent 底色上再深一档;常态透明底按 §4.2 抬到
+          // surfaceRaised(与卡片/浮层同一档)。
+          hoverColor: on
+              ? tokens.accent.withValues(alpha: 0.24)
+              : tokens.surfaceRaised,
+          // splash/highlight:accent 低 alpha;禁用态由 InkWell 自行忽略。
+          splashColor: tokens.accent.withValues(alpha: 0.12),
+          highlightColor: tokens.accent.withValues(alpha: 0.16),
+          // 键盘焦点:Material 系的 focusColor 覆盖色(外扩环留给自绘 chip)。
+          focusColor: tokens.accent.withValues(alpha: 0.24),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
             child: Text(
@@ -414,6 +428,7 @@ class _SideActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = context.tokens;
     return SizedBox(
       width: 59,
       child: Column(
@@ -426,13 +441,15 @@ class _SideActions extends StatelessWidget {
                   ? Icons.favorite_rounded
                   : Icons.favorite_border_rounded,
               label: followed ? '已关注' : '关注',
-              foreground: followed
-                  ? context.tokens.playFollowTextActive
-                  : context.tokens.playFollowText,
-              background: followed
-                  ? context.tokens.playFollowBgActive
-                  : context.tokens.playFollowBg,
-              border: context.tokens.playFollowBorder,
+              selected: followed,
+              colors: _ActionChipColors(
+                background: tokens.playFollowBg,
+                hoverBackground: tokens.playFollowBgHover,
+                activeBackground: tokens.playFollowBgActive,
+                border: tokens.playFollowBorder,
+                foreground: tokens.playFollowText,
+                activeForeground: tokens.playFollowTextActive,
+              ),
               onPressed: onToggleFollow,
             ),
           ),
@@ -444,13 +461,15 @@ class _SideActions extends StatelessWidget {
                   ? Icons.star_rounded
                   : Icons.star_border_rounded,
               label: superFollowed ? '已超关' : '超关',
-              foreground: superFollowed
-                  ? context.tokens.playSuperTextActive
-                  : context.tokens.playSuperText,
-              background: superFollowed
-                  ? context.tokens.playSuperBgActive
-                  : context.tokens.playSuperBg,
-              border: context.tokens.playSuperBorder,
+              selected: superFollowed,
+              colors: _ActionChipColors(
+                background: tokens.playSuperBg,
+                hoverBackground: tokens.playSuperBgHover,
+                activeBackground: tokens.playSuperBgActive,
+                border: tokens.playSuperBorder,
+                foreground: tokens.playSuperText,
+                activeForeground: tokens.playSuperTextActive,
+              ),
               onPressed: onToggleSuperFollow,
             ),
           ),
@@ -460,56 +479,139 @@ class _SideActions extends StatelessWidget {
   }
 }
 
-class _SideActionButton extends StatelessWidget {
+/// 关注 / 超关 chip 的状态配色族(红系 `playFollow*` / 紫系 `playSuper*`)。
+///
+/// 六个值全部来自 `context.tokens`(深浅主题各自解析,浅色主题下是浅底深字),
+/// widget 内不出现裸色值。[activeBackground] / [activeForeground] 即 token 文档
+/// 里的「已关注底 / 已关注文字」,同时充当**按下态**:未关注时按下就先预告
+/// 已关注的配色(DESIGN.md §4.2「active / pressed 在 hover 基础上再压一档」)。
+class _ActionChipColors {
+  const _ActionChipColors({
+    required this.background,
+    required this.hoverBackground,
+    required this.activeBackground,
+    required this.border,
+    required this.foreground,
+    required this.activeForeground,
+  });
+
+  /// 常态底(未关注)。
+  final Color background;
+
+  /// hover 底:token `playFollowBgHover` / `playSuperBgHover`
+  /// (此前全库零引用,本 chip 是它们的唯一接线点)。
+  final Color hoverBackground;
+
+  /// 已关注底 / 按下底。
+  final Color activeBackground;
+
+  /// 描边(常态与各态共用,不在状态间跳色)。
+  final Color border;
+
+  /// 常态文字与图标。
+  final Color foreground;
+
+  /// 已关注 / 按下时的文字与图标。
+  final Color activeForeground;
+}
+
+/// 「关注 / 超关」chip:六态中的 rest / hover / pressed / focus 都在此自绘。
+///
+/// - 底色 / 描边由 [AnimatedContainer] 过渡(`AppMotion.fast` + `AppMotion.curve`),
+///   **只改颜色与阴影,不改尺寸位置**(`DESIGN.md` §7 裁决:禁按压缩放/位移);
+/// - 键盘焦点用 [AppFocus.ring] 外扩(2px 环 + 2px 间隙,不占布局);
+/// - hover / pressed 另叠 [AppElevation.accentGlow] 强调色光晕(§6 已登记档位,
+///   语义已从「选中态」扩到「选中态 + hover 态」)。
+class _SideActionButton extends StatefulWidget {
   const _SideActionButton({
     super.key,
     required this.icon,
     required this.label,
-    required this.foreground,
-    required this.background,
-    required this.border,
+    required this.selected,
+    required this.colors,
     required this.onPressed,
   });
 
   final IconData icon;
   final String label;
-  final Color foreground;
-  final Color background;
-  final Color border;
+
+  /// 已关注 / 已超关(常态即取 [colors] 的 active 档,与旧实现逐位同色)。
+  final bool selected;
+  final _ActionChipColors colors;
   final VoidCallback onPressed;
 
   @override
+  State<_SideActionButton> createState() => _SideActionButtonState();
+}
+
+class _SideActionButtonState extends State<_SideActionButton> {
+  bool _hovered = false;
+  bool _pressed = false;
+  bool _focused = false;
+
+  @override
   Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    final colors = widget.colors;
+    // 已关注与按下共用 active 档:按下即「预告」已关注的配色,视觉不断层。
+    final active = widget.selected || _pressed;
+    final background = active
+        ? colors.activeBackground
+        : (_hovered ? colors.hoverBackground : colors.background);
+    final foreground = active ? colors.activeForeground : colors.foreground;
+    // 同屏只给一个最强信号:焦点环优先于 hover 光晕;两者都外扩、都不改尺寸。
+    final glow = _focused
+        ? AppFocus.ring(tokens.accent)
+        : (_hovered || _pressed
+              ? AppElevation.accentGlow(colors.border)
+              : null);
     return Tooltip(
-      message: label,
-      child: Material(
-        color: background,
-        shape: RoundedRectangleBorder(
+      message: widget.label,
+      child: AnimatedContainer(
+        duration: AppMotion.fast,
+        curve: AppMotion.curve,
+        decoration: BoxDecoration(
+          color: background,
           borderRadius: AppRadius.allPill,
-          side: BorderSide(color: border),
+          border: Border.all(color: colors.border),
+          boxShadow: glow,
         ),
-        child: InkWell(
-          borderRadius: AppRadius.allPill,
-          onTap: onPressed,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, size: 12, color: foreground),
-              const SizedBox(width: 2),
-              Flexible(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: AppFontSize.label,
-                    height: 1,
-                    fontWeight: FontWeight.w600,
-                    color: foreground,
+        child: Material(
+          // 透明壳只为 InkWell 提供墨水宿主;底色/描边由上面的
+          // AnimatedContainer 承担(这样才能过渡)。
+          type: MaterialType.transparency,
+          child: InkWell(
+            borderRadius: AppRadius.allPill,
+            onTap: widget.onPressed,
+            onHover: (value) => setState(() => _hovered = value),
+            onFocusChange: (value) => setState(() => _focused = value),
+            onTapDown: (_) => setState(() => _pressed = true),
+            onTapUp: (_) => setState(() => _pressed = false),
+            onTapCancel: () => setState(() => _pressed = false),
+            // 涟漪/按压覆盖色从 chip **自身**文字色推导
+            // (button-states「状态色由基色推导」),不引入外来色相。
+            splashColor: colors.activeForeground.withValues(alpha: 0.10),
+            highlightColor: colors.activeForeground.withValues(alpha: 0.14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(widget.icon, size: 12, color: foreground),
+                const SizedBox(width: 2),
+                Flexible(
+                  child: Text(
+                    widget.label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: AppFontSize.label,
+                      height: 1,
+                      fontWeight: FontWeight.w600,
+                      color: foreground,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
