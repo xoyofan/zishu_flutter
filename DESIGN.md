@@ -345,7 +345,7 @@ AppElevation / AppFocus / AppOnVideo / AppControls / AppDirectoryDrawer / AppRoo
 | 3 | 10 处非 4pt 栅格值 | 见 §5.4 表 | 逐字保留 | 逐像素复刻优先于栅格归一 | — |
 | 4 | 主题范围 | dark + light 双套，默认 dark | 双套已实现，但 Windows 第一轮只验收 dark | 收敛验收面 | — |
 | 5 | 字体 | 浏览器 system-ui | 显式 `Microsoft YaHei` + 回退链 | 桌面端中文排版稳定 | — |
-| 6 | 窄屏底栏文字标签 | `responsive-chrome.css:231-233`：phone+portrait 下隐藏 `.nav-label` 与 `.nav-brand__name`，只留图标 | zishu 用 `FittedBox scaleDown` 压缩显示「我的分类」等 4 字标签 | 待裁决（本阶段不动，避免连带改 mobile golden） | 2026-09-21 |
+| 6 | 窄屏底栏文字标签 | `responsive-chrome.css:231-233`：phone+portrait 下隐藏 `.nav-label` 与 `.nav-brand__name`，只留图标 | zishu 用 `FittedBox scaleDown` 压缩显示「我的分类」等 4 字标签 | **已裁决 2026-09-21：保留现状**。理由：它与顶栏（`NavSidebar` 窄屏收缩）属同一类“chrome 信息密度”问题，单改底栏会造成顶/底栏口径不一致；延后到「断点/壳层专项」一并处理（需重算槽位宽 + 重抓 mobile golden） | 2026-09-21 |
 
 ---
 

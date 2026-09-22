@@ -117,8 +117,9 @@ zishu 当前额外有"动态"和"主题"。建议将"主题"移入设置页，"�
      （`.nav-label` 与 `.nav-brand__name`），`.nav-my-cat-wrap` 全仓没有任何 `display:none` 规则；
      `tool/screenshots/sfvideo/360x640_mobile_home.png` 实测就是 8 个图标。
   3) **真正的差异**：360px 下真源隐藏文字标签（只留图标），zishu 用 `FittedBox scaleDown`
-     把「我的分类」等 4 字标签压缩显示。要对齐成“窄屏隐藏标签”就需同步重抓 mobile golden，
-     待产品裁决（已登记到 `DESIGN.md` §10 第 6 条）。
+     把「我的分类」等 4 字标签压缩显示。**已裁决 2026-09-21：保留现状（方案 B）** ——
+     与顶栏窄屏收缩策略一并延后到「断点/壳层专项」，那时同步重算槽位宽并重抓 mobile golden。
+     登记在 `DESIGN.md` §10 第 6 条。
 - 验证命令：`flutter test test/ui/workflows/shell_mobile_align_test.dart`（含项序 + 路由可达性）
   与 `test/ui/workflows/navigation_test.dart`、`test/ui/workflows/mobile_phones_test.dart` 全绿。
 
