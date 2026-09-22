@@ -241,6 +241,10 @@ on-video 层（叠在视频画面上的控件，恒定暗色语义，**不随主
 | `70px` | 70 | `nav-width`（遗留）、page-tile avatar |
 | `AppSpacing.xxl` | 28 | Flutter 侧自有值，web 真源无对应（web 用 24 / 32） |
 
+> 口径：本表记录的是 **web 真源里的例外值**（包括 `5.76` 这种从未落到 Flutter 的死条目），
+> 加上 Flutter 侧自有的例外（如 `AppSpacing.xxl = 28`）。想知道某项是否真的在 Flutter 代码里生效，
+> 必须 grep 具体数值，不要只看本表。
+
 新增间距一律取 `AppSpacing` 已有档；确需例外必须在提交说明里写明并与本表同步登记。
 
 ---
@@ -347,6 +351,9 @@ AppElevation / AppFocus / AppOnVideo / AppControls / AppDirectoryDrawer / AppRoo
 | 5 | 字体 | 浏览器 system-ui | 显式 `Microsoft YaHei` + 回退链 | 桌面端中文排版稳定 | — |
 | 6 | 窄屏底栏文字标签 | `responsive-chrome.css:231-233`：phone+portrait 下隐藏 `.nav-label` 与 `.nav-brand__name`，只留图标 | zishu 用 `FittedBox scaleDown` 压缩显示「我的分类」等 4 字标签 | **已裁决 2026-09-21：保留现状**。理由：它与顶栏（`NavSidebar` 窄屏收缩）属同一类“chrome 信息密度”问题，单改底栏会造成顶/底栏口径不一致；延后到「断点/壳层专项」一并处理（需重算槽位宽 + 重抓 mobile golden） | 2026-09-21 |
 
+| 7 | 统计项缺值显示 | web `utils/browse/platformRoomStats.ts` 的 `statDisplay`：空值显示**「0」** | zishu 显示**「—」** | 数据诚实性：不伪造未取得的数值（用户口径） | 2026-09-21 |
+| 8 | 统计项无底色 | web 有 `--play-stat-{audience,vip,svip}-bg`（暗色预计算 `#243F5B` / `#7B572C` / `#432660`） | 只落了 `playStat*Text` 文字色，没有底色 chip | **未实现**（待补），不是有意偏离 | 2026-09-21 |
+
 ---
 
 ## 11. 真源与漂移
@@ -383,3 +390,39 @@ AppElevation / AppFocus / AppOnVideo / AppControls / AppDirectoryDrawer / AppRoo
 
 教训：**看板不是真源**。裁决前必须回到 `SFVideoLive/apps/web/src` 的 CSS/模板原文或官方截图，
 中介文档（看板、实测笔记）只能当线索。这条已写入 `AGENTS.md` 的视觉真源一节。
+
+---
+
+## 12. 已登记的未实现项（勿当 bug 重复报）
+
+### 12.1 播放侧栏统计第 3 列（tone = svip）全平台未实现
+
+web 真源 `config/platformCatalog.ts` 的 `ROOM_STAT_COLUMNS` 为**每个平台**配置 2–3 个统计列，
+第 3 列的 `tone` 恒为 `svip`，但**各平台语义不同**（所以它不是一个“SVIP 字段”）：
+
+| 平台 | 列1 (audience) | 列2 (vip) | 列3 (tone=**svip**) | zishu 状态 |
+|---|---|---|---|---|
+| douyu | online 观众 | vip 贵宾 | **diamondFans 钻粉** | ❌ 无字段/无取数/无 UI |
+| huya | online 观众 | vip 贵宾 | **diamondFans 超粉** | ❌ 同上（web 走 `wupui/getSuperFansInfo`） |
+| douyin | online 观众 | fanGroup 粉丝团 | **vip 会员** | ❌ 第3列缺；且 zishu 把「会员」放进 `vip` 槽 → **列错位** |
+| bilibili | online 观众 | fanGroup 粉丝勋章 | **guard 大航海** | ❌ 第3列缺 |
+| xhs / youtube / soop | online | — | — | ✅（本就 1–2 列） |
+
+- **数据模型**：`RoomSummary` 只有 `followers` / `online` / `vip`，没有第 3 列字段，
+  也没有 web `PlatformRoomStats` 的 `diamondFans` / `fanGroup` / `guard` 三个字段。
+- **UI**：`side_panel_header.dart` 只渲染 2 个 `_StatValue`（人气 + VIP）；移动端
+  `play_meta_bar.dart` 是另一套四格（关注/开播/人气/弹幕），与此无关。
+- **结论**：4 个平台的第 3 统计列全部不显示。这是“好多 SVIP 没显示”的**根因**，
+  属**未实现**，不是回归（`git log -S statSvip` 显示只动过 token，从未接过 UI）。
+- **死代码提醒**：`ZishuTokens.statSvip`（深/浅两套）与 `AppColors.playStatSvipText`
+  已定义但**零引用**。接线前不要删，也不要误以为已实现。
+- **修复范围**：① 数据模型按 web 形态扩展（或等价的多字段）；② 各平台取数
+  （douyu 钻粉 / huya `getSuperFansInfo` / douyin 会员 / bilibili 大航海）；
+  ③ 第 3 列 UI + §10 第 8 条的 `playStat*Bg` 底色。
+- 取数口径证据：`packages/live_parser/lib/src/platforms/huya/huya_wup.dart:27`
+  明确写着“本轮未实现，RoomSummary 无对应字段”。
+
+### 12.2 Web 端外链打开为桩实现
+
+`lib/src/platforms/common/open_external_url_stub.dart` 恒返回 `false`（Web 优先级靠后，
+有意如此；文件内注释已说明）。Windows/Android 走各自的真实实现。
