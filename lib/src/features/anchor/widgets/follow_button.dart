@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../../../shared/presentation/design_tokens.dart';
+import '../../../shared/presentation/widgets/ambient_cta_hover.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 
 /// 关注按钮:本页局部状态切换(已关注/未关注),不落全局存储。
@@ -35,53 +36,58 @@ class _FollowButtonState extends State<FollowButton> {
   Widget build(BuildContext context) {
     final tokens = context.tokens;
     final followed = _followed;
-    return AnimatedContainer(
-      // 测试锚点:主播页关注按钮。
-      key: const Key('anchor-follow-btn'),
-      duration: AppMotion.normal,
-      curve: AppMotion.curve,
-      decoration: BoxDecoration(
-        color: followed ? tokens.surfaceRaised : tokens.accent,
-        borderRadius: AppRadius.allSm,
-        border: followed ? Border.all(color: tokens.border) : null,
-        // focus: AppFocus.ring——2px 实环 + 2px 间隙,外扩不占布局,
-        // 不撑开盒子、不位移(DESIGN.md §4.2 / §7)。
-        boxShadow: _focusRing ? AppFocus.ring(tokens.accent) : null,
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
+    return AmbientCtaHover(
+      borderRadius: AppRadius.allSm,
+      child: AnimatedContainer(
+        // 测试锚点:主播页关注按钮。
+        key: const Key('anchor-follow-btn'),
+        duration: AppMotion.normal,
+        curve: AppMotion.curve,
+        decoration: BoxDecoration(
+          color: followed ? tokens.surfaceRaised : tokens.accent,
           borderRadius: AppRadius.allSm,
-          onTap: () => setState(() => _followed = !_followed),
-          onFocusChange: _handleFocusChange,
-          // accent 实底按钮:状态层取反白 on-accent(accent 低 alpha 压在同色
-          // 底上不可见,等于没有反馈)。焦点只用外环,不叠 M3 内层 tint。
-          hoverColor: AppOnBright.white.withValues(alpha: 0.12),
-          splashColor: AppStateLayer.splashOf(AppOnBright.white),
-          highlightColor: AppStateLayer.pressedOf(AppOnBright.white),
-          focusColor: AppStateLayer.focusOf(tokens.accent),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.lg,
-              vertical: AppSpacing.sm,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  followed ? Icons.check_rounded : Icons.add_rounded,
-                  size: 16,
-                  color: followed ? tokens.textSecondary : tokens.surfaceSoft,
-                ),
-                const SizedBox(width: AppSpacing.xs),
-                Text(
-                  followed ? '已关注' : '关注',
-                  style: context.textBody.copyWith(
+          border: followed ? Border.all(color: tokens.border) : null,
+          // focus: AppFocus.ring——2px 实环 + 2px 间隙,外扩不占布局,
+          // 不撑开盒子、不位移(DESIGN.md §4.2 / §7)。
+          boxShadow: _focusRing ? AppFocus.ring(tokens.accent) : null,
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            borderRadius: AppRadius.allSm,
+            onTap: () => setState(() => _followed = !_followed),
+            onFocusChange: _handleFocusChange,
+            // accent 实底按钮:状态层取反白 on-accent(accent 低 alpha 压在同色
+            // 底上不可见,等于没有反馈)。焦点只用外环,不叠 M3 内层 tint。
+            hoverColor: AppOnBright.white.withValues(alpha: 0.12),
+            splashColor: AppStateLayer.splashOf(AppOnBright.white),
+            highlightColor: AppStateLayer.pressedOf(AppOnBright.white),
+            focusColor: AppStateLayer.focusOf(tokens.accent),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.lg,
+                vertical: AppSpacing.sm,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    followed ? Icons.check_rounded : Icons.add_rounded,
+                    size: 16,
                     color: followed ? tokens.textSecondary : tokens.surfaceSoft,
-                    fontWeight: FontWeight.w700,
                   ),
-                ),
-              ],
+                  const SizedBox(width: AppSpacing.xs),
+                  Text(
+                    followed ? '已关注' : '关注',
+                    style: context.textBody.copyWith(
+                      color: followed
+                          ? tokens.textSecondary
+                          : tokens.surfaceSoft,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),

@@ -13,6 +13,7 @@ import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
+import '../../../shared/presentation/widgets/ambient_card_hover.dart';
 import '../../../shared/presentation/widgets/translated_text.dart';
 import '../application/follow_provider.dart';
 import 'follow_common.dart';
@@ -59,164 +60,169 @@ class FollowEntryCard extends StatelessWidget {
     final room = entry.room;
     final live = entry.isLive;
     final replay = entry.isReplay;
-    return Container(
-      // 测试锚点:条目根节点(follow-entry-{site}-{roomId})。
-      key: Key('follow-entry-${room.site}-${room.roomId}'),
-      // 批量模式下选中项用品牌紫描边提示。
-      foregroundDecoration: BoxDecoration(
-        borderRadius: AppRadius.allMd,
-        border: Border.all(
-          color: selected ? tokens.accent : tokens.border,
-          width: selected ? 1.5 : 1,
+    return AmbientCardHover(
+      borderRadius: AppRadius.allMd,
+      child: Container(
+        // 测试锚点:条目根节点(follow-entry-{site}-{roomId})。
+        key: Key('follow-entry-${room.site}-${room.roomId}'),
+        // 批量模式下选中项用品牌紫描边提示。
+        foregroundDecoration: BoxDecoration(
+          borderRadius: AppRadius.allMd,
+          border: Border.all(
+            color: selected ? tokens.accent : tokens.border,
+            width: selected ? 1.5 : 1,
+          ),
         ),
-      ),
-      child: Material(
-        color: tokens.surface,
-        borderRadius: AppRadius.allMd,
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          onLongPress: onLongPress,
-          // 状态反馈(全部走 token):hover 抬亮;焦点/按压用 accent 低 alpha。
-          hoverColor: tokens.surfaceRaised,
-          splashColor: AppStateLayer.splashOf(tokens.accent),
-          highlightColor: AppStateLayer.pressedOf(tokens.accent),
-          focusColor: AppStateLayer.focusOf(tokens.accent),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              _buildCover(context, room),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    AppSpacing.sm,
-                    6,
-                    AppSpacing.sm,
-                    4,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // 主播名:参考实现的封面下一律先给主播。
-                      // 可点主播名:补指针光标(现可点但无 click 光标)。
-                      MouseRegion(
-                        cursor: onAnchorTap == null
-                            ? MouseCursor.defer
-                            : SystemMouseCursors.click,
-                        child: GestureDetector(
-                          onTap: onAnchorTap,
+        child: Material(
+          color: tokens.surface,
+          borderRadius: AppRadius.allMd,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            onLongPress: onLongPress,
+            // 状态反馈(全部走 token):hover 抬亮;焦点/按压用 accent 低 alpha。
+            hoverColor: tokens.surfaceRaised,
+            splashColor: AppStateLayer.splashOf(tokens.accent),
+            highlightColor: AppStateLayer.pressedOf(tokens.accent),
+            focusColor: AppStateLayer.focusOf(tokens.accent),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _buildCover(context, room),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      AppSpacing.sm,
+                      6,
+                      AppSpacing.sm,
+                      4,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // 主播名:参考实现的封面下一律先给主播。
+                        // 可点主播名:补指针光标(现可点但无 click 光标)。
+                        MouseRegion(
+                          cursor: onAnchorTap == null
+                              ? MouseCursor.defer
+                              : SystemMouseCursors.click,
+                          child: GestureDetector(
+                            onTap: onAnchorTap,
 
-                          child: Row(
-                            children: [
-                              if (entry.isSpecial) ...[
-                                Icon(
-                                  Icons.star_rounded,
-                                  size: 12,
-                                  color: tokens.brand,
+                            child: Row(
+                              children: [
+                                if (entry.isSpecial) ...[
+                                  Icon(
+                                    Icons.star_rounded,
+                                    size: 12,
+                                    color: tokens.brand,
+                                  ),
+                                  const SizedBox(width: 2),
+                                ],
+                                Flexible(
+                                  child: FollowAnchorName(
+                                    site: room.site,
+                                    name: room.anchorName,
+                                    live: live,
+                                    fontSize: AppFontSize.body,
+                                  ),
                                 ),
-                                const SizedBox(width: 2),
                               ],
-                              Flexible(
-                                child: FollowAnchorName(
-                                  site: room.site,
-                                  name: room.anchorName,
-                                  live: live,
-                                  fontSize: AppFontSize.body,
-                                ),
-                              ),
-                            ],
+                            ),
                           ),
                         ),
-                      ),
-                      const SizedBox(height: 2),
-                      TranslatedText(
-                        room.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: context.textSecondary.copyWith(
-                          fontSize: AppFontSize.caption,
-                          color: tokens.textSecondary,
+                        const SizedBox(height: 2),
+                        TranslatedText(
+                          room.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.textSecondary.copyWith(
+                            fontSize: AppFontSize.caption,
+                            color: tokens.textSecondary,
+                          ),
                         ),
-                      ),
-                      if (!compact) ...[
-                        const Spacer(),
-                        // 统计/操作行:平台圆点 + 在线数/轮播标,右侧三枚操作。
-                        // 侧栏 compact 态隐藏(对齐 web show-stats=false)。
-                        Row(
-                          children: [
-                            FollowPlatformDot(site: room.site),
-                            const SizedBox(width: 4),
-                            Icon(
-                              live
-                                  ? Icons.people_alt_rounded
-                                  : (replay
-                                        ? Icons.repeat_rounded
-                                        : Icons.schedule_rounded),
-                              size: 10,
-                              color: live
-                                  ? tokens.liveBadge
-                                  : (replay
-                                        ? context.tokens.brandBright
-                                        : tokens.textSecondary),
-                            ),
-                            const SizedBox(width: 2),
-                            Flexible(
-                              child: Text(
-                                // 在播:在线数;轮播:「轮播」;离线:有开播
-                                // 记录显示「上次开播」,否则「未开播」
-                                // (对齐 web offlineLastLiveLabel)。
+                        if (!compact) ...[
+                          const Spacer(),
+                          // 统计/操作行:平台圆点 + 在线数/轮播标,右侧三枚操作。
+                          // 侧栏 compact 态隐藏(对齐 web show-stats=false)。
+                          Row(
+                            children: [
+                              FollowPlatformDot(site: room.site),
+                              const SizedBox(width: 4),
+                              Icon(
                                 live
-                                    ? room.online
+                                    ? Icons.people_alt_rounded
                                     : (replay
-                                          ? '轮播'
-                                          : offlineLastLiveLabel(
-                                              entry.lastLiveAt,
-                                            )),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: context.textCaption.copyWith(
-                                  fontSize: AppFontSize.label,
-                                  color: live
-                                      ? tokens.textPrimary
+                                          ? Icons.repeat_rounded
+                                          : Icons.schedule_rounded),
+                                size: 10,
+                                color: live
+                                    ? tokens.liveBadge
+                                    : (replay
+                                          ? context.tokens.brandBright
+                                          : tokens.textSecondary),
+                              ),
+                              const SizedBox(width: 2),
+                              Flexible(
+                                child: Text(
+                                  // 在播:在线数;轮播:「轮播」;离线:有开播
+                                  // 记录显示「上次开播」,否则「未开播」
+                                  // (对齐 web offlineLastLiveLabel)。
+                                  live
+                                      ? room.online
                                       : (replay
-                                            ? context.tokens.brandBright
-                                            : tokens.textSecondary),
+                                            ? '轮播'
+                                            : offlineLastLiveLabel(
+                                                entry.lastLiveAt,
+                                              )),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: context.textCaption.copyWith(
+                                    fontSize: AppFontSize.label,
+                                    color: live
+                                        ? tokens.textPrimary
+                                        : (replay
+                                              ? context.tokens.brandBright
+                                              : tokens.textSecondary),
+                                  ),
                                 ),
                               ),
-                            ),
-                            if (!selectMode) ...[
-                              const Spacer(),
-                              FollowIconAction(
-                                icon: entry.isSpecial
-                                    ? Icons.star_rounded
-                                    : Icons.star_border_rounded,
-                                tooltip: entry.isSpecial ? '取消特别关注' : '设为特别关注',
-                                active: entry.isSpecial,
-                                onPressed: onToggleSpecial,
-                              ),
-                              FollowIconAction(
-                                icon: entry.remindOn
-                                    ? Icons.notifications_active_rounded
-                                    : Icons.notifications_none_rounded,
-                                tooltip: entry.remindOn ? '关闭开播提醒' : '开启开播提醒',
-                                active: entry.remindOn,
-                                onPressed: onToggleRemind,
-                              ),
-                              FollowIconAction(
-                                icon: Icons.delete_outline_rounded,
-                                tooltip: '移除关注',
-                                danger: true,
-                                onPressed: onRemove,
-                              ),
+                              if (!selectMode) ...[
+                                const Spacer(),
+                                FollowIconAction(
+                                  icon: entry.isSpecial
+                                      ? Icons.star_rounded
+                                      : Icons.star_border_rounded,
+                                  tooltip: entry.isSpecial
+                                      ? '取消特别关注'
+                                      : '设为特别关注',
+                                  active: entry.isSpecial,
+                                  onPressed: onToggleSpecial,
+                                ),
+                                FollowIconAction(
+                                  icon: entry.remindOn
+                                      ? Icons.notifications_active_rounded
+                                      : Icons.notifications_none_rounded,
+                                  tooltip: entry.remindOn ? '关闭开播提醒' : '开启开播提醒',
+                                  active: entry.remindOn,
+                                  onPressed: onToggleRemind,
+                                ),
+                                FollowIconAction(
+                                  icon: Icons.delete_outline_rounded,
+                                  tooltip: '移除关注',
+                                  danger: true,
+                                  onPressed: onRemove,
+                                ),
+                              ],
                             ],
-                          ],
-                        ),
+                          ),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

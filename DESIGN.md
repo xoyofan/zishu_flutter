@@ -267,7 +267,7 @@ Flutter 的 `TextStyle.height` 是**倍数**，所以吸附后的 px 要除回�
 | 状态 | 颜色来源 | 形态 |
 |---|---|---|
 | default | `surface` / `surfaceSoft` 底，`border` 描边 | 圆角 `AppRadius.sm`(4) 或 `md`(8) |
-| hover（**底色**） | **按组件语义取，不是统一“抬升”**：导航品牌块压暗到 `surfaceSoft`（web `--bg-soft` `#141414`）、卡片/浮层抬到 `surfaceRaised`（web `--dark-6` `#2A2A2A`）、导航项 web 真源是**文字变琥珀**（`.nav-brand:hover{background:var(--bg-soft)}` / `.nav-item:hover{color:var(--amber)}`）；动效 `AppMotion.fast`(150ms) + `AppMotion.curve` | 颜色/边框过渡，**不位移、不缩放** |
+| hover（**底色**） | **按组件语义取，不是统一“抬升”**：导航品牌块压暗到 `surfaceSoft`（web `--bg-soft` `#141414`）、卡片/浮层抬到 `surfaceRaised`（web `--dark-6` `#2A2A2A`）、导航项 web 真源是**文字变琥珀**（`.nav-brand:hover{background:var(--bg-soft)}` / `.nav-item:hover{color:var(--amber)}`）；动效 `AppMotion.fast`(150ms) + `AppMotion.curve` | 颜色/边框过渡，**不位移、不缩放**（2026-09-21 裁决）；<br>2026-09-22 氛围分支 `ui/ambient-polish` 修订：清单 2.1 卡片 hover 允许 translateY(−2px) + `AmbientGlow.cardHover`，覆盖本条「不位移」条款，限定用于 `RoomCard` / `AnchorLiveCard` / `FollowEntryCard` / `PlayRoomCard` |
 | active / pressed | 在 hover 基础上再压一档（如 `playFollowBgActive`） | 仍不位移 |
 | selected | `accent.withValues(alpha: 0.2)` 底（见 `app_theme.dart` 的 `navigationBarTheme.indicatorColor`）；平台/分类选中另加 `AppElevation.accentGlow` | — |
 | disabled | `textSecondary` 文字 + 不响应指针；不额外加灰罩 | — |
@@ -460,7 +460,7 @@ golden 差 2074px，整块底色/描边都变）。需要更明显的交互态�
 - ❌ 在一个项目里混用两套外部品牌的设计系统（`awesome-design-md` 一次只选一套，且只取结构不取品牌色 / 字体 / logo）。
 - ❌ 复制外部品牌的 logo、商标字形、专有插图。
 - ❌ 让 `liveBadge` 用红（直播中是绿，红是「关注」按钮）。
-- ❌ 给按钮加**按压位移/缩放**（press scale）做反馈（2026-09-21 裁决禁止）：按钮反馈只走颜色 / 描边 / 阴影 / 图标，不做位移与缩放。
+- ❌ 给按钮加**按压位移/缩放**（press scale）做反馈（2026-09-21 裁决禁止）：按钮反馈只走颜色 / 描边 / 阴影 / 图标，不做位移与缩放。<br>2026-09-22 氛围分支 `ui/ambient-polish` 修订（清单 2.5）：仅主 CTA `FollowButton` / `player_controls.dart` 的 `play-toggle-play` 允许 pressed 缩放 0.97，与 `AppStateLayer` 叠加，其余按钮仍禁止。
 - ❌ 把平台色的两个家族混用（`accentColor` 用于图标/tab，`color` 用于角标/chip）；也禁止把平台 `chipForeground` 换成“按亮度自动算”或“统一黑 87%”（见 §2.3）。
 - ❌ 常规容器用 > 12px 圆角（chip / badge / 头像用 `AppRadius.pill`）。
 

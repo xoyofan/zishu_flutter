@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
+import '../../../shared/presentation/widgets/ambient_card_hover.dart';
 import '../../../shared/presentation/widgets/translated_text.dart';
 import '../application/anchor_provider.dart';
 import 'badge_chips.dart';
@@ -35,119 +36,122 @@ class AnchorLiveCard extends StatelessWidget {
       return const _OfflineCard();
     }
     final tokens = context.tokens;
-    return Container(
-      decoration: BoxDecoration(
-        color: tokens.surface,
-        borderRadius: AppRadius.allMd,
-        border: Border.all(color: tokens.border),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final height = min(
-                constraints.maxWidth * 9 / 16,
-                _maxCoverHeight,
-              );
-              return SizedBox(
-                height: height,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    NetworkCover(
-                      url: room.cover,
-                      fallbackLabel: displayCategoryName(
-                        room.site,
-                        room.category,
-                        room.cid,
+    return AmbientCardHover(
+      borderRadius: AppRadius.allMd,
+      child: Container(
+        decoration: BoxDecoration(
+          color: tokens.surface,
+          borderRadius: AppRadius.allMd,
+          border: Border.all(color: tokens.border),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final height = min(
+                  constraints.maxWidth * 9 / 16,
+                  _maxCoverHeight,
+                );
+                return SizedBox(
+                  height: height,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      NetworkCover(
+                        url: room.cover,
+                        fallbackLabel: displayCategoryName(
+                          room.site,
+                          room.category,
+                          room.cid,
+                        ),
                       ),
-                    ),
-                    Positioned(
-                      left: AppSpacing.md,
-                      top: AppSpacing.md,
-                      child: LiveStateChip(isLive: true),
-                    ),
-                    Positioned(
-                      right: AppSpacing.md,
-                      bottom: AppSpacing.md,
-                      child: OnlineTag(online: room.online),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-          Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: TranslatedText(
-                        room.title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: context.textTitle.copyWith(
-                          fontSize: AppFontSize.subtitle,
+                      Positioned(
+                        left: AppSpacing.md,
+                        top: AppSpacing.md,
+                        child: LiveStateChip(isLive: true),
+                      ),
+                      Positioned(
+                        right: AppSpacing.md,
+                        bottom: AppSpacing.md,
+                        child: OnlineTag(online: room.online),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+            Padding(
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TranslatedText(
+                          room.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: context.textTitle.copyWith(
+                            fontSize: AppFontSize.subtitle,
+                          ),
+                        ),
+                      ),
+                      if (room.category.isNotEmpty) ...[
+                        const SizedBox(width: AppSpacing.sm),
+                        CategoryChip(label: room.category, site: room.site),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
+                  Text('${room.anchorName} 正在直播', style: context.textSecondary),
+                  const SizedBox(height: AppSpacing.lg),
+                  SizedBox(
+                    width: double.infinity,
+                    height: _buttonHeight,
+                    child: Material(
+                      color: tokens.accent,
+                      borderRadius: AppRadius.allMd,
+                      child: InkWell(
+                        borderRadius: AppRadius.allMd,
+                        onTap: onEnterRoom,
+                        // accent 实底 CTA:状态层取反白 on-accent
+                        // (accent 低 alpha 压在同色底上不可见),焦点可见。
+                        hoverColor: AppOnBright.white.withValues(alpha: 0.12),
+                        splashColor: AppStateLayer.splashOf(AppOnBright.white),
+                        highlightColor: AppStateLayer.pressedOf(
+                          AppOnBright.white,
+                        ),
+                        focusColor: AppStateLayer.focusOf(AppOnBright.white),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.play_arrow_rounded,
+                              size: 20,
+                              color: tokens.surfaceSoft,
+                            ),
+                            const SizedBox(width: AppSpacing.sm),
+                            Text(
+                              '进入直播间',
+                              style: context.textTitle.copyWith(
+                                fontSize: AppFontSize.subtitle,
+                                fontWeight: FontWeight.w700,
+                                color: tokens.surfaceSoft,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
-                    if (room.category.isNotEmpty) ...[
-                      const SizedBox(width: AppSpacing.sm),
-                      CategoryChip(label: room.category, site: room.site),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.sm),
-                Text('${room.anchorName} 正在直播', style: context.textSecondary),
-                const SizedBox(height: AppSpacing.lg),
-                SizedBox(
-                  width: double.infinity,
-                  height: _buttonHeight,
-                  child: Material(
-                    color: tokens.accent,
-                    borderRadius: AppRadius.allMd,
-                    child: InkWell(
-                      borderRadius: AppRadius.allMd,
-                      onTap: onEnterRoom,
-                      // accent 实底 CTA:状态层取反白 on-accent
-                      // (accent 低 alpha 压在同色底上不可见),焦点可见。
-                      hoverColor: AppOnBright.white.withValues(alpha: 0.12),
-                      splashColor: AppStateLayer.splashOf(AppOnBright.white),
-                      highlightColor: AppStateLayer.pressedOf(
-                        AppOnBright.white,
-                      ),
-                      focusColor: AppStateLayer.focusOf(AppOnBright.white),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.play_arrow_rounded,
-                            size: 20,
-                            color: tokens.surfaceSoft,
-                          ),
-                          const SizedBox(width: AppSpacing.sm),
-                          Text(
-                            '进入直播间',
-                            style: context.textTitle.copyWith(
-                              fontSize: AppFontSize.subtitle,
-                              fontWeight: FontWeight.w700,
-                              color: tokens.surfaceSoft,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

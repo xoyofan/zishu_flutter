@@ -20,6 +20,7 @@ import 'package:live_parser/live_parser.dart';
 
 import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
+import '../../../shared/presentation/widgets/ambient_card_hover.dart';
 import '../../../shared/presentation/widgets/cover_badges.dart';
 import '../../../shared/presentation/widgets/translated_text.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -116,136 +117,139 @@ class PlayRoomCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    return Material(
-      color: tokens.surface,
+    return AmbientCardHover(
       borderRadius: AppRadius.allSm,
-      clipBehavior: Clip.antiAlias,
-      child: InkWell(
-        onTap: onTap,
-        // 卡片 hover 抬一档底(surface → surfaceRaised,DESIGN.md §4.2);
-        // 按下/键盘焦点走 accent 低 alpha。只改颜色,不动尺寸与位置。
-        hoverColor: tokens.surfaceRaised,
-        splashColor: AppStateLayer.splashOf(tokens.accent),
-        highlightColor: AppStateLayer.pressedOf(tokens.accent),
-        focusColor: AppStateLayer.focusOf(tokens.accent),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            AspectRatio(
-              aspectRatio: 16 / 9,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  FollowCoverImage(
-                    cover: room.cover,
-                    fallbackLabel: room.category.isEmpty
-                        ? room.site
-                        : displayCategoryName(
-                            room.site,
-                            room.category,
-                            room.cid,
-                          ),
-                    offline: !_live,
-                  ),
-                  // 左上:平台徽章(web `.platform-cover-badge` 贴左上)。
-                  Positioned(
-                    left: 0,
-                    top: 0,
-                    child: CoverPlatformBadge(
-                      key: const Key('cover-badge-platform'),
-                      corner: CoverCorner.topLeft,
-                      site: room.site,
+      child: Material(
+        color: tokens.surface,
+        borderRadius: AppRadius.allSm,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          // 卡片 hover 抬一档底(surface → surfaceRaised,DESIGN.md §4.2);
+          // 按下/键盘焦点走 accent 低 alpha。只改颜色,不动尺寸与位置。
+          hoverColor: tokens.surfaceRaised,
+          splashColor: AppStateLayer.splashOf(tokens.accent),
+          highlightColor: AppStateLayer.pressedOf(tokens.accent),
+          focusColor: AppStateLayer.focusOf(tokens.accent),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              AspectRatio(
+                aspectRatio: 16 / 9,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    FollowCoverImage(
+                      cover: room.cover,
+                      fallbackLabel: room.category.isEmpty
+                          ? room.site
+                          : displayCategoryName(
+                              room.site,
+                              room.category,
+                              room.cid,
+                            ),
+                      offline: !_live,
                     ),
-                  ),
-                  // 右上:分类徽章(web `.follow-preview-cat` 贴右上)。
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    child: CoverCategoryBadge(
-                      key: const Key('cover-badge-category'),
-                      corner: CoverCorner.topRight,
-                      category: room.category,
-                      site: room.site,
-                      cid: room.cid,
-                    ),
-                  ),
-                  // 右下:热度。
-                  if (_live)
-                    Positioned(
-                      right: 0,
-                      bottom: 0,
-                      child: CoverOnlineBadge(
-                        key: const Key('cover-badge-online'),
-                        corner: CoverCorner.bottomRight,
-                        online: room.online,
-                      ),
-                    ),
-                  // 左下:特别关注 ★(本仓特有能力,占唯一空置的左下角)。
-                  if (isSpecial)
+                    // 左上:平台徽章(web `.platform-cover-badge` 贴左上)。
                     Positioned(
                       left: 0,
-                      bottom: 0,
-                      child: CoverBadge(
-                        key: const Key('cover-badge-special'),
-                        corner: CoverCorner.bottomLeft,
-                        background: tokens.coverScrim,
-                        child: Icon(
-                          Icons.star_rounded,
-                          size: 11,
-                          color: tokens.brand,
-                        ),
+                      top: 0,
+                      child: CoverPlatformBadge(
+                        key: const Key('cover-badge-platform'),
+                        corner: CoverCorner.topLeft,
+                        site: room.site,
                       ),
                     ),
-                  // 离线:整封面压暗 + 居中「未开播」(web `.follow-preview-offline`)。
-                  if (!_live)
-                    Positioned.fill(
-                      key: const Key('cover-offline-overlay'),
-                      child: ColoredBox(
-                        color: tokens.coverScrim.withValues(alpha: 0.55),
-                        child: Center(
-                          child: Text(
-                            '未开播',
-                            style: context.textCaption.copyWith(
-                              fontSize: AppFontSize.caption,
-                              color: tokens.coverScrimText,
-                              fontWeight: FontWeight.w600,
+                    // 右上:分类徽章(web `.follow-preview-cat` 贴右上)。
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      child: CoverCategoryBadge(
+                        key: const Key('cover-badge-category'),
+                        corner: CoverCorner.topRight,
+                        category: room.category,
+                        site: room.site,
+                        cid: room.cid,
+                      ),
+                    ),
+                    // 右下:热度。
+                    if (_live)
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: CoverOnlineBadge(
+                          key: const Key('cover-badge-online'),
+                          corner: CoverCorner.bottomRight,
+                          online: room.online,
+                        ),
+                      ),
+                    // 左下:特别关注 ★(本仓特有能力,占唯一空置的左下角)。
+                    if (isSpecial)
+                      Positioned(
+                        left: 0,
+                        bottom: 0,
+                        child: CoverBadge(
+                          key: const Key('cover-badge-special'),
+                          corner: CoverCorner.bottomLeft,
+                          background: tokens.coverScrim,
+                          child: Icon(
+                            Icons.star_rounded,
+                            size: 11,
+                            color: tokens.brand,
+                          ),
+                        ),
+                      ),
+                    // 离线:整封面压暗 + 居中「未开播」(web `.follow-preview-offline`)。
+                    if (!_live)
+                      Positioned.fill(
+                        key: const Key('cover-offline-overlay'),
+                        child: ColoredBox(
+                          color: tokens.coverScrim.withValues(alpha: 0.55),
+                          child: Center(
+                            child: Text(
+                              '未开播',
+                              style: context.textCaption.copyWith(
+                                fontSize: AppFontSize.caption,
+                                color: tokens.coverScrimText,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                ],
-              ),
-            ),
-            Expanded(
-              child: Padding(
-                // 用户口径(2026-09-20):列表模式文字左侧 padding 收窄,行内容更贴分类条纹。
-                padding: const EdgeInsets.fromLTRB(1, 3, 3, 2),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    FollowAnchorName(
-                      site: room.site,
-                      name: room.anchorName,
-                      live: _live,
-                      fontSize: AppFontSize.caption,
-                    ),
-                    const SizedBox(height: 1),
-                    TranslatedText(
-                      room.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: context.textSecondary.copyWith(
-                        fontSize: AppFontSize.label,
-                        color: tokens.textSecondary,
-                      ),
-                    ),
                   ],
                 ),
               ),
-            ),
-          ],
+              Expanded(
+                child: Padding(
+                  // 用户口径(2026-09-20):列表模式文字左侧 padding 收窄,行内容更贴分类条纹。
+                  padding: const EdgeInsets.fromLTRB(1, 3, 3, 2),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      FollowAnchorName(
+                        site: room.site,
+                        name: room.anchorName,
+                        live: _live,
+                        fontSize: AppFontSize.caption,
+                      ),
+                      const SizedBox(height: 1),
+                      TranslatedText(
+                        room.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.textSecondary.copyWith(
+                          fontSize: AppFontSize.label,
+                          color: tokens.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

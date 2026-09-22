@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:live_parser/live_parser.dart';
 
 import '../../../shared/presentation/design_tokens.dart';
+import '../../../shared/presentation/widgets/ambient_card_hover.dart';
 import '../../../shared/presentation/widgets/cover_badges.dart';
 import '../../../shared/presentation/widgets/translated_text.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -35,27 +36,29 @@ class RoomCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    return Material(
-      // 测试锚点:定位/点击具体房间卡片。
-      key: Key('room-card-${room.site}-${room.roomId}'),
-      color: tokens.surface,
+    return AmbientCardHover(
       borderRadius: AppRadius.allMd,
-      child: InkWell(
+      child: Material(
+        // 测试锚点:定位/点击具体房间卡片。
+        key: Key('room-card-${room.site}-${room.roomId}'),
+        color: tokens.surface,
         borderRadius: AppRadius.allMd,
-        onTap: onTap,
-        // 状态反馈(M3 state layer,全部走 token):hover 抬亮到 surfaceRaised;
-        // splash/highlight/focus 用 accent 低 alpha(8–12%),键盘焦点可见。
-        // 只改颜色,不位移/不缩放(DESIGN.md §7)。
-        hoverColor: tokens.surfaceRaised,
-        splashColor: AppStateLayer.splashOf(tokens.accent),
-        highlightColor: AppStateLayer.pressedOf(tokens.accent),
-        focusColor: AppStateLayer.focusOf(tokens.accent),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _Cover(room: room, showPlatformBadge: showPlatformBadge),
-            _RoomCardMeta(room: room, showPlatformBadge: showPlatformBadge),
-          ],
+        child: InkWell(
+          borderRadius: AppRadius.allMd,
+          onTap: onTap,
+          // 状态反馈(M3 state layer,全部走 token):hover 抬亮到 surfaceRaised;
+          // splash/highlight/focus 用 accent 低 alpha(8–12%),键盘焦点可见。
+          hoverColor: tokens.surfaceRaised,
+          splashColor: AppStateLayer.splashOf(tokens.accent),
+          highlightColor: AppStateLayer.pressedOf(tokens.accent),
+          focusColor: AppStateLayer.focusOf(tokens.accent),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _Cover(room: room, showPlatformBadge: showPlatformBadge),
+              _RoomCardMeta(room: room, showPlatformBadge: showPlatformBadge),
+            ],
+          ),
         ),
       ),
     );

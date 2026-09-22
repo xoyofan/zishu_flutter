@@ -27,6 +27,7 @@ import '../../../platforms/common/playback/live_player.dart'
     show LivePlayer, PlayerSnapshot;
 import '../../../platforms/common/playback/play_screen_mode.dart';
 import '../../../shared/presentation/design_tokens.dart';
+import '../../../shared/presentation/widgets/ambient_cta_hover.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../application/play_provider.dart';
 import '../../danmaku/application/danmaku_settings_provider.dart';
@@ -189,19 +190,24 @@ class _PlayerControlsBarState extends ConsumerState<PlayerControlsBar> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                IconButton(
-                  // 测试锚点:播放/暂停按钮。
-                  key: const Key('play-toggle-play'),
-                  style: _onVideoButtonStyle(),
-                  tooltip: snapshot.playing ? '暂停 (Space)' : '播放 (Space)',
-                  onPressed: () =>
-                      (snapshot.playing ? player.pause() : player.play()),
-                  icon: Icon(
-                    snapshot.playing
-                        ? Icons.pause_rounded
-                        : Icons.play_arrow_rounded,
-                    size: 20,
-                    color: AppOnVideo.text,
+                AmbientCtaHover(
+                  // 本按钮是 M3 IconButton(默认 StadiumBorder = 胶囊/圆),
+                  // 流光描边必须同形,否则圆角处会露出直角(清单 2.2)。
+                  borderRadius: AppRadius.allPill,
+                  child: IconButton(
+                    // 测试锚点:播放/暂停按钮。
+                    key: const Key('play-toggle-play'),
+                    style: _onVideoButtonStyle(),
+                    tooltip: snapshot.playing ? '暂停 (Space)' : '播放 (Space)',
+                    onPressed: () =>
+                        (snapshot.playing ? player.pause() : player.play()),
+                    icon: Icon(
+                      snapshot.playing
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      size: 20,
+                      color: AppOnVideo.text,
+                    ),
                   ),
                 ),
                 IconButton(

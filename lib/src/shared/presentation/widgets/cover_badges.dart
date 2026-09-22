@@ -129,7 +129,11 @@ class CoverCategoryBadge extends StatelessWidget {
 
 /// 平台角标:平台品牌色底 + 该平台约定的前景色(`chipForeground`)。
 class CoverPlatformBadge extends StatelessWidget {
-  const CoverPlatformBadge({super.key, required this.corner, required this.site});
+  const CoverPlatformBadge({
+    super.key,
+    required this.corner,
+    required this.site,
+  });
 
   final CoverCorner corner;
   final String site;
@@ -166,6 +170,7 @@ class CoverOnlineBadge extends StatelessWidget {
     if (!live || text.isEmpty || text == '—' || text == '-') {
       return const SizedBox.shrink();
     }
+    final tokens = context.tokens;
     return CoverBadge(
       corner: corner,
       child: Text(
@@ -173,7 +178,14 @@ class CoverOnlineBadge extends StatelessWidget {
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         // 数值等宽,避免同一列卡片上的热度角标宽度跳动。
-        style: const TextStyle(fontFeatures: [FontFeature.tabularFigures()]),
+        // 热度数字发光:用 AmbientGlow.cardHover 的 accent 18%/blur 12 拼
+        // textShadow(halo 8%/64 过散、accentGlow 带 y+2 不适合文字)。
+        style: TextStyle(
+          fontFeatures: const [FontFeature.tabularFigures()],
+          shadows: AmbientGlow.cardHover(tokens.accent)
+              .map((s) => Shadow(color: s.color, blurRadius: s.blurRadius))
+              .toList(),
+        ),
       ),
     );
   }
@@ -181,7 +193,12 @@ class CoverOnlineBadge extends StatelessWidget {
 
 /// 促销/画质角标(web `CoverPromoBadge`):琥珀底、超长截断到 [maxLen] 字。
 class CoverPromoBadge extends StatelessWidget {
-  const CoverPromoBadge({super.key, required this.corner, required this.text, this.maxLen = 6});
+  const CoverPromoBadge({
+    super.key,
+    required this.corner,
+    required this.text,
+    this.maxLen = 6,
+  });
 
   final CoverCorner corner;
   final String text;
@@ -215,11 +232,7 @@ class CoverPromoBadge extends StatelessWidget {
 /// 遮罩之上)。flutter 侧由调用方用 `Stack.children` 顺序复刻 —— 把本组件
 /// 放在角标**之前**。
 class CoverOfflineOverlay extends StatelessWidget {
-  const CoverOfflineOverlay({
-    super.key,
-    this.text = '未开播',
-    this.fontSize = 13,
-  });
+  const CoverOfflineOverlay({super.key, this.text = '未开播', this.fontSize = 13});
 
   /// 遮罩上的居中文案。
   final String text;

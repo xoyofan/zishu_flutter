@@ -1,5 +1,8 @@
 /// shared 通用展示组件统一出口。
 library;
+
+export 'ambient_card_hover.dart';
+export 'ambient_cta_hover.dart';
 export 'async_value_view.dart';
 export 'cover_badges.dart';
 export 'empty_view.dart';
