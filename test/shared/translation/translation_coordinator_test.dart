@@ -88,6 +88,92 @@ void main() {
     });
   });
 
+  group('GoogleWebEngine(浏览器字典端点 dict-chrome-ex)', () {
+    test('走 translate_a/t + client=dict-chrome-ex,解析 [译文, 源语言] 对', () async {
+      Uri? captured;
+      final engine = GoogleWebEngine(
+        fetcher: (uri) async {
+          captured = uri;
+          return [
+            ['你好世界', 'en'],
+          ];
+        },
+      );
+      final out = await engine.translate('hello world');
+      expect(out, '你好世界');
+      expect(captured!.host, 'translate.googleapis.com');
+      expect(captured!.path, '/translate_a/t');
+      expect(captured!.queryParameters['client'], 'dict-chrome-ex');
+      expect(captured!.queryParameters['sl'], 'auto');
+      expect(captured!.queryParameters['tl'], 'zh-CN');
+      expect(captured!.queryParameters['q'], 'hello world');
+    });
+
+    test('响应缺失/形态不符/译文为空时返回 null(上层回退原文)', () async {
+      expect(
+        await GoogleWebEngine(fetcher: (_) async => null).translate('hi'),
+        isNull,
+      );
+      expect(
+        await GoogleWebEngine(fetcher: (_) async => 'oops').translate('hi'),
+        isNull,
+      );
+      expect(
+        await GoogleWebEngine(fetcher: (_) async => <Object?>[]).translate('hi'),
+        isNull,
+      );
+      expect(
+        await GoogleWebEngine(
+          fetcher: (_) async => [
+            ['', 'en'],
+          ],
+        ).translate('hi'),
+        isNull,
+      );
+    });
+
+    test('批量:重复 q 参数一次请求（不用换行合并），结果按序对应', () async {
+      Uri? captured;
+      final engine = GoogleWebEngine(
+        fetcher: (uri) async {
+          captured = uri;
+          return [
+            ['你好', 'en'],
+            ['世界', 'ko'],
+          ];
+        },
+      );
+      final out = await engine.translateBatch(['hello', '안녕']);
+      expect(captured!.path, '/translate_a/t');
+      expect(captured!.queryParametersAll['q'], ['hello', '안녕']);
+      expect(out, ['你好', '世界']);
+    });
+
+    test('批量:条数不齐返回 null(协调器回退逐条)；空输入返回空表', () async {
+      final engine = GoogleWebEngine(
+        fetcher: (_) async => [
+          ['只有一个', 'en'],
+        ],
+      );
+      expect(await engine.translateBatch(['a', 'b']), isNull);
+      expect(await engine.translateBatch(const []), isEmpty);
+    });
+
+    test('超长文本不上请求,直接返回 null', () async {
+      var called = false;
+      final engine = GoogleWebEngine(
+        fetcher: (_) async {
+          called = true;
+          return [
+            ['x', 'en'],
+          ];
+        },
+      );
+      expect(await engine.translate('a' * (kTranslationMaxChars + 1)), isNull);
+      expect(called, isFalse);
+    });
+  });
+
   group('SimplyTranslateEngine', () {
     test('拼 query 参数并解析 translated-text 字段', () async {
       Uri? captured;
