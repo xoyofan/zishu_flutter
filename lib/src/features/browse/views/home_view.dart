@@ -57,6 +57,12 @@ class _HomeViewState extends ConsumerState<HomeView> {
               message: '房间列表加载失败：$error',
               onRetry: controller.refresh,
             ),
+      // 新平台请求在途(AsyncLoading):继续用上一份网格,不切成 loading。
+      _ when _lastVisibleRooms != null => _body(
+        context,
+        rooms: _lastVisibleRooms!.rooms,
+        hasMore: _lastVisibleRooms!.hasMore,
+      ),
       _ => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
     };
 
