@@ -5,12 +5,11 @@ import 'package:zishu_flutter/src/shared/application/translation/translation_coo
 
 /// 支持 批量+单条 的假引擎:记录每次请求的文本组。
 class FakeBatchEngine implements TranslationBatchEngine {
-  FakeBatchEngine({this.failBatch = false, this.mismatchLines = false});
+  FakeBatchEngine({this.failBatch = false});
 
   final List<List<String>> batchCalls = [];
   final List<String> singleCalls = [];
   final bool failBatch;
-  final bool mismatchLines;
 
   @override
   Future<String?> translate(String text) async {
@@ -22,13 +21,8 @@ class FakeBatchEngine implements TranslationBatchEngine {
   Future<List<String?>?> translateBatch(List<String> texts) async {
     batchCalls.add(texts);
     if (failBatch) return null;
-    // mismatchLines 模拟「行数不齐」:条数翻倍,协调器应回退逐条。
-    final lines = [
-      for (final t in texts) ...['译:$t', '多余行'],
-    ];
-    assert(lines.isNotEmpty);
-    // 多行合并式响应:引擎返回带换行的整段,协调器按行拆分;
-    // 这里直接给出按条对应的多元素列表模拟「拆分成功」。
+    // 批量响应:引擎一次返回与入参等长的结果列表(新 GoogleWebEngine 用
+    // 重复 q 参数,志愿者实例回退逐条);这里直接给出按条对应列表。
     return [for (final t in texts) '译:$t'];
   }
 }

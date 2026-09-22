@@ -11,8 +11,36 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../../models/models.dart';
+import '../../http/upstream_proxy.dart';
 import '../douyu/json_utils.dart';
 import 'normalize.dart';
+
+/// yt-dlp 抓 watch 页用的主机(代理分流判定与请求目标同源)。
+const String _youtubeWatchHost = 'www.youtube.com';
+
+/// 组装 yt-dlp 参数(纯函数,便于单测)。
+///
+/// [proxyHostPort] 形如 `127.0.0.1:7897`。yt-dlp 是**独立子进程**,不会继承
+/// 宿主 `HttpClient` 的代理设置,必须显式下发 `--proxy`;否则在「YouTube 必须
+/// 经代理才可达」的网络下会直连拖慢(2026-09-22 实测:不发 `--proxy`
+/// 39665/6675/7823ms,下发后 3433/5095/5054ms,且直连方差极大)。
+List<String> buildYoutubeDlpArgs({
+  required String videoId,
+  String? denoPath,
+  String? proxyHostPort,
+}) {
+  return [
+    'https://www.youtube.com/watch?v=$videoId',
+    '--no-warnings',
+    '--no-playlist',
+    '-J',
+    if (denoPath != null)
+      // RUNTIME:PATH 以第一个冒号切分,Windows 盘符路径需转正斜杠。
+      ...['--js-runtimes', 'deno:${denoPath.replaceAll(r'\', '/')}'],
+    if (proxyHostPort != null && proxyHostPort.isNotEmpty)
+      ...['--proxy', 'http://$proxyHostPort'],
+  ];
+}
 
 /// yt-dlp 提取的一档直播。
 class YoutubeDlpTier {
@@ -138,17 +166,14 @@ Future<YoutubeDlpExtract?> extractYoutubeViaDlp(
   final bin = _availabilityCache?.ok == true
       ? _availabilityCache!.bin
       : await resolveYoutubeDlpBin();
-  final args = <String>[
-    'https://www.youtube.com/watch?v=$videoId',
-    '--no-warnings',
-    '--no-playlist',
-    '-J',
-  ];
-  final deno = denoCandidate();
-  if (deno != null) {
-    // RUNTIME:PATH 以第一个冒号切分,Windows 盘符路径需转正斜杠。
-    args.addAll(['--js-runtimes', 'deno:${deno.replaceAll(r'\', '/')}']);
-  }
+  final args = buildYoutubeDlpArgs(
+    videoId: videoId,
+    denoPath: denoCandidate(),
+    // 仅当该主机在代理分流表内才下发:国内站点仍走直连。
+    proxyHostPort: UpstreamProxy.needsProxy(_youtubeWatchHost)
+        ? UpstreamProxy.hostPort
+        : null,
+  );
   if (argsOverride != null) args.addAll(argsOverride);
 
   Process process;

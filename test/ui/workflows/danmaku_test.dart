@@ -11,7 +11,8 @@
 /// 1. danmakuRendersFromInjectedSession:注入会话推送既定弹幕后,侧栏出现对应
 ///    条目(不推就是空态,推什么就出现什么);
 /// 2. danmakuVisualIntegrity:条目为「徽章? + 用户名 + '：' + 正文」富文本,
-///    用户名 hash 着色(w600 + HSL 稳定色相)且与正文颜色区分,粉丝徽章存在;
+///    用户名使用解析器提供的颜色、缺失时回退普通色(w600)且与正文颜色区分,
+///    粉丝徽章存在;
 /// 3. danmakuIsNotHardcoded:推送内容改变后断言随之变化——旧的硬编码样例
 ///    (星河不入梦/来了来了…)不再出现,新推送内容出现;并验证增量(先 2 条后加 1 条);
 /// 4. danmakuPanelIsolatedFromRoomNav:聊天 → 关注 → 推荐 → 聊天 往返,条目数一致;
@@ -55,6 +56,7 @@ import 'package:live_parser/live_parser.dart'
 import 'package:zishu_flutter/src/app/app_router.dart';
 import 'package:zishu_flutter/src/app/app_theme.dart';
 import 'package:zishu_flutter/src/features/danmaku/application/danmaku_session_provider.dart';
+import 'package:zishu_flutter/src/shared/presentation/zishu_tokens.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/features/play/widgets/play_side_panel.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
@@ -93,16 +95,6 @@ TextSpan _danmakuRowSpan(RichText entry) {
     span = inner;
   }
   return span;
-}
-
-/// 复刻 _ChatRow._userColor 的 hash 着色:用户名 codeUnits 按 31 进制累加
-/// 取模 360 得稳定色相(SFVideoLive 同款思路,饱和度/亮度 0.6/0.68)。
-Color _hashUserColor(String user) {
-  var hash = 0;
-  for (final unit in user.codeUnits) {
-    hash = (hash * 31 + unit) % 360;
-  }
-  return HSLColor.fromAHSL(1, hash.toDouble(), 0.6, 0.68).toColor();
 }
 
 /// 统计当前聊天 tab 挂载的弹幕条目数。
@@ -447,7 +439,7 @@ void main() {
         reason: '两枚徽章应渲染在同一行');
   });
 
-  testWidgets('danmakuVisualIntegrity:富文本结构完整,hash 着色+粉丝徽章', (
+  testWidgets('danmakuVisualIntegrity:富文本结构完整,解析色与普通色回退+粉丝徽章', (
     tester,
   ) async {
     final connector = _FakeDanmakuConnector();
@@ -456,7 +448,9 @@ void main() {
     await _pumpStable(tester);
 
     final session = connector.session!;
-    session.push(_chat('星河不入梦', '来了来了，主播这波操作可以', badgeLevel: 12));
+    session.push(
+      _chat('星河不入梦', '来了来了，主播这波操作可以', badgeLevel: 12, color: 0xFF12A8FF),
+    );
     session.push(_chat('皮蛋solo', '这波是教科书级别，学会了吗', badgeLevel: 7));
     await _pumpStable(tester);
 
@@ -496,7 +490,8 @@ void main() {
       );
     }
 
-    // hash 着色钉死校验:注入的用户名颜色 == 复刻算法计算值(31 进制 hash → HSL 0.6/0.68)。
+    // 解析器提供颜色时,昵称必须使用该颜色,不能再按昵称 hash 改色。
+    const pinnedColor = Color(0xFF12A8FF);
     const pinnedUser = '星河不入梦';
     final pinnedFinder = find.descendant(
       of: find.byType(PlaySidePanel),
@@ -513,8 +508,25 @@ void main() {
     expect((pinnedSpans[2] as TextSpan).text, '来了来了，主播这波操作可以');
     expect(
       (pinnedSpans[0] as TextSpan).style?.color,
-      _hashUserColor(pinnedUser),
-      reason: '用户名颜色应按 hash(用户名) 稳定色相计算',
+      pinnedColor,
+      reason: '用户名颜色应使用解析器提供的实际颜色',
+    );
+
+    final fallbackFinder = find.descendant(
+      of: find.byType(PlaySidePanel),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is RichText &&
+            widget.text.toPlainText().startsWith('皮蛋solo：'),
+      ),
+    );
+    final fallbackRow = _danmakuRowSpan(
+      tester.widget<RichText>(fallbackFinder),
+    );
+    expect(
+      (fallbackRow.children![0] as TextSpan).style?.color,
+      ZishuTokens.dark.textSecondary,
+      reason: '未解析到颜色时用户名应回退普通色',
     );
 
     // 粉丝团徽章:斗鱼无团名(构造未传 badgeName)→ 不渲染粉丝牌

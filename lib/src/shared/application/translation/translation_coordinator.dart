@@ -120,10 +120,18 @@ String? _stringField(Object? data, String key) {
   return null;
 }
 
-/// Google 网页翻译公开端点(client=gtx):无需 key,经上游代理可达且稳定
-/// (内置志愿者实例 2026-09-20 实测集体失效:Cloudflare 盾/上游错误/下线),
+/// Google 浏览器字典公开端点(client=dict-chrome-ex):无需 key,经上游代理
+/// 可达。
+///
+/// 端点演变(2026-09-22 实测):原 `translate_a/single?client=gtx` 已被 Google
+/// 判定为自动查询,直连与经代理**一律返回 HTTP 429 拦截页**;同期志愿者实例
+/// (lingva 被 Cloudflare 盾 403、lunar.icu 500、simplytranslate 400/jae.fi
+/// 不可达)集体失效 —— 中文化与字幕翻译整条链路因此全部回退原文。同一主机
+/// 换用 Chrome 扩展端点的 `client=dict-chrome-ex` 恢复 200(直连/代理均可),
 /// 故作为首选引擎;志愿者实例降级为后备。
-/// 响应形如 `[[["译文","原文",...],...],...]`,取全部分句拼接。
+///
+/// 响应形如 `[["译文","检测语言"], ...]`,按查询顺序一一对应;一次查询
+/// (即使多句)只产生一项。
 class GoogleWebEngine implements TranslationEngine, TranslationBatchEngine {
   GoogleWebEngine({required this.fetcher});
 
@@ -131,52 +139,52 @@ class GoogleWebEngine implements TranslationEngine, TranslationBatchEngine {
 
   static const _base = 'https://translate.googleapis.com';
 
+  /// 查询 URL:重复 `q` 参数即批量(响应按序对应)。
+  Uri _queryUri(Iterable<String> texts) {
+    final query = [
+      'client=dict-chrome-ex',
+      'sl=auto',
+      'tl=zh-CN',
+      for (final text in texts) 'q=${Uri.encodeComponent(text)}',
+    ].join('&');
+    return Uri.parse('$_base/translate_a/t?$query');
+  }
+
+  /// 解析 `[[译文, 检测语言], ...]`。
+  ///
+  /// 形态不符或条数与查询不齐一律返回 null(调用方回退);译文为空白视为
+  /// 该条失败(null),与批量里的「空行」语义一致。
+  List<String?>? _parsePairs(Object? data, int expected) {
+    if (data is! List || data.length != expected) return null;
+    final out = <String?>[];
+    for (final item in data) {
+      if (item is! List || item.isEmpty || item.first is! String) return null;
+      final translated = (item.first as String).trim();
+      out.add(translated.isEmpty ? null : translated);
+    }
+    return out;
+  }
+
   @override
   Future<String?> translate(String text) async {
     if (text.length > kTranslationMaxChars) return null;
-    final uri = Uri.parse(
-      '$_base/translate_a/single'
-      '?client=gtx&sl=auto&tl=zh-CN&dt=t&q=${Uri.encodeComponent(text)}',
-    );
-    final data = await fetcher(uri);
-    if (data is! List || data.isEmpty) return null;
-    final sentences = data.first;
-    if (sentences is! List) return null;
-    final buffer = StringBuffer();
-    for (final sentence in sentences) {
-      if (sentence is List && sentence.isNotEmpty && sentence.first is String) {
-        buffer.write(sentence.first);
-      }
-    }
-    final translated = buffer.toString();
-    return translated.isEmpty ? null : translated;
+    final parsed = _parsePairs(await fetcher(_queryUri([text])), 1);
+    return parsed?.first;
   }
 
-  /// 批量:多行合并为一次 gtx 请求(Google 按行分段返回,行数可一一对应);
-  /// 合并体超长/行数不齐时返回 null,调用方回退逐条。
+  /// 批量:重复 `q` 参数一次请求。
+  ///
+  /// 不能用「多行合并 + 按行拆分」:该端点会把换行吞掉合成一段(实测
+  /// `hello\nworld` → `["你好世界"]`),条数对不上。合并体超长同样返回
+  /// null,由协调器回退逐条(串行小并发,不会放大整体延迟)。
   @override
   Future<List<String?>?> translateBatch(List<String> texts) async {
     if (texts.isEmpty) return const [];
     if (texts.any((t) => t.length > kTranslationMaxChars)) return null;
-    final joined = texts.join('\n');
-    if (joined.length > kTranslationMaxChars) return null;
-    final uri = Uri.parse(
-      '$_base/translate_a/single'
-      '?client=gtx&sl=auto&tl=zh-CN&dt=t&q=${Uri.encodeComponent(joined)}',
-    );
-    final data = await fetcher(uri);
-    if (data is! List || data.isEmpty) return null;
-    final sentences = data.first;
-    if (sentences is! List) return null;
-    final buffer = StringBuffer();
-    for (final sentence in sentences) {
-      if (sentence is List && sentence.isNotEmpty && sentence.first is String) {
-        buffer.write(sentence.first);
-      }
+    if (texts.fold<int>(0, (sum, t) => sum + t.length) > kTranslationMaxChars) {
+      return null;
     }
-    final lines = buffer.toString().split('\n');
-    if (lines.length != texts.length) return null;
-    return [for (final line in lines) line.trim().isEmpty ? null : line.trim()];
+    return _parsePairs(await fetcher(_queryUri(texts)), texts.length);
   }
 }
 
