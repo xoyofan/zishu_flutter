@@ -81,7 +81,14 @@ zishu_flutter 是**深色优先的桌面级直播客户端**，视觉语言继�
 
 on-video 层（叠在视频画面上的控件，恒定暗色语义，**不随主题翻转**，见
 `design_tokens.dart` 的 `AppOnVideo`）：`scrim` `#B8000000`、`bar` `#000000`、
-`text` `#DEFFFFFF`、`textMuted` `#8CFFFFFF`。
+`text` `#DEFFFFFF`、`textMuted` `#8CFFFFFF`，另有 `captionPillBg`、`captionPillText`、
+`captionPillTextMuted`、`pauseScrim`（字幕胶囊与暂停遮罩）。
+
+对称地，`AppOnBright` 覆盖**亮饱和底**（accent / brand / 平台品牌色）上的前景：
+`glyph` `#000000`、`text` `#DD000000`、`white` `#FFFFFFFF`。
+**`AppOnVideo` 与 `AppOnBright` 都是主题无关常量**（底色由画面或品牌/平台决定，
+不随深浅主题变）；而随主题变化的颜色**必须**走 `ZishuTokens` —— 在 `lib/src` 的
+UI 文件里写死 `AppColors.*` 会被 `test/ui/light_theme_test.dart` 的静态守则拦下。
 
 ### 2.2 浅色主题（同步维护，非验收基线）
 
@@ -234,7 +241,7 @@ Flutter 的 `TextStyle.height` 是**倍数**，所以吸附后的 px 要除回�
 | 状态 | 颜色来源 | 形态 |
 |---|---|---|
 | default | `surface` / `surfaceSoft` 底，`border` 描边 | 圆角 `AppRadius.sm`(4) 或 `md`(8) |
-| hover | 底色抬到 `surfaceRaised`；动效 `AppMotion.fast`(150ms) + `AppMotion.curve` | 颜色/边框过渡，不位移 |
+| hover | 底色**按组件语义取，不是统一“抬升”**：导航品牌块压暗到 `surfaceSoft`（web `--bg-soft` `#141414`）、卡片/浮层抬到 `surfaceRaised`（web `--dark-6` `#2A2A2A`）、导航项 web 真源是**文字变琥珀**（`.nav-brand:hover{background:var(--bg-soft)}` / `.nav-item:hover{color:var(--amber)}`）；动效 `AppMotion.fast`(150ms) + `AppMotion.curve` | 颜色/边框过渡，不位移 |
 | active / pressed | 在 hover 基础上再压一档（如 `playFollowBgActive`） | 仍不位移 |
 | selected | `accent.withValues(alpha: 0.2)` 底（见 `app_theme.dart` 的 `navigationBarTheme.indicatorColor`）；平台/分类选中另加 `AppElevation.accentGlow` | — |
 | focus | `AppFocus.ring(accent)`——2px 实环 + 2px 间隙 | 外扩，不占布局 |
@@ -430,9 +437,11 @@ AppElevation / AppFocus / AppOnVideo / AppControls / AppDirectoryDrawer / AppRoo
 | 6 | 窄屏底栏文字标签 | `responsive-chrome.css:231-233`：phone+portrait 下隐藏 `.nav-label` 与 `.nav-brand__name`，只留图标 | zishu 用 `FittedBox scaleDown` 压缩显示「我的分类」等 4 字标签 | **已裁决 2026-09-21：保留现状**。理由：它与顶栏（`NavSidebar` 窄屏收缩）属同一类“chrome 信息密度”问题，单改底栏会造成顶/底栏口径不一致；延后到「断点/壳层专项」一并处理（需重算槽位宽 + 重抓 mobile golden） | 2026-09-21 |
 
 | 7 | 统计项缺值显示 | web `utils/browse/platformRoomStats.ts` 的 `statDisplay`：空值显示**「0」** | zishu 显示**「—」** | 数据诚实性：不伪造未取得的数值（用户口径） | 2026-09-21 |
-| 8 | 统计项无底色 | web 有 `--play-stat-{audience,vip,svip}-bg`（暗色预计算 `#243F5B` / `#7B572C` / `#432660`） | 只落了 `playStat*Text` 文字色，没有底色 chip | **未实现**（待补），不是有意偏离 | 2026-09-21 |
+| 8 | 统计项**有无底色** | 真播放页统计行（`SideHeader.vue` 的 `.room-stat-icon-row--*` / `.room-stat-data-line--*`）**无任何背景规则**；`--play-stat-*-bg` 的唯一消费者是 dev 徽章目录页 `apps/web/public/dev/badge-catalog.html` 的 `.play-stat-item--*` 芯片 | zishu 统计行同样无底色 | **本行已于 2026-09-21 作废**：原先我把它当成缺口（“web 有底色 chip，zishu 未实现”）是错的，底色属 dev demo 而非产品面；参见 §11.2 | 2026-09-21 |
 | 9 | 字号总数 | web 真源自身有 **~28 种** font-size（`.52rem`=8.32px 到 `2.4rem`=38.4px，精度 0.01rem） | **9 档**整数 px 阶梯（`AppFontSize`），且行高按 `line-height-grid` 公式取整吸附 | 收敛字号数量、消除 0.5px 级散值；参见 §3.2/§3.6 | 2026-09-21 |
 | 10 | 行高取值 | web 用无单位乘数散写（1 / 1.2 / 1.15 / 1.35 / 1.08 … 共 13 种） | 两轨公式（UI ×1.20 / prose ×1.50）吸附到 2px 网格，Flutter 侧以 `height = snappedPx / fontSize` 表达 | 让行高可推导、可校验；参见 §3.3 | 2026-09-21 |
+| 11 | 紧前景色分组 | web 无对应常量 | 新增 `AppOnBright`（在 accent/brand/平台色这类**亮饱和底**上的前景：`glyph`/`text`/`white`），与 `AppOnVideo` 对称；两者都是**主题无关**常量 | 亮饱和底由品牌/平台决定、不随主题变；而深/浅底上的前景（`textPrimary` 等）必须走 `ZishuTokens` | 2026-09-21 |
+| 12 | 轮播强调色 / 模态遮罩 | web 独立变量 `#f5dc70`（`.nav-item:hover` 的 `--amber`）与遮罩色 | 新增主题字段 `ZishuTokens.brandBright`（深 `#F5DC70` / 浅 `#9A7B1A`）与 `barrier`（深 `0x73000000` / 浅 `0x4D000000`） | 必须随主题切换：亮金与重遮罩在浅底上不可读/压灰；浅色取值为估算值，待 a11y 轨复核 | 2026-09-21 |
 
 ---
 
@@ -471,6 +480,20 @@ AppElevation / AppFocus / AppOnVideo / AppControls / AppDirectoryDrawer / AppRoo
 教训：**看板不是真源**。裁决前必须回到 `SFVideoLive/apps/web/src` 的 CSS/模板原文或官方截图，
 中介文档（看板、实测笔记）只能当线索。这条已写入 `AGENTS.md` 的视觉真源一节。
 
+### 11.2 规范本身也会写错（两处已作废）
+
+同一个风险的**第三种形态**：不是代码漂移、也不是看板写错，而是**本规范作者自己写错的条目**。
+两条都已被执行轨举证推翻，记录在案，以防后人照着错的规范去“修”代码：
+
+| 已作废条目 | 我（规范）的原文 | 复核结果（web 出处） | 处置 |
+|---|---|---|---|
+| §10 第 8 条「统计项无底色」 | 断言 web 有 `--play-stat-{audience,vip,svip}-bg` 用在统计行，zishu 未实现 | ❌ 这两个变量只在 `styles/theme.css:36-41,129-134` **定义**；全仓唯一消费者是 dev 徽章目录页 `apps/web/public/dev/badge-catalog.html` 的 `.play-stat-item--*` 芯片。真播放页 `SideHeader.vue` 的 `.room-stat-icon-row--*` / `.room-stat-data-line--*` **无任何背景规则** | 条目作废；zishu 不加底色才是对齐真源 |
+| §4.2 hover 规则 | 「hover 底色抬到 `surfaceRaised`」 | ❌ 过度概括。web `.nav-brand:hover{background:var(--bg-soft)}`（`#141414`，**更暗**）、`.nav-item:hover{color:var(--amber)}`（**文字变琥珀**，不是底色）、`--dark-6` `#2A2A2A` 用于卡片/浮层 | 规则改为“按组件语义取”，并补记导航项文字变色 |
+
+教训：**规范作者也会错**。所以“代码与规范不一致”时两种可能都要查——可能是代码漂了，
+也可能是**规范写错了**。上面第二条就差点导致把已经对齐真源的顶栏 hover 改坏
+（与 T2/T3 同型：都是在“修改”的旗号下把对的改成错的）。
+
 ---
 
 ## 12. 已登记的未实现项（勿当 bug 重复报）
@@ -496,9 +519,11 @@ web 真源 `config/platformCatalog.ts` 的 `ROOM_STAT_COLUMNS` 为**每个平台
   属**未实现**，不是回归（`git log -S statSvip` 显示只动过 token，从未接过 UI）。
 - **死代码提醒**：`ZishuTokens.statSvip`（深/浅两套）与 `AppColors.playStatSvipText`
   已定义但**零引用**。接线前不要删，也不要误以为已实现。
-- **修复范围**：① 数据模型按 web 形态扩展（或等价的多字段）；② 各平台取数
-  （douyu 钻粉 / huya `getSuperFansInfo` / douyin 会员 / bilibili 大航海）；
-  ③ 第 3 列 UI + §10 第 8 条的 `playStat*Bg` 底色。
+- **修复范围**：① 数据模型按 web 形态扩展（已完成：`RoomSummary.diamondFans`）；
+  ② 各平台取数（虎牙已实现并真机验证；douyu 钻粉 / douyin 会员 / bilibili 大航海待做）；
+  ③ 第 3 列 UI（已完成：`side_panel_header.dart` 的第三个 `_StatValue`，色取 `statSvip`，无值显示「—」）。
+- **不要加底色**：原先本节写的“③ 第 3 列 UI + `playStat*Bg` 底色”已作废——
+  `--play-stat-*-bg` 只服务于 dev 徽章目录页，真播放页统计行无背景（见 §10 第 8 条、§11.2）。
 - 取数口径证据：`packages/live_parser/lib/src/platforms/huya/huya_wup.dart:27`
   明确写着“本轮未实现，RoomSummary 无对应字段”。
 
