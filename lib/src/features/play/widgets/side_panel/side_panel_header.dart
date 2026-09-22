@@ -88,7 +88,8 @@ class _SideHeader extends ConsumerWidget {
           const SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
+              // spaceBetween:第一行贴顶、第三行贴底,去掉上下留白,空间全给行间距。
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 // 第一行:主播名(中文化) + 粉丝数药丸(紧挨昵称、靠左)。
@@ -667,12 +668,12 @@ class _StatValue extends StatelessWidget {
     final content = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 11, color: color.withValues(alpha: 0.88)),
+        Icon(icon, size: 13, color: color.withValues(alpha: 0.88)),
         const SizedBox(width: 2),
         Text(
           value,
           style: TextStyle(
-            fontSize: AppFontSize.label,
+            fontSize: AppFontSize.body,
             height: 1,
             color: color,
             fontFeatures: const [FontFeature.tabularFigures()],
