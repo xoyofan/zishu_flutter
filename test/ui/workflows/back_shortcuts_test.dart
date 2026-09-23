@@ -38,9 +38,11 @@ class FakeLivePlayer implements LivePlayer {
       const SizedBox.expand();
 
   @override
-  Future<void> open(StreamLine line,
-          [List<StreamLine> fallbacks = const [], bool resetRetries = true]) async =>
-      calls.add('open:${line.url}');
+  Future<void> open(
+    StreamLine line, [
+    List<StreamLine> fallbacks = const [],
+    bool resetRetries = true,
+  ]) async => calls.add('open:${line.url}');
 
   @override
   Future<void> play() async => calls.add('play');
@@ -172,21 +174,6 @@ Future<void> _clickForwardMouseButton(WidgetTester tester) async {
   await _pumpFrames(tester, 2);
 }
 
-/// 按住 Alt 的鼠标点击(左键后退 / 右键前进),落在 [at] 位置。
-Future<void> _altClickMouse(
-  WidgetTester tester, {
-  required int buttons,
-  Offset at = const Offset(120, 200),
-}) async {
-  await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
-  final pointer = TestPointer(3, PointerDeviceKind.mouse);
-  await tester.sendEventToBinding(pointer.down(at, buttons: buttons));
-  await _pumpFrames(tester, 3);
-  await tester.sendEventToBinding(pointer.up());
-  await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
-  await _pumpFrames(tester, 2);
-}
-
 /// F5:浏览器式刷新(平台首页重拉列表 / 播放页重开当前线路)。
 Future<void> _pressF5(WidgetTester tester) async {
   await tester.sendKeyDownEvent(LogicalKeyboardKey.f5);
@@ -279,9 +266,9 @@ void main() {
           find.byWidgetPredicate(
             (widget) =>
                 widget.key is ValueKey<String> &&
-                (widget.key as ValueKey<String>)
-                    .value
-                    .startsWith('play-recommend-room-'),
+                (widget.key as ValueKey<String>).value.startsWith(
+                  'play-recommend-room-',
+                ),
           ),
         )
         .map((w) => (w.key as ValueKey<String>).value)
@@ -340,40 +327,22 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('Alt+鼠标左键:后退;并独占点击,子组件不响应', (tester) async {
-    final app = await _pumpApp(tester);
-    app.router.go('/all');
+  testWidgets('Alt 状态残留时普通点击仍可进入房间', (tester) async {
+    await _pumpApp(tester);
     await _pumpFrames(tester, 3);
-    app.router.push('/douyu/play/63136');
-    await _pumpFrames(tester, 4);
 
-    // 播放页里 Alt+左键 → 后退回首页。
-    await _altClickMouse(tester, buttons: kPrimaryMouseButton);
-    expect(_visiblePage(tester), '/all', reason: 'Alt+鼠标左键 = 后退');
-
-    // 栈底再 Alt+点击房间卡:后退静默,且卡片不得响应(gate 独占该 pointer),
-    // 否则会既后退又进房。
+    // 模拟 Windows 切窗/Alt-Tab 后 Flutter 未收到 Alt keyup：全局键盘状态
+    // 仍报告 Alt 按下，但普通鼠标点击绝不能因此失去命中能力。
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
     final card = find.byKey(const Key('room-card-douyu-63136'));
     await tester.ensureVisible(card);
     await _pumpFrames(tester, 2);
-    await _altClickMouse(tester, buttons: kPrimaryMouseButton, at: tester.getCenter(card));
-    expect(_visiblePage(tester), '/all', reason: 'Alt+点击卡片不得进房(子树命中被阻断)');
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('Alt+鼠标右键:前进', (tester) async {
-    final app = await _pumpApp(tester);
-    app.router.go('/all');
-    await _pumpFrames(tester, 3);
-    app.router.push('/douyu/play/63136');
+    await tester.tap(card);
     await _pumpFrames(tester, 4);
 
-    await _pressAltLeft(tester);
-    expect(_visiblePage(tester), '/all');
-
-    await _altClickMouse(tester, buttons: kSecondaryMouseButton);
-    expect(_visiblePage(tester), '/douyu/play/63136', reason: 'Alt+鼠标右键 = 前进');
+    expect(_visiblePage(tester), '/douyu/play/63136');
     expect(tester.takeException(), isNull);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
   });
 
   testWidgets('Alt+Home:回首页;没后退过则无可前进点,后退过的前进栈不受影响', (tester) async {
@@ -458,11 +427,7 @@ void main() {
     app.router.go('/douyu');
     await _pumpFrames(tester, 3);
     await _pressAltRight(tester);
-    expect(
-      _visiblePage(tester),
-      '/douyu',
-      reason: '自行导航后 Alt+→ 不得跳回旧页面',
-    );
+    expect(_visiblePage(tester), '/douyu', reason: '自行导航后 Alt+→ 不得跳回旧页面');
     expect(tester.takeException(), isNull);
   });
 

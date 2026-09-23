@@ -1,8 +1,8 @@
 /// 全局导航快捷键:对齐桌面浏览器习惯 —— 后退 / 前进 / 首页 / 搜索。
 ///
 /// 快捷键(浏览器同款三件套 + 通用搜索):
-/// - 后退:`Alt+←`、`Alt+鼠标左键`、鼠标侧键 X1(kBackMouseButton);
-/// - 前进:`Alt+→`、`Alt+鼠标右键`、鼠标侧键 X2(kForwardMouseButton);
+/// - 后退:`Alt+←`、鼠标侧键 X1(kBackMouseButton);
+/// - 前进:`Alt+→`、鼠标侧键 X2(kForwardMouseButton);
 /// - 首页:`Alt+Home`;
 /// - 搜索:`Ctrl+F` / `Ctrl+K`(桌面浏览器/播放器通用入口);
 /// - 刷新:`F5`(浏览器式 —— 播放页重开当前线路,否则刷新平台首页列表)。
@@ -36,13 +36,8 @@
 library;
 
 import 'package:flutter/gestures.dart'
-    show
-        kBackMouseButton,
-        kForwardMouseButton,
-        kPrimaryMouseButton,
-        kSecondaryMouseButton;
+    show kBackMouseButton, kForwardMouseButton;
 import 'package:flutter/material.dart';
-import 'package:flutter/rendering.dart' show BoxHitTestResult, RenderProxyBox;
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
@@ -140,11 +135,6 @@ class _AppNavShortcutsState extends State<AppNavShortcuts> {
 
   void _handlePointer(PointerDownEvent event) {
     final buttons = event.buttons;
-    if (HardwareKeyboard.instance.isAltPressed) {
-      if (buttons & kPrimaryMouseButton != 0) return _back();
-      if (buttons & kSecondaryMouseButton != 0) return _forward();
-      // Alt + 侧键不占用:落到下面的原生侧键语义。
-    }
     if (buttons & kBackMouseButton != 0) {
       _back();
     } else if (buttons & kForwardMouseButton != 0) {
@@ -159,41 +149,25 @@ class _AppNavShortcutsState extends State<AppNavShortcuts> {
         // Alt+← / Alt+→ = 浏览器后退 / 前进。Windows 下文本编辑默认绑定
         // 是 ctrl+←/→ 移词,不占用 alt+方向键,输入框聚焦时也不会被抢。
         const SingleActivator(LogicalKeyboardKey.arrowLeft, alt: true): _back,
-        const SingleActivator(LogicalKeyboardKey.arrowRight, alt: true): _forward,
+        const SingleActivator(LogicalKeyboardKey.arrowRight, alt: true):
+            _forward,
         const SingleActivator(LogicalKeyboardKey.home, alt: true): _home,
-        const SingleActivator(LogicalKeyboardKey.keyF, control: true): _openSearch,
-        const SingleActivator(LogicalKeyboardKey.keyK, control: true): _openSearch,
+        const SingleActivator(LogicalKeyboardKey.keyF, control: true):
+            _openSearch,
+        const SingleActivator(LogicalKeyboardKey.keyK, control: true):
+            _openSearch,
         // F5 = 浏览器式刷新(裸 F5,无修饰;文本输入不产生该键,无冲突)。
         const SingleActivator(LogicalKeyboardKey.f5): _refresh,
       },
       child: Listener(
-        // opaque:空白区也参与命中 —— Alt+点击空白处同样要能后退/前进;
-        // 侧键(X1/X2)本就是「落点无关」的全局手势,不能只在内容上生效。
+        // opaque:空白区也参与命中 —— 鼠标侧键(X1/X2)是落点无关的全局手势。
         behavior: HitTestBehavior.opaque,
         onPointerDown: _handlePointer,
-        child: _NavGate(child: widget.child),
+        // 不根据全局键盘状态阻断子树命中。Windows 切窗/Alt-Tab 偶尔会丢失
+        // keyup，使 HardwareKeyboard.isAltPressed 残留为 true；若据此持续
+        // 关闭 hitTestChildren，整个首页会永久失去点击能力。
+        child: widget.child,
       ),
     );
-  }
-}
-
-/// Alt 按下时阻断子树命中测试,让上层 [Listener] 独占该 pointer。
-///
-/// 为什么必须有它:Listener 与子组件的 GestureDetector 同时收到 pointer down,
-/// 只拦 Listener 侧会出现「Alt+点击房间卡 → 既后退又进房」。命中测试发生在
-/// pointer down 阶段,此时 Alt 已按下(HardwareKeyboard 可读),直接让子树不参与
-/// 本次命中即可 —— 子组件收不到该 pointer,也就不会响应这次点击。
-class _NavGate extends SingleChildRenderObjectWidget {
-  const _NavGate({required super.child});
-
-  @override
-  RenderObject createRenderObject(BuildContext context) => _NavGateRender();
-}
-
-class _NavGateRender extends RenderProxyBox {
-  @override
-  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) {
-    if (HardwareKeyboard.instance.isAltPressed) return false;
-    return super.hitTestChildren(result, position: position);
   }
 }
