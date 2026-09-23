@@ -19,9 +19,14 @@ Uint8List _danmuFrame({
   required String text,
   List<Object?>? medalInfo,
   List<Object?>? ulInfo,
+  List<Object?>? meta15,
   Map<String, Object?>? metaUser, // 新协议 info[0][15].user
 }) {
   final meta = <Object?>[0, 16, 999, 0xff7f00, 1700000000];
+  while (meta.length < 13) {
+    meta.add(null);
+  }
+  meta.add(meta15);
   if (metaUser != null) {
     while (meta.length < 15) {
       meta.add(null);
@@ -158,6 +163,38 @@ void main() {
       reason: '人气消息不参与 chat 去重',
     );
 
+    await sub.cancel();
+    await session.close();
+  });
+
+  test('DANMU_MSG 内嵌表情归一为 emoji segments', () async {
+    final session = await connector.connect(
+      const DanmakuSessionRequest(site: 'bilibili', roomId: '9527'),
+    );
+    final socket = transport.sockets.single;
+    final received = <DanmakuMessage>[];
+    final sub = session.messages.listen(received.add);
+    socket.pushBytes(encodeBiliPacket(BiliPacketOp.authAck, utf8.encode('{"code":0}')));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    socket.pushBytes(_danmuFrame(
+      cmd: 'DANMU_MSG:4:0:2:2:2:0',
+      userName: '张三',
+      text: '前[开心]中[未知]后',
+      meta15: [
+        {'emoticon': '开心', 'emote_url': 'https://cdn.example/kaixin.png'},
+        {'emoticon': '未知', 'emote_url': ''},
+      ],
+    ));
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(received.single.segments, hasLength(5));
+    expect(received.single.segments[0].text, '前');
+    expect(received.single.segments[1].isEmoji, isTrue);
+    expect(received.single.segments[1].url, 'https://cdn.example/kaixin.png');
+    expect(received.single.segments[2].text, '中');
+    expect(received.single.segments[3].text, '[未知]');
+    expect(received.single.segments[4].text, '后');
     await sub.cancel();
     await session.close();
   });

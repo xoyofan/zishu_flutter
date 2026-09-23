@@ -334,6 +334,8 @@ class BilibiliDanmakuSession implements DanmakuSession {
       userLevel = ul.isNotEmpty ? _intOf(ul[0]) : 0;
     }
 
+    final segments = _emoteSegments(meta, text0);
+
     // 协议重推去重(对齐 web bilibiliDanmakuDedup,cap 1200):
     // 优先 id_str,缺失回落「用户+正文」key(web fallback 同款)。
     final dedupKey = danmakuId.isNotEmpty ? danmakuId : '$userName\u0000$text0';
@@ -347,6 +349,7 @@ class BilibiliDanmakuSession implements DanmakuSession {
         userName: userName,
         userId: userId,
         text: text0,
+        segments: segments,
         badgeName: badgeName,
         badgeLevel: badgeLevel,
         userLevel: userLevel,
@@ -359,6 +362,64 @@ class BilibiliDanmakuSession implements DanmakuSession {
         rawType: cmd,
       ),
     );
+  }
+
+  static List<DanmakuSegment> _emoteSegments(
+    List<Object?> meta,
+    String text,
+  ) {
+    if (text.isEmpty) return const [];
+    final candidates = <Object?>[];
+    void collect(Object? raw) {
+      if (raw is List) {
+        candidates.addAll(raw);
+      } else if (raw is Map) {
+        final nested = raw['emote'];
+        if (nested is List) candidates.addAll(nested);
+      }
+    }
+
+    if (meta.length > 13) collect(meta[13]);
+    if (meta.length > 15) collect(meta[15]);
+
+    final urls = <String, String>{};
+    for (final candidate in candidates) {
+      if (candidate is! Map) continue;
+      final url = jsonText(candidate['url']).trim().isNotEmpty
+          ? jsonText(candidate['url']).trim()
+          : jsonText(candidate['emote_url']).trim();
+      final rawName = jsonText(candidate['emoji']).trim().isNotEmpty
+          ? jsonText(candidate['emoji']).trim()
+          : jsonText(candidate['emoticon']).trim().isNotEmpty
+          ? jsonText(candidate['emoticon']).trim()
+          : jsonText(candidate['text']).trim();
+      final name = rawName.replaceAll(RegExp(r'^\[+|\]+$'), '').trim();
+      if (url.isNotEmpty && name.isNotEmpty) urls[name] = url;
+    }
+    if (urls.isEmpty) return const [];
+
+    final segments = <DanmakuSegment>[];
+    final pattern = RegExp(r'\[([^\[\]]+)\]');
+    var cursor = 0;
+    var hit = false;
+    for (final match in pattern.allMatches(text)) {
+      if (match.start > cursor) {
+        segments.add(DanmakuSegment.text(text.substring(cursor, match.start)));
+      }
+      final url = urls[match.group(1)];
+      if (url != null) {
+        hit = true;
+        segments.add(DanmakuSegment.emoji(text: match.group(0)!, url: url));
+      } else {
+        segments.add(DanmakuSegment.text(match.group(0)!));
+      }
+      cursor = match.end;
+    }
+    if (!hit) return const [];
+    if (cursor < text.length) {
+      segments.add(DanmakuSegment.text(text.substring(cursor)));
+    }
+    return segments;
   }
 
   static int _intOf(Object? value) =>
