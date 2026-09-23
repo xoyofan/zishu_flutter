@@ -7,6 +7,7 @@ import '../../contracts/contracts.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
 import '../../registry/cached_room_resolver.dart';
+import '../../registry/site_display.dart';
 import 'biz_names.dart';
 import 'browse.dart';
 import 'normalize.dart';
@@ -252,6 +253,7 @@ SiteRegistration buildYyRegistration({
       multiQuality: true,
       multiLine: true,
     ),
+    display: kYyDisplay,
     resolver: CachedRoomResolver(YyRoomResolver(effectiveClient)),
     browse: YyBrowseRepository(effectiveClient.parserHttp),
     search: YySearchRepository(effectiveClient.parserHttp),

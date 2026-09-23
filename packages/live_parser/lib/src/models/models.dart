@@ -16,6 +16,48 @@ import 'dart:convert';
 /// 枚举按 name 序列化,`replay` 追加在末尾不影响旧 JSON 的读写。
 enum RoomState { live, offline, notFound, replay }
 
+/// 房间统计列对应的稳定数据字段。
+///
+/// UI 不直接依赖平台字段名,只消费 [RoomStatColumn] 与这里的公共枚举。
+enum RoomStatField { audience, vip, svip }
+
+/// 房间统计列的视觉语义,对应现有主题 token。
+enum RoomStatTone { audience, vip, svip }
+
+/// 一个平台公开的房间统计列。
+class RoomStatColumn {
+  const RoomStatColumn({
+    required this.field,
+    required this.label,
+    required this.tone,
+  });
+
+  final RoomStatField field;
+  final String label;
+  final RoomStatTone tone;
+}
+
+/// 站点在 UI 中公开的展示能力。
+///
+/// 这是纯 Dart 描述,不包含 Flutter/UI 依赖;`site == ...` 分支不应
+/// 重新定义这些标签。
+class SiteDisplaySpec {
+  const SiteDisplaySpec({
+    this.showFollowers = false,
+    this.showStartedAt = false,
+    this.roomStats = const [],
+  });
+
+  /// 是否显示独立的「关注 N」字段。
+  final bool showFollowers;
+
+  /// 是否显示本场开播时间字段。
+  final bool showStartedAt;
+
+  /// 平台公开的房间统计列,按展示顺序排列。
+  final List<RoomStatColumn> roomStats;
+}
+
 /// 一条可播放线路。
 class StreamLine {
   const StreamLine({

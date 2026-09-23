@@ -8,6 +8,7 @@ import '../../http/parser_http.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
 import '../../registry/cached_room_resolver.dart';
+import '../../registry/site_display.dart';
 import '../../utils/format_online.dart';
 import '../../utils/header_sanitizer.dart';
 import 'browse.dart';
@@ -361,6 +362,7 @@ SiteRegistration buildBilibiliRegistration({
       multiQuality: true,
       multiLine: true,
     ),
+    display: kBilibiliDisplay,
     resolver: CachedRoomResolver(BilibiliRoomResolver(effectiveClient)),
     browse: BilibiliBrowseRepository(effectiveClient.parserHttp, effectiveClient.credentials),
     search: BilibiliSearchRepository(effectiveClient.parserHttp, effectiveClient.credentials),

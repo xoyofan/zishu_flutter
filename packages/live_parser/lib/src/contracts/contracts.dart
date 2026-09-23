@@ -141,6 +141,7 @@ class SiteRegistration {
     this.browse,
     this.search,
     this.danmaku,
+    this.display = const SiteDisplaySpec(),
   });
 
   final String id;
@@ -150,6 +151,9 @@ class SiteRegistration {
   final BrowseRepository? browse;
   final SearchRepository? search;
   final DanmakuConnector? danmaku;
+
+  /// UI 共享的平台展示语义,默认不暴露任何统计列。
+  final SiteDisplaySpec display;
 }
 
 /// 站点能力注册表。

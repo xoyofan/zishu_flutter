@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
 import '../../registry/cached_room_resolver.dart';
+import '../../registry/site_display.dart';
 import '../douyu/json_utils.dart';
 import 'browse.dart';
 import 'danmaku.dart';
@@ -303,6 +304,7 @@ SiteRegistration buildYoutubeRegistration({
       multiQuality: true,
       multiLine: true,
     ),
+    display: kYoutubeDisplay,
     resolver: CachedRoomResolver(
       YoutubeRoomResolver(
         effectiveClient,

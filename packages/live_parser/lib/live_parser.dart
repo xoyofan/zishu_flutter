@@ -45,4 +45,5 @@ export 'src/platforms/yy/normalize.dart';
 export 'src/platforms/yy/room_api.dart';
 export 'src/platforms/yy/search.dart';
 export 'src/platforms/yy/yy_site.dart';
+export 'src/registry/site_display.dart';
 export 'src/registry/site_registry.dart';

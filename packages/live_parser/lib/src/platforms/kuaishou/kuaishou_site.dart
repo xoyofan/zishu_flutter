@@ -9,6 +9,7 @@ import '../../contracts/contracts.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
 import '../../registry/cached_room_resolver.dart';
+import '../../registry/site_display.dart';
 import 'browse.dart';
 import 'danmaku.dart';
 import 'normalize.dart';
@@ -195,6 +196,7 @@ SiteRegistration buildKuaishouRegistration({
       multiQuality: true,
       multiLine: true,
     ),
+    display: kKuaishouDisplay,
     resolver: CachedRoomResolver(KuaishouRoomResolver(effectiveClient)),
     browse: KuaishouBrowseRepository(effectiveClient.parserHttp),
     search: const KuaishouSearchRepository(),

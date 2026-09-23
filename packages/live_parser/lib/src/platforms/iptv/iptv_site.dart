@@ -4,6 +4,7 @@ library;
 import '../../http/danmaku_transport.dart';
 import '../../http/parser_http.dart';
 import '../../contracts/contracts.dart';
+import '../../registry/site_display.dart';
 import '../../models/models.dart';
 import 'browse.dart';
 import 'channel_repository.dart';
@@ -112,6 +113,7 @@ SiteRegistration buildIptvRegistration({
       roomSearch: true,
       multiLine: true,
     ),
+    display: kIptvDisplay,
     resolver: IptvRoomResolver(repository),
     browse: IptvBrowseRepository(repository),
     search: IptvSearchRepository(repository),

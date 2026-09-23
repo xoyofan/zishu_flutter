@@ -8,6 +8,7 @@ import '../../http/parser_http.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
 import '../../registry/cached_room_resolver.dart';
+import '../../registry/site_display.dart';
 import '../../utils/format_online.dart';
 import 'browse.dart';
 import 'danmaku.dart';
@@ -449,6 +450,7 @@ SiteRegistration buildDouyuRegistration({
       multiQuality: true,
       multiLine: true,
     ),
+    display: kDouyuDisplay,
     resolver: CachedRoomResolver(DouyuRoomResolver(effectiveClient)),
     browse: DouyuBrowseRepository(effectiveClient.parserHttp),
     search: DouyuSearchRepository(effectiveClient.parserHttp),

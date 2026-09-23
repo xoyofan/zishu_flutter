@@ -8,6 +8,7 @@ import '../../http/danmaku_transport.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
 import '../../registry/cached_room_resolver.dart';
+import '../../registry/site_display.dart';
 import 'browse.dart';
 import 'danmaku.dart';
 import 'gql.dart';
@@ -291,6 +292,7 @@ SiteRegistration buildTwitchRegistration({
       danmaku: true,
       multiQuality: true,
     ),
+    display: kTwitchDisplay,
     resolver: CachedRoomResolver(TwitchRoomResolver(effectiveClient)),
     browse: TwitchBrowseRepository(effectiveClient.gql),
     search: TwitchSearchRepository(effectiveClient.gql),

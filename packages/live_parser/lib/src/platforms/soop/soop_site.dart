@@ -8,6 +8,7 @@ import '../../http/danmaku_transport.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
 import '../../registry/cached_room_resolver.dart';
+import '../../registry/site_display.dart';
 import '../../utils/format_online.dart';
 import 'browse.dart';
 import 'danmaku.dart';
@@ -289,6 +290,7 @@ SiteRegistration buildSoopRegistration({
       multiQuality: true,
       multiLine: true,
     ),
+    display: kSoopDisplay,
     resolver: CachedRoomResolver(SoopRoomResolver(effectiveClient)),
     browse: SoopBrowseRepository(effectiveClient.parserHttp),
     search: SoopSearchRepository(effectiveClient.parserHttp),

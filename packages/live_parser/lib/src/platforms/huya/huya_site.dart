@@ -8,6 +8,7 @@ import '../../http/parser_http.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
 import '../../registry/cached_room_resolver.dart';
+import '../../registry/site_display.dart';
 import '../../utils/format_online.dart';
 import 'browse.dart';
 import 'danmaku.dart';
@@ -473,6 +474,7 @@ SiteRegistration buildHuyaRegistration({
       multiQuality: true,
       multiLine: true,
     ),
+    display: kHuyaDisplay,
     resolver: CachedRoomResolver(HuyaRoomResolver(effectiveClient)),
     browse: HuyaBrowseRepository(effectiveClient.parserHttp),
     search: HuyaSearchRepository(effectiveClient.parserHttp),
