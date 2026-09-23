@@ -204,7 +204,9 @@ Future<Map<String, dynamic>> fetchDouyuMobileRoomInfo(
 /// - `data.roomInfo.fansNum` → 粉丝数;
 /// - `data.functionShow.giftCard.total` → 贵宾数回退(web 真源的贵宾
 ///   实时榜走弹幕 WS `oni` 消息,轻量刷新不复刻 WS,只取卡片回退值,
-///   与 web `vipFromCard` 分支一致)。
+///   与 web `vipFromCard` 分支一致);
+/// - `data.anchorLevel.dFansInfo.curDfansNum` → 钻粉数
+///   ([RoomSummary.diamondFans],web `ROOM_STAT_COLUMNS.douyu` 第 3 列)。
 ///
 /// 失败一律返回空 map:粉丝/贵宾是展示增强,不得让刷新整体失败。
 Future<Map<String, dynamic>> fetchDouyuAnchorCard(

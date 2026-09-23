@@ -8,7 +8,6 @@ import '../../models/models.dart';
 import '../../registry/category_cache.dart';
 import '../../utils/format_online.dart';
 import '../douyu/json_utils.dart';
-import 'ab_sign.dart';
 import 'normalize.dart';
 import 'room_api.dart';
 
@@ -302,7 +301,7 @@ Future<RoomListResult> fetchDouyinPartitionRooms(
   final partitionType = _resolvePartitionType(effectivePartition);
   final offset = (page < 1 ? 0 : page - 1) * effectiveLimit;
 
-  final json = await _signedGet(
+  final json = await signedDouyinGet(
     client,
     '/webcast/web/partition/detail/room/v2/',
     <String, String>{
@@ -346,44 +345,6 @@ Future<RoomListResult> fetchDouyinPartitionRooms(
     page: page,
     hasMore: jsonBool(wrapper['has_more']) || entries.length >= effectiveLimit,
   );
-}
-
-Future<Map<String, dynamic>> _signedGet(
-  DouyinClient client,
-  String path,
-  Map<String, String> params,
-) async {
-  Object? lastError;
-  for (var attempt = 0; attempt < 2; attempt++) {
-    final cookie = await client.sessionCookie(force: attempt > 0);
-    final query = serializeDouyinQuery(
-      params.entries.map((entry) => MapEntry(entry.key, entry.value)).toList(),
-    );
-    final abogus = douyinAbSign(query, kDouyinUserAgent);
-    final uri = Uri.parse(
-      'https://live.douyin.com$path?$query&a_bogus=${Uri.encodeComponent(abogus)}',
-    );
-    try {
-      final response = await client.parserHttp.get(
-        uri,
-        headers: douyinPcHeaders(cookie: cookie),
-      );
-      final text = utf8.decode(response.bodyBytes);
-      if (text.trim().isEmpty || text.trim().startsWith('<!DOCTYPE')) {
-        lastError = const FormatException('抖音列表接口触发风控');
-        continue;
-      }
-      final decoded = jsonDecode(text);
-      if (decoded is! Map) {
-        throw const FormatException('抖音列表接口返回非对象 JSON');
-      }
-      return Map<String, dynamic>.from(decoded);
-    } on Object catch (error) {
-      lastError = error;
-      if (attempt == 0) continue;
-    }
-  }
-  throw StateError(lastError?.toString() ?? '抖音列表接口触发风控');
 }
 
 String _resolvePartitionType(String cid) {

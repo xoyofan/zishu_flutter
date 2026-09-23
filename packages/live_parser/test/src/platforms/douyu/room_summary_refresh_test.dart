@@ -54,6 +54,9 @@ void main() {
           'functionShow': {
             'giftCard': {'total': 321},
           },
+          'anchorLevel': {
+            'dFansInfo': {'curDfansNum': 678},
+          },
         },
       };
 
@@ -72,6 +75,10 @@ void main() {
     // 资料卡:粉丝/贵宾(web fetchDouyuAnchorCard 同源,fansNum/giftCard.total)。
     expect(summary.followers, '123456', reason: 'web formatCount 口径:完整数字');
     expect(summary.vip, '321', reason: '贵宾取卡片 giftCard.total(WS oni 不复刻)');
+    // 钻粉:web ROOM_STAT_COLUMNS.douyu 第 3 列(tone=svip)field=diamondFans,
+    // 取 getAnchorNewCard 的 anchorLevel.dFansInfo.curDfansNum(同一卡片请求,
+    // 零额外网络)。
+    expect(summary.diamondFans, '678');
     expect(summary.roomState, RoomState.live);
 
     final urls = fake.requests.map((request) => request.url).join('\n');
@@ -98,6 +105,7 @@ void main() {
     expect(summary.online, '5千');
     expect(summary.followers, '', reason: '统计是展示增强,拿不到就留空');
     expect(summary.vip, '');
+    expect(summary.diamondFans, '');
   });
 
   test('分类:mobile cate2Name 优先;betard 无 cate_name 时兜 second_lvl_name', () async {

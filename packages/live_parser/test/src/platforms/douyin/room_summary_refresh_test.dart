@@ -86,6 +86,47 @@ void main() {
     );
   });
 
+  test('会员(diamondFans):在播时走带签名的主播资料卡接口', () async {
+    fake
+      ..enterResponse = _enter(status: 2, online: 32100)
+      ..anchorProfileResponse = {
+        'status_code': 0,
+        'data': {
+          'user_profile': {
+            'subscribe_info': {'member_count': 4567},
+          },
+        },
+      };
+
+    final summary = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'douyin', roomIdOrUrl: '123456'),
+    );
+
+    // web ROOM_STAT_COLUMNS.douyin 第 3 列(tone=svip)field=vip「会员」
+    // (follow/douyin-extras.ts 的 subscribe_info.member_count);
+    // 本包统一由 [RoomSummary.diamondFans] 承载。
+    expect(summary.diamondFans, '4567');
+    final urls = fake.requests.map((request) => request.url).join('\n');
+    expect(urls, contains('/webcast/user/profile/'));
+    expect(urls, contains('a_bogus='), reason: '资料卡接口需 a_bogus 签名');
+    expect(urls, isNot(contains('partition')), reason: '刷新不得请求分区/列表接口');
+  });
+
+  test('会员:未开播(status=4)不请求资料卡,diamondFans 留空', () async {
+    fake.enterResponse = _enter(status: 4, online: 9999);
+
+    final summary = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'douyin', roomIdOrUrl: '123456'),
+    );
+
+    expect(summary.diamondFans, '');
+    expect(
+      fake.requests.map((request) => request.url).join('\n'),
+      isNot(contains('/webcast/user/profile/')),
+      reason: '仅播时取会员(web 真源 status==2 门槛)',
+    );
+  });
+
   test('未开播(status=4):online 为空串', () async {
     fake.enterResponse = _enter(status: 4, online: 9999);
 

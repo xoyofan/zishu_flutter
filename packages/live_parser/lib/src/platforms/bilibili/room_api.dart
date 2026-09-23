@@ -131,6 +131,41 @@ Future<({String uname, String face})> fetchBilibiliAnchorInRoom(
   return (uname: jsonText(info['uname']), face: httpsBilibiliUrl(jsonText(info['face'])));
 }
 
+/// 大航海总人数(xlive/app-room/v2/guardTab/topList 的 `data.info.num`)。
+///
+/// 口径对齐 web `fetchBilibiliGuardInfo`(SFVideoLive
+/// `services/streaming-server/src/resolve/bilibili/web-stream.ts:331`):
+/// 仅在播时查询(调用方门槛),失败/为 0 一律返回 0(展示层留空,不伪造)。
+Future<int> fetchBilibiliGuardTotal(
+  ParserHttp http,
+  BilibiliCredentials credentials,
+  String roomId,
+  int anchorUid,
+) async {
+  if (roomId.isEmpty || anchorUid <= 0) return 0;
+  try {
+    final data = jsonMapOf(
+      await bilibiliFetchJson(
+        http,
+        credentials,
+        Uri.parse(
+          'https://api.live.bilibili.com/xlive/app-room/v2/guardTab/topList',
+        ),
+        params: {
+          'roomid': roomId,
+          'ruid': '$anchorUid',
+          'page': '1',
+          'page_size': '50',
+        },
+        roomId: roomId,
+      ),
+    );
+    return jsonInt(jsonMapOf(data['info'])['num']);
+  } on Object {
+    return 0;
+  }
+}
+
 /// xlive/web-room/v2/index/getRoomPlayInfo。
 Future<Map<String, dynamic>> fetchBilibiliRoomPlayInfo(
   ParserHttp http,

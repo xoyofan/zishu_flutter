@@ -346,21 +346,24 @@ class RoomSummary {
   ///   `platforms/huya/huya_wup.dart`)的 `VipBarListRsp.iTotalNum`;
   ///   wup 失败/为 0 留空;
   /// - bilibili/douyin/yy/kuaishou:上游需要额外签名/Tars 协议或
-  ///   真源本身无此字段,恒为空。
+  ///   真源本身无此字段,恒为空(注:抖音的会员数在 web 真源是 `vip`
+  ///   字段,但落在第 3 列,本包按列口径归入 [diamondFans])。
   final String vip;
 
   /// 第 3 列「SVIP 档」计数文案(已格式化,如「1.2万」)。
   ///
   /// 字段名沿用 web 真源的同一个键 `FollowStatus.diamondFans`
   /// (SFVideoLive `packages/shared/src/types/follow.ts:27`)与
-  /// `ROOM_STAT_COLUMNS` 的第 3 列 `field: "diamondFans"`
-  /// (`platformCatalog.ts:9`);**不做平台专属重命名**,因为真源本身就是
-  /// 一个字段承载各平台不同语义 —— 故此处保留 `diamondFans` 以便
-  /// douyu/douyin/bilibili 后续按同一键复用(映射关系与真源一致):
-  /// - huya(本轮实现):`tone=svip` 列 label「超粉」= **超粉人数**;
-  /// - douyu:label「钻粉」(`functionShow.giftCard.dFansInfo.curDfansNum`);
-  /// - douyin:label「会员」;bilibili:label「大航海」;
-  ///   (后三站按 web 真源另有取数链路,本包尚未实现,恒为空)。
+  /// `ROOM_STAT_COLUMNS` 的第 3 列(tone=svip);**不做平台专属重命名**,
+  /// 因为真源本身就是一个字段承载各平台不同语义 —— 本包统一由
+  /// `diamondFans` 承载各站第 3 列的值(语义随平台变):
+  /// - douyu:label「钻粉」= `getAnchorNewCard` 的
+  ///   `anchorLevel.dFansInfo.curDfansNum`(与粉丝/贵宾同一卡片请求);
+  /// - huya:label「超粉」= 超粉人数(wup `getSuperFansInfo`);
+  /// - douyin:label「会员」= web 真源 `FollowStatus.vip`
+  ///   (`/webcast/user/profile/` 的 `subscribe_info.member_count`,仅播时);
+  /// - bilibili:label「大航海」= web 真源 `FollowStatus.guard`
+  ///   (`guardTab/topList` 的 `data.info.num`,仅播时)。
   ///
   /// 虎牙取数(对齐 web `fetchHuyaSuperFanCount`,SFVideoLive
   /// `services/streaming-server/src/follow/huya-wup.ts:199`):仅在播时走

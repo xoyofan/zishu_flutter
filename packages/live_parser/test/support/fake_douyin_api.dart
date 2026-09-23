@@ -9,6 +9,9 @@ import 'package:http/http.dart' as http;
 
 class FakeDouyinApi extends http.BaseClient {
   Object? enterResponse;
+
+  /// 主播资料卡(/webcast/user/profile/,签名请求)。
+  Object? anchorProfileResponse;
   Object? partitionResponse;
   Object? discoverResponse;
   Object? roomSearchResponse;
@@ -39,6 +42,9 @@ class FakeDouyinApi extends http.BaseClient {
       }
       if (url.path.startsWith('/webcast/room/web/enter/')) {
         return _json(enterResponse);
+      }
+      if (url.path.startsWith('/webcast/user/profile/')) {
+        return _json(anchorProfileResponse);
       }
       if (url.path.startsWith('/webcast/web/partition/detail/room/v2/')) {
         return _json(partitionResponse);

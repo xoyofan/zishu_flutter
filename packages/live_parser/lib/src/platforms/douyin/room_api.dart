@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
+import '../../utils/format_online.dart';
 import '../douyu/json_utils.dart';
 import 'ab_sign.dart';
 import 'normalize.dart';
@@ -510,6 +511,109 @@ String douyinAvatarOf(Map<String, dynamic> room) {
     }
   }
   return '';
+}
+
+/// 带 a_bogus 签名的抖音 PC GET(自动带会话 cookie;风控/非 JSON 重试一次)。
+///
+/// 与 web 真源 `follow/douyin-extras.ts` 的 `signedDouyinGet` 同构。
+Future<Map<String, dynamic>> signedDouyinGet(
+  DouyinClient client,
+  String path,
+  Map<String, String> params, {
+  String referer = 'https://live.douyin.com/',
+}) async {
+  Object? lastError;
+  for (var attempt = 0; attempt < 2; attempt++) {
+    final cookie = await client.sessionCookie(force: attempt > 0);
+    final query = serializeDouyinQuery(
+      params.entries.map((entry) => MapEntry(entry.key, entry.value)).toList(),
+    );
+    final abogus = douyinAbSign(query, kDouyinUserAgent);
+    final uri = Uri.parse(
+      'https://live.douyin.com$path?$query&a_bogus=${Uri.encodeComponent(abogus)}',
+    );
+    try {
+      final response = await client.parserHttp.get(
+        uri,
+        headers: douyinPcHeaders(referer: referer, cookie: cookie),
+      );
+      final text = utf8.decode(response.bodyBytes);
+      if (text.trim().isEmpty || text.trim().startsWith('<!DOCTYPE')) {
+        lastError = const FormatException('抖音接口触发风控');
+        continue;
+      }
+      final decoded = jsonDecode(text);
+      if (decoded is! Map) {
+        throw const FormatException('抖音接口返回非对象 JSON');
+      }
+      return Map<String, dynamic>.from(decoded);
+    } on Object catch (error) {
+      lastError = error;
+      if (attempt == 0) continue;
+    }
+  }
+  throw StateError(lastError?.toString() ?? '抖音接口触发风控');
+}
+
+/// 直播会员人数(web `follow/douyin-extras.ts`
+/// `fetchDouyinAnchorProfileCounts` 的 vip 分支)。
+///
+/// 走带 a_bogus 签名的 `/webcast/user/profile/`,取
+/// `data.user_profile.subscribe_info.member_count`(缺失回退 `member_count_str`,
+/// 万/千级字符串一并还原,口径同 web `pickProfileCount`)。失败、字段缺失、
+/// 业务码非 0、或 owner/房间内部号缺失时**一律返回空串**
+/// (数据诚实性:不伪造)。web 真源同响应另有粉丝团人数(fanGroup),
+/// 本包 [RoomSummary] 无该列,不取。
+Future<String> fetchDouyinAnchorMemberCount(
+  DouyinClient client,
+  Map<String, dynamic> room,
+  String webRid,
+) async {
+  final owner = jsonMapOf(room['owner']);
+  final anchorId = jsonText(owner['id_str']).trim();
+  final secUid = jsonText(owner['sec_uid']).trim();
+  final internalRoomId = jsonText(room['id_str'] ?? room['id']).trim();
+  if (anchorId.isEmpty || internalRoomId.isEmpty) return '';
+  try {
+    final json = await signedDouyinGet(
+      client,
+      '/webcast/user/profile/',
+      {
+        'aid': '6383',
+        'app_name': 'douyin_web',
+        'live_id': '1',
+        'device_platform': 'web',
+        'anchor_id': anchorId,
+        'sec_anchor_id': secUid,
+        'room_id': internalRoomId,
+        'target_uid': anchorId,
+        'user_id': anchorId,
+        'sec_user_id': secUid,
+        'msToken': randomDouyinMsToken(),
+      },
+      referer: 'https://live.douyin.com/$webRid',
+    );
+    if (jsonInt(json['status_code']) != 0) return '';
+    final profile = jsonMapOf(jsonMapOf(json['data'])['user_profile']);
+    final subscribe = jsonMapOf(profile['subscribe_info']);
+    return _douyinProfileCount(
+      subscribe['member_count'],
+      subscribe['member_count_str'],
+    );
+  } on Object {
+    return '';
+  }
+}
+
+/// web `pickProfileCount` 口径:数值优先,缺失时还原「1.2万」类字符串。
+String _douyinProfileCount(Object? raw, Object? text) {
+  final numeric = parseOnlineCount(raw);
+  if (numeric > 0) return formatExactCount(numeric);
+  final cleaned = jsonText(
+    text,
+  ).replaceFirst(RegExp(r'人$'), '').replaceAll('+', '').trim();
+  final fromText = parseOnlineCount(cleaned);
+  return fromText > 0 ? formatExactCount(fromText) : '';
 }
 
 /// 解析直播内部房间号(弹幕 WS 需要):id_str/id,兜底房间页正则。

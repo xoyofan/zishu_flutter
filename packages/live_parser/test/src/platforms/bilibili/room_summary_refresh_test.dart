@@ -100,6 +100,62 @@ void main() {
     expect(summary.avatar, 'https://i0.hdslb.com/bfs/face/fallback.jpg');
   });
 
+  test('大航海(diamondFans):在播时取 guardTab/topList 的 info.num', () async {
+    fake
+      ..roomInfoResponse = _roomInfo(liveStatus: 1, online: 12345)
+      ..guardTopListResponse = {
+        'code': 0,
+        'data': {
+          'info': {'num': 128},
+          'top3': [
+            {'guard_level': 1},
+          ],
+          'list': [
+            {'guard_level': 3},
+          ],
+        },
+      };
+
+    final summary = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'bilibili', roomIdOrUrl: '9527'),
+    );
+
+    // web ROOM_STAT_COLUMNS.bilibili 第 3 列(tone=svip)field=guard「大航海」,
+    // 本包统一由 [RoomSummary.diamondFans] 承载。
+    expect(summary.diamondFans, '128');
+    final urls = fake.requests.map((request) => request.url).join('\n');
+    expect(urls, contains('guardTab/topList'));
+    expect(urls, isNot(contains('play_info')), reason: '刷新不得请求取流接口');
+  });
+
+  test('大航海:离线不请求 guardTab,diamondFans 留空', () async {
+    fake.roomInfoResponse = _roomInfo(liveStatus: 0, online: 9999);
+
+    final summary = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'bilibili', roomIdOrUrl: '9528'),
+    );
+
+    expect(summary.diamondFans, '');
+    expect(
+      fake.requests.map((request) => request.url).join('\n'),
+      isNot(contains('guardTab/topList')),
+      reason: '仅播时取大航海(web 真源 state==live 门槛)',
+    );
+  });
+
+  test('大航海:接口失败留空,刷新不失败(不伪造)', () async {
+    fake
+      ..roomInfoResponse = _roomInfo(liveStatus: 1, online: 12345)
+      ..guardTopListResponse = {'code': -400, 'message': '风控'};
+
+    final summary = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'bilibili', roomIdOrUrl: '9527'),
+    );
+
+    expect(summary.diamondFans, '');
+    expect(summary.online, '1.2万', reason: '大航海失败不影响其余字段');
+  });
+
   test('离线(live_status=0):online 为空串,roomState=offline', () async {
     fake.roomInfoResponse = _roomInfo(liveStatus: 0, online: 9999);
 

@@ -14,6 +14,9 @@ class FakeBilibiliApi extends http.BaseClient {
   Object? anchorInRoomResponse;
   Object? roomPlayInfoResponse;
 
+  /// 大航海人数(guardTab/topList)。
+  Object? guardTopListResponse;
+
   /// 按请求 qn 参数路由的 playInfo 响应(懒取流用例):命中键用对应响应,
   /// 未命中回退 [roomPlayInfoResponse]。
   Map<int, Object?>? roomPlayInfoByQn;
@@ -49,6 +52,7 @@ class FakeBilibiliApi extends http.BaseClient {
     return switch (path) {
       '/room/v1/Room/get_info' => _json(roomInfoResponse),
       '/live_user/v1/UserInfo/get_anchor_in_room' => _json(anchorInRoomResponse),
+      '/xlive/app-room/v2/guardTab/topList' => _json(guardTopListResponse),
       '/xlive/web-room/v2/index/getRoomPlayInfo' => _playInfoFor(request),
       '/room/v1/Area/getList' => _json(areaListResponse),
       '/room/v1/Area/getRoomList' => _json(roomListResponse),

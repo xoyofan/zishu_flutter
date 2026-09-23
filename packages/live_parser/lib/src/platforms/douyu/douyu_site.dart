@@ -63,7 +63,8 @@ class DouyuRoomResolver implements RoomResolver, RoomSummaryRefresher {
   /// douyu 快照(`douyuState`):`show_status == 1` 且实时在播时取 `hn`
   /// 作热度文案,轮播(`videoLoop == 1`,输出 [RoomState.replay])与离线
   /// 一律空串;`fansNum`/`giftCard.total` 作粉丝/贵宾文案(web 真源的贵宾
-  /// 实时榜走弹幕 WS oni,此处仅取卡片回退值)。
+  /// 实时榜走弹幕 WS oni,此处仅取卡片回退值),`anchorLevel.dFansInfo.curDfansNum`
+  /// 作第 3 列钻粉([RoomSummary.diamondFans],web `ROOM_STAT_COLUMNS.douyu`)。
   @override
   Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
     final parserHttp = _client.parserHttp;
@@ -79,6 +80,14 @@ class DouyuRoomResolver implements RoomResolver, RoomSummaryRefresher {
     );
     final cardVip = formatExactCount(
       jsonMapOf(jsonMapOf(anchorCard['functionShow'])['giftCard'])['total'],
+    );
+    // 钻粉(web `ROOM_STAT_COLUMNS.douyu` 第 3 列 tone=svip field=diamondFans):
+    // getAnchorNewCard 的 `anchorLevel.dFansInfo.curDfansNum` —— 与粉丝/贵宾
+    // 同一张资料卡,零额外网络。
+    final cardDiamondFans = formatExactCount(
+      jsonMapOf(
+        jsonMapOf(anchorCard['anchorLevel'])['dFansInfo'],
+      )['curDfansNum'],
     );
 
     final live = room.showStatus == 1;
@@ -111,6 +120,7 @@ class DouyuRoomResolver implements RoomResolver, RoomSummaryRefresher {
           : room.avatar,
       followers: cardFans,
       vip: cardVip,
+      diamondFans: cardDiamondFans,
       roomState: replay
           ? RoomState.replay
           : (live ? RoomState.live : RoomState.offline),

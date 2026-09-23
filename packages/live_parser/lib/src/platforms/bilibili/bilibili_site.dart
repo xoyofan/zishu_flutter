@@ -107,6 +107,19 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
     final liveStatus = jsonInt(info['live_status']);
     final isLive = liveStatus == 1;
     final isReplay = liveStatus == 2;
+    // 大航海人数(web ROOM_STAT_COLUMNS.bilibili 第 3 列 tone=svip
+    // field=guard「大航海」,本包统一由 diamondFans 承载):仅在播时取
+    // guardTab/topList(web 真源 state==live 门槛),失败/为 0 留空。
+    final diamondFans = isLive
+        ? formatExactCount(
+            await fetchBilibiliGuardTotal(
+              http,
+              credentials,
+              rid,
+              jsonInt(info['uid']),
+            ),
+          )
+        : '';
     // 二级分类名优先(web pickText(area_name, parent_area_name) 同口径)。
     final refreshAreaName = jsonText(info['area_name']);
     return RoomSummary(
@@ -124,6 +137,7 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
       cover: bilibiliCoverFromRoom(info),
       avatar: avatar,
       followers: formatExactCount(info['attention']),
+      diamondFans: diamondFans,
       roomState: isLive
           ? RoomState.live
           : (isReplay ? RoomState.replay : RoomState.offline),
