@@ -1,6 +1,7 @@
-/// 全局返回快捷键 workflow 测试:鼠标侧键(后退)与 Alt+←。
+/// 全局导航快捷键 workflow 测试:后退(Alt+←/侧键X1/Alt+左键)、
+/// 前进(Alt+→/侧键X2/Alt+右键)与 Alt+Home,含「Alt 点击独占子组件」的 gate 验证。
 ///
-/// 覆盖三条链路,全部走真实宿主 [WindowsApp](含 AppBackShortcuts 接线)
+/// 覆盖真实宿主 [WindowsApp](含 AppNavShortcuts 接线)
 /// + 注入 FakeLivePlayer(VM 下禁止初始化 media_kit);存储后端注入
 /// InMemorySharedPreferencesAsync,与 side_panel_features_test 宿主写法一致:
 /// 固定次数 pump,不用 pumpAndSettle(封面图在 VM 中不会真正加载)。
@@ -140,6 +141,50 @@ Future<void> _clickBackMouseButton(WidgetTester tester) async {
   await _pumpFrames(tester, 2);
 }
 
+/// 按住 Alt 再按 →(浏览器前进手势)。
+Future<void> _pressAltRight(WidgetTester tester) async {
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.arrowRight);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.arrowRight);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+  await _pumpFrames(tester, 3);
+}
+
+/// 按住 Alt 再按 Home(浏览器回首页手势)。
+Future<void> _pressAltHome(WidgetTester tester) async {
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.home);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.home);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+  await _pumpFrames(tester, 3);
+}
+
+/// 鼠标前进侧键(XBUTTON2 → kForwardMouseButton)。
+Future<void> _clickForwardMouseButton(WidgetTester tester) async {
+  final pointer = TestPointer(1, PointerDeviceKind.mouse);
+  await tester.sendEventToBinding(
+    pointer.down(const Offset(120, 200), buttons: kForwardMouseButton),
+  );
+  await _pumpFrames(tester, 3);
+  await tester.sendEventToBinding(pointer.up());
+  await _pumpFrames(tester, 2);
+}
+
+/// 按住 Alt 的鼠标点击(左键后退 / 右键前进),落在 [at] 位置。
+Future<void> _altClickMouse(
+  WidgetTester tester, {
+  required int buttons,
+  Offset at = const Offset(120, 200),
+}) async {
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.altLeft);
+  final pointer = TestPointer(3, PointerDeviceKind.mouse);
+  await tester.sendEventToBinding(pointer.down(at, buttons: buttons));
+  await _pumpFrames(tester, 3);
+  await tester.sendEventToBinding(pointer.up());
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
+  await _pumpFrames(tester, 2);
+}
+
 void main() {
   setUp(() {
     // 桌面壳里有内存存储/登录恢复链路,注入内存后端避免碰平台通道。
@@ -248,6 +293,167 @@ void main() {
     await tester.tap(find.byKey(const Key('play-back')));
     await _pumpFrames(tester, 4);
     expect(_visiblePage(tester), '/all', reason: '切房后返回应回到进入播放页前的浏览页');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Alt+→ :后退后前进,回到原播放页', (tester) async {
+    final app = await _pumpApp(tester);
+    app.router.go('/all');
+    await _pumpFrames(tester, 3);
+    app.router.push('/douyu/play/63136');
+    await _pumpFrames(tester, 4);
+    expect(_visiblePage(tester), '/douyu/play/63136');
+
+    await _pressAltLeft(tester);
+    expect(_visiblePage(tester), '/all', reason: '先验证后退');
+
+    await _pressAltRight(tester);
+    expect(
+      _visiblePage(tester),
+      '/douyu/play/63136',
+      reason: 'Alt+→ 应回到刚被后退掉的页面(go_router 无 forward,由宿主前进栈提供)',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('鼠标前进侧键(X2):后退后前进', (tester) async {
+    final app = await _pumpApp(tester);
+    app.router.go('/all');
+    await _pumpFrames(tester, 3);
+    app.router.push('/douyu/play/63136');
+    await _pumpFrames(tester, 4);
+
+    await _clickBackMouseButton(tester);
+    expect(_visiblePage(tester), '/all', reason: 'X1 后退');
+
+    await _clickForwardMouseButton(tester);
+    expect(_visiblePage(tester), '/douyu/play/63136', reason: 'X2 前进');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Alt+鼠标左键:后退;并独占点击,子组件不响应', (tester) async {
+    final app = await _pumpApp(tester);
+    app.router.go('/all');
+    await _pumpFrames(tester, 3);
+    app.router.push('/douyu/play/63136');
+    await _pumpFrames(tester, 4);
+
+    // 播放页里 Alt+左键 → 后退回首页。
+    await _altClickMouse(tester, buttons: kPrimaryMouseButton);
+    expect(_visiblePage(tester), '/all', reason: 'Alt+鼠标左键 = 后退');
+
+    // 栈底再 Alt+点击房间卡:后退静默,且卡片不得响应(gate 独占该 pointer),
+    // 否则会既后退又进房。
+    final card = find.byKey(const Key('room-card-douyu-63136'));
+    await tester.ensureVisible(card);
+    await _pumpFrames(tester, 2);
+    await _altClickMouse(tester, buttons: kPrimaryMouseButton, at: tester.getCenter(card));
+    expect(_visiblePage(tester), '/all', reason: 'Alt+点击卡片不得进房(子树命中被阻断)');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Alt+鼠标右键:前进', (tester) async {
+    final app = await _pumpApp(tester);
+    app.router.go('/all');
+    await _pumpFrames(tester, 3);
+    app.router.push('/douyu/play/63136');
+    await _pumpFrames(tester, 4);
+
+    await _pressAltLeft(tester);
+    expect(_visiblePage(tester), '/all');
+
+    await _altClickMouse(tester, buttons: kSecondaryMouseButton);
+    expect(_visiblePage(tester), '/douyu/play/63136', reason: 'Alt+鼠标右键 = 前进');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Alt+Home:回首页;没后退过则无可前进点,后退过的前进栈不受影响', (tester) async {
+    final app = await _pumpApp(tester);
+    app.router.go('/all');
+    await _pumpFrames(tester, 3);
+    app.router.push('/douyu/play/63136');
+    await _pumpFrames(tester, 4);
+
+    // 没后退过:Alt+Home 后前进栈为空,Alt+→ 静默(浏览器同款 ——
+    // 前进点只来自「已后退的历史」)。
+    await _pressAltHome(tester);
+    expect(_visiblePage(tester), '/all', reason: 'Alt+Home 回首页');
+    await _pressAltRight(tester);
+    expect(_visiblePage(tester), '/all', reason: '没后退过则无前进点,静默');
+
+    // 从非首页出发:后退留下前进栈 → Alt+Home(go 重置路由栈)不得清掉它。
+    app.router.go('/douyu');
+    await _pumpFrames(tester, 3);
+    app.router.push('/douyu/play/63136');
+    await _pumpFrames(tester, 4);
+    await _pressAltLeft(tester);
+    expect(_visiblePage(tester), '/douyu', reason: '后退到 /douyu');
+
+    await _pressAltHome(tester);
+    expect(_visiblePage(tester), '/all', reason: 'Alt+Home 从任意页回首页');
+
+    await _pressAltRight(tester);
+    expect(
+      _visiblePage(tester),
+      '/douyu/play/63136',
+      reason: 'Alt+Home 不清前进栈,Alt+→ 仍能回到刚才的房间',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('Ctrl+F:全局拉起搜索框,重复按不叠层', (tester) async {
+    final app = await _pumpApp(tester);
+    app.router.go('/all');
+    await _pumpFrames(tester, 3);
+
+    Future<void> pressCtrlF() async {
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.keyF);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.keyF);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await _pumpFrames(tester, 4);
+    }
+
+    await pressCtrlF();
+    expect(
+      find.byKey(const Key('search-dialog')),
+      findsOneWidget,
+      reason: 'Ctrl+F 应在任意页面打开搜索框',
+    );
+
+    // 防重入:openSearchDialog 本身不防叠,连按两次会开两层、得关两次。
+    await pressCtrlF();
+    expect(
+      find.byKey(const Key('search-dialog'), skipOffstage: false),
+      findsOneWidget,
+      reason: '重复 Ctrl+F 不得叠出第二个对话框',
+    );
+
+    await tester.tap(find.byKey(const Key('search-dialog-close')));
+    // 对话框退场动画约 150ms,按固定步长推够时间(不使用 pumpAndSettle)。
+    await _pumpFrames(tester, 10);
+    expect(find.byKey(const Key('search-dialog')), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('自行导航清空前进栈:此后 Alt+→ 静默不动作', (tester) async {
+    final app = await _pumpApp(tester);
+    app.router.go('/all');
+    await _pumpFrames(tester, 3);
+    app.router.push('/douyu/play/63136');
+    await _pumpFrames(tester, 3);
+    await _pressAltLeft(tester);
+    expect(_visiblePage(tester), '/all', reason: '后退后前进栈非空');
+
+    // 用户自己导航(等价点菜单/切平台):前进语义失效,浏览器同款清栈。
+    app.router.go('/douyu');
+    await _pumpFrames(tester, 3);
+    await _pressAltRight(tester);
+    expect(
+      _visiblePage(tester),
+      '/douyu',
+      reason: '自行导航后 Alt+→ 不得跳回旧页面',
+    );
     expect(tester.takeException(), isNull);
   });
 }

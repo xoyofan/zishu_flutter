@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 
-import '../../app/app_back_shortcuts.dart';
+import '../../app/app_nav_shortcuts.dart';
 import '../../app/app_router.dart';
 import '../../app/app_theme.dart';
 import '../../features/browse/application/browse_provider.dart';
@@ -25,6 +25,7 @@ class WindowsApp extends ConsumerStatefulWidget {
 }
 
 class _WindowsAppState extends ConsumerState<WindowsApp> with WindowListener {
+
   /// 分类预热延迟触发器:dispose 时取消,避免测试环境留下 pending timer。
   Timer? _warmupTimer;
 
@@ -93,9 +94,10 @@ class _WindowsAppState extends ConsumerState<WindowsApp> with WindowListener {
       darkTheme: ZishuTheme.dark(),
       themeMode: themeMode,
       routerConfig: router,
-      // 全局返回(鼠标侧键 / Alt+←):包在路由内容外侧,全页面生效。
+      // 全局返回(鼠标侧键 / Alt+← / Ctrl+F 搜索):包在路由内容外侧,
+      // 焦点无论落在路由 Scope 还是具体控件,本层恒在焦点祖先链上。
       builder: (context, child) =>
-          AppBackShortcuts(router: router, child: child ?? const SizedBox.shrink()),
+          AppNavShortcuts(router: router, child: child ?? const SizedBox.shrink()),
     );
   }
 }

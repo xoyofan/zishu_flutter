@@ -19,6 +19,7 @@ import '../shared/presentation/design_tokens.dart';
 import '../shared/presentation/platform_brands.dart';
 import '../shared/presentation/zishu_tokens.dart';
 import '../shared/presentation/widgets/platform_icon.dart';
+import 'app_nav_shortcuts.dart';
 
 part 'shell/hover_overlay.dart';
 part 'shell/top_nav.dart';
@@ -69,9 +70,17 @@ class _AppShellState extends ConsumerState<AppShell> {
   bool _myCatHover = false;
   double _myCatX = 0;
 
+  /// 本壳层落地给全局快捷键的搜索动作(身份用 this,见 dispose 的按己清理)。
+  Future<void> _openSearchAction() => openSearchDialog(context);
+
   @override
   void dispose() {
     _closeTimer?.cancel();
+    // 只清自己的注册:若路由过渡期新壳层已先注册,不动它的。
+    if (identical(GlobalActions.owner, this)) {
+      GlobalActions.openSearch = null;
+      GlobalActions.owner = null;
+    }
     super.dispose();
   }
 
@@ -162,8 +171,13 @@ class _AppShellState extends ConsumerState<AppShell> {
     });
   }
 
+
   @override
   Widget build(BuildContext context) {
+    // 注册全局搜索动作(Ctrl+F/Ctrl+K):快捷键监听在 Router 之上(builder 层),
+    // 落地需要 Router 内 context —— 本壳层恒在 Router 内且跨页面常驻。
+    GlobalActions.openSearch = _openSearchAction;
+    GlobalActions.owner = this;
     // 关注在播状态定时轮询常驻(播放页也常驻——顶栏在),无 refresher 时为 null。
     ref.watch(followStatusPollerProvider);
     final isPhone = MediaQuery.sizeOf(context).width < AppBreakpoints.phone;
