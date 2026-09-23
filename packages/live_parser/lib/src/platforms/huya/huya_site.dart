@@ -160,9 +160,13 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver, RoomSummar
           ? formatOnlineCount(liveData['totalCount'] ?? liveData['userCount'])
           : '',
       cover: httpsHuyaUrl(jsonText(liveData['cover'] ?? liveData['screenshot'])),
-      // 头像(web avatarFromHuya 同源:avatar180 优先,avatar 兑底)。
+      // 头像(web avatarFromHuya 同源:profileInfo.avatar180 优先,avatar 兜底)。
+      // 真源探针实证(2026-09,room 333003):avatar180 只存在于
+      // `data.profileInfo` 下,顶层 `data` 没有 —— 早期版本读
+      // `profile['avatar180']` 导致虎牙刷新头像恒空,关注 hover 只能回退
+      // 房间截图(与 HuyaProfileBrief 的 profileInfo 口径对齐)。
       avatar: httpsHuyaUrl(
-        _firstText([profile['avatar180'], profile['avatar']], ''),
+        _firstText([profileInfo['avatar180'], profileInfo['avatar']], ''),
       ),
       // 粉丝数(web formatCount 口径:完整数字,0/缺失留空)。
       followers: formatExactCount(

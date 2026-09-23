@@ -78,6 +78,9 @@ void main() {
     expect(summary.cid, '1');
     expect(summary.online, '12.3万');
     expect(summary.cover, 'https://cover.huya.com/cover.jpg');
+    // 头像取 data.profileInfo.avatar180(web avatarFromHuya 同源);
+    // 真源探针实证:顶层 data 下没有 avatar180/avatar,只存在于 profileInfo。
+    expect(summary.avatar, 'https://huyaimg.msstatic.com/avatar.jpg');
     // 粉丝数取同响应 activityCount(web follow/status.ts 的 huya 快照)。
     expect(summary.followers, '98765', reason: 'web formatCount 口径:完整数字');
     expect(
