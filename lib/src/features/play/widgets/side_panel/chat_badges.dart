@@ -222,7 +222,7 @@ class _FanBadgeState extends State<_FanBadge> {
           radius: 3,
           color: widget.color == 0
               ? const Color(0xff6b7280)
-              : Color(widget.color),
+              : Color(0xff000000 | (widget.color & 0xffffff)),
           child: Text(
             shortLabel,
             style: const TextStyle(
