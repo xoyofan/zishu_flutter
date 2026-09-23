@@ -177,13 +177,15 @@ class _TopNavTools extends StatelessWidget {
           route: '/timeline',
           showLabel: showLabels,
         ),
-        _NavThemeAction(showLabel: showLabels),
         _NavAction(
           key: const Key('nav-settings'),
           icon: Icons.settings_outlined,
           label: '设置',
           tooltip: '设置',
-          route: '/settings',
+          // 设置改对话框(用户口径 2026-09-23):不再跳整页;
+          // /settings 路由保留供深链与整页测试。浅色/主题切换同日移入
+          // 设置(「外观 → 主题模式」下拉),顶栏主题按钮移除。
+          onTap: (_) => unawaited(openSettingsDialog(context)),
           showLabel: showLabels,
         ),
         _UserAvatar(showLabels: showLabels),

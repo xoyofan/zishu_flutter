@@ -1,30 +1,10 @@
 part of '../app_shell.dart';
 
-/// 顶栏主题切换:在深色 ⇄ 浅色之间切换(写 `settingsProvider.setThemeMode`)。
+/// 顶栏主题切换按钮已移除(用户口径 2026-09-23:浅色/主题切换收进设置,
+/// 设置入口改弹对话框) —— 主题模式在「设置 → 外观 → 主题模式」下拉中切换,
+/// 移动底栏的 [_BottomThemeItem] 快捷入口保留。
 ///
-/// 按钮文案与图标表示「点击后要切到的目标」:当前生效为深色 → 显示「浅色」+
-/// [Icons.light_mode_outlined](与 web `NavSidebar.vue` 的 `themeMode === 'dark'
-/// ? '浅色' : '深色'` 一致)。判定/切换本身由 [_isDarkTheme] / [_toggleTheme]
-/// 单一实现提供,移动底栏的「主题」项复用同一份。
-class _NavThemeAction extends ConsumerWidget {
-  const _NavThemeAction({required this.showLabel});
-
-  final bool showLabel;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isDark = _isDarkTheme(context, ref);
-    return _NavAction(
-      key: const Key('nav-theme'),
-      icon: isDark ? Icons.light_mode_outlined : Icons.dark_mode_outlined,
-      label: isDark ? '浅色' : '深色',
-      tooltip: '切换主题',
-      showLabel: showLabel,
-      onTap: (_) => _toggleTheme(context, ref),
-    );
-  }
-}
-
+/// 下面的判定/切换与底栏入口继续服务该能力:
 /// 当前**生效**主题是否为深色。
 ///
 /// 显式 dark/light 直接取设置值;system 按平台亮度解析 —— 与 MaterialApp 的

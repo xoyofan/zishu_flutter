@@ -5,6 +5,8 @@
 /// (Web 端后续接入),本轮只移除设置页上的录入 UI。
 library;
 
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -18,9 +20,13 @@ import '../application/settings_provider.dart';
 import '../widgets/follow_common.dart';
 
 class SettingsView extends ConsumerStatefulWidget {
-  const SettingsView({super.key});
+  const SettingsView({super.key, this.embedded = false});
 
   static const Key mobileLoginKey = Key('mobile-login');
+
+  /// 以对话框内嵌形态呈现:隐藏页顶的「设置」大标题(对话框自己画标题行),
+  /// 其余分组与滚动行为不变。默认 false = 整页(/settings 深链)保持原样。
+  final bool embedded;
 
   @override
   ConsumerState<SettingsView> createState() => _SettingsViewState();
@@ -45,13 +51,15 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                '设置',
-                style: context.textTitle.copyWith(
-                  fontSize: AppFontSize.headline,
+              if (!widget.embedded) ...[
+                Text(
+                  '设置',
+                  style: context.textTitle.copyWith(
+                    fontSize: AppFontSize.headline,
+                  ),
                 ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
+                const SizedBox(height: AppSpacing.lg),
+              ],
               _SettingsGroup(title: '账号', children: [_AccountSettingRow()]),
               _SettingsGroup(
                 title: '外观',
@@ -486,6 +494,82 @@ class _TranslationEndpointRowState
               ),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 打开设置对话框(顶栏 / 底栏「我的」入口共用)。
+///
+/// 用户口径(2026-09-23):设置点击弹对话框而非跳整页;/settings 整页路由
+/// 保留(深链与既有整页测试仍可用)。样式语言对齐 search_dialog 的对话框
+/// (surface 底、allLg 圆角、视口收敛)。
+Future<void> openSettingsDialog(BuildContext context) async {
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: true,
+    barrierColor: context.tokens.barrier,
+    builder: (_) => const _SettingsDialogFrame(),
+  );
+}
+
+/// 设置对话框宽度/高度上限(对齐 search_dialog 的常量写法,math.min 需 double)。
+const double _kSettingsDialogWidth = 760;
+const double _kSettingsDialogMaxHeight = 840;
+
+/// 设置对话框容器:标题行 + 关闭按钮 + 内嵌 [SettingsView](隐藏其页顶大标题)。
+class _SettingsDialogFrame extends StatelessWidget {
+  const _SettingsDialogFrame();
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    final viewport = MediaQuery.sizeOf(context);
+    final width = math.min(viewport.width * 0.92, _kSettingsDialogWidth);
+    final height = math.min(viewport.height * 0.82, _kSettingsDialogMaxHeight);
+    return Dialog(
+      key: const Key('settings-dialog'),
+      backgroundColor: tokens.surface,
+      insetPadding: const EdgeInsets.all(AppSpacing.lg),
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.allLg),
+      clipBehavior: Clip.antiAlias,
+      child: SizedBox(
+        width: width,
+        height: height,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AppSpacing.lg,
+                AppSpacing.sm,
+                AppSpacing.sm,
+                0,
+              ),
+              child: Row(
+                children: [
+                  Text(
+                    '设置',
+                    style: context.textTitle.copyWith(
+                      fontSize: AppFontSize.subtitle,
+                      color: tokens.textPrimary,
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    key: const Key('settings-dialog-close'),
+                    tooltip: '关闭',
+                    onPressed: () => Navigator.of(context).pop(),
+                    iconSize: 18,
+                    color: tokens.textSecondary,
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                ],
+              ),
+            ),
+            const Expanded(child: SettingsView(embedded: true)),
+          ],
         ),
       ),
     );

@@ -352,15 +352,29 @@ void main() {
     expect(find.byKey(const Key('room-card-douyu-63136')), findsNothing);
     expect(tester.takeException(), isNull);
 
-    // Step 2:点 nav-settings → 设置页;关注页文案/条目锚点消失。
+    // Step 2:点 nav-settings → 设置**对话框**(2026-09-23 改弹框不切页):
+    // 路由与底层关注页保持不变,「主题模式」在对话框里可见,
+    // 关注锚点仍挂在底下(dialog 叠加于页面之上)。
     await tester.tap(find.byKey(const Key('nav-settings')));
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
-    expect(router.routeInformationProvider.value.uri.path, '/settings');
+    expect(
+      router.routeInformationProvider.value.uri.path,
+      '/follow',
+      reason: '设置改弹框,不再切路由',
+    );
+    expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
     expect(find.text('主题模式'), findsOneWidget);
-    expect(find.text('我的关注'), findsNothing);
-    expect(find.byKey(const Key('follow-entry-douyu-63136')), findsNothing);
+    expect(find.byKey(const Key('follow-entry-douyu-63136')), findsOneWidget);
     expect(tester.takeException(), isNull);
+
+    // 关闭对话框回到底层关注页(退场动画约 150ms,推够帧)。
+    await tester.tap(find.byKey(const Key('settings-dialog-close')));
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    expect(find.byKey(const Key('settings-dialog')), findsNothing);
+    expect(find.text('主题模式'), findsNothing);
 
     // Step 3:点 nav-home 回首页;设置文案消失,房间网格恢复。
     await tester.tap(find.byKey(const Key('nav-home')));
@@ -472,68 +486,47 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('themeToggleTopBar:顶栏 nav-theme 默认深色,点击切浅色并写盘,再点还原', (
+  testWidgets('顶栏契约:nav-theme 已移除(主题收进设置),nav-settings 弹设置对话框', (
     tester,
   ) async {
     suppressRenderFlexOverflow();
-    // 1600x900:≥ desktop 断点(1366)顶栏动作显示文案,可断言 label 随目标态。
+    // 1600x900:≥ desktop 断点(1366)顶栏动作显示文案。
     useViewport(tester, const Size(1600, 900));
     useInMemoryPrefs();
-    final router = await pumpApp(
-      tester,
-      anonymousAuth: true,
-    );
+    final router = await pumpApp(tester, anonymousAuth: true);
     final container = ProviderScope.containerOf(
       tester.element(find.byType(AppShell)),
     );
     await pumpUntilHydrated(tester, container);
 
-    // 默认深色:按钮显示「点击后要切到的目标」= 浅色(light_mode 图标),
-    // 对齐 web NavSidebar(`themeMode === 'dark' ? '浅色' : '深色'`)。
-    expect(router.routeInformationProvider.value.uri.path, '/all');
+    // 新契约(2026-09-23):顶栏主题快捷按钮移除,浅色/主题收进设置对话框。
+    expect(find.byKey(const Key('nav-theme')), findsNothing);
     expect(container.read(settingsProvider).themeMode, ThemeModeChoice.dark);
-    expect(find.text('浅色'), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byKey(const Key('nav-theme')),
-        matching: find.byIcon(Icons.light_mode_outlined),
-      ),
-      findsOneWidget,
-    );
+    expect(router.routeInformationProvider.value.uri.path, '/all');
     expect(
       await SharedPreferencesAsync().getString('zishu.settings.themeMode'),
       isNull,
-      reason: '出厂默认深色不经按钮写入,存储为空',
+      reason: '出厂默认深色不经写入,存储为空',
     );
 
-    // 点击 → light:provider 更新、目标态文案翻转为「深色」、持久化写盘。
-    await tester.tap(find.byKey(const Key('nav-theme')));
+    // 点设置 → 对话框,不切路由。
+    await tester.tap(find.byKey(const Key('nav-settings')));
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
-    expect(container.read(settingsProvider).themeMode, ThemeModeChoice.light);
-    expect(find.text('深色'), findsOneWidget);
+    expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
     expect(
-      find.descendant(
-        of: find.byKey(const Key('nav-theme')),
-        matching: find.byIcon(Icons.dark_mode_outlined),
-      ),
-      findsOneWidget,
-    );
-    expect(
-      await SharedPreferencesAsync().getString('zishu.settings.themeMode'),
-      'light',
+      router.routeInformationProvider.value.uri.path,
+      '/all',
+      reason: '设置改弹框不切路由',
     );
 
-    // 再点 → 还原 dark:light↔dark 往返闭环,字段同步写盘。
-    await tester.tap(find.byKey(const Key('nav-theme')));
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
-    expect(container.read(settingsProvider).themeMode, ThemeModeChoice.dark);
-    expect(find.text('浅色'), findsOneWidget);
-    expect(
-      await SharedPreferencesAsync().getString('zishu.settings.themeMode'),
-      'dark',
-    );
+    // 关闭回原页(退场动画推够帧)。
+    await tester.tap(find.byKey(const Key('settings-dialog-close')));
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    expect(find.byKey(const Key('settings-dialog')), findsNothing);
+    expect(router.routeInformationProvider.value.uri.path, '/all');
     expect(tester.takeException(), isNull);
   });
 

@@ -104,17 +104,24 @@ SettingsState _readSettings(WidgetTester tester) {
   return ProviderScope.containerOf(element).read(settingsProvider);
 }
 
-/// nav-theme 处实际生效的主题亮度(Theme 由 MaterialApp 按 themeMode 解析)。
+/// nav-settings 锚点(常驻)处生效的主题亮度(Theme 由 MaterialApp 按 themeMode 解析)。
 Brightness _themeBrightness(WidgetTester tester) =>
-    Theme.of(tester.element(find.byKey(const Key('nav-theme')))).brightness;
+    Theme.of(tester.element(find.byKey(const Key('nav-settings')))).brightness;
 
 /// MaterialApp 上配置的 themeMode。
 ThemeMode _materialAppThemeMode(WidgetTester tester) =>
     tester.widget<MaterialApp>(find.byType(MaterialApp)).themeMode!;
 
-/// nav-theme 动作内的子节点(避免与页面其它文案/图标串味)。
-Finder _inNavTheme(Finder matching) =>
-    find.descendant(of: find.byKey(const Key('nav-theme')), matching: matching);
+/// 在打开的设置对话框内选择「主题模式」下拉的某一项(菜单开合各推 300ms)。
+Future<void> _selectThemeMode(WidgetTester tester, String label) async {
+  final dropdown = find.byType(DropdownButton<ThemeModeChoice>);
+  await tester.ensureVisible(dropdown);
+  await tester.tap(dropdown);
+  await tester.pump(const Duration(milliseconds: 300)); // 菜单展开。
+  await tester.tap(find.text(label).last);
+  await tester.pump(const Duration(milliseconds: 300)); // 菜单收起。
+  await tester.pump(const Duration(milliseconds: 50)); // 状态落地。
+}
 
 /// pump WindowsApp(桌面视口)并轮询至 settingsProvider hydrated。
 Future<void> _pumpApp(WidgetTester tester) async {
@@ -158,30 +165,30 @@ void main() {
         InMemorySharedPreferencesAsync.withData(<String, Object>{});
   });
 
-  testWidgets('点击 nav-theme:深色 → 浅色 → 深色,provider 与 MaterialApp 主题同步', (
+  testWidgets('顶栏主题按钮已移除:设置对话框内完成主题切换,provider 与 MaterialApp 同步', (
     tester,
   ) async {
     await _pumpApp(tester);
 
-    final navTheme = find.byKey(const Key('nav-theme'));
-    expect(navTheme, findsOneWidget);
-    expect(
-      find.byTooltip('切换主题'),
-      findsOneWidget,
-      reason: 'tooltip 固定为「切换主题」',
-    );
+    // 新契约(2026-09-23):顶栏不再有主题快捷按钮,浅色/主题收进设置对话框。
+    expect(find.byKey(const Key('nav-theme')), findsNothing);
+    expect(find.byTooltip('切换主题'), findsNothing);
 
-    // 初始:出厂默认深色,label/icon 指向「点击后切到浅色」。
+    // 初始:出厂默认深色。
     expect(_readSettings(tester).themeMode, ThemeModeChoice.dark);
     expect(_materialAppThemeMode(tester), ThemeMode.dark);
     expect(_themeBrightness(tester), Brightness.dark);
-    expect(_inNavTheme(find.text('浅色')), findsOneWidget);
-    expect(_inNavTheme(find.byIcon(Icons.light_mode_outlined)), findsOneWidget);
 
-    // 第一次点击 → 浅色。
-    await tester.tap(navTheme);
-    // 主题切换走 MaterialApp 的 AnimatedTheme(kThemeAnimationDuration=200ms):
-    // 先 pump 一帧落地新主题并启动动画,再 pump 过完整时长,Theme.of 才反映目标亮度。
+    // 点顶栏设置 → 对话框(而非整页)。
+    await tester.tap(find.byKey(const Key('nav-settings')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
+    expect(find.byKey(const Key('settings-dialog-close')), findsOneWidget);
+
+    // 对话框内切到浅色:provider、MaterialApp themeMode、亮度、写盘四断言。
+    await _selectThemeMode(tester, '浅色');
+    // 主题切换走 MaterialApp 的 AnimatedTheme(200ms):先落一帧再推过时长。
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 50));
@@ -189,32 +196,35 @@ void main() {
     expect(_readSettings(tester).themeMode, ThemeModeChoice.light);
     expect(_materialAppThemeMode(tester), ThemeMode.light);
     expect(_themeBrightness(tester), Brightness.light);
-    expect(_inNavTheme(find.text('深色')), findsOneWidget);
-    expect(_inNavTheme(find.byIcon(Icons.dark_mode_outlined)), findsOneWidget);
     expect(
       await SharedPreferencesAsync().getString('zishu.settings.themeMode'),
       'light',
       reason: '切换即写盘',
     );
 
-    // 第二次点击 → 回到深色。
-    await tester.tap(navTheme);
+    // 切回深色(light↔dark 往返闭环)。
+    await _selectThemeMode(tester, '深色');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(_readSettings(tester).themeMode, ThemeModeChoice.dark);
     expect(_materialAppThemeMode(tester), ThemeMode.dark);
-    expect(_themeBrightness(tester), Brightness.dark);
-    expect(_inNavTheme(find.text('浅色')), findsOneWidget);
-    expect(_inNavTheme(find.byIcon(Icons.light_mode_outlined)), findsOneWidget);
     expect(
       await SharedPreferencesAsync().getString('zishu.settings.themeMode'),
       'dark',
     );
+
+    // 关闭对话框(退场动画约 150ms,推够帧后应从树中移除)。
+    await tester.tap(find.byKey(const Key('settings-dialog-close')));
+    for (var i = 0; i < 6; i++) {
+      await tester.pump(const Duration(milliseconds: 60));
+    }
+    expect(find.byKey(const Key('settings-dialog')), findsNothing);
+    expect(tester.takeException(), isNull);
   });
 
-  testWidgets('themeMode=system:按平台亮度取当前主题,点击切到相反的显式值', (
+  testWidgets('themeMode=system:设置对话框内切到与当前生效相反的显式值', (
     tester,
   ) async {
     // 系统亮度设为深色:system 档下当前生效主题即深色。
@@ -223,7 +233,6 @@ void main() {
 
     await _pumpApp(tester);
 
-    final navTheme = find.byKey(const Key('nav-theme'));
     final container = ProviderScope.containerOf(
       tester.element(find.byType(MaterialApp)),
     );
@@ -233,20 +242,25 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
 
-    // system + 平台深色 → 当前为深色,label/icon 指向浅色。
+    // system + 平台深色 → MaterialApp 走 system 档,当前生效深色。
     expect(_materialAppThemeMode(tester), ThemeMode.system);
     expect(_themeBrightness(tester), Brightness.dark);
-    expect(_inNavTheme(find.text('浅色')), findsOneWidget);
 
-    await tester.tap(navTheme);
+    // 打开设置对话框,选与当前生效相反的显式值「浅色」。
+    await tester.tap(find.byKey(const Key('nav-settings')));
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
+
+    await _selectThemeMode(tester, '浅色');
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 50));
 
-    // 点击后落到相反的那个显式值(不再停留在 system)。
+    // 不再停留在 system,落到显式 light。
     expect(_readSettings(tester).themeMode, ThemeModeChoice.light);
     expect(_materialAppThemeMode(tester), ThemeMode.light);
     expect(_themeBrightness(tester), Brightness.light);
-    expect(_inNavTheme(find.text('深色')), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

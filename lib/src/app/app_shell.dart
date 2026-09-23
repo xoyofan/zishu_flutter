@@ -19,6 +19,7 @@ import '../shared/presentation/design_tokens.dart';
 import '../shared/presentation/platform_brands.dart';
 import '../shared/presentation/zishu_tokens.dart';
 import '../shared/presentation/widgets/platform_icon.dart';
+import '../features/follow/views/settings_view.dart' show openSettingsDialog;
 import 'app_nav_shortcuts.dart';
 
 part 'shell/hover_overlay.dart';

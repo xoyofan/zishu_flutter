@@ -107,7 +107,9 @@ class _BottomNav extends StatelessWidget {
               context.tokens,
             ),
             label: '我的',
-            route: '/settings',
+            // 设置改对话框(与顶栏同源,2026-09-23);深链进 /settings 整页时
+            // active 仍由 currentSite 驱动。
+            onTap: () => unawaited(openSettingsDialog(context)),
             active: currentSite == 'settings',
           ),
         ],

@@ -135,7 +135,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
 
-    // SettingsView 标题与「外观」分组行出现。
+    // SettingsView 标题与「外观」分组行出现(2026-09-23 起:设置改弹对话框)。
+    expect(find.byKey(const Key('settings-dialog')), findsOneWidget);
     expect(find.text('设置'), findsOneWidget);
     expect(find.text('主题模式'), findsOneWidget);
   });
