@@ -315,6 +315,22 @@ void main() {
       final list = jsonDecode(raw!) as List;
       expect(list.any((e) => e['roomId'] == '606118'), isTrue);
 
+      // 关注条目必须带上播放页 payload 的头像(resolveRoom 已取到,不得丢):
+      // 丢了 hover/头像堆叠只能回退房间封面(huya 头像不对即此链)。
+      final followed = container
+          .read(followProvider)
+          .firstWhere((e) => e.key == roomKey);
+      expect(
+        followed.room.avatar,
+        'https://placeholder.zishu.dev/douyu/606118-avatar.jpg',
+        reason: 'addFromRoom 前必须把 payload.avatar 写进 RoomSummary',
+      );
+      expect(
+        list.firstWhere((e) => e['roomId'] == '606118')['avatar'],
+        isNotEmpty,
+        reason: '落盘也要保留头像,否则重启即丢',
+      );
+
       // 重建 ProviderScope(新容器重新从存储恢复)。
       final play2 = await _pumpPlay(tester, location: _playLocationA8);
       await _awaitFollowContains(tester, play2.container, roomKey);

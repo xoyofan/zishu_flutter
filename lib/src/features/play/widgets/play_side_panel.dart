@@ -157,6 +157,9 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
       category: payload?.category ?? '',
       online: payload?.isLive == true ? '直播中' : '',
       cover: payload?.cover ?? '',
+      // 头像:resolveRoom 已取到(RoomPayload.avatar),必须带进关注条目 ——
+      // 否则 hover/顶栏头像堆叠只能回退房间封面,且刷新未回填前一直是错的。
+      avatar: payload?.avatar ?? '',
     );
   }
 
