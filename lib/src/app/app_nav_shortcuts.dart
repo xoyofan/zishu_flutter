@@ -4,7 +4,8 @@
 /// - 后退:`Alt+←`、`Alt+鼠标左键`、鼠标侧键 X1(kBackMouseButton);
 /// - 前进:`Alt+→`、`Alt+鼠标右键`、鼠标侧键 X2(kForwardMouseButton);
 /// - 首页:`Alt+Home`;
-/// - 搜索:`Ctrl+F` / `Ctrl+K`(桌面浏览器/播放器通用入口)。
+/// - 搜索:`Ctrl+F` / `Ctrl+K`(桌面浏览器/播放器通用入口);
+/// - 刷新:`F5`(浏览器式 —— 播放页重开当前线路,否则刷新平台首页列表)。
 ///
 /// **为什么在 builder 层**:快捷键靠焦点祖先生效 —— 用户未点任何控件时
 /// primaryFocus 是路由 Scope,其祖先只有 Navigator→Router→builder 树;
@@ -13,7 +14,8 @@
 ///
 /// **为什么又要 Router 内 context**:builder 层查不到 Navigator/GoRouterState
 /// (MaterialApp.router 强制 navigatorKey=null,GoRouter 也不公开 key),故
-/// 通过 [GlobalActions] 注册表由 Router 内的常驻壳层(AppShell)落地实现。
+/// 通过 [GlobalActions] 注册表由 Router 内的组件(AppShell / HomeView /
+/// PlayView)各自注册落地,注销随其 dispose。
 ///
 /// 放在应用根部包住路由内容,所有页面共享同一份实现,避免每页各写一遍。
 /// 后退判定直接走 GoRouter 自身的 `canPop()`:栈内有上一页才 pop,栈底静默
@@ -43,6 +45,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show BoxHitTestResult, RenderProxyBox;
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
+
+import '../shared/application/global_actions.dart';
 
 class AppNavShortcuts extends StatefulWidget {
   const AppNavShortcuts({super.key, required this.router, required this.child});
@@ -114,22 +118,24 @@ class _AppNavShortcutsState extends State<AppNavShortcuts> {
     widget.router.go('/all');
   }
 
-  /// 搜索对话框防重入:openSearchDialog 本身不防叠,连按两次 Ctrl+F
-  /// 会开两层、得关两次。标志在对话框关闭后复位。
-  bool _searchOpening = false;
-
   /// Ctrl+F / Ctrl+K = 全局搜索。实现由 Router 内的壳层经 [GlobalActions]
-  /// 注册(builder 层 context 无 Navigator/GoRouterState 可用)。
-  Future<void> _openSearch() async {
-    if (_searchOpening) return;
-    final action = GlobalActions.openSearch;
-    if (action == null) return; // 壳层尚未注册(极早期按键)。
-    _searchOpening = true;
-    try {
-      await action();
-    } finally {
-      _searchOpening = false;
+  /// 注册(builder 层 context 无 Navigator/GoRouterState 可用),防重入随
+  /// 动作在 AppShell 侧管理。
+  void _openSearch() {
+    GlobalActions.call(GlobalActionNames.search);
+  }
+
+  /// 浏览器式 F5:播放页在栈顶时重开当前线路,否则刷新平台首页列表。
+  ///
+  /// 分发依据是「谁注册了」:播放页注册 refreshPlay、首页注册 refreshHome,
+  /// 注销随 dispose 天然反映当前可见页面 —— 播放页 push 后首页仍在栈下,但
+  /// refreshPlay 优先;播放页离开即注销,回落 refreshHome。
+  void _refresh() {
+    if (GlobalActions.isActive(GlobalActionNames.refreshPlay)) {
+      GlobalActions.call(GlobalActionNames.refreshPlay);
+      return;
     }
+    GlobalActions.call(GlobalActionNames.refreshHome);
   }
 
   void _handlePointer(PointerDownEvent event) {
@@ -157,6 +163,8 @@ class _AppNavShortcutsState extends State<AppNavShortcuts> {
         const SingleActivator(LogicalKeyboardKey.home, alt: true): _home,
         const SingleActivator(LogicalKeyboardKey.keyF, control: true): _openSearch,
         const SingleActivator(LogicalKeyboardKey.keyK, control: true): _openSearch,
+        // F5 = 浏览器式刷新(裸 F5,无修饰;文本输入不产生该键,无冲突)。
+        const SingleActivator(LogicalKeyboardKey.f5): _refresh,
       },
       child: Listener(
         // opaque:空白区也参与命中 —— Alt+点击空白处同样要能后退/前进;
@@ -188,23 +196,4 @@ class _NavGateRender extends RenderProxyBox {
     if (HardwareKeyboard.instance.isAltPressed) return false;
     return super.hitTestChildren(result, position: position);
   }
-}
-
-/// Router 内组件注册的全局动作表(builder 层快捷键的落地点)。
-///
-/// 键盘监听必须位于 MaterialApp.builder(Router **之上**,焦点祖先链恒经过),
-/// 而打开对话框需要 Router **内**的 context —— 两者无法同址,故用这张注册表:
-/// Router 内的常驻壳层(AppShell)在 build 时注册、dispose 时按身份清理。
-///
-/// 注:`MaterialApp.router` 强制 `navigatorKey = null`(其初始化列表),
-/// go_router 也不公开 navigatorKey —— 无法用 key 桥接,注册表是唯一通路。
-class GlobalActions {
-  GlobalActions._();
-
-  /// 全局搜索(Ctrl+F / Ctrl+K)。签名与 openSearchDialog 一致。
-  static Future<void> Function()? openSearch;
-
-  /// 当前注册者身份(实例方法 tearoff 每次求值不是同一对象,不能靠
-  /// identical 比较回调 —— 用壳层实例做身份,dispose 时按己清理)。
-  static Object? owner;
 }

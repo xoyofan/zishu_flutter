@@ -18,6 +18,7 @@ import '../../../shared/presentation/category_colors.dart';
 import '../../../shared/presentation/widgets/platform_icon.dart';
 import '../../../shared/presentation/widgets/retry_button.dart';
 import '../../../shared/presentation/widgets/translated_text.dart';
+import '../../../shared/application/global_actions.dart';
 import '../../../shared/application/translation/translation_provider.dart';
 import '../../browse/application/my_category_provider.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -108,6 +109,7 @@ class _PlayViewState extends ConsumerState<PlayView> {
   @override
   void dispose() {
     HardwareKeyboard.instance.removeHandler(_onGlobalKey);
+    GlobalActions.unregister(GlobalActionNames.refreshPlay, owner: this);
     _hideTimer?.cancel();
     _immersiveSideLockTimer?.cancel();
     _immersiveSideHideTimer?.cancel();
@@ -115,6 +117,12 @@ class _PlayViewState extends ConsumerState<PlayView> {
     // (autoDispose:离开播放页即触发),此处不再手动调用,避免与 provider
     // 销毁时序打架——旧做法在 dispose 期走 ref,会撞上"provider 已销毁"。
     super.dispose();
+  }
+
+  /// F5 刷新播放页:与控制条「刷新视频」同通路 —— retry(payload 已就位时
+  /// bump 代际并重开当前线路;解析失败才整体重解析)。
+  void _refreshStream() {
+    ref.read(playControllerProvider(_params).notifier).retry();
   }
 
   /// 返回上一页。
@@ -347,6 +355,13 @@ class _PlayViewState extends ConsumerState<PlayView> {
 
   @override
   Widget build(BuildContext context) {
+    // 注册 F5 刷新(builder 层快捷键经此落地,注销随本 State dispose):
+    // 与控制条「刷新视频」同通路(retry —— payload 就位时轻量重开当前线路)。
+    GlobalActions.register(
+      GlobalActionNames.refreshPlay,
+      owner: this,
+      action: _refreshStream,
+    );
     // 订阅播放快照:播放/暂停/静音变化实时刷新侧栏状态条。
     ref.watch(playerSnapshotProvider);
     final async = ref.watch(playControllerProvider(_params));

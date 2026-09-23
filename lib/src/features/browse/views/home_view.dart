@@ -1,8 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 
+import '../../../shared/application/global_actions.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/widgets/retry_button.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -25,12 +28,34 @@ class HomeView extends ConsumerStatefulWidget {
 }
 
 class _HomeViewState extends ConsumerState<HomeView> {
-  // 平台切换采用 stale-while-revalidate:新平台首屏请求期间保留上一次
-  // 已渲染的网格(卡片元素继续存活),避免整块内容变成 loading 再重建。
+  /// 平台切换采用 stale-while-revalidate:新平台首屏请求期间保留上一次
+  /// 已渲染的网格(卡片元素继续存活),避免整块内容变成 loading 再重建。
   static RoomListResult? _lastVisibleRooms;
+
+  /// F5 刷新本平台首页(浏览器式):与下拉刷新同通路(refresh 保留旧值回退)。
+  /// 每次 build 以当前 site 重注册 —— 平台切换不重建 State 时闭包也不过期。
+  void _refreshRooms() {
+    unawaited(
+      ref
+          .read(browseRoomsProvider(BrowseRoomQuery(site: widget.site)).notifier)
+          .refresh(),
+    );
+  }
+
+  @override
+  void dispose() {
+    GlobalActions.unregister(GlobalActionNames.refreshHome, owner: this);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    // 注册 F5 刷新动作(builder 层快捷键经此落地,注销随本 State dispose)。
+    GlobalActions.register(
+      GlobalActionNames.refreshHome,
+      owner: this,
+      action: _refreshRooms,
+    );
     final query = BrowseRoomQuery(site: widget.site);
     final roomsAsync = ref.watch(browseRoomsProvider(query));
     final controller = ref.read(browseRoomsProvider(query).notifier);

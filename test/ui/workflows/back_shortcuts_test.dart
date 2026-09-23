@@ -18,8 +18,10 @@ import 'package:shared_preferences_platform_interface/in_memory_shared_preferenc
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:zishu_flutter/src/app/app_router.dart';
 import 'package:zishu_flutter/src/apps/windows/windows_app.dart';
+import 'package:zishu_flutter/src/features/browse/application/browse_provider.dart';
 import 'package:zishu_flutter/src/features/browse/views/home_view.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
+import 'package:zishu_flutter/src/features/play/application/play_screen_provider.dart';
 import 'package:zishu_flutter/src/features/play/views/play_view.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 
@@ -183,6 +185,13 @@ Future<void> _altClickMouse(
   await tester.sendEventToBinding(pointer.up());
   await tester.sendKeyUpEvent(LogicalKeyboardKey.altLeft);
   await _pumpFrames(tester, 2);
+}
+
+/// F5:浏览器式刷新(平台首页重拉列表 / 播放页重开当前线路)。
+Future<void> _pressF5(WidgetTester tester) async {
+  await tester.sendKeyDownEvent(LogicalKeyboardKey.f5);
+  await tester.sendKeyUpEvent(LogicalKeyboardKey.f5);
+  await _pumpFrames(tester, 4);
 }
 
 void main() {
@@ -453,6 +462,85 @@ void main() {
       _visiblePage(tester),
       '/douyu',
       reason: '自行导航后 Alt+→ 不得跳回旧页面',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('F5:平台首页刷新当前列表(浏览器式刷新)', (tester) async {
+    final app = await _pumpApp(tester);
+    app.router.go('/all');
+    await _pumpFrames(tester, 3);
+
+    var refreshes = 0;
+    app.container.listen(
+      browseRoomsProvider(const BrowseRoomQuery(site: 'all')),
+      (_, _) => refreshes++,
+    );
+
+    await _pressF5(tester);
+    await _pumpFrames(tester, 8);
+
+    expect(refreshes, greaterThan(0), reason: 'F5 应触发首页房间列表刷新');
+    expect(_visiblePage(tester), '/all', reason: '刷新不改变路由');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('F5:播放页重开当前线路(retry 通路,不改路由)', (tester) async {
+    final app = await _pumpApp(tester);
+    app.router.go('/all');
+    await _pumpFrames(tester, 3);
+    app.router.push('/douyu/play/63136');
+    await _pumpFrames(tester, 4);
+
+    // retry 通路:payload 就位时 bump 代际(重开当前线路),fixture 房间
+    // 不走真实 open,故断言代际而非 open 次数。
+    const params = (site: 'douyu', roomId: '63136');
+    final before = app.container
+        .read(playControllerProvider(params))
+        .requireValue
+        .generation;
+
+    await _pressF5(tester);
+    await _pumpFrames(tester, 10);
+
+    final after = app.container
+        .read(playControllerProvider(params))
+        .requireValue
+        .generation;
+    expect(after, greaterThan(before), reason: 'F5 应 bump 代际重开当前线路');
+    expect(_visiblePage(tester), '/douyu/play/63136', reason: '刷新不改变路由');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('全屏态仍可后退/前进(Alt+← / Alt+→)', (tester) async {
+    final app = await _pumpApp(tester);
+    app.router.go('/all');
+    await _pumpFrames(tester, 3);
+    app.router.push('/douyu/play/63136');
+    await _pumpFrames(tester, 4);
+
+    // 焦点给舞台 → F 进全屏(播放页收 chrome)。
+    await tester.tap(find.byKey(const Key('play-stage-focus')));
+    await _pumpFrames(tester, 7);
+    await tester.sendKeyDownEvent(LogicalKeyboardKey.keyF);
+    await tester.sendKeyUpEvent(LogicalKeyboardKey.keyF);
+    await _pumpFrames(tester, 5);
+    expect(
+      app.container.read(playScreenProvider).hidesChrome,
+      isTrue,
+      reason: '已进入全屏态(chrome 收起)',
+    );
+
+    // Alt+←:全屏态后退到浏览页(快捷键在 builder 层,焦点链不受 chrome 影响)。
+    await _pressAltLeft(tester);
+    expect(_visiblePage(tester), '/all', reason: '全屏态 Alt+← 应后退');
+
+    // Alt+→:前进回播放页。
+    await _pressAltRight(tester);
+    expect(
+      _visiblePage(tester),
+      '/douyu/play/63136',
+      reason: 'Alt+→ 应回到刚后退掉的播放页',
     );
     expect(tester.takeException(), isNull);
   });
