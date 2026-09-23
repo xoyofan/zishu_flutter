@@ -26,6 +26,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     required this.statAudience,
     required this.statVip,
     required this.statSvip,
+    required this.chatSuperFan,
     required this.playFollowBg,
     required this.playFollowBgHover,
     required this.playFollowBgActive,
@@ -93,6 +94,9 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
   final Color statVip;
   final Color statSvip;
 
+  /// 虎牙超粉 V 标记的金色,对齐 Web `ChatHuyaSuperFanBadge.vue`。
+  final Color chatSuperFan;
+
   /// 播放页侧栏「关注」按钮(红系 chip):常态底/hover 底/已关注底/描边/文字/已关注文字。
   ///
   /// 原为 `AppColors.playFollow*` 写死深色系,现随主题切换:深色与旧常量
@@ -135,6 +139,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     statAudience: Color(0xFFB8DCFF),
     statVip: Color(0xFFFFD4A0),
     statSvip: Color(0xFFF0B8FF),
+    chatSuperFan: Color(0xFFFBBF24),
     // 关注/超关 chip:与原 AppColors.playFollow*/playSuper* 逐位同值。
     playFollowBg: Color(0xFF582626),
     playFollowBgHover: Color(0xFF512626),
@@ -174,6 +179,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     statAudience: Color(0xFF1B6CA8),
     statVip: Color(0xFFA8620A),
     statSvip: Color(0xFF8E3AA8),
+    chatSuperFan: Color(0xFFA16207),
     // 关注/超关 chip:浅底淡色填充 + 低明度同色系文字(实机确认写死深色系
     // 在浅色下可读,但语义上应随主题;浅色值与深色分套,深色不变)。
     playFollowBg: Color(0xFFFBECEC),
@@ -212,6 +218,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
     Color? statAudience,
     Color? statVip,
     Color? statSvip,
+    Color? chatSuperFan,
     Color? playFollowBg,
     Color? playFollowBgHover,
     Color? playFollowBgActive,
@@ -246,6 +253,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
       statAudience: statAudience ?? this.statAudience,
       statVip: statVip ?? this.statVip,
       statSvip: statSvip ?? this.statSvip,
+      chatSuperFan: chatSuperFan ?? this.chatSuperFan,
       playFollowBg: playFollowBg ?? this.playFollowBg,
       playFollowBgHover: playFollowBgHover ?? this.playFollowBgHover,
       playFollowBgActive: playFollowBgActive ?? this.playFollowBgActive,
@@ -286,6 +294,7 @@ class ZishuTokens extends ThemeExtension<ZishuTokens> {
       statAudience: mix(statAudience, other.statAudience),
       statVip: mix(statVip, other.statVip),
       statSvip: mix(statSvip, other.statSvip),
+      chatSuperFan: mix(chatSuperFan, other.chatSuperFan),
       playFollowBg: mix(playFollowBg, other.playFollowBg),
       playFollowBgHover: mix(playFollowBgHover, other.playFollowBgHover),
       playFollowBgActive: mix(playFollowBgActive, other.playFollowBgActive),

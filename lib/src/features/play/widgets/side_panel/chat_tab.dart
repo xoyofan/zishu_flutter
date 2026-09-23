@@ -12,12 +12,17 @@ class _ChatRowData {
     this.fanName,
     this.fanLevel,
     this.badges = const [],
+    this.guard,
     this.badgeColorStart = 0,
     this.badgeColorEnd = 0,
     this.badgeColorBorder = 0,
     this.badgeTextColor = 0,
     this.badgeColorLevel = 0,
     this.userLevel = 0,
+    this.userLevelIconUrl = '',
+    this.userLevelBadgeStyle = 0,
+    this.userLevelIsPolished = 0,
+    this.userLevelColor = 0,
     this.color = 0,
     this.segments = const [],
   });
@@ -42,6 +47,9 @@ class _ChatRowData {
   /// 一条消息可带的全部徽章；非 SOOP 多徽章平台通常只有 0/1 枚。
   final List<DanmakuBadge> badges;
 
+  /// B站大航海等独立身份徽章。
+  final DanmakuBadge? guard;
+
   /// 粉丝牌渐变起止色(B 站协议色;0 = 未提供)。
   final int badgeColorStart;
   final int badgeColorEnd;
@@ -54,13 +62,19 @@ class _ChatRowData {
   /// 用户等级(0 = 不渲染等级 pill)。
   final int userLevel;
 
+  final String userLevelIconUrl;
+  final int userLevelBadgeStyle;
+  final int userLevelIsPolished;
+  final int userLevelColor;
+
   /// 正文颜色(0 = 默认)。当前侧栏按平台主题统一着色,保留字段以备后续。
   final int color;
 
   factory _ChatRowData.fromMessage(DanmakuMessage message, String site) {
     final badges = message.badges.isNotEmpty
         ? message.badges
-        : message.badgeLevel > 0
+        : message.badgeLevel > 0 &&
+              (site != 'douyu' || message.badgeName.trim().isNotEmpty)
         ? [
             DanmakuBadge(
               name: message.badgeName,
@@ -76,6 +90,7 @@ class _ChatRowData {
       message.text,
       site: site,
       badges: badges,
+      guard: message.guard,
       fanName: badges.isEmpty ? null : badges.first.name,
       fanLevel: badges.isEmpty ? null : badges.first.level,
       badgeColorStart: message.badgeColorStart,
@@ -84,6 +99,10 @@ class _ChatRowData {
       badgeTextColor: message.badgeTextColor,
       badgeColorLevel: message.badgeColorLevel,
       userLevel: message.userLevel,
+      userLevelIconUrl: message.userLevelIconUrl,
+      userLevelBadgeStyle: message.userLevelBadgeStyle,
+      userLevelIsPolished: message.userLevelIsPolished,
+      userLevelColor: message.userLevelColor,
       color: message.color,
       segments: message.segments,
     );

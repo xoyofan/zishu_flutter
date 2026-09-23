@@ -601,9 +601,9 @@ void main() {
     expect(rich.children, hasLength(5), reason: '用户名 + 冒号 + 3 个正文段');
     final emojiSpan = rich.children![3];
     expect(emojiSpan, isA<WidgetSpan>(), reason: '有 url 的表情段应内联 WidgetSpan 图片');
-    final imageWidget = (emojiSpan as WidgetSpan).child;
-    expect(imageWidget, isA<Image>(), reason: 'WidgetSpan 内应是 Image.network(协议 CDN)');
-    final image = imageWidget as Image;
+    final emojiKey = Key('chat-emoji-image-[捂脸]');
+    final image = tester.widget<Image>(find.byKey(emojiKey));
+    expect(find.byKey(emojiKey), findsOneWidget);
     expect(image.image, NetworkImage(emojiUrl), reason: '表情图应加载段携带的 url');
     // 边长 ≈ 字号 × 1.6(默认 chatFontSize=14 → 22.4),fit contain。
     expect(image.width, 14 * 1.6);

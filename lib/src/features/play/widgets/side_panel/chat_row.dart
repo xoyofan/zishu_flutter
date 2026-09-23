@@ -42,12 +42,19 @@ class _ChatRow extends StatelessWidget {
         if (segment.isEmoji && segment.url.isNotEmpty)
           WidgetSpan(
             alignment: PlaceholderAlignment.middle,
-            child: Image.network(
-              segment.url,
-              width: emojiSide,
-              height: emojiSide,
-              fit: BoxFit.contain,
-              errorBuilder: (_, _, _) => Text(segment.text, style: bodyStyle),
+            child: ColorFiltered(
+              colorFilter: chatWebImageFilter,
+              child: Image.network(
+                segment.url,
+                key: Key(
+                  'chat-emoji-image-${segment.name.isNotEmpty ? segment.name : segment.text}',
+                ),
+                width: emojiSide,
+                height: emojiSide,
+                fit: BoxFit.contain,
+                semanticLabel: segment.name.isNotEmpty ? segment.name : segment.text,
+                errorBuilder: (_, _, _) => Text(segment.text, style: bodyStyle),
+              ),
             ),
           )
         else
@@ -87,7 +94,14 @@ class _ChatRow extends StatelessWidget {
           // 粉丝牌在后(用户口径 2026-09-19:「平台等级应该在粉丝等级前显示」)。
           if (data.userLevel > 0)
             _inlineBadge(
-              _UserLevelBadge(site: data.site, level: data.userLevel),
+              _UserLevelBadge(
+                site: data.site,
+                level: data.userLevel,
+                iconUrl: data.userLevelIconUrl,
+                badgeStyle: data.userLevelBadgeStyle,
+                isPolished: data.userLevelIsPolished,
+                color: data.userLevelColor,
+              ),
             ),
           ...data.badges.map(
             (badge) => _inlineBadge(
@@ -97,6 +111,9 @@ class _ChatRow extends StatelessWidget {
                 level: badge.level,
                 kind: badge.kind,
                 url: badge.url,
+                iconUrl: badge.iconUrl,
+                vFlag: badge.vFlag,
+                vLogo: badge.vLogo,
                 color: badge.color,
                 colorStart: data.badgeColorStart,
                 colorEnd: data.badgeColorEnd,
@@ -120,6 +137,10 @@ class _ChatRow extends StatelessWidget {
                 textColor: data.badgeTextColor,
                 levelColor: data.badgeColorLevel,
               ),
+            ),
+          if (data.guard != null)
+            _inlineBadge(
+              _GuardBadge(badge: data.guard!),
             ),
           TextSpan(
             text: data.user,

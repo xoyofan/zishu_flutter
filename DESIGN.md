@@ -64,6 +64,7 @@ zishu_flutter 是**深色优先的桌面级直播客户端**，视觉语言继�
 | `statAudience` | `#B8DCFF` | 人气统计文字（蓝） |
 | `statVip` | `#FFD4A0` | VIP 统计文字（橙） |
 | `statSvip` | `#F0B8FF` | SVIP 统计文字（紫） |
+| `chatSuperFan` | `#FBBF24` | 虎牙超粉 `V` 标记（对齐 Web `ChatHuyaSuperFanBadge.vue`） |
 
 播放页「关注」按钮（红系，6 态）：
 
@@ -105,6 +106,7 @@ UI 文件里写死 `AppColors.*` 会被 `test/ui/light_theme_test.dart` 的静�
 | `brand` | `#C9A227` | `statAudience` | `#1B6CA8` |
 | `accent` | `#6A1B9A` | `statVip` | `#A8620A` |
 | | | `statSvip` | `#8E3AA8` |
+| | | `chatSuperFan` | `#A16207` |
 
 浅色下 `liveBadge` 仍为 `#32C874`、`error` 仍为 `#E55050`、`coverScrim` 仍为
 `#B8000000`（压图角标两种主题都必须暗底白字）。`playFollow*` / `playSuper*` 在浅色下

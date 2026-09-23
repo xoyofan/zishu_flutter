@@ -9,6 +9,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:zishu_flutter/src/shared/presentation/design_tokens.dart';
+import 'package:zishu_flutter/src/shared/presentation/zishu_tokens.dart';
 
 void main() {
   group('AppColors 契约', () {
@@ -19,6 +20,13 @@ void main() {
       // 只有这条平行常量残留旧值 F56C6C。两者必须一致,否则后续一旦有人
       // 从 `AppColors.error` 取色就会与主题色分叉。
       expect(AppColors.error, const Color(0xFFE55050));
+    });
+  });
+
+  group('聊天徽章 token 契约', () {
+    test('虎牙超粉 V 使用 Web 金色,浅色主题有独立可读值', () {
+      expect(ZishuTokens.dark.chatSuperFan, const Color(0xFFFBBF24));
+      expect(ZishuTokens.light.chatSuperFan, const Color(0xFFA16207));
     });
   });
 

@@ -1,3 +1,17 @@
+library;
+
+import 'package:flutter/material.dart';
+
+/// Web `SideChatTab.vue` 对徽章/等级/表情图片的统一增强:
+/// brightness(1.14) contrast(1.08) saturate(1.1)。Flutter 端用等价
+/// 4×5 ColorFilter matrix,避免每个平台重复写滤镜。
+const ColorFilter chatWebImageFilter = ColorFilter.matrix(<double>[
+  1.328145, -0.088055, -0.008889, 0, -0.1156,
+  -0.026175, 1.266265, -0.008889, 0, -0.1156,
+  -0.026175, -0.088055, 1.345431, 0, -0.1156,
+  0, 0, 0, 1, 0,
+]);
+
 /// 聊天徽章本地图片:SFVideoLive `web/public/assets/badges/` 官方素材渲染。
 ///
 /// 路径规则与消费侧对齐 web:
@@ -10,9 +24,6 @@
 ///
 /// 本组件只消费打包资产(无网络、无平台依赖);gif 素材若入包,
 /// [Image.asset] 原生支持帧动画(当前资产清单无 gif)。
-library;
-
-import 'package:flutter/material.dart';
 
 /// 徽章类别:fans=粉丝牌(团牌),userLevel=用户等级(荣誉/消费等级)。
 enum ChatBadgeKind { fans, userLevel }
@@ -97,6 +108,7 @@ class ChatBadgeImage extends StatefulWidget {
     required this.height,
     this.name,
     this.fit,
+    this.src = '',
     this.assetPathOverride,
     this.onFail,
   });
@@ -114,6 +126,9 @@ class ChatBadgeImage extends StatefulWidget {
 
   /// 覆写默认 fit(默认 fans/userLevel 均 contain)。
   final BoxFit? fit;
+
+  /// 协议/平台直接下发的远程图 URL,优先于本地静态资源。
+  final String src;
 
   /// 显式资产路径；用于 Bilibili medal-frame 等不走等级编号的固定素材。
   final String? assetPathOverride;
@@ -139,6 +154,7 @@ class _ChatBadgeImageState extends State<ChatBadgeImage> {
         oldWidget.kind != widget.kind ||
         oldWidget.level != widget.level ||
         oldWidget.name != widget.name ||
+        oldWidget.src != widget.src ||
         oldWidget.assetPathOverride != widget.assetPathOverride) {
       // 行复用换内容后允许重新尝试图片(资产确实缺失会在一帧内再次回落)。
       _failed = false;
@@ -157,24 +173,49 @@ class _ChatBadgeImageState extends State<ChatBadgeImage> {
   @override
   Widget build(BuildContext context) {
     if (_failed) return const SizedBox.shrink();
-    final path = widget.assetPath;
-    if (path.isEmpty) {
+    final localPath = widget.assetPath;
+    final fit = widget.fit ?? _defaultFit(widget.kind);
+    if (widget.src.isNotEmpty) {
+      return ColorFiltered(
+        colorFilter: chatWebImageFilter,
+        child: Image.network(
+          widget.src,
+          height: widget.height,
+          fit: fit,
+          alignment: Alignment.centerLeft,
+          filterQuality: FilterQuality.medium,
+          errorBuilder: (context, error, stackTrace) {
+            if (localPath.isEmpty) {
+              _reportFail();
+              return const SizedBox.shrink();
+            }
+            return _assetImage(localPath, fit);
+          },
+        ),
+      );
+    }
+    if (localPath.isEmpty) {
       // 无资产:立即渲染 shrink(调用方经 onFail 回文字态)。
       _reportFail();
       return const SizedBox.shrink();
     }
-    return Image.asset(
+    return _assetImage(localPath, fit);
+  }
+
+  Widget _assetImage(String path, BoxFit fit) => ColorFiltered(
+    colorFilter: chatWebImageFilter,
+    child: Image.asset(
       path,
       height: widget.height,
-      fit: widget.fit ?? _defaultFit(widget.kind),
+      fit: fit,
       alignment: Alignment.centerLeft,
       filterQuality: FilterQuality.medium,
       errorBuilder: (context, error, stackTrace) {
         _reportFail();
         return const SizedBox.shrink();
       },
-    );
-  }
+    ),
+  );
 
   /// 按 kind 的默认 fit:两类素材均为官方整牌(内容含自身描边),contain
   /// 完整呈现;后续若有方形纯图标素材可在分支里改 cover。
