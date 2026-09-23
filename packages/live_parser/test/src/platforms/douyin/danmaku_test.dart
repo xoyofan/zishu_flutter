@@ -226,7 +226,7 @@ void main() {
       expect(received.single.text, '你好[呲牙]哈哈', reason: '表情名以 [名] 形态拼入正文');
       expect(received.single.segments, [
         const DanmakuSegment.text('你好'),
-        const DanmakuSegment.emoji(text: '[呲牙]', url: emojiUrl),
+        const DanmakuSegment.emoji(text: '[呲牙]', url: emojiUrl, name: '呲牙'),
         const DanmakuSegment.text('哈哈'),
       ], reason: 'text/emoji 段按协议顺序保留');
 

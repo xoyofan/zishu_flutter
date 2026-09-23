@@ -304,7 +304,10 @@ String _firstHttpUrl(List<PbField> imageFields) {
         final display = trimmed.startsWith('[') && trimmed.endsWith(']')
             ? trimmed
             : '[$trimmed]';
-        return (display, DanmakuSegment.emoji(text: display, url: url));
+        return (
+          display,
+          DanmakuSegment.emoji(text: display, url: url, name: trimmed),
+        );
       }
     }
   }
