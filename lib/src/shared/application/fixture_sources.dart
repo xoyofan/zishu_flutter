@@ -17,6 +17,7 @@ final List<RoomSummary> kFixtureRooms = [
     category: '英雄联盟',
     online: '42.1万',
     cover: 'https://placeholder.zishu.dev/douyu/63136.jpg',
+    avatar: 'https://placeholder.zishu.dev/anchor/douyu/63136.jpg',
     promoTag: '官方',
   ),
   RoomSummary(
@@ -28,6 +29,7 @@ final List<RoomSummary> kFixtureRooms = [
     category: '云顶之弈',
     online: '18.7万',
     cover: 'https://placeholder.zishu.dev/douyu/288016.jpg',
+    avatar: 'https://placeholder.zishu.dev/anchor/douyu/288016.jpg',
   ),
   RoomSummary(
     site: 'douyu',
@@ -38,6 +40,7 @@ final List<RoomSummary> kFixtureRooms = [
     category: '无畏契约',
     online: '9.3万',
     cover: 'https://placeholder.zishu.dev/douyu/71415.jpg',
+    avatar: 'https://placeholder.zishu.dev/anchor/douyu/71415.jpg',
     promoTag: '赛事',
   ),
   RoomSummary(
@@ -49,6 +52,7 @@ final List<RoomSummary> kFixtureRooms = [
     category: '唱见',
     online: '5.8万',
     cover: 'https://placeholder.zishu.dev/douyu/74960.jpg',
+    avatar: 'https://placeholder.zishu.dev/anchor/douyu/74960.jpg',
   ),
   RoomSummary(
     site: 'douyu',
@@ -59,6 +63,7 @@ final List<RoomSummary> kFixtureRooms = [
     category: '王者荣耀',
     online: '23.4万',
     cover: 'https://placeholder.zishu.dev/douyu/9999.jpg',
+    avatar: 'https://placeholder.zishu.dev/anchor/douyu/9999.jpg',
   ),
   RoomSummary(
     site: 'douyu',
@@ -69,6 +74,7 @@ final List<RoomSummary> kFixtureRooms = [
     category: '永劫无间',
     online: '7.2万',
     cover: 'https://placeholder.zishu.dev/douyu/24422.jpg',
+    avatar: 'https://placeholder.zishu.dev/anchor/douyu/24422.jpg',
   ),
   RoomSummary(
     site: 'douyu',
@@ -79,6 +85,7 @@ final List<RoomSummary> kFixtureRooms = [
     category: '炉石传说',
     online: '3.1万',
     cover: 'https://placeholder.zishu.dev/douyu/606118.jpg',
+    avatar: 'https://placeholder.zishu.dev/anchor/douyu/606118.jpg',
   ),
   RoomSummary(
     site: 'douyu',
@@ -89,6 +96,7 @@ final List<RoomSummary> kFixtureRooms = [
     category: '户外',
     online: '1.9万',
     cover: 'https://placeholder.zishu.dev/douyu/445245.jpg',
+    avatar: 'https://placeholder.zishu.dev/anchor/douyu/445245.jpg',
     promoTag: '新秀',
   ),
   RoomSummary(
@@ -100,6 +108,7 @@ final List<RoomSummary> kFixtureRooms = [
     category: '主机游戏',
     online: '6.6万',
     cover: 'https://placeholder.zishu.dev/douyu/518801.jpg',
+    avatar: 'https://placeholder.zishu.dev/anchor/douyu/518801.jpg',
   ),
   RoomSummary(
     site: 'douyu',
@@ -110,6 +119,7 @@ final List<RoomSummary> kFixtureRooms = [
     category: '影视',
     online: '8921',
     cover: 'https://placeholder.zishu.dev/douyu/723100.jpg',
+    avatar: 'https://placeholder.zishu.dev/anchor/douyu/723100.jpg',
   ),
 ];
 

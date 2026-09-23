@@ -9,6 +9,28 @@ part of '../app_shell.dart';
 ///
 /// 在播列表走 [visibleFollowEntries] 的 `liveOnly`(与 hover 浮层同一份口径),数据由关注状态
 /// 定时刷新链路(FollowStatusPoller,60s)驱动 —— 这里不另起定时器。
+/// 关注头像取图:对齐 web `utils/follow/followAvatar.ts` 的 `pickFollowAvatarSrc`。
+///
+/// **avatar 优先、cover 兜底**;斗鱼的过期截图 CDN(`rpic.douyucdn.cn/asrpic…`)
+/// 两个值都排除(web 同口径:会过期,不作头像长期展示);都拿不到 → 空串,
+/// 由调用方落「主播名首字」占位。
+String _followAvatarSrc(RoomSummary room) {
+  final expiring = RegExp(
+    r'(?:^|\.)rpic\.douyucdn\.cn/(?:asrpic|a\d+/)',
+    caseSensitive: false,
+  );
+  final isDouyu = room.site == 'douyu';
+  final avatar = room.avatar.trim();
+  if (avatar.isNotEmpty) {
+    if (isDouyu && expiring.hasMatch(avatar)) return '';
+    return avatar;
+  }
+  final cover = room.cover.trim();
+  if (cover.isEmpty) return '';
+  if (isDouyu && expiring.hasMatch(cover)) return '';
+  return cover;
+}
+
 class _NavFollowAvatars extends ConsumerWidget {
   const _NavFollowAvatars({this.size = topSize});
 
@@ -69,6 +91,8 @@ class _NavFollowAvatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final room = entry.room;
+    // 头像优先、封面兑底(web pickFollowAvatarSrc 同口径),空则首字占位。
+    final src = _followAvatarSrc(room);
     final fallback = Container(
       width: size,
       height: size,
@@ -91,11 +115,11 @@ class _NavFollowAvatar extends StatelessWidget {
         shape: BoxShape.circle,
         border: Border.all(color: context.tokens.surfaceSoft),
       ),
-      child: room.cover.isEmpty
+      child: src.isEmpty
           ? fallback
           : ClipOval(
               child: CachedNetworkImage(
-                imageUrl: room.cover,
+                imageUrl: src,
                 width: size,
                 height: size,
                 fit: BoxFit.cover,
@@ -238,6 +262,8 @@ class _FollowAvatarTile extends StatelessWidget {
   }
 
   Widget _avatar(BuildContext context, RoomSummary room) {
+    // 头像优先、封面兑底(web pickFollowAvatarSrc 同口径),空则首字占位。
+    final src = _followAvatarSrc(room);
     final fallback = CircleAvatar(
       radius: _FollowFlyout._kAvatarSize / 2,
       backgroundColor: context.tokens.surfaceRaised,
@@ -249,10 +275,10 @@ class _FollowAvatarTile extends StatelessWidget {
         ),
       ),
     );
-    if (room.cover.isEmpty) return fallback;
+    if (src.isEmpty) return fallback;
     return ClipOval(
       child: CachedNetworkImage(
-        imageUrl: room.cover,
+        imageUrl: src,
         width: _FollowFlyout._kAvatarSize,
         height: _FollowFlyout._kAvatarSize,
         fit: BoxFit.cover,

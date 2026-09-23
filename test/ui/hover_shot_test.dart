@@ -9,6 +9,7 @@
 /// 更新基线前必须先 `read` 打开 `test/ui/failures/*.png` 确认差异成因。
 library;
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -153,6 +154,17 @@ void main() {
     mockPathProvider();
     await pumpApp(tester);
     await hover(tester, find.byKey(const Key('nav-follow')));
+
+    // 头像数据源回归钉子:浮层/顶栏头像取 avatar(web pickFollowAvatarSrc
+    // 同口径),而非房间封面 —— fixture 的 avatar 路径带 /anchor/,cover 不带。
+    await expectLater(
+      find.byWidgetPredicate(
+        (w) => w is CachedNetworkImage && w.imageUrl.contains('/anchor/'),
+      ),
+      findsWidgets,
+      reason: '关注头像应优先渲染主播头像(avatar),不是房间封面',
+    );
+
     await expectLater(
       find.byType(Scaffold).first,
       matchesGoldenFile('hover_follow_grid.png'),

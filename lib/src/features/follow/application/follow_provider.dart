@@ -129,6 +129,7 @@ class FollowController extends Notifier<List<FollowEntry>> {
           category: source.category,
           online: '',
           cover: source.cover,
+          avatar: source.avatar,
         );
 
     return [
@@ -361,6 +362,8 @@ class FollowController extends Notifier<List<FollowEntry>> {
       // online 以刷新为准:空串即平台明确未开播。
       online: fresh.online,
       cover: fresh.cover.trim().isNotEmpty ? fresh.cover : current.cover,
+      // 头像:刷新非空则更新(同 cover 口径;上游没给就保留上次拿到的值)。
+      avatar: fresh.avatar.trim().isNotEmpty ? fresh.avatar : current.avatar,
       // roomState 以刷新为准:在线/轮播/离线互转跟随上游。
       roomState: fresh.roomState,
       followers: fresh.followers.trim().isNotEmpty
@@ -441,6 +444,7 @@ class FollowController extends Notifier<List<FollowEntry>> {
                     category: item['category']?.toString() ?? '',
                     online: item['online']?.toString() ?? '',
                     cover: item['cover']?.toString() ?? '',
+                    avatar: item['avatar']?.toString() ?? '',
                     roomState: RoomState.values.firstWhere(
                       (state) => state.name == item['roomState'],
                       orElse: () => RoomState.offline,
@@ -540,7 +544,7 @@ class FollowController extends Notifier<List<FollowEntry>> {
   /// 把关注列表序列化为 JSON 字符串写入本地存储;[syncRemote] 时随后整表推云端。
   ///
   /// 字段契约:{site, roomId, title, uname, cover} + 元信息(cid/category/
-  /// online/roomState/followers/vip/diamondFans,刷新回填后随落盘保留)+ 本地标记
+  /// online/roomState/followers/vip/diamondFans/avatar,刷新回填后随落盘保留)+ 本地标记
   /// (isSpecial/remindOn/followedAt),与任务卡 A8 约定的关注落库结构一致。
   Future<void> _persist({bool syncRemote = true}) async {
     try {
@@ -552,6 +556,7 @@ class FollowController extends Notifier<List<FollowEntry>> {
             'title': entry.room.title,
             'uname': entry.room.anchorName,
             'cover': entry.room.cover,
+            'avatar': entry.room.avatar,
             'cid': entry.room.cid,
             'category': entry.room.category,
             'online': entry.room.online,
