@@ -1160,14 +1160,16 @@ class _PausedOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: AppOnVideo.pauseScrim,
-      alignment: Alignment.center,
-      child: SvgPicture.asset(
-        'assets/ui/icons/play-purple.svg',
-        width: 96,
-        height: 96,
-        semanticsLabel: '播放',
+    return IgnorePointer(
+      child: Container(
+        color: AppOnVideo.pauseScrim,
+        alignment: Alignment.center,
+        child: SvgPicture.asset(
+          'assets/ui/icons/play-purple.svg',
+          width: 96,
+          height: 96,
+          semanticsLabel: '播放',
+        ),
       ),
     );
   }
@@ -1223,9 +1225,10 @@ class _PlaybackNoticeOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      liveRegion: true,
-      child: Container(
+    return IgnorePointer(
+      child: Semantics(
+        liveRegion: true,
+        child: Container(
         key: const Key('playback-notice-overlay'),
         padding: const EdgeInsets.symmetric(
           horizontal: AppSpacing.lg,
@@ -1260,6 +1263,7 @@ class _PlaybackNoticeOverlay extends StatelessWidget {
               Text(progress, style: context.textCaption),
             ],
           ],
+        ),
         ),
       ),
     );

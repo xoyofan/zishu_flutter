@@ -7,6 +7,8 @@
 ///   祖先,这里用 Scaffold 提供等价宿主环境,聚焦锚点交互验证。
 library;
 
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -24,9 +26,10 @@ class FakeLivePlayer implements LivePlayer {
   /// 记录方法调用,便于必要时验证交互链路。
   final List<String> calls = [];
 
+  PlayerSnapshot snapshot = const PlayerSnapshot();
+
   @override
-  Stream<PlayerSnapshot> get snapshots =>
-      Stream<PlayerSnapshot>.value(const PlayerSnapshot());
+  Stream<PlayerSnapshot> get snapshots => Stream<PlayerSnapshot>.value(snapshot);
 
   @override
   Widget buildVideoView({BoxFit fit = BoxFit.contain}) =>
@@ -98,6 +101,25 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
   }
+
+  testWidgets('纯展示遮罩使用 IgnorePointer 避免拦截按钮', (tester) async {
+    await pumpPlayView(tester);
+
+    final source = File(
+      'lib/src/features/play/views/play_view.dart',
+    ).readAsStringSync();
+    final noticeClass = source.substring(
+      source.indexOf('class _PlaybackNoticeOverlay'),
+      source.indexOf('/// 播放错误浮层卡片'),
+    );
+    final pausedClass = source.substring(
+      source.indexOf('class _PausedOverlay'),
+      source.indexOf('/// 解析中/失败/fixture'),
+    );
+
+    expect(noticeClass, contains('return IgnorePointer('));
+    expect(pausedClass, contains('return IgnorePointer('));
+  });
 
   testWidgets('/douyu/play/63136:返回与侧栏开关锚点存在,画质/线路 selectbox 可用', (
     tester,
