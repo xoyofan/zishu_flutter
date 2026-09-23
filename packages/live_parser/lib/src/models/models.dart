@@ -595,13 +595,25 @@ class DanmakuBadge {
     this.color = 0,
     this.kind = '',
     this.url = '',
+    this.iconUrl = '',
+    this.vFlag = 0,
+    this.vLogo = '',
   });
 
   final String name;
   final int level;
   final int color;
   final String kind;
+
+  /// 徽章主体/图标 URL。SOOP 订阅等平台可同时使用 [url] 与 [iconUrl]。
   final String url;
+
+  /// 平台协议直接下发的图标 URL。
+  final String iconUrl;
+
+  /// 虎牙超粉标记与 V 标图片。
+  final int vFlag;
+  final String vLogo;
 }
 
 /// 弹幕富文本段:文本段与表情图段按协议顺序排列。
@@ -614,16 +626,22 @@ class DanmakuBadge {
 /// name 不单列:表情段 [text] 恒为 `[表情名]` 括号形态,UI 需要纯名字时
 /// 去括号即可(web normalizeEmojiName 同语义)。
 class DanmakuSegment {
-  const DanmakuSegment({required this.type, this.text = '', this.url = ''});
+  const DanmakuSegment({
+    required this.type,
+    this.text = '',
+    this.url = '',
+    this.name = '',
+  });
 
   /// 文本段。
   const DanmakuSegment.text(this.text)
     : type = DanmakuSegmentType.text,
-      url = '';
+      url = '',
+      name = '';
 
   /// 表情图段:[text] 为 `[表情名]`,[url] 为表情图 CDN(协议未携带时为空,
   /// UI 回退渲染 [text] 原文,web DanmakuRichText 同语义)。
-  const DanmakuSegment.emoji({required this.text, this.url = ''})
+  const DanmakuSegment.emoji({required this.text, this.url = '', this.name = ''})
     : type = DanmakuSegmentType.emoji;
 
   final DanmakuSegmentType type;
@@ -632,6 +650,9 @@ class DanmakuSegment {
   /// 表情图 CDN 地址;文本段恒为空。
   final String url;
 
+  /// 协议提供的可读名称,用于图片 alt/tooltip。
+  final String name;
+
   bool get isEmoji => type == DanmakuSegmentType.emoji;
 
   @override
@@ -639,10 +660,11 @@ class DanmakuSegment {
       other is DanmakuSegment &&
       other.type == type &&
       other.text == text &&
-      other.url == url;
+      other.url == url &&
+      other.name == name;
 
   @override
-  int get hashCode => Object.hash(type, text, url);
+  int get hashCode => Object.hash(type, text, url, name);
 
   @override
   String toString() =>
@@ -672,6 +694,11 @@ class DanmakuMessage {
     this.badgeKind = '',
     this.badgeUrl = '',
     this.badges = const [],
+    this.guard,
+    this.userLevelIconUrl = '',
+    this.userLevelBadgeStyle = 0,
+    this.userLevelIsPolished = 0,
+    this.userLevelColor = 0,
     this.id = '',
     this.sentAt,
     this.rawType = '',
@@ -711,6 +738,15 @@ class DanmakuMessage {
   final String badgeKind;
   final String badgeUrl;
   final List<DanmakuBadge> badges;
+
+  /// B站大航海等独立身份徽章;与普通粉丝牌分开显示。
+  final DanmakuBadge? guard;
+
+  /// 用户等级图标/样式元数据(平台协议直接提供时使用)。
+  final String userLevelIconUrl;
+  final int userLevelBadgeStyle;
+  final int userLevelIsPolished;
+  final int userLevelColor;
 
   /// 协议消息 id(空 = 未提供)。用于弹幕去重(协议重推同一条时按 id 判重),
   /// 消除「用户+正文」兜底 key 对同名同文的误杀。
