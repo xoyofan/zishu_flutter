@@ -20,6 +20,7 @@ void main() {
         category: '英雄联盟',
         online: '',
         cover: '',
+        avatar: 'https://a.test/anchor.jpg',
         roomState: RoomState.replay,
       );
 
@@ -27,6 +28,11 @@ void main() {
 
       expect(restored.roomState, RoomState.replay);
       expect(restored.toJson()['roomState'], 'replay');
+      expect(
+        restored.avatar,
+        'https://a.test/anchor.jpg',
+        reason: '主播头像随 json 回环保留(关注 hover 浮层的数据源)',
+      );
     });
 
     test('默认 offline:构造与 toJson 显式写出', () {

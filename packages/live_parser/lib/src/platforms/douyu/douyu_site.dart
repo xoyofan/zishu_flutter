@@ -104,6 +104,11 @@ class DouyuRoomResolver implements RoomResolver, RoomSummaryRefresher {
       // 热度只在实时在播时有意义;`hn` 缺失/为 0 时留空,轮播归空串。
       online: live && !replay && hn.isNotEmpty && hn != '0' ? hn : '',
       cover: room.cover,
+      // 头像(web avatarFromDouyu 同源:mobileInfo.avatar 优先,betard
+      // 的 avatar 兑底)。
+      avatar: jsonText(mobile['avatar']).isNotEmpty
+          ? jsonText(mobile['avatar'])
+          : room.avatar,
       followers: cardFans,
       vip: cardVip,
       roomState: replay

@@ -160,6 +160,10 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver, RoomSummar
           ? formatOnlineCount(liveData['totalCount'] ?? liveData['userCount'])
           : '',
       cover: httpsHuyaUrl(jsonText(liveData['cover'] ?? liveData['screenshot'])),
+      // 头像(web avatarFromHuya 同源:avatar180 优先,avatar 兑底)。
+      avatar: httpsHuyaUrl(
+        _firstText([profile['avatar180'], profile['avatar']], ''),
+      ),
       // 粉丝数(web formatCount 口径:完整数字,0/缺失留空)。
       followers: formatExactCount(
         profileInfo['activityCount'] ?? liveData['activityCount'],

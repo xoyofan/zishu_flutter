@@ -294,6 +294,7 @@ class RoomSummary {
     required this.category,
     required this.online,
     required this.cover,
+    this.avatar = '',
     this.promoTag,
     this.followers = '',
     this.vip = '',
@@ -309,6 +310,14 @@ class RoomSummary {
   final String category;
   final String online;
   final String cover;
+
+  /// 主播头像 URL(状态刷新/列表接口提供时填充)。
+  ///
+  /// 关注 hover 浮层与顶栏头像堆叠优先用它(web `FollowRoomEntry.avatar` /
+  /// `pickFollowAvatarSrc`:avatar 优先、cover 兜底);空串 = 尚未获取,
+  /// UI 回退房间封面。斗鱼的过期截图 CDN 排除在 UI 侧判定(与 web 同口径)。
+  final String avatar;
+
   final String? promoTag;
 
   /// 粉丝/关注数文案(已格式化,如「123456」)。
@@ -389,6 +398,7 @@ class RoomSummary {
     'category': category,
     'online': online,
     'cover': cover,
+    if (avatar.isNotEmpty) 'avatar': avatar,
     'roomState': roomState.name,
     if (promoTag != null) 'promoTag': promoTag,
     if (followers.isNotEmpty) 'followers': followers,
@@ -406,6 +416,7 @@ class RoomSummary {
     category: json['category']?.toString() ?? '',
     online: json['online']?.toString() ?? '',
     cover: json['cover']?.toString() ?? '',
+    avatar: json['avatar']?.toString() ?? '',
     roomState: RoomState.values.firstWhere(
       (state) => state.name == json['roomState'],
       orElse: () => RoomState.offline,
