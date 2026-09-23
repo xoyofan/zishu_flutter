@@ -160,7 +160,8 @@ void main() {
       final subscription = session.messages.listen(received.add);
       socket.push(soopFrame([
         '\x1b\x09010900000600', '你好', '12345', '2', '7', 'user-1',
-        '张三', '268468512', '16777215', '0', '0', 'jpg', '12', '1', '',
+        '张三', '268468512', '16777215', '0', '0', 'jpg', '12', '0', '',
+        '', '', '1', '-1',
       ]));
       await Future<void>.delayed(const Duration(milliseconds: 10));
 

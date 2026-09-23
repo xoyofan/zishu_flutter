@@ -223,7 +223,7 @@ class SoopDanmakuSession implements DanmakuSession {
         ? 'png'
         : parts[11].trim();
     final months = parts[12].trim();
-    final animated = parts.length > 13 && parts[13].trim() == '1';
+    final animated = parts.length > 17 && parts[17].trim() == '1';
     if (message.isEmpty || groupId.isEmpty || subId.isEmpty || user.isEmpty) {
       return;
     }
