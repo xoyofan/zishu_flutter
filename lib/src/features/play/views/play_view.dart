@@ -9,7 +9,7 @@ import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart' show DanmakuMessage, RoomPayload;
 
 import '../../../platforms/common/playback/live_player.dart'
-    show PlayerSnapshot;
+    show PlayerSnapshot, PlaybackNotice;
 import '../../../platforms/common/playback/playback_retry.dart'
     show retryProgressLabel;
 import '../../../shared/domain/category_display.dart';
@@ -1064,9 +1064,19 @@ class _VideoStageState extends ConsumerState<_VideoStage> {
               !snapshot.buffering &&
               snapshot.error == null)
             const _PausedOverlay(),
-          if (snapshot.buffering && snapshot.error == null)
-            const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-          if (snapshot.error != null)
+          if (snapshot.notice != PlaybackNotice.none)
+            Center(
+              child: _PlaybackNoticeOverlay(
+                notice: snapshot.notice,
+                progress: snapshot.retryAttempt > 0
+                    ? retryProgressLabel(
+                        snapshot.retryAttempt,
+                        snapshot.retryLimit,
+                      )
+                    : '',
+              ),
+            ),
+          if (snapshot.error != null && snapshot.notice == PlaybackNotice.none)
             Center(
               child: _ErrorCard(
                 message: snapshot.error!,
@@ -1192,6 +1202,66 @@ class _StagePlaceholder extends StatelessWidget {
         ],
         if (action != null) ...[const SizedBox(height: AppSpacing.md), action!],
       ],
+    );
+  }
+}
+
+/// 缓冲/恢复中的脱敏原因浮层。只展示稳定状态映射，不暴露 URL、token 或 mpv 日志。
+class _PlaybackNoticeOverlay extends StatelessWidget {
+  const _PlaybackNoticeOverlay({required this.notice, this.progress = ''});
+
+  final PlaybackNotice notice;
+  final String progress;
+
+  String get _message => switch (notice) {
+    PlaybackNotice.networkJitter => '网络波动，缓冲中…',
+    PlaybackNotice.sourceOpenFailed => '直播地址暂时无法打开，正在切换线路…',
+    PlaybackNotice.reconnecting => '网络不稳定，正在重新连接…',
+    PlaybackNotice.recoveringNewUrl => '正在获取新的直播地址…',
+    PlaybackNotice.none => '正在缓冲直播画面…',
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        key: const Key('playback-notice-overlay'),
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.lg,
+          vertical: AppSpacing.md,
+        ),
+        decoration: BoxDecoration(
+          color: context.tokens.surfaceRaised.withValues(alpha: 0.90),
+          borderRadius: AppRadius.allMd,
+          border: Border.all(color: context.tokens.border),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 360),
+              child: Text(
+                _message,
+                textAlign: TextAlign.center,
+                style: context.textSecondary.copyWith(
+                  color: context.tokens.textPrimary,
+                ),
+              ),
+            ),
+            if (progress.isNotEmpty) ...[
+              const SizedBox(height: AppSpacing.xs),
+              Text(progress, style: context.textCaption),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }
