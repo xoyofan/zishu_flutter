@@ -44,6 +44,17 @@ List<Color> _huyaBarGradient(int level) {
   };
 }
 
+String _soopSubscriberAsset(int months) {
+  final name = months >= 24
+      ? 'subscriber_24mo.png'
+      : months >= 12
+      ? 'subscriber_12mo.png'
+      : months >= 6
+      ? 'subscriber_6mo.png'
+      : 'subscriber_basic.png';
+  return 'assets/badges/soop/$name';
+}
+
 /// 粉丝牌(对齐 web ChatFanBadge 各平台分支;本地图优先 → 文字态兜底):
 /// - 斗鱼:官方粉丝牌 PNG(`douyu/fans/{lv}.png`,等级已绘在图内 → 不叠数字)
 ///   作底图、团名叠右侧(web douyuOfficial);加载失败/无图回落中性深底团名
@@ -141,53 +152,85 @@ class _FanBadgeState extends State<_FanBadge> {
     // 是协议位域解析出的文字色块，与 Web 的 0005 徽章顺序一致。
     if (site == 'soop') {
       if (widget.kind == 'subscriber') {
+        const size = 18.0;
+        final asset = _soopSubscriberAsset(level);
         final image = widget.url.isNotEmpty
             ? Image.network(
                 widget.url,
-                width: 21,
-                height: 21,
-                fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => const SizedBox.shrink(),
-              )
-            : const SizedBox.shrink();
-        return SizedBox(
-          height: 21,
-          width: 21,
-          child: Stack(
-            clipBehavior: Clip.none,
-            children: [
-              Positioned.fill(child: image),
-              Positioned(
-                right: 0,
-                bottom: 0,
-                child: Text(
-                  '$level',
-                  style: const TextStyle(
-                    fontSize: 9,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    shadows: [Shadow(color: Colors.black54, blurRadius: 2)],
-                  ),
+                width: size,
+                height: size,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => Image.asset(
+                  asset,
+                  width: size,
+                  height: size,
+                  fit: BoxFit.cover,
                 ),
+              )
+            : Image.asset(asset, width: size, height: size, fit: BoxFit.cover);
+        return Padding(
+          padding: const EdgeInsets.only(right: 2),
+          child: Tooltip(
+            message: '订阅 $level 个月',
+            child: SizedBox(
+              height: size,
+              width: size,
+              child: Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Positioned.fill(
+                    child: ClipOval(child: image),
+                  ),
+                  Positioned(
+                    right: -7,
+                    bottom: -5,
+                    child: Text(
+                      '$level',
+                      style: const TextStyle(
+                        fontSize: 8,
+                        height: 1,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                        shadows: [Shadow(color: Colors.black87, blurRadius: 1.5)],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         );
       }
-      return _BadgeBox(
-        height: 16,
-        minWidth: 16,
-        radius: 2,
-        color: widget.color == 0
-            ? const Color(0xff6b7280)
-            : Color(widget.color),
-        child: Text(
-          name?.trim().isNotEmpty == true ? name!.trim() : widget.kind,
-          style: const TextStyle(
-            fontSize: AppFontSize.overline,
-            height: 1.1,
-            color: Colors.white,
-            fontWeight: FontWeight.w800,
+      final shortLabel = switch (widget.kind) {
+        'manager' => 'M',
+        'topfan' => 'T',
+        'fanclub' => 'F',
+        _ => name?.trim().isNotEmpty == true ? name!.trim() : '',
+      };
+      final tooltip = switch (widget.kind) {
+        'manager' => '管理员',
+        'topfan' => '铁粉',
+        'fanclub' => '粉丝团',
+        _ => shortLabel,
+      };
+      if (shortLabel.isEmpty) return const SizedBox.shrink();
+      return Tooltip(
+        message: tooltip,
+        child: _BadgeBox(
+          height: 18,
+          minWidth: 18,
+          radius: 3,
+          color: widget.color == 0
+              ? const Color(0xff6b7280)
+              : Color(widget.color),
+          child: Text(
+            shortLabel,
+            style: const TextStyle(
+              fontSize: 12.5,
+              height: 1,
+              color: Colors.white,
+              fontWeight: FontWeight.w600,
+            ),
           ),
         ),
       );
@@ -309,41 +352,52 @@ class _FanBadgeState extends State<_FanBadge> {
         ],
       );
       if (!hasProtocolColor && !_imgFailed) {
-        return Container(
-          height: 21, // web bilibiliComposed/官方边框牌 1.48em ≈ 20.7
-          constraints: const BoxConstraints(minWidth: 49), // 3.5em
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: ChatBadgeImage(
-                    site: site,
-                    kind: ChatBadgeKind.fans,
-                    level: level,
-                    height: 21,
-                    onFail: _markImgFailed,
+        return Tooltip(
+          message: hasName ? '$name Lv.$level' : '粉丝团 Lv.$level',
+          child: ClipRRect(
+            borderRadius: const BorderRadius.all(Radius.circular(999)),
+            child: Container(
+              height: 21, // web bilibiliComposed/官方边框牌 1.48em ≈ 20.7
+              constraints: const BoxConstraints(minWidth: 49), // 3.5em
+              decoration: const BoxDecoration(),
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: ChatBadgeImage(
+                        site: site,
+                        kind: ChatBadgeKind.fans,
+                        level: level,
+                        height: 21,
+                        assetPathOverride: bilibiliMedalFrameAssetPath(),
+                        onFail: _markImgFailed,
+                      ),
+                    ),
                   ),
-                ),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Center(child: content),
+                  ),
+                ],
               ),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: Center(child: content),
-              ),
-            ],
+            ),
           ),
         );
       }
-      return _BadgeBox(
-        height: 21,
-        radius: 999,
-        gradient: hasProtocolColor ? [Color(start), Color(end)] : null,
-        color: hasProtocolColor ? null : neutralBg,
-        // web `linear-gradient(to left, start, end)`:start 在右、end 在左。
-        gradientBegin: Alignment.centerRight,
-        gradientEnd: Alignment.centerLeft,
-        border: colorBorder != 0 ? Color(colorBorder) : null,
-        child: content,
+      return Tooltip(
+        message: hasName ? '$name Lv.$level' : '粉丝团 Lv.$level',
+        child: _BadgeBox(
+          height: 21,
+          radius: 999,
+          gradient: hasProtocolColor ? [Color(start), Color(end)] : null,
+          color: hasProtocolColor ? null : neutralBg,
+          // web `linear-gradient(to left, start, end)`:start 在右、end 在左。
+          gradientBegin: Alignment.centerRight,
+          gradientEnd: Alignment.centerLeft,
+          border: colorBorder != 0 ? Color(colorBorder) : null,
+          child: content,
+        ),
       );
     }
     // 斗鱼:官方粉丝牌 PNG 整图为底(等级已绘在图内,不叠数字),团名叠右侧

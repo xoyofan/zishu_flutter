@@ -97,6 +97,7 @@ class ChatBadgeImage extends StatefulWidget {
     required this.height,
     this.name,
     this.fit,
+    this.assetPathOverride,
     this.onFail,
   });
 
@@ -114,11 +115,15 @@ class ChatBadgeImage extends StatefulWidget {
   /// 覆写默认 fit(默认 fans/userLevel 均 contain)。
   final BoxFit? fit;
 
+  /// 显式资产路径；用于 Bilibili medal-frame 等不走等级编号的固定素材。
+  final String? assetPathOverride;
+
   /// 加载失败/无资产回调(每个失败只回一次;输入变化后重置重试)。
   final VoidCallback? onFail;
 
   /// 解析后的资产路径('' = 无本地图);暴露给调用方/测试判定图片分支。
-  String get assetPath => badgeAssetPath(site: site, kind: kind, level: level);
+  String get assetPath =>
+      assetPathOverride ?? badgeAssetPath(site: site, kind: kind, level: level);
 
   @override
   State<ChatBadgeImage> createState() => _ChatBadgeImageState();
@@ -133,7 +138,8 @@ class _ChatBadgeImageState extends State<ChatBadgeImage> {
     if (oldWidget.site != widget.site ||
         oldWidget.kind != widget.kind ||
         oldWidget.level != widget.level ||
-        oldWidget.name != widget.name) {
+        oldWidget.name != widget.name ||
+        oldWidget.assetPathOverride != widget.assetPathOverride) {
       // 行复用换内容后允许重新尝试图片(资产确实缺失会在一帧内再次回落)。
       _failed = false;
     }
