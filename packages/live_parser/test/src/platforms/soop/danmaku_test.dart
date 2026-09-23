@@ -151,7 +151,35 @@ void main() {
       await session.close();
     });
 
-    test('opcode 白名单:非 0005 的系统帧一律丢弃(对齐 web 768f8cd)', () async {
+    test('SVC_OGQ_EMOTICON(0109) 独立表情帧归一为 emoji segment', () async {
+      final session = await connector.connect(
+        const DanmakuSessionRequest(site: 'soop', roomId: 'testbj'),
+      );
+      final socket = transport.sockets.single;
+      final received = <DanmakuMessage>[];
+      final subscription = session.messages.listen(received.add);
+      socket.push(soopFrame([
+        '\x1b\x09010900000600', '你好', '12345', '2', '7', 'user-1',
+        '张三', '268468512', '16777215', '0', '0', 'jpg', '12', '1', '',
+      ]));
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(received, hasLength(1));
+      expect(received.single.rawType, 'soop:ogq_emoticon');
+      expect(received.single.text, '你好');
+      expect(received.single.userName, '张三');
+      expect(received.single.segments, hasLength(2));
+      expect(received.single.segments.last.isEmoji, isTrue);
+      expect(
+        received.single.segments.last.url,
+        'https://ogq-sticker-global-cdn-z01.afreecatv.com/'
+        'sticker/12345/2_160.webp?v=7',
+      );
+      await subscription.cancel();
+      await session.close();
+    });
+
+    test('opcode 白名单:非聊天帧一律丢弃', () async {
       final session = await connector.connect(
         const DanmakuSessionRequest(site: 'soop', roomId: 'testbj'),
       );

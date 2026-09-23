@@ -30,9 +30,9 @@ const Map<String, String> kSoopChatHandshakeHeaders = {
       '(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
 };
 
-/// 聊天帧 opcode:实测 wire 上 0001/0002 是握手 ACK、0004 是观众列表、
-/// 0127 是粉丝勋章(每 ~2s 成对刷屏),只有 0005 是真实聊天。
+/// 聊天 opcode：0005 是普通文字，0109(SVC_OGQ_EMOTICON) 是独立表情帧。
 const String kSoopChatOpcode = '0005';
+const String kSoopOgqEmoticonOpcode = '0109';
 
 const String _escape = '\x1b\x09';
 const String _separator = '\x0c';
@@ -165,11 +165,17 @@ class SoopDanmakuSession implements DanmakuSession {
     // 无意义弹幕刷屏(web 768f8cd 同款语义)。
     final text = utf8.decode(data, allowMalformed: true);
     for (final packet in text.split(_escape)) {
-      if (packet.length < 4 || packet.substring(0, 4) != kSoopChatOpcode) {
+      if (packet.length < 4) continue;
+      final opcode = packet.substring(0, 4);
+      if (opcode != kSoopChatOpcode && opcode != kSoopOgqEmoticonOpcode) {
         continue;
       }
       final parts = packet.split(_separator);
-      // 聊天帧:字段足够、第二字段不是控制码、且不含「|」分隔的批量行。
+      if (opcode == kSoopOgqEmoticonOpcode) {
+        _emitOgqEmoticon(parts);
+        continue;
+      }
+      // 普通聊天帧:字段足够、第二字段不是控制码、且不含「|」分隔的批量行。
       if (parts.length <= 6) continue;
       final comment = parts[1].trim();
       final user = parts[6].trim();
@@ -202,6 +208,53 @@ class SoopDanmakuSession implements DanmakuSession {
         ),
       );
     }
+  }
+
+  void _emitOgqEmoticon(List<String> parts) {
+    if (parts.length <= 13) return;
+    final message = parts[1].trim();
+    final groupId = parts[2].trim();
+    final subId = parts[3].trim();
+    final version = parts[4].trim();
+    final userId = parts[5].trim();
+    final user = parts[6].trim();
+    final flag = parts[7].trim();
+    final extension = parts[11].trim().isEmpty
+        ? 'png'
+        : parts[11].trim();
+    final months = parts[12].trim();
+    final animated = parts.length > 13 && parts[13].trim() == '1';
+    if (message.isEmpty || groupId.isEmpty || subId.isEmpty || user.isEmpty) {
+      return;
+    }
+    final imageUrl = soopOgqEmoticonUrl(
+      groupId: groupId,
+      subId: subId,
+      version: version,
+      extension: animated ? 'webp' : extension,
+    );
+    if (imageUrl.isEmpty) return;
+    final segments = <DanmakuSegment>[];
+    if (message.isNotEmpty) segments.add(DanmakuSegment.text(message));
+    segments.add(DanmakuSegment.emoji(text: '[OGQ表情]', url: imageUrl));
+    final badges = _soopBadges(flag, months, roomId);
+    _messagesController.add(
+      DanmakuMessage(
+        type: DanmakuMessageType.chat,
+        roomId: roomId,
+        userName: user,
+        userId: userId,
+        text: message.isEmpty ? '[OGQ表情]' : message,
+        segments: segments,
+        color: _soopChatColor(parts.length > 8 ? parts[8] : ''),
+        badgeName: badges.isEmpty ? '' : badges.first.name,
+        badgeLevel: badges.isEmpty ? 0 : badges.first.level,
+        badgeKind: badges.isEmpty ? '' : badges.first.kind,
+        badgeUrl: badges.isEmpty ? '' : badges.first.url,
+        badges: badges,
+        rawType: 'soop:ogq_emoticon',
+      ),
+    );
   }
 
   void _onDisconnected(DanmakuSessionState state) {
@@ -277,6 +330,18 @@ String soopSubscriberBadgeUrl(String roomId, int months) {
       ? '_6'
       : '';
   return 'https://static.file.sooplive.com/spcon/pc_$roomId$suffix.png';
+}
+
+String soopOgqEmoticonUrl({
+  required String groupId,
+  required String subId,
+  required String version,
+  required String extension,
+}) {
+  if (groupId.isEmpty || subId.isEmpty) return '';
+  final cleanExtension = extension.isEmpty ? 'png' : extension.toLowerCase();
+  return 'https://ogq-sticker-global-cdn-z01.afreecatv.com/'
+      'sticker/$groupId/${subId}_160.$cleanExtension?v=$version';
 }
 
 /// SOOP 文字色字段(parts[9],十进制 RGB 整数):空/非法按 UI 默认色(0);
