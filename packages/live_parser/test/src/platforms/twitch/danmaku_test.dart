@@ -70,7 +70,7 @@ void main() {
       final subscription = session.messages.listen(received.add);
 
       socket.pushText(
-        '@badge-info=;badges=;color=#1E90FF;display-name=张三;emotes=25:0-4;id=abc-123;'
+        '@badge-info=;badges=moderator/1,vip/4;color=#1E90FF;display-name=张三;emotes=25:0-4;id=abc-123;'
         'tmi-sent-ts=1700000000000;user-id=42'
         ' :zhangsan!zhangsan@zhangsan.tmi.twitch.tv PRIVMSG #somechannel :Kappa 你好',
       );
@@ -90,6 +90,11 @@ void main() {
       expect(message.segments, hasLength(2));
       expect(message.segments[0].isEmoji, isTrue);
       expect(message.segments[0].text, '[Kappa]');
+      expect(message.segments[0].name, 'Kappa');
+      expect(message.badges, hasLength(1));
+      expect(message.badges.single.kind, 'twitch');
+      expect(message.badges.single.name, 'vip', reason: 'Web 优先级 vip 高于 moderator');
+      expect(message.badges.single.url, contains('/badges/v1/'));
       expect(
         message.segments[0].url,
         'https://static-cdn.jtvnw.net/emoticons/v2/25/default/dark/1.0',

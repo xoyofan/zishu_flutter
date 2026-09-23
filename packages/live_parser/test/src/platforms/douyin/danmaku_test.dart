@@ -139,6 +139,9 @@ void main() {
                 userId: 42,
                 payGradeLevel: 18,
                 fansBadgeLevel: 10,
+                fansBadgeUrl: 'https://p3-webcast.douyinpic.com/ranklist_fansclub_pop_advanced_badge_10.png',
+                fansBadgeName: '粉丝团十级',
+                honorIconUrl: 'https://p3-webcast.douyinpic.com/honor/18.png',
               ),
             ),
           ),
@@ -150,9 +153,9 @@ void main() {
       expect(received, hasLength(1));
       expect(received.single.userLevel, 18, reason: 'User.payGrade 的 field 6');
       expect(received.single.badgeLevel, 10, reason: 'fansclub badge 项的等级');
-      // 抖音协议无可靠粉丝团名(通用勋章描述),badgeName 留空 —— 对齐 web
-      // douyinTextFallback(只显示等级圆盘)。
-      expect(received.single.badgeName, isEmpty);
+      expect(received.single.badgeName, '粉丝团十级');
+      expect(received.single.badgeUrl, 'https://p3-webcast.douyinpic.com/ranklist_fansclub_pop_advanced_badge_10.png');
+      expect(received.single.userLevelIconUrl, 'https://p3-webcast.douyinpic.com/honor/18.png');
 
       // 无徽章用户:字段默认空/0。
       socket.push(
@@ -279,6 +282,9 @@ List<int> _chatPayload({
   required int userId,
   int payGradeLevel = 0,
   int fansBadgeLevel = 0,
+  String fansBadgeUrl = '',
+  String fansBadgeName = '',
+  String honorIconUrl = '',
   List<int> richText = const [],
 }) {
   final user = [
@@ -288,7 +294,10 @@ List<int> _chatPayload({
     if (payGradeLevel > 0)
       ..._pbBytes(
         23,
-        [..._pbUint(6, payGradeLevel)],
+        [
+          ..._pbUint(6, payGradeLevel),
+          if (honorIconUrl.isNotEmpty) ..._pbString(19, honorIconUrl),
+        ],
       ),
     // 粉丝团 badge 项(#61 repeated):#1 = 官方 CDN 图(含等级),
     // #8 = 描述子消息(#3 = 等级,#4 = 名称)。
@@ -298,14 +307,21 @@ List<int> _chatPayload({
         [
           ..._pbString(
             1,
-            'https://p11-webcast.douyinpic.com/img/webcast/'
-            'ranklist_fansclub_pop_advanced_badge_$fansBadgeLevel.png~tplv-obj.image',
+            fansBadgeUrl.isNotEmpty
+                ? fansBadgeUrl
+                : 'https://p11-webcast.douyinpic.com/img/webcast/'
+                    'ranklist_fansclub_pop_advanced_badge_$fansBadgeLevel.png~tplv-obj.image',
           ),
           ..._pbBytes(
             8,
             [
               ..._pbUint(3, fansBadgeLevel),
-              ..._pbString(4, '粉丝团等级$fansBadgeLevel级勋章'),            ],
+              ..._pbString(
+                4,
+                fansBadgeName.isNotEmpty
+                    ? fansBadgeName
+                    : '粉丝团等级$fansBadgeLevel级勋章',
+              ),            ],
           ),
         ],
       ),

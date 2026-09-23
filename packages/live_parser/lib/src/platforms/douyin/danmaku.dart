@@ -237,8 +237,20 @@ class DouyinDanmakuSession implements DanmakuSession {
           userName: chat.user,
           userId: chat.userId,
           text: chat.text,
+          badgeName: chat.badgeName,
           badgeLevel: chat.badgeLevel,
+          badgeUrl: chat.badgeUrl,
+          badges: chat.badgeLevel > 0
+              ? [
+                  DanmakuBadge(
+                    name: chat.badgeName,
+                    level: chat.badgeLevel,
+                    url: chat.badgeUrl,
+                  ),
+                ]
+              : const [],
           userLevel: chat.userLevel,
+          userLevelIconUrl: chat.userLevelIconUrl,
           sentAt: chat.sentAtMs > 0
               ? DateTime.fromMillisecondsSinceEpoch(chat.sentAtMs)
               : null,

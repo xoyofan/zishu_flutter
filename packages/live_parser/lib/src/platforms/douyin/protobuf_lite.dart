@@ -170,7 +170,10 @@ class DouyinChatItem {
     required this.text,
     required this.sentAtMs,
     this.badgeLevel = 0,
+    this.badgeName = '',
+    this.badgeUrl = '',
     this.userLevel = 0,
+    this.userLevelIconUrl = '',
     this.segments = const [],
   });
 
@@ -179,12 +182,20 @@ class DouyinChatItem {
   final String text;
   final int sentAtMs;
 
-  /// 粉丝团等级(协议无可靠团名,badgeName 留空 —— 对齐 web
-  /// douyinTextFallback 只显示等级圆盘)。
+  /// 粉丝团等级(协议无可靠团名时仍可只显示等级圆盘)。
   final int badgeLevel;
+
+  /// 粉丝团名称(协议描述子消息提供时保留)。
+  final String badgeName;
+
+  /// 粉丝牌官方/协议图片 URL。
+  final String badgeUrl;
 
   /// 荣誉/消费等级(User.payGrade 的 field 6)。
   final int userLevel;
+
+  /// honor 图标 URL(协议可用时提供)。
+  final String userLevelIconUrl;
 
   /// 富文本段:仅当协议携带表情 image piece 时非空;纯文本消息保持空
   /// (UI 直接渲染 [text])。契约见 DanmakuMessage.segments。
@@ -201,21 +212,27 @@ String _parseUserName(Uint8List? userBuf) {
   return pbFieldString(fields, 1028);
 }
 
-/// User badge 项(#21/#61 repeated)里的粉丝团等级:
-/// 项结构 #1 = 官方 CDN 图(如 `ranklist_fansclub_pop_advanced_badge_10`),
-/// #8 = 描述子消息(#3 = 等级,#4 = 名称)。荣誉等级图(`new_user_grade_level`)
-/// 不是粉丝团,跳过;无子消息时回落 URL 正则(2026-09 实测字段)。
-int _parseFansBadgeLevel(Uint8List badgeBuf) {
+/// User badge 项(#21/#61 repeated)里的粉丝团信息:
+/// 项结构 #1 = 官方 CDN 图,#8 = 描述子消息(#3 = 等级,#4 = 名称)。
+({int level, String url, String name}) _parseFansBadge(Uint8List badgeBuf) {
   final fields = decodePbFields(badgeBuf);
   final url = pbFieldString(fields, 1);
-  if (url.isEmpty || !url.toLowerCase().contains('fansclub')) return 0;
   final desc = pbFieldBytes(fields, 8);
+  var level = 0;
+  var name = '';
   if (desc != null) {
-    final level = pbFieldUint(decodePbFields(desc), 3);
-    if (level > 0) return level;
+    final descFields = decodePbFields(desc);
+    level = pbFieldUint(descFields, 3);
+    name = pbFieldString(descFields, 4).trim();
   }
-  final match = RegExp(r'badge_(\d+)').firstMatch(url);
-  return match != null ? int.tryParse(match.group(1)!) ?? 0 : 0;
+  if (level <= 0 && url.toLowerCase().contains('fansclub')) {
+    final match = RegExp(r'badge_(\d+)').firstMatch(url);
+    level = match != null ? int.tryParse(match.group(1)!) ?? 0 : 0;
+  }
+  if (level <= 0 && name.isEmpty && !url.toLowerCase().contains('fansclub')) {
+    return (level: 0, url: '', name: '');
+  }
+  return (level: level, url: url, name: name);
 }
 
 /// User 荣誉/消费等级:payGrade(#23) 的 field 6(field 1 是钻石总数,勿混用)。
@@ -224,6 +241,24 @@ int _parseUserPayGradeLevel(Uint8List? userBuf) {
   final payGrade = pbFieldBytes(decodePbFields(userBuf), 23);
   if (payGrade == null) return 0;
   return pbFieldUint(decodePbFields(payGrade), 6);
+}
+
+String _parseUserLevelIconUrl(Uint8List? userBuf) {
+  if (userBuf == null) return '';
+  final payGrade = pbFieldBytes(decodePbFields(userBuf), 23);
+  if (payGrade == null) return '';
+  final fields = decodePbFields(payGrade);
+  for (final tag in const [19, 17, 18]) {
+    final direct = pbFieldString(fields, tag).trim();
+    if (direct.startsWith('http://') || direct.startsWith('https://')) {
+      return direct;
+    }
+    final nested = pbFieldBytes(fields, tag);
+    if (nested == null) continue;
+    final url = _firstHttpUrl(decodePbFields(nested));
+    if (url.isNotEmpty) return url;
+  }
+  return '';
 }
 
 /// Image 字段 #1(repeated bytes)中第一个 http(s) URL(web 真源
@@ -356,14 +391,23 @@ DouyinChatItem? parseDouyinChatPayload(Uint8List payload) {
 
   // 徽章:粉丝团等级(#21/#61 repeated,任一命中即用)+ 荣誉等级(payGrade)。
   var badgeLevel = 0;
+  var badgeName = '';
+  var badgeUrl = '';
   var userLevel = 0;
+  var userLevelIconUrl = '';
   if (userBuf != null) {
     final userFields = decodePbFields(userBuf);
     for (final buf in [...pbRepeatedBytes(userFields, 61), ...pbRepeatedBytes(userFields, 21)]) {
-      badgeLevel = _parseFansBadgeLevel(buf);
-      if (badgeLevel > 0) break;
+      final badge = _parseFansBadge(buf);
+      if (badge.level > 0) {
+        badgeLevel = badge.level;
+        badgeName = badge.name;
+        badgeUrl = badge.url;
+        break;
+      }
     }
     userLevel = _parseUserPayGradeLevel(userBuf);
+    userLevelIconUrl = _parseUserLevelIconUrl(userBuf);
   }
   return DouyinChatItem(
     user: user.isEmpty ? '观众' : user,
@@ -371,7 +415,10 @@ DouyinChatItem? parseDouyinChatPayload(Uint8List payload) {
     text: text,
     sentAtMs: parsePbCommonCreateTime(payload),
     badgeLevel: badgeLevel,
+    badgeName: badgeName,
+    badgeUrl: badgeUrl,
     userLevel: userLevel,
+    userLevelIconUrl: userLevelIconUrl,
     segments: segments,
   );
 }

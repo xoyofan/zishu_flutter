@@ -153,6 +153,7 @@ class TwitchDanmakuSession implements DanmakuSession {
 
     final displayName = _unescapeTag(tags['display-name'] ?? '');
     final color = _parseColorTag(tags['color'] ?? '');
+    final twitchBadges = _parseTwitchBadges(tags['badges'] ?? '');
     return DanmakuMessage(
       type: DanmakuMessageType.chat,
       roomId: channel,
@@ -160,6 +161,7 @@ class TwitchDanmakuSession implements DanmakuSession {
       userId: nick,
       text: text,
       color: color,
+      badges: twitchBadges,
       id: _unescapeTag(tags['id'] ?? ''),
       sentAt: _parseTimestamp(tags['tmi-sent-ts'] ?? ''),
       rawType: 'chat',
@@ -182,6 +184,59 @@ class TwitchDanmakuSession implements DanmakuSession {
     await _messagesController.close();
     await _statesController.close();
   }
+}
+
+const _twitchBadgeCdn = <String, String>{
+  'broadcaster': '5527c58c-fc70-11e9-841e-784f43822e80',
+  'moderator': '32679f86-9526-4b63-b32a-6b9a6a95f55c',
+  'subscriber': '5d9f2208-5dd8-11e7-8513-2ff4adfae661',
+  'vip': 'b817aba4-fad8-49e2-b88a-7cc744dfa6ec',
+  'partner': 'd12a2e27-1c86-4d50-b1a1-655c0462a4ac',
+  'staff': '93874e8c-5c6f-46c6-a89c-39f05da653ea',
+  'founder': '51ef22f8-5472-411a-909a-4201d55d7425',
+  'premium': 'bbbe0db0-a598-423e-86d0-f9fb98ca1933',
+  'artist': '87603a06-dc64-468a-8486-02c53b14b978',
+};
+
+const _twitchBadgePriority = <String>[
+  'broadcaster',
+  'staff',
+  'partner',
+  'founder',
+  'vip',
+  'moderator',
+  'subscriber',
+  'premium',
+  'artist',
+];
+
+List<DanmakuBadge> _parseTwitchBadges(String raw) {
+  if (raw.trim().isEmpty) return const [];
+  final entries = <({String key, int version})>[];
+  for (final item in raw.split(',')) {
+    final slash = item.indexOf('/');
+    final key = (slash < 0 ? item : item.substring(0, slash)).trim();
+    if (!_twitchBadgeCdn.containsKey(key)) continue;
+    final version = slash < 0
+        ? 1
+        : int.tryParse(item.substring(slash + 1).trim()) ?? 1;
+    entries.add((key: key, version: version));
+  }
+  entries.sort(
+    (a, b) => _twitchBadgePriority.indexOf(a.key)
+        .compareTo(_twitchBadgePriority.indexOf(b.key)),
+  );
+  if (entries.isEmpty) return const [];
+  final first = entries.first;
+  return [
+    DanmakuBadge(
+      name: first.key,
+      level: first.version,
+      kind: 'twitch',
+      url: 'https://static-cdn.jtvnw.net/badges/v1/'
+          '${_twitchBadgeCdn[first.key]}/2',
+    ),
+  ];
 }
 
 /// IRCv3 标签串 `k=v;k2=v2` → map;值按 IRC 转义还原。
@@ -277,6 +332,7 @@ List<DanmakuSegment> _buildSegments(String text, String emotesTag) {
     segments.add(
       DanmakuSegment.emoji(
         text: '[$name]',
+        name: name,
         url: kTwitchEmoteUrlTemplate.replaceAll('{id}', id),
       ),
     );

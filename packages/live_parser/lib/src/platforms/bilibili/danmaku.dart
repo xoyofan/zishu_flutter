@@ -280,8 +280,13 @@ class BilibiliDanmakuSession implements DanmakuSession {
     var badgeColorBorder = 0;
     var badgeTextColor = 0;
     var badgeColorLevel = 0;
+    var badgeIconUrl = '';
+    var userLevelIconUrl = '';
+    var guardLevel = 0;
     final metaUser = meta.length > 15 ? jsonMapOf(meta[15]) : null;
-    final newMedal = jsonMapOf(jsonMapOf(metaUser)['user'])['medal'];
+    final newUser = jsonMapOf(jsonMapOf(metaUser)['user']);
+    final newMedal = newUser['medal'];
+    final wealth = jsonMapOf(newUser['wealth']);
     // 消息 id:info[0][15].extra JSON 的 id_str(web bilibiliMeta.ts:274-290),
     // 用于协议重推去重;缺失回落「用户+正文」key。
     var danmakuId = '';
@@ -314,6 +319,11 @@ class BilibiliDanmakuSession implements DanmakuSession {
           : jsonText(medal['color_border']));
       badgeTextColor = _hexColorOf(jsonText(medal['v2_medal_color_text']));
       badgeColorLevel = _hexColorOf(jsonText(medal['v2_medal_color_level']));
+      badgeIconUrl = jsonText(medal['guard_icon'] ?? medal['honor_icon']).trim();
+      guardLevel = _intOf(medal['guard_level']);
+    }
+    if (wealth['level'] != null && _intOf(wealth['level']) > 0) {
+      userLevelIconUrl = _bilibiliWealthIconUrl(wealth);
     }
     if (badgeName.isEmpty && badgeLevel <= 0 && info.length > 3 && info[3] is List) {
       final medal = info[3] as List<Object?>;
@@ -326,6 +336,9 @@ class BilibiliDanmakuSession implements DanmakuSession {
         badgeColorStart = medal.length > 8 ? _intOf(medal[8]) & 0xffffff : 0;
         badgeColorEnd = medal.length > 9 ? _intOf(medal[9]) & 0xffffff : 0;
         badgeColorBorder = medal.length > 5 ? _intOf(medal[5]) & 0xffffff : 0;
+        if (guardLevel == 0 && medal.length > 10) {
+          guardLevel = _intOf(medal[10]);
+        }
       }
     }
     var userLevel = 0;
@@ -333,6 +346,21 @@ class BilibiliDanmakuSession implements DanmakuSession {
       final ul = info[4] as List<Object?>;
       userLevel = ul.isNotEmpty ? _intOf(ul[0]) : 0;
     }
+    if (userLevel == 0 && userLevelIconUrl.isNotEmpty) {
+      userLevel = _intOf(wealth['level']);
+    }
+    if (guardLevel == 0) {
+      final rootMedal = jsonMapOf(obj['medal_info']);
+      guardLevel = _intOf(rootMedal['guard_level']);
+    }
+    final fanBadge = badgeName.isNotEmpty && badgeLevel > 0
+        ? DanmakuBadge(
+            name: badgeName,
+            level: badgeLevel,
+            iconUrl: badgeIconUrl,
+          )
+        : null;
+    final guard = _bilibiliGuardBadge(guardLevel);
 
     final segments = _emoteSegments(meta, text0);
 
@@ -358,6 +386,9 @@ class BilibiliDanmakuSession implements DanmakuSession {
         badgeColorBorder: badgeColorBorder,
         badgeTextColor: badgeTextColor,
         badgeColorLevel: badgeColorLevel,
+        badges: fanBadge == null ? const [] : [fanBadge],
+        guard: guard,
+        userLevelIconUrl: userLevelIconUrl,
         id: danmakuId,
         rawType: cmd,
       ),
@@ -409,7 +440,13 @@ class BilibiliDanmakuSession implements DanmakuSession {
       final url = urls[match.group(1)];
       if (url != null) {
         hit = true;
-        segments.add(DanmakuSegment.emoji(text: match.group(0)!, url: url));
+        segments.add(
+          DanmakuSegment.emoji(
+            text: match.group(0)!,
+            url: url,
+            name: match.group(1)!,
+          ),
+        );
       } else {
         segments.add(DanmakuSegment.text(match.group(0)!));
       }
@@ -450,3 +487,32 @@ class BilibiliDanmakuSession implements DanmakuSession {
     await _statesController.close();
   }
 }
+
+String _bilibiliWealthIconUrl(Map<String, dynamic> wealth) {
+  final key = jsonText(wealth['dm_icon_key'] ?? wealth['iconUrl']).trim();
+  if (key.isEmpty) return '';
+  if (key.startsWith('http://') || key.startsWith('https://')) return key;
+  return 'https://i0.hdslb.com/bfs/live-reward/activity/wealth/$key';
+}
+
+DanmakuBadge? _bilibiliGuardBadge(int level) => switch (level) {
+  1 => const DanmakuBadge(
+    name: '总督',
+    level: 1,
+    color: 0xffe74c3c,
+    kind: 'guard',
+  ),
+  2 => const DanmakuBadge(
+    name: '提督',
+    level: 2,
+    color: 0xff3498db,
+    kind: 'guard',
+  ),
+  3 => const DanmakuBadge(
+    name: '舰长',
+    level: 3,
+    color: 0xfff39c12,
+    kind: 'guard',
+  ),
+  _ => null,
+};

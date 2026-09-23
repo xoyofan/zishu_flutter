@@ -260,6 +260,10 @@ void main() {
           'v2_medal_color_text': '#EDEDED',
           'v2_medal_color_level': '#FFFFFF',
         },
+        'wealth': {
+          'level': 6,
+          'dm_icon_key': 'wealth_6',
+        },
       },
       medalInfo: [12, '老结构牌', 12],
       ulInfo: [20, 0, -1],
@@ -279,6 +283,9 @@ void main() {
     // 文字色/等级数字色 = v2_medal_color_text/level(web bilibili.ts:121-141)。
     expect(received[0].badgeTextColor, 0xededed);
     expect(received[0].badgeColorLevel, 0xffffff);
+    expect(received[0].guard?.kind, 'guard');
+    expect(received[0].guard?.name, '舰长');
+    expect(received[0].userLevelIconUrl, contains('wealth_6'));
     expect(received[1].badgeName, isEmpty);
     expect(received[1].badgeLevel, 0);
     expect(received[1].userLevel, 0);
