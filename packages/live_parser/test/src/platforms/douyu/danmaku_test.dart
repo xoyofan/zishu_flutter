@@ -124,7 +124,8 @@ void main() {
       socket.pushPacket('type@=loginres/userid@=0/');
       socket.pushPacket(
         'type@=chatmsg/rid@=9527/nn@=张三/uid@=10086/txt@=你好@S世界/col@=2/'
-        'dms@=100/cst@=1700000000/level@=8/bnn@=粉丝团/bl@=5/',
+        'dms@=100/cst@=1700000000/level@=8/bnn@=粉丝团/bl@=5/'
+        'bimg@=https:@S@S@Scdn.example@Sdouyu-fans.png/bc@=16711680/',
       );
       await Future<void>.delayed(const Duration(milliseconds: 10));
       await Future<void>.delayed(const Duration(milliseconds: 60));
@@ -139,6 +140,10 @@ void main() {
       expect(message.color, 0x1e87f0);
       expect(message.badgeName, '粉丝团');
       expect(message.badgeLevel, 5);
+      expect(message.badges.single.name, '粉丝团');
+      expect(message.badges.single.level, 5);
+      expect(message.badges.single.url, 'https://cdn.example/douyu-fans.png');
+      expect(message.badges.single.color, 0xff0000);
       expect(message.userLevel, 8);
       expect(message.sentAt, DateTime.fromMillisecondsSinceEpoch(1700000000 * 1000));
       expect(message.rawType, 'chatmsg');

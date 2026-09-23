@@ -52,8 +52,20 @@ Uint8List _chatNotice({
 
 /// BadgeInfo{sBadgeName@3, iBadgeLevel@4} 结构体字节。
 /// 依据 web 真源 parseOfficialBadgeInfo(apps/web/src/utils/danmaku/huyaJce.ts:350-361)。
-Uint8List _fansBadgeInfo({required String name, required int level}) =>
-    (TarsWriter()..writeString(name, 3)..writeInt(level, 4)).takeBytes();
+Uint8List _fansBadgeInfo({
+  required String name,
+  required int level,
+  int vFlag = 0,
+  String vLogo = '',
+  int badgeType = 0,
+}) =>
+    (TarsWriter()
+          ..writeString(name, 3)
+          ..writeInt(level, 4)
+          ..writeInt(vFlag, 12)
+          ..writeString(vLogo, 13)
+          ..writeInt(badgeType, 17))
+        .takeBytes();
 
 /// ConsumeLevelBadgeInfo{iLevel@1, iBadgeStyle@2, iIsPolished@3} 结构体字节。
 /// 依据 web 真源 parseOfficialConsumeLevel(huyaJce.ts:362-373)。
@@ -179,8 +191,20 @@ void main() {
           content: '带牌发言',
           decorations: {
             8: [
-              _decorationInfo(10400, _fansBadgeInfo(name: '铁粉', level: 13)),
-              _decorationInfo(11200, _consumeLevelInfo(level: 25, style: 1)),
+              _decorationInfo(
+                10400,
+                _fansBadgeInfo(
+                  name: '铁粉',
+                  level: 13,
+                  vFlag: 1,
+                  vLogo: 'https://cdn.example/huya-v.png',
+                  badgeType: 2,
+                ),
+              ),
+              _decorationInfo(
+                11200,
+                _consumeLevelInfo(level: 25, style: 1, polished: 1),
+              ),
             ],
           },
         ),
@@ -194,7 +218,11 @@ void main() {
     expect(received.single.text, '带牌发言');
     expect(received.single.badgeName, '铁粉');
     expect(received.single.badgeLevel, 13);
+    expect(received.single.badges.single.vFlag, 1);
+    expect(received.single.badges.single.vLogo, 'https://cdn.example/huya-v.png');
     expect(received.single.userLevel, 25);
+    expect(received.single.userLevelBadgeStyle, 1);
+    expect(received.single.userLevelIsPolished, 1);
     // 虎牙粉丝牌渐变走 UI 端 HUYA_BAR_GRADIENTS 7 档分档,不填 B 站专属三色。
     expect(received.single.badgeColorStart, 0);
     expect(received.single.badgeColorEnd, 0);

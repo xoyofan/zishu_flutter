@@ -250,7 +250,11 @@ class HuyaDanmakuSession implements DanmakuSession {
     //   lib/src/features/play/widgets/play_side_panel.dart:1044-1060)。
     var badgeName = '';
     var badgeLevel = 0;
+    var badgeVFlag = 0;
+    var badgeVLogo = '';
     var userLevel = 0;
+    var userLevelStyle = 0;
+    var userLevelPolished = 0;
     try {
       for (final tag in _decorationTags) {
         final decorations = reader.readStructList(
@@ -267,14 +271,26 @@ class HuyaDanmakuSession implements DanmakuSession {
               // web parseOfficialBadgeInfo 的读取顺序一致)。
               final name = badge.readString(3);
               final level = badge.readInt(4);
+              final vFlag = badge.readInt(12);
+              final vLogo = badge.readString(13);
+              // tag 17 是 badgeType;当前契约不单独存它,读取以保持字段
+              // 顺序与 Web JCE parser 一致,缺省值不影响展示。
+              badge.readInt(17);
               if (level > 0) {
                 badgeLevel = level;
                 badgeName = name;
+                badgeVFlag = vFlag;
+                badgeVLogo = vLogo;
               }
             case _decoAppIdConsumeLevel:
-              final level = TarsReader(deco.data).readInt(1);
+              final levelReader = TarsReader(deco.data);
+              final level = levelReader.readInt(1);
+              final style = levelReader.readInt(2);
+              final polished = levelReader.readInt(3);
               if (level > 0) {
                 userLevel = level;
+                userLevelStyle = style;
+                userLevelPolished = polished;
               }
           }
         }
@@ -292,6 +308,14 @@ class HuyaDanmakuSession implements DanmakuSession {
       // 无 id 不影响正文。
     }
 
+    final badge = badgeName.isNotEmpty && badgeLevel > 0
+        ? DanmakuBadge(
+            name: badgeName,
+            level: badgeLevel,
+            vFlag: badgeVFlag,
+            vLogo: badgeVLogo,
+          )
+        : null;
     return DanmakuMessage(
       type: DanmakuMessageType.chat,
       roomId: roomId,
@@ -301,7 +325,10 @@ class HuyaDanmakuSession implements DanmakuSession {
       text: content,
       badgeName: badgeName,
       badgeLevel: badgeLevel,
+      badges: badge == null ? const [] : [badge],
       userLevel: userLevel,
+      userLevelBadgeStyle: userLevelStyle,
+      userLevelIsPolished: userLevelPolished,
       id: sMessageId,
       rawType: 'huya:1400',
     );

@@ -91,6 +91,25 @@ int douyuChatColor(int col) => switch (col) {
   _ => 0,
 };
 
+String _firstBadgeUrl(Map<String, Object?> stt) {
+  for (final key in const ['bimg', 'bimgurl', 'badgeimg', 'badge_img']) {
+    final value = _sttText(stt[key]).trim();
+    if (value.isEmpty) continue;
+    return value.startsWith('//') ? 'https:$value' : value;
+  }
+  return '';
+}
+
+String _sttText(Object? raw) {
+  if (raw is List) return raw.map(_sttText).join('/');
+  return raw?.toString() ?? '';
+}
+
+int _packedRgbColor(Object? raw) {
+  final value = int.tryParse(raw?.toString().trim() ?? '') ?? 0;
+  return value > 0 ? value & 0xffffff : 0;
+}
+
 class DouyuDanmakuConnector implements DanmakuConnector {
   DouyuDanmakuConnector({DanmakuTransport? transport, this.heartbeatInterval = kDouyuDanmakuHeartbeat})
     : transport = transport ?? const IoDanmakuTransport();
@@ -190,6 +209,22 @@ class DouyuDanmakuSession implements DanmakuSession {
         : DateTime.fromMillisecondsSinceEpoch(
             rawTimestamp > 100000000000 ? rawTimestamp : rawTimestamp * 1000,
           );
+    final badgeName =
+        (stt['bnn'] ?? stt['bn'] ?? '').toString().trim();
+    final badgeLevel = int.tryParse(
+          (stt['bl'] ?? stt['bnnl'] ?? '').toString(),
+        ) ??
+        0;
+    final badgeUrl = _firstBadgeUrl(stt);
+    final badgeColor = _packedRgbColor(stt['bc']);
+    final badge = badgeName.isNotEmpty && badgeLevel > 0
+        ? DanmakuBadge(
+            name: badgeName,
+            level: badgeLevel,
+            color: badgeColor,
+            url: badgeUrl,
+          )
+        : null;
     return DanmakuMessage(
       type: DanmakuMessageType.chat,
       roomId: roomId,
@@ -197,9 +232,14 @@ class DouyuDanmakuSession implements DanmakuSession {
       userName: stt['nn']?.toString() ?? '',
       userId: stt['uid']?.toString() ?? '',
       text: stt['txt']?.toString() ?? '',
-      badgeName: stt['bnn']?.toString() ?? '',
-      badgeLevel: int.tryParse(stt['bl']?.toString() ?? '') ?? 0,
-      userLevel: int.tryParse(stt['level']?.toString() ?? '') ?? 0,
+      badgeName: badgeName,
+      badgeLevel: badgeLevel,
+      badgeUrl: badgeUrl,
+      badges: badge == null ? const [] : [badge],
+      userLevel: int.tryParse(
+            (stt['level'] ?? stt['lv'] ?? '').toString(),
+          ) ??
+          0,
       sentAt: sentAt,
       rawType: stt['type']?.toString() ?? '',
     );
