@@ -89,7 +89,20 @@ class _ChatRow extends StatelessWidget {
             _inlineBadge(
               _UserLevelBadge(site: data.site, level: data.userLevel),
             ),
-          if (fanBadge != null &&
+          ...data.badges.map(
+            (badge) => _inlineBadge(
+              _FanBadge(
+                site: data.site,
+                name: badge.name,
+                level: badge.level,
+                kind: badge.kind,
+                url: badge.url,
+                color: badge.color,
+              ),
+            ),
+          ),
+          if (data.badges.isEmpty &&
+              fanBadge != null &&
               _FanBadge.visibleFor(site: data.site, name: data.fanName))
             _inlineBadge(
               _FanBadge(

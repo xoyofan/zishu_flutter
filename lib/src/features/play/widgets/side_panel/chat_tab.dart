@@ -11,6 +11,7 @@ class _ChatRowData {
     required this.site,
     this.fanName,
     this.fanLevel,
+    this.badges = const [],
     this.badgeColorStart = 0,
     this.badgeColorEnd = 0,
     this.badgeColorBorder = 0,
@@ -38,6 +39,9 @@ class _ChatRowData {
   /// 粉丝团等级(null = 无粉丝牌)。
   final int? fanLevel;
 
+  /// 一条消息可带的全部徽章；非 SOOP 多徽章平台通常只有 0/1 枚。
+  final List<DanmakuBadge> badges;
+
   /// 粉丝牌渐变起止色(B 站协议色;0 = 未提供)。
   final int badgeColorStart;
   final int badgeColorEnd;
@@ -54,12 +58,26 @@ class _ChatRowData {
   final int color;
 
   factory _ChatRowData.fromMessage(DanmakuMessage message, String site) {
+    final badges = message.badges.isNotEmpty
+        ? message.badges
+        : message.badgeLevel > 0
+        ? [
+            DanmakuBadge(
+              name: message.badgeName,
+              level: message.badgeLevel,
+              color: message.badgeColorStart,
+              kind: message.badgeKind,
+              url: message.badgeUrl,
+            ),
+          ]
+        : const <DanmakuBadge>[];
     return _ChatRowData(
       message.userName,
       message.text,
       site: site,
-      fanName: message.badgeLevel > 0 ? message.badgeName : null,
-      fanLevel: message.badgeLevel > 0 ? message.badgeLevel : null,
+      badges: badges,
+      fanName: badges.isEmpty ? null : badges.first.name,
+      fanLevel: badges.isEmpty ? null : badges.first.level,
       badgeColorStart: message.badgeColorStart,
       badgeColorEnd: message.badgeColorEnd,
       badgeColorBorder: message.badgeColorBorder,
@@ -321,6 +339,16 @@ class _ChatTabState extends ConsumerState<_ChatTab>
       userId: message.userId,
       text: [for (final segment in segments) segment.text].join(),
       color: message.color,
+      badgeName: message.badgeName,
+      badgeLevel: message.badgeLevel,
+      badgeColorStart: message.badgeColorStart,
+      badgeColorEnd: message.badgeColorEnd,
+      badgeColorBorder: message.badgeColorBorder,
+      badgeTextColor: message.badgeTextColor,
+      badgeColorLevel: message.badgeColorLevel,
+      badgeKind: message.badgeKind,
+      badgeUrl: message.badgeUrl,
+      badges: message.badges,
       segments: segments,
       id: message.id,
       sentAt: message.sentAt,

@@ -61,6 +61,9 @@ class _FanBadge extends StatefulWidget {
     required this.site,
     required this.level,
     this.name,
+    this.kind = '',
+    this.url = '',
+    this.color = 0,
     this.colorStart = 0,
     this.colorEnd = 0,
     this.colorBorder = 0,
@@ -71,6 +74,9 @@ class _FanBadge extends StatefulWidget {
   final String site;
   final int level;
   final String? name;
+  final String kind;
+  final String url;
+  final int color;
   final int colorStart;
   final int colorEnd;
   final int colorBorder;
@@ -100,7 +106,9 @@ class _FanBadgeState extends State<_FanBadge> {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.site != widget.site ||
         oldWidget.level != widget.level ||
-        oldWidget.name != widget.name) {
+        oldWidget.name != widget.name ||
+        oldWidget.kind != widget.kind ||
+        oldWidget.url != widget.url) {
       _imgFailed = false;
     }
   }
@@ -128,6 +136,62 @@ class _FanBadgeState extends State<_FanBadge> {
     final resolvedLevelColor = levelColor != 0
         ? Color(levelColor)
         : resolvedTextColor;
+
+    // SOOP:订阅牌优先使用主播自定义头像/本地分档图；管理员、铁粉、粉丝团
+    // 是协议位域解析出的文字色块，与 Web 的 0005 徽章顺序一致。
+    if (site == 'soop') {
+      if (widget.kind == 'subscriber') {
+        final image = widget.url.isNotEmpty
+            ? Image.network(
+                widget.url,
+                width: 21,
+                height: 21,
+                fit: BoxFit.contain,
+                errorBuilder: (_, _, _) => const SizedBox.shrink(),
+              )
+            : const SizedBox.shrink();
+        return SizedBox(
+          height: 21,
+          width: 21,
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Positioned.fill(child: image),
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Text(
+                  '$level',
+                  style: const TextStyle(
+                    fontSize: 9,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    shadows: [Shadow(color: Colors.black54, blurRadius: 2)],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+      return _BadgeBox(
+        height: 16,
+        minWidth: 16,
+        radius: 2,
+        color: widget.color == 0
+            ? const Color(0xff6b7280)
+            : Color(widget.color),
+        child: Text(
+          name?.trim().isNotEmpty == true ? name!.trim() : widget.kind,
+          style: const TextStyle(
+            fontSize: AppFontSize.overline,
+            height: 1.1,
+            color: Colors.white,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      );
+    }
 
     // 抖音:img-only 站,有等级即官方整图(fans/{lv}.png,等级绘在图内);
     // 失败/无图回落红色渐变圆盘文字态。

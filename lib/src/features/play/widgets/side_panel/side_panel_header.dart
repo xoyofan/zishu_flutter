@@ -63,15 +63,16 @@ class _SideHeader extends ConsumerWidget {
         ref.watch(roomStatsProvider((site: site, roomId: roomId))).value;
     final followersText = _formatFollowersText(stats?.followers);
     final audienceText = _statText(stats?.online);
-    final vipText = _statText(stats?.vip);
-    // 第 3 列(tone=svip):web `ROOM_STAT_COLUMNS` 的 `field: "diamondFans"`
-    // 槽位,douyu 钻粉 / huya 超粉 / douyin 会员 / bilibili 大航海。
-    // 与上两列同口径:始终渲染,上游未提供 → '—'(数据诚实性,不伪造 0)。
-    final svipText = _statText(stats?.diamondFans);
+    final vipText = _statText(_platformVipStat(site, stats));
+    // Web 的各平台列定义会交换 vip / fanGroup / diamondFans；不能把两个
+    // 固定字段直接当第 2、3 列。SOOP 只有「观看 / 订阅」两列。
+    final showVip = _showsVipStat(site);
+    final showSvip = _showsSvipStat(site);
+    final svipText = _statText(_platformSvipStat(site, stats));
 
-    // 信息头高度随系统字号缩放:固定 64px 在大字体(1.15x/1.3x)下会把
-    // 中间三行元信息挤出容器底部(移动端实测 1px RenderFlex 溢出)。
-    final headerHeight = MediaQuery.textScalerOf(context).scale(64.0);
+    // 信息头留出稳定的三行排版空间：昵称、分类、统计各占一行，
+    // 统一使用紧凑但可读的行高，避免大字体或窄侧栏下互相挤压。
+    final headerHeight = MediaQuery.textScalerOf(context).scale(72.0);
     return Container(
       key: const Key('play-side-header'),
       height: headerHeight,
@@ -87,152 +88,165 @@ class _SideHeader extends ConsumerWidget {
           _SideAvatar(avatar: avatar, label: anchor, live: isLive),
           const SizedBox(width: AppSpacing.sm),
           Expanded(
-            child: Column(
-              // spaceBetween:第一行贴顶、第三行贴底,去掉上下留白,空间全给行间距。
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // 第一行:主播名(中文化) + 粉丝数药丸(紧挨昵称、靠左)。
-                Row(
-                  children: [
-                    Flexible(
-                      child: TranslatedText(
-                        anchor,
-                        translateName: true,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: AppFontSize.subtitle,
-                          height: 1.08,
-                          fontWeight: FontWeight.w600,
-                          color: isLive ? tokens.liveBadge : tokens.textPrimary,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6),
+              child: Column(
+                // 三行内容在剩余高度内均分，分类行和统计行不再依赖固定
+                // SizedBox 间隔；窄侧栏只压缩水平宽度，不压扁文字行高。
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // 第一行:主播名(中文化) + 粉丝数药丸(紧挨昵称、靠左)。
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Tooltip(
+                          message: '主播昵称：$anchor',
+                          child: TranslatedText(
+                            anchor,
+                            translateName: true,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: AppFontSize.subtitle,
+                              height: 1.18,
+                              fontWeight: FontWeight.w600,
+                              color: isLive
+                                  ? tokens.liveBadge
+                                  : tokens.textPrimary,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: AppSpacing.xs),
-                    // 粉丝数(用户口径 2026-09-22:紧挨昵称靠左 + 圆弧外框)。
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 1,
-                      ),
-                      decoration: BoxDecoration(
-                        border: Border.all(color: tokens.border),
-                        borderRadius: AppRadius.allPill,
-                      ),
-                      child: Text(
-                        '关注 $followersText',
-                        key: const Key('play-side-stat-followers'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: AppFontSize.bodySecondary,
-                          height: 1.2,
-                          color: tokens.textSecondary,
+                      const SizedBox(width: AppSpacing.xs),
+                      // 粉丝数(用户口径 2026-09-22:紧挨昵称靠左 + 圆弧外框)。
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 1,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: tokens.border),
+                          borderRadius: AppRadius.allPill,
+                        ),
+                        child: Text(
+                          '关注 $followersText',
+                          key: const Key('play-side-stat-followers'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: AppFontSize.bodySecondary,
+                            height: 1.2,
+                            color: tokens.textSecondary,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-                // 分类显示在主播名后面那一行(用户口径 2026-09-19)。
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        formatCategoryHeaderLabel(
-                          payload?.site,
-                          category,
-                          payload?.cid,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: AppFontSize.bodySecondary,
-                          height: 1.1,
+                    ],
+                  ),
+                  // 分类显示在主播名后面那一行(用户口径 2026-09-19)。
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Flexible(
+                        child: Tooltip(
+                          message:
+                              '直播分类：${formatCategoryHeaderLabel(payload?.site, category, payload?.cid)}',
+                          child: Text(
+                            formatCategoryHeaderLabel(
+                              payload?.site,
+                              category,
+                              payload?.cid,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: AppFontSize.bodySecondary,
+                              height: 1.2,
+                            ),
+                          ),
                         ),
                       ),
-                    ),
-                    // 提醒(铃铛) + 网页(浏览器图标)。
-                    const SizedBox(width: 4),
-                    _SideTextAction(
-                      key: const Key('play-side-notify'),
-                      icon: remindOn
-                          ? Icons.notifications_active_rounded
-                          : Icons.notifications_none_rounded,
-                      label: remindOn ? '提醒中' : '提醒',
-                      tooltip: followed
-                          ? (remindOn ? '已开启开播/下播提醒，点击关闭' : '开启开播/下播提醒')
-                          : '关注后可开启开播提醒',
-                      onPressed: followed ? onToggleRemind : null,
-                      active: remindOn,
-                    ),
-                    const SizedBox(width: 3),
-                    _SideTextAction(
-                      key: const Key('play-side-external'),
-                      icon: Icons.open_in_browser_rounded,
-                      label: '网页',
-                      tooltip: '打开直播间页面',
-                      onPressed: externalUrl == null
-                          ? null
-                          : () => onOpenExternal(externalUrl!),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                // 统计行:人气 + VIP + 第 3 列(SVIP 档)。「关注 N」已上移到
-                // 第一排昵称右侧(用户口径 2026-09-22)。
-                // 整行收进一个 FittedBox(scaleDown)兜底 —— 328px 面板
-                // 配 1.3x 系统字号时多段内容会顶到行宽上限,等比缩放优于
-                // RenderFlex 溢出(本项目有过溢出史)。列间距用 xs 而非
-                // sm,为第 3 列腾出宽度。
-                Flexible(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // 人气/观众(web stats[0]「观众」列;online 为空 = 离线或
-                        // 尚未刷新回填,显示「—」)。
-                        _StatValue(
-                          key: const Key('play-side-stat-audience'),
-                          icon: AppIcons.eye,
-                          value: audienceText,
-                          color: context.tokens.statAudience,
-                        ),
-                        const SizedBox(width: AppSpacing.xs),
-                        // VIP/贵宾(web stats[1] vip 列;douyu/huya 贵宾、
-                        // douyin 会员、soop 订阅;其余平台上游无 → 「—」)。
-                        _StatValue(
-                          key: const Key('play-side-stat-vip'),
-                          icon: AppIcons.crown,
-                          value: vipText,
-                          color: context.tokens.statVip,
-                        ),
-                        const SizedBox(width: AppSpacing.xs),
-                        // 第 3 列(web stats[2],tone 恒为 svip):
-                        // douyu 钻粉 / huya 超粉 / douyin 会员 / bilibili
-                        // 大航海,同一字段 [RoomSummary.diamondFans] 承载。
-                        // 语义随平台变,故挂 Tooltip 说明列名(图标仅一个,
-                        // 不额外占宽度)。
-                        _StatValue(
-                          key: const Key('play-side-stat-svip'),
-                          icon: AppIcons.gem,
-                          value: svipText,
-                          color: context.tokens.statSvip,
-                          tooltip: '${_svipStatLabel(site)} $svipText',
-                        ),
-                      ],
+                      // 提醒(铃铛) + 网页(浏览器图标)。
+                      const SizedBox(width: 4),
+                      _SideTextAction(
+                        key: const Key('play-side-notify'),
+                        icon: remindOn
+                            ? Icons.notifications_active_rounded
+                            : Icons.notifications_none_rounded,
+                        label: remindOn ? '提醒中' : '提醒',
+                        tooltip: followed
+                            ? (remindOn ? '已开启开播/下播提醒，点击关闭' : '开启开播/下播提醒')
+                            : '关注后可开启开播提醒',
+                        onPressed: followed ? onToggleRemind : null,
+                        active: remindOn,
+                      ),
+                      const SizedBox(width: 3),
+                      _SideTextAction(
+                        key: const Key('play-side-external'),
+                        icon: Icons.open_in_browser_rounded,
+                        label: '网页',
+                        tooltip: '打开直播间页面',
+                        onPressed: externalUrl == null
+                            ? null
+                            : () => onOpenExternal(externalUrl!),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  // 统计行:人气 + VIP + 第 3 列(SVIP 档)。「关注 N」已上移到
+                  // 第一排昵称右侧(用户口径 2026-09-22)。
+                  // 整行收进一个 FittedBox(scaleDown)兜底 —— 328px 面板
+                  // 配 1.3x 系统字号时多段内容会顶到行宽上限,等比缩放优于
+                  // RenderFlex 溢出(本项目有过溢出史)。列间距用 xs 而非
+                  // sm,为第 3 列腾出宽度。
+                  Flexible(
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // 人气/观众(web stats[0]「观众」列;online 为空 = 离线或
+                          // 尚未刷新回填,显示「—」)。
+                          _StatValue(
+                            key: const Key('play-side-stat-audience'),
+                            icon: AppIcons.eye,
+                            value: audienceText,
+                            color: context.tokens.statAudience,
+                            tooltip:
+                                '${_audienceStatLabel(site)} $audienceText',
+                          ),
+                          if (showVip) ...[
+                            const SizedBox(width: AppSpacing.xs),
+                            _StatValue(
+                              key: const Key('play-side-stat-vip'),
+                              icon: AppIcons.crown,
+                              value: vipText,
+                              color: context.tokens.statVip,
+                              tooltip: '${_vipStatLabel(site)} $vipText',
+                            ),
+                          ],
+                          if (showSvip) ...[
+                            const SizedBox(width: AppSpacing.xs),
+                            _StatValue(
+                              key: const Key('play-side-stat-svip'),
+                              icon: AppIcons.gem,
+                              value: svipText,
+                              color: context.tokens.statSvip,
+                              tooltip: '${_svipStatLabel(site)} $svipText',
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                if (title.isNotEmpty && title != anchor)
-                  Semantics(
-                    label: '房间标题 $title',
-                    child: const SizedBox.shrink(),
-                  ),
-              ],
+                  if (title.isNotEmpty && title != anchor)
+                    Semantics(
+                      label: '房间标题 $title',
+                      child: const SizedBox.shrink(),
+                    ),
+                ],
+              ),
             ),
           ),
           const SizedBox(width: AppSpacing.xs),
@@ -267,6 +281,44 @@ String _statText(String? value) {
 /// 未登记该列的平台(xhs / youtube / soop / twitch 等)无专属语义,
 /// 回落通用「会员」;这些平台的 [RoomSummary.diamondFans] 恒为空,
 /// 列值显示「—」,不伪造。
+String? _platformVipStat(String site, RoomSummary? stats) => switch (site) {
+  'douyu' || 'huya' || 'soop' => stats?.vip,
+  // 抖音粉丝团、B 站粉丝勋章当前解析核心没有对应计数，保留「—」，
+  // 不拿订阅/大航海数冒充第 2 列。
+  'douyin' || 'bilibili' => null,
+  _ => null,
+};
+
+String? _platformSvipStat(String site, RoomSummary? stats) => switch (site) {
+  // 解析核心已按 Web 展示列口径归一：douyin 的 diamondFans 是会员，
+  // bilibili 的 diamondFans 是大航海。
+  'douyu' || 'huya' || 'douyin' || 'bilibili' => stats?.diamondFans,
+  _ => null,
+};
+
+bool _showsVipStat(String site) =>
+    site == 'douyu' ||
+    site == 'huya' ||
+    site == 'douyin' ||
+    site == 'bilibili' ||
+    site == 'soop';
+
+bool _showsSvipStat(String site) =>
+    site == 'douyu' || site == 'huya' || site == 'douyin' || site == 'bilibili';
+
+String _audienceStatLabel(String site) => switch (site) {
+  'soop' || 'youtube' => '观看',
+  _ => '观众',
+};
+
+String _vipStatLabel(String site) => switch (site) {
+  'douyu' || 'huya' => '贵宾',
+  'douyin' => '粉丝团',
+  'bilibili' => '粉丝勋章',
+  'soop' => '订阅',
+  _ => '会员',
+};
+
 String _svipStatLabel(String site) => switch (site) {
   'douyu' => '钻粉',
   'huya' => '超粉',

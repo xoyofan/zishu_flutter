@@ -8,15 +8,13 @@ import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/widgets/platform_icon.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
-import '../../follow/application/follow_provider.dart';
-import '../../follow/widgets/follow_common.dart';
 import '../application/browse_provider.dart';
 import '../application/sidebar_pref_provider.dart';
 
 /// 桌面首页常驻左侧栏:可折叠 rail(收起 52px ↔ 展开 220px)。
 ///
 /// 对齐 SFVideoLive 桌面首页的 `DirectoryDrawer.vue`(mumu 分支),逐项复刻:
-/// - 收藏星区(`__follow-wrap`):64px 行 + 36px 金色实心星,底部分隔线;
+/// - 关注入口(`__follow-wrap`):64px 行 + 36px 金色实心星,底部分隔线;
 /// - 平台 tab 网格(`__platform-tabs`):38.4px 方形 tab + 32px 图标,Wrap 流式
 ///   排布,非选中无边框透明底,选中金色边框 + 金色 12% 底;
 /// - 分类网格(`__cat-grid`):2 列(minmax(80px,1fr) 在 220px 抽屉下的落位),
@@ -84,7 +82,7 @@ class BrowseSidebar extends ConsumerWidget {
   }
 }
 
-/// 展开态内容:收藏星区 + 平台 tab 网格 + 分类网格(参考实现自上而下三段)。
+/// 展开态内容:关注入口 + 平台 tab 网格 + 分类网格。
 class _ExpandedContent extends StatelessWidget {
   const _ExpandedContent({required this.site, required this.categoriesAsync});
 
@@ -107,23 +105,20 @@ class _ExpandedContent extends StatelessWidget {
   }
 }
 
-/// 收藏星区(`__follow-wrap`):64px 行 + 36px 金色实心星,点击进入关注页。
+/// 关注入口(`__follow-wrap`):固定行高 + 金色星标,点击进入关注页。
 ///
-/// 参考实现有关注时渲染头像堆叠;无关注时显示星标入口。
-class _FollowRow extends ConsumerWidget {
+/// 顶部不再展示关注主播头像堆叠，避免在窄侧栏占用分类导航空间。
+class _FollowRow extends StatelessWidget {
   const _FollowRow({required this.tokens});
 
   final ZishuTokens tokens;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final entries = ref.watch(followProvider);
-    final live = entries.where((entry) => entry.isLive).take(3).toList();
+  Widget build(BuildContext context) {
     return Material(
       color: Colors.transparent,
       child: InkWell(
         onTap: () => context.go('/follow'),
-        // 状态反馈(全部走 token):hover 抬亮;焦点/按压用 accent 低 alpha。
         hoverColor: tokens.surfaceRaised,
         splashColor: AppStateLayer.splashOf(tokens.accent),
         highlightColor: AppStateLayer.pressedOf(tokens.accent),
@@ -135,13 +130,11 @@ class _FollowRow extends ConsumerWidget {
           ),
           child: Align(
             alignment: Alignment.centerLeft,
-            child: live.isEmpty
-                ? Icon(
-                    Icons.star_rounded,
-                    size: AppDirectoryDrawer.followIconSize,
-                    color: tokens.brand,
-                  )
-                : _FollowAvatarStack(entries: live),
+            child: Icon(
+              Icons.star_rounded,
+              size: AppDirectoryDrawer.followIconSize,
+              color: tokens.brand,
+            ),
           ),
         ),
       ),
@@ -149,39 +142,6 @@ class _FollowRow extends ConsumerWidget {
   }
 }
 
-class _FollowAvatarStack extends StatelessWidget {
-  const _FollowAvatarStack({required this.entries});
-
-  final List<FollowEntry> entries;
-
-  @override
-  Widget build(BuildContext context) {
-    const size = AppDirectoryDrawer.followAvatarSize;
-    const overlap = AppDirectoryDrawer.followAvatarOverlap;
-    return SizedBox(
-      width: size + (entries.length - 1) * (size - overlap),
-      height: size,
-      child: Stack(
-        children: [
-          for (var index = 0; index < entries.length; index++)
-            Positioned(
-              left: index * (size - overlap),
-              child: ClipOval(
-                child: FollowCoverImage(
-                  cover: entries[index].room.cover,
-                  fallbackLabel: entries[index].room.anchorName,
-                  width: size,
-                  height: size,
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// 展示最多 3 个开播关注头像,头像重叠约 33%。
 /// 收起态内容:平台图标竖列(单列,无文字),对齐参考
 /// `directory-drawer__rail-platform`(全宽按钮、竖直 padding .5rem、图标 32px)。
 class _RailContent extends StatelessWidget {
