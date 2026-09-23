@@ -250,6 +250,11 @@ https://usher.example/v1/playlist/720p60.m3u8
       expect(summary.cid, '263490');
       expect(summary.online, '2.3万', reason: 'viewersCount 22942 过万显示 X.X万');
       expect(summary.cover, isNotEmpty);
+      // 头像:UseLive 查询已带回的 profileImageURL(零额外请求)。
+      expect(
+        summary.avatar,
+        'https://static-cdn.jtvnw.net/jtv_user_pictures/fps-shaka-profile-300x300.png',
+      );
     });
 
     test('未开播:online 必须为空串(宿主以 online 非空为在播判据)', () async {
@@ -260,6 +265,11 @@ https://usher.example/v1/playlist/720p60.m3u8
       expect(summary.online, isEmpty);
       expect(summary.anchorName, 'shroud');
       expect(summary.title, isEmpty);
+      // 离线仍有主播头像(web 快照离线分支同样带 stats.avatar)。
+      expect(
+        summary.avatar,
+        'https://static-cdn.jtvnw.net/jtv_user_pictures/shroud-profile-300x300.png',
+      );
     });
 
     test('主播不存在:抛异常,不返回伪造资料', () async {

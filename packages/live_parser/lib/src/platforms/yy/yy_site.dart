@@ -56,12 +56,16 @@ class YyRoomResolver implements RoomResolver, RoomSummaryRefresher {
       throw ParserHttpException('YY 房间不存在: $roomId');
     }
     var detail = result.detail;
+    // 头像跨重试保留首个非空值(web `avatar = avatar || validImgUrl(detail.avatar)`
+    // 同口径:重试响应可能缺 avatar)。
+    var avatar = detail?.avatar ?? '';
     for (var attempt = 0; attempt < 2 && detail != null && detail.totalViewer.isEmpty; attempt++) {
       result = await fetchYyRoomDetail(_client.parserHttp, roomId);
       if (result.notFound) {
         throw ParserHttpException('YY 房间不存在: $roomId');
       }
       detail = result.detail ?? detail;
+      if (avatar.isEmpty) avatar = detail.avatar;
     }
     final totalViewer = detail?.totalViewer ?? '';
     return RoomSummary(
@@ -77,6 +81,7 @@ class YyRoomResolver implements RoomResolver, RoomSummaryRefresher {
       // totalViewer 本就是格式化热度串("145.9万"),原样下发;离线空串。
       online: totalViewer,
       cover: detail?.thumb ?? '',
+      avatar: avatar,
     );
   }
 

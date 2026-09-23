@@ -87,15 +87,21 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
       info['uname'] ??
           jsonMapOf(jsonMapOf(info['anchor_info'])['base_info'])['uname'],
     );
-    if (anchorName.isEmpty) {
-      // 仅主播名缺失时才补一次 anchor 接口(与完整解析同一兜底)。
+    final infoAvatar = bilibiliAvatarFromRoom(info);
+    var anchorFace = '';
+    if (anchorName.isEmpty || infoAvatar.isEmpty) {
+      // 仅主播名/头像缺失时才补一次 anchor 接口(与完整解析同一兜底)。
       try {
         final anchor = await fetchBilibiliAnchorInRoom(http, credentials, rid);
-        anchorName = anchor.uname;
+        if (anchorName.isEmpty) anchorName = anchor.uname;
+        anchorFace = anchor.face;
       } on Object {
         // 兜底失败不影响状态刷新结果。
       }
     }
+    // 头像口径与 resolveRoom 一致:get_info 的 face 优先、anchor 接口兜底
+    // (web follow/status.ts 的 `avatar: anchor.face || avatarFromRoom(info)`)。
+    final avatar = infoAvatar.isEmpty ? anchorFace : infoAvatar;
 
     // live_status:0 未开播 1 直播 2 轮播(B 站官方语义)。
     final liveStatus = jsonInt(info['live_status']);
@@ -116,6 +122,7 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
           : jsonText(info['parent_area_name']),
       online: isLive ? formatOnlineCount(info['online']) : '',
       cover: bilibiliCoverFromRoom(info),
+      avatar: avatar,
       followers: formatExactCount(info['attention']),
       roomState: isLive
           ? RoomState.live

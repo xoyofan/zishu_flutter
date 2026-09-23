@@ -44,6 +44,8 @@ void main() {
     expect(summary.online, '2.3万', reason: '分类列表 view_cnt=23456 格式化');
     expect(summary.roomState, RoomState.live);
     expect(summary.cover, startsWith('https://liveimg.sooplive.co.kr/m/12345678'));
+    // 头像:station LOGO 确定性 URL(web fetchSoopRoomStats 同源,零额外请求)。
+    expect(summary.avatar, 'https://stimg.sooplive.co.kr/LOGO/te/testbj/testbj.jpg');
     // dashboard:粉丝 + 订阅(web fetchSoopDashboard 同源,upd.fanCnt /
     // subscription.total;SOOP 的 vip 列在 web 真源是「订阅」;fixture 里
     // total 是字符串形态,一并覆盖数值解析)。
@@ -126,6 +128,11 @@ void main() {
 
     expect(summary.online, '');
     expect(summary.roomState, RoomState.offline);
+    expect(
+      summary.avatar,
+      'https://stimg.sooplive.co.kr/LOGO/te/testbj/testbj.jpg',
+      reason: '离线房间同样有 LOGO 头像',
+    );
     // 离线房间无观看数语义:分类列表观看数只在在播时补。
     expect(
       fake.requests.where(

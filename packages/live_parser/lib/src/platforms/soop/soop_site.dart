@@ -90,6 +90,8 @@ class SoopRoomResolver implements RoomResolver, RoomSummaryRefresher {
         category: detail.category,
         online: '',
         cover: soopCoverUrl(detail.bno),
+        // 头像:station LOGO 确定性 URL(web fetchSoopRoomStats 同源)。
+        avatar: soopAvatarUrl(detail.roomId),
         followers: formatExactCount(dashboard.fans),
         // SOOP 的 vip 列在 web 真源是「订阅」(ROOM_STAT_COLUMNS.soop)。
         vip: formatExactCount(dashboard.subscribers),
@@ -116,6 +118,8 @@ class SoopRoomResolver implements RoomResolver, RoomSummaryRefresher {
           ? formatOnlineCount(viewers)
           : kSoopLiveOnlineFallback,
       cover: soopCoverUrl(detail.bno),
+      // 头像:station LOGO 确定性 URL(web fetchSoopRoomStats 同源)。
+      avatar: soopAvatarUrl(detail.roomId),
       followers: formatExactCount(dashboard.fans),
       // SOOP 的 vip 列在 web 真源是「订阅」(ROOM_STAT_COLUMNS.soop)。
       vip: formatExactCount(dashboard.subscribers),

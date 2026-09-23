@@ -28,6 +28,8 @@ void main() {
     expect(summary.cid, 'ks_user_1', reason: '快手无二级分类 id,cid 即房间号');
     expect(summary.online, '2.3万', reason: 'watchingCount=23456 格式化');
     expect(summary.cover, 'https://p1.kuaishou.com/poster.jpg');
+    // 头像取房间页 SSR 的 author.avatar(零额外请求)。
+    expect(summary.avatar, 'https://p1.kuaishou.com/avatar.png');
 
     expect(fake.requests, hasLength(1), reason: '刷新只拉一次房间页');
     expect(fake.requests.single.url.host, 'live.kuaishou.com');
@@ -43,6 +45,7 @@ void main() {
 
     expect(summary.online, '', reason: '契约:online 非空即判在播,离线必须空串');
     expect(summary.anchorName, '快手主播');
+    expect(summary.avatar, 'https://p1.kuaishou.com/avatar.png', reason: '离线保留头像');
   });
 
   test('房间不存在:抛 ParserHttpException(不得伪造离线摘要)', () async {

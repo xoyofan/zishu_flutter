@@ -23,6 +23,8 @@ Map<String, Object?> _enter({
         'title': title,
         'owner': {
           'nickname': nickname,
+          'id_str': '987654',
+          'sec_uid': 'MS4wLjABAAAAsec',
           'avatar_thumb': {
             'url_list': ['//p3.douyinpic.com/avatar.jpg'],
           },
@@ -69,8 +71,9 @@ void main() {
     expect(summary.cid, '123456', reason: '抖音无二级分类 id,cid 即房间号');
     expect(summary.online, '3.2万');
     expect(summary.cover, contains('douyinpic.com'));
-    // 粉丝数取 enter 响应内 owner.follow_info(web 快照首选路径,零额外请求);
-    // 「会员」计数走带签名的主播资料卡,轻量刷新不复刻,vip 恒空。
+    // 头像取 enter 响应内 owner.avatar_thumb(web 快照同源,零额外请求)。
+    expect(summary.avatar, 'https://p3.douyinpic.com/avatar.jpg');
+    // 粉丝数取 enter 响应内 owner.follow_info(web 快照首选路径,零额外请求)。
     expect(summary.followers, '456789');
     expect(summary.vip, '');
 

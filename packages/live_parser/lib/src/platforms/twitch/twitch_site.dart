@@ -109,6 +109,8 @@ class TwitchRoomResolver implements RoomResolver, RoomSummaryRefresher {
       category: stream?.gameName ?? '',
       online: stream == null ? '' : twitchOnlineText(stream.viewers),
       cover: stream?.preview ?? '',
+      // 头像:UseLive 查询已带回的 profileImageURL(零额外请求)。
+      avatar: user.avatar,
     );
   }
 

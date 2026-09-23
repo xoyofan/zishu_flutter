@@ -53,6 +53,8 @@ class DouyinRoomResolver implements RoomResolver, RoomSummaryRefresher {
       category: douyinCategoryOf(room),
       online: live ? formatOnlineCount(douyinOnlineRaw(room)) : '',
       cover: douyinCoverOf(room),
+      // 头像(web 快照同源:owner.avatar_thumb 首项,零额外请求)。
+      avatar: douyinAvatarOf(room),
       followers: formatExactCount(
         jsonMapOf(owner['follow_info'])['follower_count'],
       ),

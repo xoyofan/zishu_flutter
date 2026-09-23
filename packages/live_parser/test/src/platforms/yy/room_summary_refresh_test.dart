@@ -23,6 +23,8 @@ void main() {
     expect(summary.cid, '1414787909', reason: '与 resolveRoom 同口径:cid 取 ssid');
     expect(summary.online, '4.1万', reason: 'totalViewer 原样下发(已是格式化串)');
     expect(summary.cover, 'https://img.yy.com/cover.jpg');
+    // 头像取 detail.avatar(web 快照 validImgUrl(detail.avatar) 同源)。
+    expect(summary.avatar, 'https://img.yy.com/avatar.jpg');
 
     expect(fake.requests, hasLength(1), reason: 'totalViewer 首次命中无需重试');
     expect(
@@ -49,6 +51,7 @@ void main() {
 
     expect(summary.online, '4.1万');
     expect(fake.requests, hasLength(2), reason: '口径对齐 web:最多连取 3 次');
+    expect(summary.avatar, 'https://img.yy.com/avatar.jpg', reason: '重试保留头像');
   });
 
   test('未开播:data=null(合法离线响应)不重试,online 为空串', () async {

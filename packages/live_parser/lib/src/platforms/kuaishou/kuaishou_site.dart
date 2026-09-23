@@ -98,6 +98,8 @@ class KuaishouRoomResolver implements RoomResolver, RoomSummaryRefresher {
       // 离线(或观看数字段缺失)一律空串,契约以「online 非空」作在播判据。
       online: detail.isLive ? detail.viewers : '',
       cover: detail.cover,
+      // 头像:房间页 SSR 的 author.avatar(零额外请求)。
+      avatar: detail.avatar,
     );
   }
 

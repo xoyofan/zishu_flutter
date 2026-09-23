@@ -13,6 +13,7 @@ Map<String, Object?> _roomInfo({
   Object? attention,
   String uname = 'B站主播',
   String title = 'B站测试房间',
+  String? face = 'https://i0.hdslb.com/bfs/face/a.jpg',
 }) => {
   'code': 0,
   'data': {
@@ -21,7 +22,7 @@ Map<String, Object?> _roomInfo({
     'live_status': liveStatus,
     'title': title,
     'uname': uname,
-    'face': 'https://i0.hdslb.com/bfs/face/a.jpg',
+    'face': ?face,
     'user_cover': 'https://i0.hdslb.com/bfs/cover/b.jpg',
     'parent_area_name': '网游',
     'area_name': '英雄联盟',
@@ -64,6 +65,10 @@ void main() {
     expect(summary.category, '英雄联盟');
     expect(summary.online, '1.2万');
     expect(summary.cover, contains('hdslb.com'));
+    // 头像取同响应 face(web follow/status.ts 的 bilibili 快照
+    // `avatar: anchor.face || avatarFromRoom(info)`,本包与 resolveRoom 同口径
+    // 以 get_info 的 face 优先、anchor 接口兜底)。
+    expect(summary.avatar, 'https://i0.hdslb.com/bfs/face/a.jpg');
     // 粉丝数取同响应 attention(web follow/status.ts 的 bilibili 快照);
     // 勋章/大航海在 web 是额外接口且 vip 列本就为空,这里恒空。
     expect(summary.followers, '654321');
@@ -73,6 +78,26 @@ void main() {
     final urls = fake.requests.map((request) => request.url).join('\n');
     expect(urls, contains('get_info'));
     expect(urls, isNot(contains('play_info')), reason: '刷新不得请求取流接口');
+  });
+
+  test('头像:get_info 缺 face 时回退 anchor 接口头像(与 resolveRoom 同口径)', () async {
+    fake
+      ..roomInfoResponse = _roomInfo(liveStatus: 1, face: null)
+      ..anchorInRoomResponse = {
+        'code': 0,
+        'data': {
+          'info': {
+            'uname': 'B站主播',
+            'face': 'http://i0.hdslb.com/bfs/face/fallback.jpg',
+          },
+        },
+      };
+
+    final summary = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'bilibili', roomIdOrUrl: '9527'),
+    );
+
+    expect(summary.avatar, 'https://i0.hdslb.com/bfs/face/fallback.jpg');
   });
 
   test('离线(live_status=0):online 为空串,roomState=offline', () async {
