@@ -30,7 +30,10 @@ void main() {
       final socket = transport.sockets.single;
 
       // ws 优先(wss 在多数网络出口超时,web resolve/soop 同结论)。
-      expect(transport.lastUrl.toString(), 'ws://chat.sooplive.co.kr:8088/Websocket/testbj');
+      expect(
+        transport.lastUrl.toString(),
+        'ws://chat.sooplive.co.kr:8088/Websocket/testbj',
+      );
       expect(transport.lastProtocols, ['chat']);
       expect(
         utf8.decode(socket.sent.first),
@@ -64,7 +67,9 @@ void main() {
         ..add(soopFixture('detail_live.json'))
         ..add(fresh);
 
-      final transport = HostBlockingTransport(blockedHosts: {'chat.sooplive.co.kr'});
+      final transport = HostBlockingTransport(
+        blockedHosts: {'chat.sooplive.co.kr'},
+      );
       final connector = SoopDanmakuConnector(
         ParserHttp(client: http),
         transport: transport,
@@ -106,15 +111,21 @@ void main() {
           '0',
           '1',
           '张三',
-          '100|1',
-          '-1',
+          '268468512',
+          '12',
           '16777215',
         ]),
       );
       // 控制码 / 批量行仍被过滤。
-      socket.push(soopFrame(['\x1b\x09000500000600', '1', 'x', 'x', 'x', 'x', '系统']));
-      socket.push(soopFrame(['\x1b\x09000500000600', '-1', 'x', 'x', 'x', 'x', '系统']));
-      socket.push(soopFrame(['\x1b\x09000500000600', 'a|b', 'x', 'x', 'x', 'x', '批量']));
+      socket.push(
+        soopFrame(['\x1b\x09000500000600', '1', 'x', 'x', 'x', 'x', '系统']),
+      );
+      socket.push(
+        soopFrame(['\x1b\x09000500000600', '-1', 'x', 'x', 'x', 'x', '系统']),
+      );
+      socket.push(
+        soopFrame(['\x1b\x09000500000600', 'a|b', 'x', 'x', 'x', 'x', '批量']),
+      );
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
       expect(received, hasLength(1));
@@ -124,6 +135,17 @@ void main() {
       expect(received.single.roomId, 'testbj');
       // 文字色 16777215 = 0xFFFFFF(web colorFromPackedInt 同构)。
       expect(received.single.color, 0xFFFFFF);
+      expect(received.single.badges.map((b) => b.kind), [
+        'subscriber',
+        'manager',
+        'topfan',
+        'fanclub',
+      ]);
+      expect(received.single.badges.first.level, 12);
+      expect(
+        received.single.badges.first.url,
+        'https://static.file.sooplive.com/spcon/pc_testbj_12.png',
+      );
 
       await subscription.cancel();
       await session.close();
@@ -139,10 +161,18 @@ void main() {
 
       // 0001 connect ACK、0002 进房 ACK、0004 观众列表、0127 粉丝勋章:
       // 旧解析器会把它们漏成假弹幕,白名单下必须全部丢弃。
-      socket.push(soopFrame(['\x1b\x09000100000600', 'hello', '1', '2', '3', '4', '张三']));
-      socket.push(soopFrame(['\x1b\x09000200001100', 'testbj', '', '', '', '', '']));
-      socket.push(soopFrame(['\x1b\x09000400000100', '观众', '列表', '', '', '', '']));
-      socket.push(soopFrame(['\x1b\x09012700000100', '粉丝', '勋章', '', '', '', '']));
+      socket.push(
+        soopFrame(['\x1b\x09000100000600', 'hello', '1', '2', '3', '4', '张三']),
+      );
+      socket.push(
+        soopFrame(['\x1b\x09000200001100', 'testbj', '', '', '', '', '']),
+      );
+      socket.push(
+        soopFrame(['\x1b\x09000400000100', '观众', '列表', '', '', '', '']),
+      );
+      socket.push(
+        soopFrame(['\x1b\x09012700000100', '粉丝', '勋章', '', '', '', '']),
+      );
       await Future<void>.delayed(const Duration(milliseconds: 10));
 
       expect(received, isEmpty);
@@ -164,7 +194,18 @@ void main() {
         [
           soopText(['\x1b\x09000400000100', '观众', '列表', '', '', '', '']),
           soopText(['\x1b\x09000500000400', '第一条', 'u1', '0', '0', '1', '李四']),
-          soopText(['\x1b\x09000500000600', '第二条', 'u2', '0', '0', '1', '王五', '9|5', '-1', '-1']),
+          soopText([
+            '\x1b\x09000500000600',
+            '第二条',
+            'u2',
+            '0',
+            '0',
+            '1',
+            '王五',
+            '9|5',
+            '-1',
+            '-1',
+          ]),
         ].join(),
       );
       socket.push(combined);

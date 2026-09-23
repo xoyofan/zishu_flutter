@@ -100,9 +100,7 @@ class SoopDanmakuConnector implements DanmakuConnector {
         }
       }
     }
-    throw ParserHttpException(
-      'SOOP 弹幕连接失败(ws/wss 两轮候选均不可达): $lastError',
-    );
+    throw ParserHttpException('SOOP 弹幕连接失败(ws/wss 两轮候选均不可达): $lastError');
   }
 }
 
@@ -120,7 +118,9 @@ class SoopDanmakuSession implements DanmakuSession {
       onError: (Object _) => _onDisconnected(DanmakuSessionState.disconnected),
     );
     // 握手由 transport.connect 完成,这里直接发握手包并视为已连接。
-    _send('${_escape}000100000600$_separator$_separator${_separator}16$_separator');
+    _send(
+      '${_escape}000100000600$_separator$_separator${_separator}16$_separator',
+    );
     _joinTimer = Timer(kSoopDanmakuJoinDelay, () {
       if (!_closed) {
         final size = utf8.encode(chatNo).length + 6;
@@ -180,6 +180,11 @@ class SoopDanmakuSession implements DanmakuSession {
           comment.contains('|')) {
         continue;
       }
+      final badges = _soopBadges(
+        parts.length > 7 ? parts[7] : '',
+        parts.length > 8 ? parts[8] : '',
+        roomId,
+      );
       _messagesController.add(
         DanmakuMessage(
           type: DanmakuMessageType.chat,
@@ -188,6 +193,11 @@ class SoopDanmakuSession implements DanmakuSession {
           userId: '',
           text: comment,
           color: _soopChatColor(parts.length > 9 ? parts[9] : ''),
+          badgeName: badges.isEmpty ? '' : badges.first.name,
+          badgeLevel: badges.isEmpty ? 0 : badges.first.level,
+          badgeKind: badges.isEmpty ? '' : badges.first.kind,
+          badgeUrl: badges.isEmpty ? '' : badges.first.url,
+          badges: badges,
           rawType: 'chat',
         ),
       );
@@ -211,6 +221,62 @@ class SoopDanmakuSession implements DanmakuSession {
     await _messagesController.close();
     await _statesController.close();
   }
+}
+
+/// SOOP 0005 的 flag1 位域:粉丝团、管理员、铁粉、订阅。
+const int _soopFlagFanclub = 32;
+const int _soopFlagManager = 256;
+const int _soopFlagTopfan = 32768;
+const int _soopFlagSubscriber = 268435456;
+
+List<DanmakuBadge> _soopBadges(
+  String flagRaw,
+  String monthsRaw,
+  String roomId,
+) {
+  final flag = int.tryParse(flagRaw.split('|').first.trim()) ?? 0;
+  final months = int.tryParse(monthsRaw.trim()) ?? 0;
+  final result = <DanmakuBadge>[];
+  if ((flag & _soopFlagSubscriber) != 0 || months > 0) {
+    final lv = months > 0 ? months : 1;
+    result.add(
+      DanmakuBadge(
+        name: '$lv',
+        level: lv,
+        color: 0xEF565F,
+        kind: 'subscriber',
+        url: soopSubscriberBadgeUrl(roomId, lv),
+      ),
+    );
+  }
+  if ((flag & _soopFlagManager) != 0) {
+    result.add(
+      const DanmakuBadge(name: 'M', level: 1, color: 0x53B1AE, kind: 'manager'),
+    );
+  }
+  if ((flag & _soopFlagTopfan) != 0) {
+    result.add(
+      const DanmakuBadge(name: 'T', level: 1, color: 0xD65B8F, kind: 'topfan'),
+    );
+  }
+  if ((flag & _soopFlagFanclub) != 0) {
+    result.add(
+      const DanmakuBadge(name: 'F', level: 1, color: 0x75AA5C, kind: 'fanclub'),
+    );
+  }
+  return result;
+}
+
+String soopSubscriberBadgeUrl(String roomId, int months) {
+  if (roomId.isEmpty) return '';
+  final suffix = months >= 24
+      ? '_24'
+      : months >= 12
+      ? '_12'
+      : months >= 6
+      ? '_6'
+      : '';
+  return 'https://static.file.sooplive.com/spcon/pc_$roomId$suffix.png';
 }
 
 /// SOOP 文字色字段(parts[9],十进制 RGB 整数):空/非法按 UI 默认色(0);

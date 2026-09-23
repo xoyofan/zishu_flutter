@@ -545,6 +545,23 @@ enum DanmakuMessageType { chat, gift, enter, welcome, other }
 /// 弹幕富文本段类型:文本 / 表情图。
 enum DanmakuSegmentType { text, emoji }
 
+/// 一枚可独立展示的聊天身份徽章。SOOP 0005 帧允许同一条消息同时带多枚。
+class DanmakuBadge {
+  const DanmakuBadge({
+    required this.name,
+    required this.level,
+    this.color = 0,
+    this.kind = '',
+    this.url = '',
+  });
+
+  final String name;
+  final int level;
+  final int color;
+  final String kind;
+  final String url;
+}
+
 /// 弹幕富文本段:文本段与表情图段按协议顺序排列。
 ///
 /// 对齐 web 真源通用段模型 `{type, text, name?, url?}`:
@@ -610,6 +627,9 @@ class DanmakuMessage {
     this.badgeColorBorder = 0,
     this.badgeTextColor = 0,
     this.badgeColorLevel = 0,
+    this.badgeKind = '',
+    this.badgeUrl = '',
+    this.badges = const [],
     this.id = '',
     this.sentAt,
     this.rawType = '',
@@ -643,6 +663,12 @@ class DanmakuMessage {
   /// 粉丝牌等级数字色(0xRRGGBB;0 = 协议未提供,UI 回落文字色)。
   /// B 站新协议 `v2_medal_color_level`(对齐 web fanBadges/bilibili.ts:137-141)。
   final int badgeColorLevel;
+
+  /// 徽章语义。SOOP 支持同一条消息同时带订阅、管理员、铁粉、粉丝团；
+  /// [badges] 是完整的顺序化徽章集合，[badgeName]/[badgeLevel] 保留首牌兼容。
+  final String badgeKind;
+  final String badgeUrl;
+  final List<DanmakuBadge> badges;
 
   /// 协议消息 id(空 = 未提供)。用于弹幕去重(协议重推同一条时按 id 判重),
   /// 消除「用户+正文」兜底 key 对同名同文的误杀。
