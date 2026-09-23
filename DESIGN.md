@@ -31,8 +31,10 @@ zishu_flutter 是**深色优先的桌面级直播客户端**，视觉语言继�
 | 语义 | 色系 | token |
 |---|---|---|
 | 直播中标识 | **绿** | `ZishuTokens.liveBadge` = `#32C874` |
-| 播放页「关注」按钮 | **红** | `ZishuTokens.playFollow*` = `#582626` 系 |
-| 播放页「超级关注」按钮 | **紫** | `ZishuTokens.playSuper*` = `#442D5B` 系 |
+| 播放页「关注」按钮 | **红系** | `ZishuTokens.playFollow*` = `#582626` 系 |
+| 播放页「超级关注」按钮 | **紫系** | `ZishuTokens.playSuper*` = `#442D5B` 系 |
+
+播放侧栏右上角「关注 / 超关」统一采用 `AppRadius.sm = 4px` 小圆角矩形，保留红/紫状态色；常态与 hover 均不使用 `AppRadius.pill`、常驻外发光或尺寸/位置变化。图标与文字固定横排，关注数改为普通次级文字，不用胶囊底色。
 
 ---
 

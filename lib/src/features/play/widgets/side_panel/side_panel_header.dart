@@ -96,7 +96,7 @@ class _SideHeader extends ConsumerWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // 第一行:主播名(中文化) + 粉丝数药丸(紧挨昵称、靠左)。
+                  // 第一行:主播名(中文化) + 普通次级关注数。
                   Row(
                     children: [
                       Flexible(
@@ -119,26 +119,17 @@ class _SideHeader extends ConsumerWidget {
                         ),
                       ),
                       const SizedBox(width: AppSpacing.xs),
-                      // 粉丝数(用户口径 2026-09-22:紧挨昵称靠左 + 圆弧外框)。
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 1,
-                        ),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: tokens.border),
-                          borderRadius: AppRadius.allPill,
-                        ),
-                        child: Text(
-                          '关注 $followersText',
-                          key: const Key('play-side-stat-followers'),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: AppFontSize.bodySecondary,
-                            height: 1.2,
-                            color: tokens.textSecondary,
-                          ),
+                      // 关注数与昵称同行：用直播色和字重区分主播名，关注数保持
+                      // 普通次级文字，不使用胶囊底/描边。
+                      Text(
+                        '关注 $followersText',
+                        key: const Key('play-side-stat-followers'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: AppFontSize.bodySecondary,
+                          height: 1.2,
+                          color: tokens.textSecondary,
                         ),
                       ),
                     ],
@@ -251,11 +242,7 @@ class _SideHeader extends ConsumerWidget {
           ),
           const SizedBox(width: AppSpacing.xs),
           Padding(
-            padding: const EdgeInsets.only(
-              top: 2,
-              bottom: 2,
-              right: AppSpacing.sm,
-            ),
+            padding: const EdgeInsets.only(top: 2, bottom: 2, right: 2),
             child: _SideActions(
               followed: followed,
               superFollowed: superFollowed,
@@ -639,12 +626,9 @@ class _SideActionButtonState extends State<_SideActionButton> {
         ? colors.activeBackground
         : (_hovered ? colors.hoverBackground : colors.background);
     final foreground = active ? colors.activeForeground : colors.foreground;
-    // 同屏只给一个最强信号:焦点环优先于 hover 光晕;两者都外扩、都不改尺寸。
-    final glow = _focused
-        ? AppFocus.ring(tokens.accent)
-        : (_hovered || _pressed
-              ? AppElevation.accentGlow(colors.border)
-              : null);
+    // 常态与 hover 都只做红/紫底色过渡，不使用光晕；键盘焦点仍保留统一
+    // focus ring，保证桌面键盘操作可见。
+    final glow = _focused ? AppFocus.ring(tokens.accent) : null;
     return Tooltip(
       message: widget.label,
       child: AnimatedContainer(
@@ -652,7 +636,7 @@ class _SideActionButtonState extends State<_SideActionButton> {
         curve: AppMotion.curve,
         decoration: BoxDecoration(
           color: background,
-          borderRadius: AppRadius.allPill,
+          borderRadius: AppRadius.allSm,
           border: Border.all(color: colors.border),
           boxShadow: glow,
         ),
@@ -661,7 +645,7 @@ class _SideActionButtonState extends State<_SideActionButton> {
           // AnimatedContainer 承担(这样才能过渡)。
           type: MaterialType.transparency,
           child: InkWell(
-            borderRadius: AppRadius.allPill,
+            borderRadius: AppRadius.allSm,
             onTap: widget.onPressed,
             onHover: (value) => setState(() => _hovered = value),
             onFocusChange: (value) => setState(() => _focused = value),
@@ -675,19 +659,18 @@ class _SideActionButtonState extends State<_SideActionButton> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(widget.icon, size: 12, color: foreground),
+                Icon(widget.icon, size: 14, color: foreground),
                 const SizedBox(width: 2),
-                Flexible(
-                  child: Text(
-                    widget.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: AppFontSize.label,
-                      height: 1,
-                      fontWeight: FontWeight.w600,
-                      color: foreground,
-                    ),
+                Text(
+                  widget.label,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.clip,
+                  style: TextStyle(
+                    fontSize: AppFontSize.bodySecondary,
+                    height: 1,
+                    fontWeight: FontWeight.w600,
+                    color: foreground,
                   ),
                 ),
               ],
