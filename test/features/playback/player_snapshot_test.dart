@@ -21,6 +21,7 @@ void main() {
       expect(snapshot.retryAttempt, 0);
       expect(snapshot.retryLimit, 0);
       expect(snapshot.reconnecting, isFalse);
+      expect(snapshot.notice, PlaybackNotice.none);
     });
 
     test('const 构造可用(21 个测试替身依赖此用法)', () {
@@ -51,6 +52,16 @@ void main() {
         PlayerErrorKind.none,
         reason: '不应残留"没有错误却有类别"的漂移态',
       );
+    });
+
+    test('notice 参与 copyWith 与相等性', () {
+      const jitter = PlayerSnapshot(
+        buffering: true,
+        notice: PlaybackNotice.networkJitter,
+      );
+      expect(jitter.copyWith(notice: PlaybackNotice.recoveringNewUrl).notice,
+          PlaybackNotice.recoveringNewUrl);
+      expect(jitter == const PlayerSnapshot(buffering: true), isFalse);
     });
 
     test('无错误时 copyWith 其他字段不会凭空产生类别', () {

@@ -144,6 +144,17 @@ void main() {
       expect(result.code, 'source_open');
     });
 
+    test('mpv codec 组件下的 Failed to open URL 仍归为 source_open', () {
+      const raw = 'codec: Failed to open https://cdn.example.com/live.m3u8';
+      final result = PlayerErrorClassifier.classify(
+        raw,
+        nativePrefix: 'codec',
+      );
+      expect(result.kind, PlayerErrorKind.source);
+      expect(result.code, 'source_open');
+      expect(result.terminal, isTrue);
+    });
+
     test('lifecycle 优先于一切(切源竞态噪音不该被当成源失效)', () {
       final result = PlayerErrorClassifier.classify(
         'player has been disposed while failed to open input',

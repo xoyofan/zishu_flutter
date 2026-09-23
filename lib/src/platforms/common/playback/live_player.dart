@@ -17,7 +17,17 @@ import 'player_error.dart';
 /// 不传 = 保持原值,null = 显式清空。
 const Object _kErrorUnset = Object();
 
-/// 播放器状态快照:由实现把底层事件流归一后发出。
+/// 播放过程中向用户公开的脱敏状态。UI 只映射稳定枚举，不展示 mpv 原始诊断、
+/// 完整 URL、query/token 或 HTTP headers。
+enum PlaybackNotice {
+  none,
+  networkJitter,
+  sourceOpenFailed,
+  reconnecting,
+  recoveringNewUrl,
+}
+
+/// 播放状态快照:由实现把底层事件流归一后发出。
 /// 带字段级相等性,便于下游做去重与 UI 局部重建。
 class PlayerSnapshot {
   const PlayerSnapshot({
@@ -31,6 +41,7 @@ class PlayerSnapshot {
     this.errorKind = PlayerErrorKind.none,
     this.retryAttempt = 0,
     this.retryLimit = 0,
+    this.notice = PlaybackNotice.none,
   });
 
   /// 是否正在播放。
@@ -62,6 +73,9 @@ class PlayerSnapshot {
   /// 自动重连次数上限(由重连策略给出);0 表示该实现不做自动重连。
   final int retryLimit;
 
+  /// 当前卡顿/恢复阶段；不包含任何原始诊断或敏感播放地址。
+  final PlaybackNotice notice;
+
   /// 是否正处于自动重连过程中(有错误且计数已推进)。
   bool get reconnecting => retryAttempt > 0 && error != null;
 
@@ -82,6 +96,7 @@ class PlayerSnapshot {
     PlayerErrorKind? errorKind,
     int? retryAttempt,
     int? retryLimit,
+    PlaybackNotice? notice,
   }) {
     final clearing = identical(error, _kErrorUnset) ? this.error == null : error == null;
     return PlayerSnapshot(
@@ -97,6 +112,7 @@ class PlayerSnapshot {
           : errorKind ?? this.errorKind,
       retryAttempt: retryAttempt ?? this.retryAttempt,
       retryLimit: retryLimit ?? this.retryLimit,
+      notice: notice ?? this.notice,
     );
   }
 
@@ -113,7 +129,8 @@ class PlayerSnapshot {
           other.error == error &&
           other.errorKind == errorKind &&
           other.retryAttempt == retryAttempt &&
-          other.retryLimit == retryLimit;
+          other.retryLimit == retryLimit &&
+          other.notice == notice;
 
   @override
   int get hashCode => Object.hash(
@@ -127,13 +144,15 @@ class PlayerSnapshot {
     errorKind,
     retryAttempt,
     retryLimit,
+    notice,
   );
 
   @override
   String toString() =>
       'PlayerSnapshot(playing: $playing, buffering: $buffering, volume: $volume, '
       'muted: $muted, size: ${width}x$height, error: $error, '
-      'errorKind: $errorKind, retry: $retryAttempt/$retryLimit)';
+      'errorKind: $errorKind, retry: $retryAttempt/$retryLimit, '
+      'notice: ${notice.name})';
 }
 
 /// 直播播放器统一接口。

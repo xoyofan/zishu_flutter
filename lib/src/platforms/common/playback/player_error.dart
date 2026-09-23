@@ -130,19 +130,23 @@ abstract final class PlayerErrorClassifier {
         terminal: true,
       );
     }
+    // `codec` 是过宽的运行时标记；带 mpv 组件前缀时，`codec: Failed to open
+    // https://...m3u8` 会先命中它并被误判成可自愈的解码抖动。源打开失败是
+    // 更具体的语义，必须先于通用 codec 标记判断，否则签名 URL 失效不会
+    // 进入 source 级恢复。
+    if (_containsAny(value, _sourceOpenMarkers)) {
+      return PlayerErrorClassification(
+        kind: PlayerErrorKind.source,
+        code: 'source_open',
+        terminal: true,
+      );
+    }
     if (_containsAny(value, _codecRuntimeMarkers)) {
       // 解码抖动:坏帧后跟着关键帧即可恢复,不打扰用户。
       return PlayerErrorClassification(
         kind: PlayerErrorKind.codec,
         code: _tag(channel, 'decoder_runtime'),
         terminal: false,
-      );
-    }
-    if (_containsAny(value, _sourceOpenMarkers)) {
-      return PlayerErrorClassification(
-        kind: PlayerErrorKind.source,
-        code: 'source_open',
-        terminal: true,
       );
     }
     if (_containsAny(value, _networkMarkers)) {
@@ -217,6 +221,8 @@ abstract final class PlayerErrorClassifier {
     'unknown protocol',
     'no protocol handler',
     'failed to open input',
+    'failed to open http://',
+    'failed to open https://',
     'error opening input',
     'unable to open input',
     'invalid data found when processing input',

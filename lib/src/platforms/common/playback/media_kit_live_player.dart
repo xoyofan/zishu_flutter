@@ -15,6 +15,7 @@ import 'package:window_manager/window_manager.dart' show DragToResizeArea;
 import 'live_player.dart';
 import 'playback_log.dart';
 import 'playback_retry.dart';
+import 'playback_resilience.dart';
 import 'player_error.dart';
 import 'twitch_ad_filter.dart';
 import 'window_presentation.dart';
@@ -25,9 +26,18 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   /// 的假后端来驱动事件与命令。生产调用点一律不传,行为与原先完全一致。
   /// [adFilter] 同理:Twitch 广告过滤代理,生产用默认实例,测试可注入
   /// 定制判定/上游的实例。
-  MediaKitLivePlayer({Player? player, TwitchAdFilter? adFilter})
-    : _player = player ?? Player(),
-      _adFilter = adFilter ?? TwitchAdFilter() {
+  MediaKitLivePlayer({
+    Player? player,
+    TwitchAdFilter? adFilter,
+    PlaybackRetryPolicy policy = const PlaybackRetryPolicy(),
+    PlaybackRecoveryPolicy recoveryPolicy = const PlaybackRecoveryPolicy(),
+    PlaybackResiliencePolicy resiliencePolicy =
+        const PlaybackResiliencePolicy(),
+  }) : _player = player ?? Player(),
+       _adFilter = adFilter ?? TwitchAdFilter() {
+    _policy = policy;
+    _recoveryPolicy = recoveryPolicy;
+    _resiliencePolicy = resiliencePolicy;
     _wire();
     // 参照 pure_live 的直播卡顿根治:mpv 属性调优让断流/卡死的直播流
     // 主动报错而非无限缓冲,再由错误/看门狗路径重连。属性调优失败不阻断播放。
@@ -126,7 +136,17 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   PlayerErrorKind _lastErrorKind = PlayerErrorKind.native;
 
   /// 有界重连策略(上限 / 退避 / 健康窗口的唯一来源)。
-  static const PlaybackRetryPolicy _policy = PlaybackRetryPolicy();
+  late final PlaybackRetryPolicy _policy;
+
+  /// 源级失败策略：连续两次确认源打不开后提前重新解析，不重放旧签名六次。
+  late final PlaybackResiliencePolicy _resiliencePolicy;
+
+  /// 当前会话连续确认的 source_open 终局错误数。
+  int _sourceOpenFailures = 0;
+
+  /// 同一 URL 组的 host 健康状态。playlist 重开时优先使用未熔断 host；
+  /// 即使全部熔断也保留候选，避免无线路可开。
+  final CdnCircuitBreaker _cdnCircuitBreaker = CdnCircuitBreaker();
 
   /// 直播 mpv 属性调优表:构造期([_applyLiveTuning])按序逐条 setProperty,
   /// 对此后每一次 open/起播生效(playerProvider 是 app 单例,构造先于任何
@@ -162,8 +182,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   ];
 
   /// 恢复重解析的节流策略:避免"重试→恢复→重试"高速空转。
-  static const PlaybackRecoveryPolicy _recoveryPolicy =
-      PlaybackRecoveryPolicy();
+  late final PlaybackRecoveryPolicy _recoveryPolicy;
 
   /// 宿主注入的恢复回调:自动重连耗尽时用它换一份**重新解析**的地址。
   /// 为 null 表示宿主不支持(如 fixture 源),此时直接走放弃分支。
@@ -253,10 +272,28 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
         });
       }
       if (!classification.terminal) return s;
+      if (classification.kind == PlayerErrorKind.source &&
+          classification.code == 'source_open') {
+        _sourceOpenFailures++;
+        final failedHost = _currentLines.isEmpty
+            ? null
+            : _hostOf(_currentLines.first);
+        if (failedHost != null) {
+          _cdnCircuitBreaker.recordFailure(failedHost, DateTime.now());
+        }
+        PlaybackLog.write('source_open_failure', {
+          'count': _sourceOpenFailures,
+          'host': failedHost,
+        });
+      }
       _onTerminalError(classification);
       return s.copyWith(
         error: playerErrorHint(classification.kind),
         errorKind: classification.kind,
+        notice: classification.kind == PlayerErrorKind.source &&
+                classification.code == 'source_open'
+            ? PlaybackNotice.sourceOpenFailed
+            : s.notice,
       );
     });
   }
@@ -270,6 +307,9 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     if (buffering) {
       // 进入缓冲先结算健康窗(已播满观察窗就归零),再起看门狗。
       _settleHealthyWindow(reason: 'buffering_interrupt');
+      if (_latest.notice == PlaybackNotice.none) {
+        _emit((s) => s.copyWith(notice: PlaybackNotice.networkJitter));
+      }
       _armStallTimer();
     } else {
       _stallTimer?.cancel();
@@ -283,7 +323,10 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   void _onPlaying() {
     _stallTimer?.cancel();
     _stallTimer = null;
-    _emit((s) => s.copyWith(error: null));
+    _emit((s) => s.copyWith(
+      error: null,
+      notice: PlaybackNotice.none,
+    ));
     final retries = _stallRetries;
     // 健康播放起点:重复的 playing 事件不重置,免得连续抖动永远凑不满观察窗。
     _playingSince ??= DateTime.now();
@@ -422,6 +465,17 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       return;
     }
     _adHoldSince = null;
+    if (_resiliencePolicy.shouldRecoverSource(
+      consecutiveSourceOpenFailures: _sourceOpenFailures,
+    )) {
+      PlaybackLog.write('recover_early', {
+        'reason': 'source_open',
+        'failures': _sourceOpenFailures,
+        'host': _hostOf(_currentLines.first),
+      });
+      unawaited(_recoverOrGiveUp());
+      return;
+    }
     if (!_policy.canRetry(_stallRetries)) {
       // 自动重试耗尽:**先尝试向宿主重新解析**,而不是直接把错误卡片交出去。
       // 虎牙等签名平台的地址在连续失败期间多半已过期,继续复用 _currentLines
@@ -437,6 +491,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       'host': _hostOf(_currentLines.first),
     });
     _settleHealthyWindow(reason: 'reopen');
+    _emit((s) => s.copyWith(notice: PlaybackNotice.reconnecting));
     unawaited(open(_currentLines.first, _currentLines.skip(1).toList(), false));
   }
 
@@ -455,6 +510,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     if (canAttempt) {
       _lastRecoverAt = now;
       PlaybackLog.write('recover_request', {'lastKind': _lastErrorKind.name});
+      _emit((s) => s.copyWith(notice: PlaybackNotice.recoveringNewUrl));
       List<StreamLine>? fresh;
       String? failReason;
       try {
@@ -470,6 +526,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
           'host': _hostOf(fresh.first),
         });
         _stallRetries = 0;
+        _sourceOpenFailures = 0;
         // resetRetries 保持默认 true:新地址开启新一轮有界重试。
         await open(fresh.first, fresh.skip(1).toList());
         return;
@@ -493,6 +550,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
         buffering: false,
         error: _policy.giveUpMessage(_lastErrorKind),
         errorKind: _lastErrorKind,
+        notice: PlaybackNotice.none,
       ),
     );
   }
@@ -621,6 +679,22 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
         wrappedLines.add(prepared);
       }
       _currentLines = wrappedLines;
+      final orderedLines = _cdnCircuitBreaker.order(
+        _currentLines,
+        (item) => _hostOf(item) ?? item.url,
+        DateTime.now(),
+      );
+      var reordered = false;
+      for (var i = 0; i < orderedLines.length; i++) {
+        if (!identical(orderedLines[i], _currentLines[i])) reordered = true;
+      }
+      if (reordered) {
+        PlaybackLog.write('cdn_failover_order', {
+          'lines': orderedLines.length,
+          'firstHost': _hostOf(orderedLines.first),
+        });
+        _currentLines = orderedLines;
+      }
       // 代理按当前线路主机取:被墙 CDN 走代理,国内可达站点显式清空
       // (mpv 选项是进程级,不重设会把上一个源的代理策略带过来)。
       await _applyProxyForLine(line);
@@ -628,6 +702,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       _adHoldSince = null;
       if (resetRetries) {
         _stallRetries = 0;
+        _sourceOpenFailures = 0;
         // 用户主动重试/切源是唯一的闩锁解除点。
         _givenUp = false;
         // 新会话(进房/切线/换新地址)重置诊断去重:不同故障的同文案也该再记。
@@ -659,6 +734,9 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
           error: keepError ? s.error : null,
           errorKind: keepError ? s.errorKind : PlayerErrorKind.none,
           retryAttempt: _stallRetries,
+          notice: resetRetries
+              ? PlaybackNotice.networkJitter
+              : s.notice,
         ),
       );
       try {
@@ -745,6 +823,8 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       // 而不是继承上一间的窗口 / 已放弃闩锁(否则重进同一间永不自动重连)。
       _lastRecoverAt = null;
       _stallRetries = 0;
+      _sourceOpenFailures = 0;
+      _cdnCircuitBreaker.clear();
       _givenUp = false;
       _adHoldSince = null;
       _lastErrorKind = PlayerErrorKind.native;
