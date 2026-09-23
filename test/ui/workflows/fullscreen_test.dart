@@ -153,7 +153,7 @@ Future<void> _pumpFrames(WidgetTester tester, int times) async {
 /// 把键盘焦点交给播放页舞台(CallbackShortcuts 沿焦点树冒泡,快捷键才可达)。
 Future<void> _focusStage(WidgetTester tester) async {
   await tester.tap(find.byKey(const Key('play-stage-focus')));
-  await _pumpFrames(tester, 2);
+  await _pumpFrames(tester, 7);
   expect(
     tester.binding.focusManager.primaryFocus,
     isNotNull,

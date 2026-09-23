@@ -264,7 +264,7 @@ void main() {
     // 这正是桌面用户「先点播放区、再按快捷键」的路径。sendKeyDownEvent /
     // sendKeyUpEvent 走框架原生派发(keyDataThenRawKeyData),无需额外 shim。
     await tester.tap(find.byKey(const Key('play-stage-focus')));
-    await _pumpFrames(tester, 2);
+    await _pumpFrames(tester, 7);
     expect(
       tester.binding.focusManager.primaryFocus,
       isNotNull,
@@ -447,7 +447,7 @@ void main() {
 
     // 点舞台中央(playerControls 区域之外的空白处)。
     await tester.tapAt(const Offset(200, 300));
-    await _pumpFrames(tester, 2);
+    await _pumpFrames(tester, 7);
     expect(_player.calls, contains('play'), reason: '点击视频帧应切到播放');
     // 点控制条上的播放按钮:走按钮自身回调,同样落到 play 通路。
     final beforeButton = _player.calls.length;

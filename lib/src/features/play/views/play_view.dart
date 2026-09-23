@@ -1095,6 +1095,16 @@ class _VideoStageState extends ConsumerState<_VideoStage> {
           // (GestureDetector 不会自带 cursor,这是 G3 里“可点却没反应”的根因)。
           // onTapUp 而非 onTap:沉浸态分流需要点击在舞台内的相对位置
           // (右缘 2/3 热区判定);常规态回调为空,退化为切播放/暂停。
+          // onDoubleTap = 播放/暂停(主流播放器肌肉记忆,与单击同义):
+          // 双击判定会令单击回调延迟约 300ms —— 支持双击的固有代价
+          // (YouTube 同款)。沉浸态(onFrameTapUp 非空)不注册双击:抽屉/热区
+          // 是精细交互,保持立即响应;那里双击也无独立语义。
+          onDoubleTap: widget.onFrameTapUp == null
+              ? () {
+                  _focusNode.requestFocus();
+                  _onStageTap();
+                }
+              : null,
           onTapUp: (details) {
             // 焦点交给舞台节点(自持 FocusNode),再处理点击语义。
             _focusNode.requestFocus();

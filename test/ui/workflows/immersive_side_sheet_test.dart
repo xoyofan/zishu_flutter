@@ -152,7 +152,7 @@ Future<void> _pressEscape(WidgetTester tester) async {
 /// 进入沉浸态并越过 720ms 防抖锁。
 Future<void> _enterImmersive(WidgetTester tester) async {
   await tester.tap(find.byKey(const Key('play-stage-focus')));
-  await _pumpFrames(tester, 2);
+  await _pumpFrames(tester, 7);
   await _pressF(tester);
   expect(
     find.byKey(const Key('play-immersive-stage')),
@@ -322,7 +322,7 @@ void main() {
   testWidgets('进入沉浸态 720ms 防抖锁内点击右缘不开抽屉', (tester) async {
     await _pumpPlay(tester);
     await tester.tap(find.byKey(const Key('play-stage-focus')));
-    await _pumpFrames(tester, 2);
+    await _pumpFrames(tester, 7);
     await _pressF(tester);
     // 不越过防抖锁,立即点击右缘。
     final origin = tester.getTopLeft(
@@ -392,7 +392,7 @@ void main() {
   testWidgets('网页全屏同样支持右缘热区抽屉', (tester) async {
     await _pumpPlay(tester);
     await tester.tap(find.byKey(const Key('play-stage-focus')));
-    await _pumpFrames(tester, 2);
+    await _pumpFrames(tester, 7);
     await tester.sendKeyDownEvent(LogicalKeyboardKey.keyW);
     await tester.sendKeyUpEvent(LogicalKeyboardKey.keyW);
     await _pumpFrames(tester, 2);
