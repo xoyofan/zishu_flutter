@@ -5,6 +5,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'src/app/app_router.dart';
+import 'src/app/app_version.dart';
 import 'src/apps/windows/windows_app.dart';
 import 'src/platforms/common/playback/playback_log.dart';
 import 'src/platforms/common/playback/window_presentation.dart';
@@ -35,6 +36,7 @@ Future<void> main(List<String> args) async {
   } catch (_) {
     // 非桌面平台或插件缺失:无需窗口管理器。
   }
+  await loadAppVersion();
   // 窗口几何恢复必须在 runApp(首帧)之前完成:runner 是「首帧就绪回调才
   // Show 窗口」,此刻窗口仍隐藏;隐藏期的 setSize/setPosition 不存在
   // 「先显示旧尺寸首帧、再 resize 触发 surface 重建」的白屏窗口期(冷启动

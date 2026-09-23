@@ -21,6 +21,7 @@ import '../shared/presentation/design_tokens.dart';
 import '../shared/presentation/platform_brands.dart';
 import '../shared/presentation/zishu_tokens.dart';
 import 'app_shell.dart';
+import 'app_version.dart';
 
 /// 路由语义与 SFVideoLive 对齐(implementation-plan 6.3)。
 /// route 参数只存 site/id/cid,不传大型对象。
@@ -243,7 +244,11 @@ Page<dynamic> _shellPage(
 }) => NoTransitionPage(
   key: state.pageKey,
   child: _WindowTitle(
-    title: '$title · $_kAppTitle',
+    title: formatWindowTitle(
+      pageTitle: title,
+      appName: _kAppTitle,
+      version: currentAppVersion(),
+    ),
     child: AppShell(site: site, child: child),
   ),
 );
@@ -271,7 +276,11 @@ class _PlayRoute extends ConsumerWidget {
         ? '${_siteLabel(site)} · 直播间'
         : roomTitle.trim();
     return _WindowTitle(
-      title: '$title · $_kAppTitle',
+      title: formatWindowTitle(
+        pageTitle: title,
+        appName: _kAppTitle,
+        version: currentAppVersion(),
+      ),
       child: AppShell(
         site: site,
         chromeHidden: chromeHidden,
