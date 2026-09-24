@@ -3,6 +3,23 @@ import 'package:test/test.dart';
 
 import '../../../support/fake_youtube_api.dart';
 
+/// 统一站点出口:注册项(含 CachedRoomResolver 包装)装配进 [SiteRegistry]
+/// 后,经 `registry.site('youtube')` 验证 LiveSite 适配层的 RoomRecord 映射。
+///
+/// 路线选择:页面链 fixture 全齐(watch_live.html + master/variant.m3u8),
+/// 按既有 fixture 选页面链为可用路线;单测显式关闭 dlp,不伪造
+/// dlp/yt-dlp 子进程。
+LiveSite _liveSite(FakeYoutubeApi fake) {
+  final registry = SiteRegistry()
+    ..register(
+      buildYoutubeRegistration(
+        httpClient: fake,
+        dlpAvailableCheck: () async => false,
+      ),
+    );
+  return registry.site('youtube')!;
+}
+
 void main() {
   group('YouTube 输入归一', () {
     test('裸 id / youtu.be / watch / live 提取', () {
@@ -199,6 +216,137 @@ void main() {
       expect(registration.capabilities.danmaku, isTrue);
       expect(registration.capabilities.roomSearch, isFalse);
       expect(registration.search, isNull);
+    });
+
+    test('注册项:未实现刷新,但带 CachedRoomResolver 装饰器时内省仍如实判 null', () {
+      // 装饰器恒 is RoomSummaryRefresher(内层未实现时运行期抛
+      // UnsupportedError),必须按 RefreshCapabilityProbe 上报真实能力。
+      final resolver = registration.resolver;
+      expect(resolver, isA<RoomSummaryRefresher>());
+      expect(
+        (resolver as RefreshCapabilityProbe).innerRefreshSupported,
+        isFalse,
+        reason: 'YoutubeRoomResolver 未实现刷新',
+      );
+    });
+  });
+
+  group('LiveSite 统一出口:registry.site(youtube).resolveRoom → RoomRecord', () {
+    late FakeYoutubeApi fake;
+
+    setUp(() {
+      fake = FakeYoutubeApi()
+        ..watchHtml = youtubeFixture('watch_live.html')
+        ..masterPlaylist = youtubeFixture('master.m3u8')
+        ..variantPlaylist = youtubeFixture('variant.m3u8');
+    });
+
+    test('在播:类型/身份/线路稳定段与 headers 透传;统计四项 null', () async {
+      final room = await _liveSite(fake).resolveRoom(
+        const RoomRequest(
+          site: 'youtube',
+          roomIdOrUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        ),
+      );
+
+      expect(room, isA<RoomRecord>());
+      expect(room.site, 'youtube');
+      expect(room.roomId, 'dQw4w9WgXcQ');
+      expect(
+        room.sourceUrl,
+        'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      );
+      expect(room.roomState, RoomState.live);
+      expect(room.isLive, isTrue);
+      expect(room.title, '测试直播间');
+      expect(room.anchorName, '测试频道');
+      expect(
+        room.cover,
+        'https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg',
+      );
+      expect(room.cid, 'dQw4w9WgXcQ');
+      expect(room.source, 'live_parser/youtube');
+      expect(room.error, isNull);
+
+      // 线路:锁定 fixture master.m3u8 真值的稳定 URL 段与播放头,
+      // 防止适配层把线路换成别的非空值仍通过。
+      expect(room.streams, hasLength(3));
+      expect(room.streams.first.name, '自动');
+      expect(
+        room.playUrl,
+        'https://manifest.googlevideo.com/api/manifest/hls_variant/live/'
+        'master.m3u8',
+        reason: '页面链主路线就是 watch 页 fixture 的 hlsManifestUrl',
+      );
+      expect(
+        room.streams.skip(1).map((stream) => stream.name).toList(),
+        ['1080p60', '720p'],
+        reason: 'master.m3u8 fixture 的两个变体档位保留',
+      );
+      final headers = room.streams.first.preferredLine?.headers ?? {};
+      expect(headers['user-agent'], kYoutubeUserAgent);
+      expect(headers['referer'], 'https://www.youtube.com/');
+
+      // 6sol 口径:RoomPayload 没有统计字段,详情出口统计必须为
+      // null,不伪造 0/空串。
+      expect(room.audience, isNull);
+      expect(room.followers, isNull);
+      expect(room.vip, isNull);
+      expect(room.svip, isNull);
+    });
+
+    test('未开播:offline、无线路、缺字段 null、统计 null', () async {
+      fake.watchHtml = '<html><body>no player</body></html>';
+
+      final room = await _liveSite(fake).resolveRoom(
+        const RoomRequest(site: 'youtube', roomIdOrUrl: 'dQw4w9WgXcQ'),
+      );
+
+      expect(room, isA<RoomRecord>());
+      expect(room.site, 'youtube');
+      expect(room.roomId, 'dQw4w9WgXcQ');
+      expect(room.roomState, RoomState.offline);
+      expect(room.isLive, isFalse);
+      expect(
+        room.title,
+        isNull,
+        reason: 'RoomPayload 空串经统一记录归一为 null',
+      );
+      expect(room.anchorName, isNull);
+      expect(room.error, isNull);
+      expect(room.streams, isEmpty);
+      expect(room.playUrl, isEmpty);
+      expect(room.audience, isNull);
+      expect(room.followers, isNull);
+      expect(room.vip, isNull);
+      expect(room.svip, isNull);
+    });
+
+    test('无法解析 URL:notFound 语义、统计 null', () async {
+      final room = await _liveSite(fake).resolveRoom(
+        const RoomRequest(site: 'youtube', roomIdOrUrl: 'not a url'),
+      );
+
+      expect(room, isA<RoomRecord>());
+      expect(room.roomState, RoomState.notFound);
+      expect(room.error, '无法解析 YouTube URL');
+      expect(
+        room.title,
+        '无法解析 YouTube URL',
+        reason: '既有 payload 把诊断文案同时落在 title,原样透传',
+      );
+      expect(room.streams, isEmpty);
+      expect(room.audience, isNull);
+      expect(room.followers, isNull);
+      expect(room.vip, isNull);
+      expect(room.svip, isNull);
+    });
+
+    test('refresh 不可用:YouTube 无 RoomSummaryRefresher,refresher 为 null', () {
+      // 契约:不支持的能力部件必须是 null(不是空占位);CachedRoomResolver
+      // 装饰器恒 is RoomSummaryRefresher,靠 RefreshCapabilityProbe 如实上报
+      // 内层未实现刷新。
+      expect(_liveSite(fake).refresher, isNull);
     });
   });
 
