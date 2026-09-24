@@ -40,6 +40,6 @@ void main() {
     expect(formatStartedAt(null, isLive: true), '开播中');
     expect(formatStartedAt(null, isLive: false), '—');
     expect(siteSupportsDanmaku('huya'), isTrue);
-    expect(siteSupportsDanmaku('yy'), isFalse);
+    expect(siteSupportsDanmaku('yy'), isTrue, reason: 'YY trident 弹幕已接入');
   });
 }

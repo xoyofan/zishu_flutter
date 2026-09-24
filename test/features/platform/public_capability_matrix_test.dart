@@ -105,6 +105,7 @@ void main() {
         browse: true,
         roomSearch: true,
         anchorSearch: true,
+        danmaku: true,
         multiQuality: true,
         multiLine: true,
       ),
@@ -159,11 +160,11 @@ void main() {
     }
   });
 
-  test('不支持能力不会伪造接口，YY 的弹幕入口保持关闭', () {
+  test('不支持能力不会伪造接口:YY 弹幕已接入,twitch 无 multiLine', () {
     final registry = buildSiteRegistry();
 
-    expect(registry['yy']!.capabilities.danmaku, isFalse);
-    expect(registry['yy']!.danmaku, isNull);
+    expect(registry['yy']!.capabilities.danmaku, isTrue);
+    expect(registry['yy']!.danmaku, isNotNull);
     expect(registry['twitch']!.capabilities.multiLine, isFalse);
   });
 

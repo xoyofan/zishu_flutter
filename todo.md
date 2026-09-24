@@ -20,8 +20,9 @@
 
 ### 待办(下轮候选,缺口优先级见 laya 分析)
 - [ ] A11 导航能力过滤:按注册表能力裁剪 navPlatforms,防未实现平台点击抛 StateError。
-- [ ] YY 弹幕 connector(纯增量,fixture 可测)。
+- [x] YY 弹幕 connector(纯增量,fixture 可测)——**已完成**:`YyDanmakuConnector` 移植现行 trident 协议(parser 434 测试全绿,详见 tasks 已验证记录)。
 - [ ] 快手搜索能力(纯增量)。
+- [ ] YY 弹幕真实在线 smoke(协议 fixture 已过,连通性未验)。
 - [ ] 协议级另立任务:虎牙零消息、Twitch 弹幕连接、快手表情图片 URL、YouTube 个别频道源、飘屏重叠。
 - [ ] 环境清理:旧残破实例 `D:\Microsoft Visual Studio\2022\Community`、ghost 副本 `D:\Program Files\Microsoft Visual Studio\2022\Community`、`%TEMP%\vs_community.exe`。
 
