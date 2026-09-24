@@ -616,7 +616,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('第 3 列始终渲染(平台无该列时也不隐藏)', (tester) async {
+    testWidgets('平台未声明的统计列不渲染(SOOP 无 svip 列)', (tester) async {
       SharedPreferencesAsyncPlatform.instance =
           InMemorySharedPreferencesAsync.withData(<String, Object>{
             'zishu.follow.list': jsonEncode([
@@ -628,10 +628,15 @@ void main() {
       await _pumpFrames(tester, 2);
 
       expect(find.byKey(const Key('play-side-header')), findsOneWidget);
+      // 设计 §3.2:SOOP 声明 roomStats = [audience(观看), vip(订阅)],
+      // 无 svip(钻粉)语义 —— 未声明的列不渲染,避免把不存在的能力
+      // 显示成空白或 0;取不到值的「已声明」列才显示「—」。
+      expect(find.byKey(const Key('play-side-stat-audience')), findsOneWidget);
+      expect(find.byKey(const Key('play-side-stat-vip')), findsOneWidget);
       expect(
         find.byKey(const Key('play-side-stat-svip')),
-        findsOneWidget,
-        reason: '口径与上两列一致:始终渲染,取不到值显示「—」',
+        findsNothing,
+        reason: 'SOOP 未声明 svip 列(无 diamondFans),按设计 §3.2 不渲染',
       );
       expect(tester.takeException(), isNull);
     });
