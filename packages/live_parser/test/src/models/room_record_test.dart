@@ -331,6 +331,28 @@ void main() {
       expect(record.toSummary().online, '');
     });
 
+    test('fromSummary:站点层判定有效的统计字符串 "0" 保留,不当作缺失', () {
+      // 与 huya 原始零裁决互补:不可信的原始 0 由站点层挡在 summary 之外;
+      // 一旦摘要合法携带 "0",fromSummary 必须保留(toJson/mergeRefresh 此前
+      // 已有同口径断言,此处只补 fromSummary 路径)。
+      const summary = RoomSummary(
+        site: 'huya',
+        roomId: '2',
+        title: '标题',
+        anchorName: '主播',
+        cid: '1',
+        category: '分类',
+        online: '0',
+        diamondFans: '0',
+        cover: '',
+        roomState: RoomState.live,
+      );
+      final record = RoomRecord.fromSummary(summary);
+      expect(record.audience, '0', reason: '确定有效的 "0" 不归 null');
+      expect(record.svip, '0');
+      expect(record.followers, isNull, reason: '未提供仍为 null');
+    });
+
     test('fromSummary replay 摘要按 roomState 判定,不看 online', () {
       const summary = RoomSummary(
         site: 'bilibili',

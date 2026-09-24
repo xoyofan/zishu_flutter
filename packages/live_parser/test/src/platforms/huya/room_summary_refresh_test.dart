@@ -168,7 +168,10 @@ void main() {
     expect(record.svip, '1300', reason: 'diamondFans → svip');
   });
 
-  test('在播但超粉为 0:diamondFans 留空(数据诚实性,不伪造 0)', () async {
+  // 6sol 裁决:Huya WUP 返回的原始 0 被 huya_wup.dart
+  // isPlausibleHuyaSuperFanCount(>0) 判为不可信 —— 协议未保证它是有效
+  // 计数,故留空才是正确行为,禁止改成显示 0。
+  test('在播但超粉原始零不可信，合并仍留空', () async {
     fake.profileRoomResponse = _profile(liveStatus: 'ON');
     fake.wupResponseBytes = buildFakeVipResponse(total: 75, totalNum: 75);
     fake.wupResponseByFunc['getSuperFansInfo'] =
@@ -185,7 +188,7 @@ void main() {
     expect(
       RoomRecord.fromSummary(summary).svip,
       isNull,
-      reason: '超粉为 0 时统一记录保持 null,不回填 0',
+      reason: '超粉原始零不可信，合并仍留空',
     );
   });
 

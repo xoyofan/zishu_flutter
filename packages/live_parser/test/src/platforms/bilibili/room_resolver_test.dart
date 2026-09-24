@@ -256,7 +256,16 @@ void main() {
       // 线路与播放请求头经统一记录透传(CDN 防盗链 Referer/Origin)。
       expect(room.streams, isNotEmpty);
       final line = room.streams.first.lines.first;
-      expect(line.url, isNotEmpty);
+      // P2:首条为 avc HLS(host+base_url+extra 拼接),断言稳定 host/路径/
+      // 查询参数 —— 均来自既有 fixture room_play_info.json 的 url_info[0]
+      // 与既有 resolver 断言口径,防止适配层整体换值仍通过。
+      expect(
+        line.url,
+        startsWith('https://cn-hbxy-cm-01.bilivideo.com/live-bvc/9527'),
+        reason: '首个 url_info host + base_url(fixture 真值)',
+      );
+      expect(line.url, contains('live-bvc/9527?proto=ts'));
+      expect(line.url, contains('expires='));
       expect(line.headers['referer'], 'https://live.bilibili.com/');
       expect(line.headers['origin'], 'https://live.bilibili.com');
       expect(room.playUrl, room.streams.first.preferredLine?.url);

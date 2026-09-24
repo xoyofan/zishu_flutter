@@ -356,7 +356,13 @@ void main() {
       // 线路与播放请求头经统一记录透传(边界深冻结不改变可读值)。
       expect(room.streams, isNotEmpty);
       final line = room.streams.first.lines.first;
-      expect(line.url, isNotEmpty);
+      // P2:锁定既有 resolver 同源的已知 fixture 线路(play_v1_probe.json),
+      // 防止适配层把两处 URL 一起换成别的非空值仍通过。
+      expect(
+        line.url,
+        'https://hw-tct.douyucdn.cn/live/9527probe_0_0.flv',
+        reason: 'rate=0 hw-h5 探测线路(与既有 resolver 断言同源)',
+      );
       expect(line.headers['referer'], 'https://www.douyu.com/9527');
       expect(line.headers['user-agent'], contains('Chrome/'));
       expect(room.playUrl, room.streams.first.preferredLine?.url);

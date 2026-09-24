@@ -186,7 +186,17 @@ void main() {
       // 线路与播放请求头经统一记录透传(防盗链 Referer/Origin)。
       expect(room.streams, isNotEmpty);
       final line = room.streams.first.lines.first;
-      expect(line.url, isNotEmpty);
+      // P2:虎牙地址带动态 wsSecret 签名,只断言稳定路径与必要查询参数
+      // (均取自既有 resolver 断言的 fixture 真值),不猜固定完整字符串。
+      expect(
+        line.url,
+        startsWith('https://alhls.huya.com/src/9527-2650134-'),
+        reason: '稳定路径前缀(房间号-流名,签名不入断言)',
+      );
+      expect(line.url, contains('.m3u8?wsSecret='));
+      expect(line.url, contains('ctype=huya_webh5'));
+      expect(line.url, matches(RegExp(r'wsSecret=[0-9a-f]{32}')));
+      expect(line.url, endsWith('&ratio='), reason: 'ratio=0 空值参数');
       expect(line.headers['referer'], 'https://www.huya.com/9527');
       expect(line.headers['origin'], 'https://www.huya.com');
       expect(room.playUrl, room.streams.first.preferredLine?.url);
