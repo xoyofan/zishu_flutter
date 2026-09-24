@@ -18,7 +18,8 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:live_parser/live_parser.dart' show RoomPayload, RoomSummary, StreamLine;
+import 'package:live_parser/live_parser.dart'
+    show RoomPayload, RoomRecord, RoomSummary, StreamLine;
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:zishu_flutter/src/apps/windows/windows_app.dart';
@@ -87,21 +88,25 @@ class _ScriptedRefresher implements RoomRefresher {
   int calls = 0;
 
   @override
-  Future<RoomSummary> refreshRoom({
+  Future<RoomRecord> refreshRoom({
     required String site,
     required String roomId,
   }) async {
     calls++;
     final live = onlineRoomIds.contains(roomId);
-    return RoomSummary(
-      site: site,
-      roomId: roomId,
-      title: '直播中$roomId',
-      anchorName: '主播$roomId',
-      cid: 'cid-$roomId',
-      category: '网游',
-      online: live ? '1.2万' : '',
-      cover: '',
+    // 端口返回统一 RoomRecord:脚本仍按 RoomSummary 描述平台返回值,
+    // 在端口边界转换(关注存储本切片仍为 RoomSummary)。
+    return RoomRecord.fromSummary(
+      RoomSummary(
+        site: site,
+        roomId: roomId,
+        title: '直播中$roomId',
+        anchorName: '主播$roomId',
+        cid: 'cid-$roomId',
+        category: '网游',
+        online: live ? '1.2万' : '',
+        cover: '',
+      ),
     );
   }
 

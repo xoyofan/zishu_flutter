@@ -4,23 +4,21 @@ import 'package:zishu_flutter/src/shared/presentation/platform_display.dart';
 
 void main() {
   test('平台列值按契约映射,缺失值为占位符', () {
-    const summary = RoomSummary(
+    // 统一房间记录(RoomRecord 版):统计缺失为 null,不伪造 0。
+    final record = RoomRecord(
       site: 'huya',
       roomId: '1',
-      title: '',
-      anchorName: '',
-      cid: '',
-      category: '',
-      online: '12万',
-      cover: '',
+      roomState: RoomState.live,
+      audience: '12万',
       followers: '12345',
       vip: '88',
     );
 
-    expect(roomStatValue(summary, RoomStatField.audience), '12万');
-    expect(roomStatValue(summary, RoomStatField.vip), '88');
-    expect(displayStatValue(roomStatValue(summary, RoomStatField.svip)), '—');
-    expect(formatFollowersValue('12345'), '1.2万');
+    expect(roomStatValue(record, RoomStatField.audience), '12万');
+    expect(roomStatValue(record, RoomStatField.vip), '88');
+    expect(displayStatValue(roomStatValue(record, RoomStatField.svip)), '—');
+    expect(formatFollowersValue(record.followers), '1.2万');
+    expect(formatFollowersValue(null), '—');
   });
 
   test('平台声明决定列名而不是 UI site 分支', () {

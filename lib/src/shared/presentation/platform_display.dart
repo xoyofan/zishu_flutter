@@ -11,11 +11,14 @@ final SiteRegistry _displayRegistry = buildSiteRegistry();
 SiteDisplaySpec displaySpecFor(String site) =>
     _displayRegistry[site]?.display ?? const SiteDisplaySpec();
 
-String roomStatValue(RoomSummary? summary, RoomStatField field) =>
+/// 统一房间记录的列值取数(RoomRecord 版):按列读统计字段,
+/// 本次无值为 null → 空串,展示层 [displayStatValue] 渲染「—」。
+/// 平台差异只在列声明(`SiteDisplaySpec`),这里不复制平台分支。
+String roomStatValue(RoomRecord? record, RoomStatField field) =>
     switch (field) {
-      RoomStatField.audience => summary?.online ?? '',
-      RoomStatField.vip => summary?.vip ?? '',
-      RoomStatField.svip => summary?.diamondFans ?? '',
+      RoomStatField.audience => record?.audience ?? '',
+      RoomStatField.vip => record?.vip ?? '',
+      RoomStatField.svip => record?.svip ?? '',
     };
 
 String displayStatValue(String? raw) {
@@ -23,6 +26,8 @@ String displayStatValue(String? raw) {
   return value.isEmpty ? '—' : value;
 }
 
+/// 关注数格式化:取 [RoomRecord.followers](或搜索命中等其它文本字段),
+/// 千分位清洗后按 1 万档折算;未提供(null/空)显示「—」。
 String formatFollowersValue(String? raw) {
   final text = (raw?.trim() ?? '').replaceAll(',', '');
   if (text.isEmpty) return '—';

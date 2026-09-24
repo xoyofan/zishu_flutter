@@ -15,7 +15,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:live_parser/live_parser.dart'
-    show RoomPayload, RoomState, RoomSummary;
+    show RoomPayload, RoomRecord, RoomState, RoomSummary;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
@@ -40,7 +40,7 @@ class FakeRefresher implements RoomRefresher {
   int get callCount => calls.length;
 
   @override
-  Future<RoomSummary> refreshRoom({
+  Future<RoomRecord> refreshRoom({
     required String site,
     required String roomId,
   }) async {
@@ -50,7 +50,8 @@ class FakeRefresher implements RoomRefresher {
     }
     final room = results[roomId];
     if (room == null) throw StateError('no scripted result: $roomId');
-    return room;
+    // 端口返回统一 RoomRecord,脚本仍用 RoomSummary 描述平台返回值。
+    return RoomRecord.fromSummary(room);
   }
 
   @override

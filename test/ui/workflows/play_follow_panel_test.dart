@@ -20,7 +20,7 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart'
-    show RoomPayload, RoomState, RoomSummary, StreamLine;
+    show RoomPayload, RoomRecord, RoomState, RoomSummary, StreamLine;
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:zishu_flutter/src/app/app_router.dart';
@@ -208,13 +208,14 @@ class _ScriptedRefresher implements RoomRefresher {
   final Map<String, RoomSummary> results;
 
   @override
-  Future<RoomSummary> refreshRoom({
+  Future<RoomRecord> refreshRoom({
     required String site,
     required String roomId,
   }) async {
     final room = results[roomId];
     if (room == null) throw StateError('no scripted result: $roomId');
-    return room;
+    // 端口返回统一 RoomRecord,脚本仍用 RoomSummary 描述平台统计快照。
+    return RoomRecord.fromSummary(room);
   }
 
   @override

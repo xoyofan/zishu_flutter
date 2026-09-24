@@ -51,9 +51,13 @@ abstract interface class RoomRecoverer implements RoomSource {
 ///
 /// fixture 源不实现本能力,关注列表据此保持「样例数据、零网络」的既有行为。
 ///
+/// 返回统一 [RoomRecord]:状态真源是 `roomState`,本次未取到的统计字段为
+/// `null`(不伪造 0);存储仍是 `RoomSummary` 的消费者在边界自行转换
+/// (`RoomRecord.toSummary` / `RoomRecord.fromSummary`)。
+///
 /// 继承 [RoomSource]:让调用点 `is` 探测获得类型提升(同 [RoomRecoverer])。
 abstract interface class RoomRefresher implements RoomSource {
-  Future<RoomSummary> refreshRoom({
+  Future<RoomRecord> refreshRoom({
     required String site,
     required String roomId,
   });

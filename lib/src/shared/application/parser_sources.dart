@@ -99,7 +99,7 @@ class ParserRoomSource implements RoomSource, RoomRecoverer, RoomRefresher {
   /// 注意:注册表出口套了 `CachedRoomResolver`,它已透传该能力且**不走短缓存**,
   /// 因此这里的刷新拿到的总是上游新鲜值。
   @override
-  Future<RoomSummary> refreshRoom({
+  Future<RoomRecord> refreshRoom({
     required String site,
     required String roomId,
   }) async {

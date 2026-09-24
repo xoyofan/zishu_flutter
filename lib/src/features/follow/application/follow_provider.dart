@@ -282,10 +282,12 @@ class FollowController extends Notifier<List<FollowEntry>> {
         if (index >= targets.length) return;
         final entry = targets[index];
         try {
-          final room = await refresher
+          // 刷新端口返回统一 RoomRecord;关注存储本切片仍是 RoomSummary,
+          // 在消费边界 toSummary() 归一(状态/统计口径不变)。
+          final fresh = await refresher
               .refreshRoom(site: entry.room.site, roomId: entry.room.roomId)
               .timeout(const Duration(seconds: 10));
-          updated[entry.key] = _mergeRefreshed(entry.room, room);
+          updated[entry.key] = _mergeRefreshed(entry.room, fresh.toSummary());
         } catch (_) {
           // 单条失败:保留原条目,不翻转离线。
         }

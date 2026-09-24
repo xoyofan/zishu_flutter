@@ -13,17 +13,19 @@
 /// **数据诚实性**:统计格与关注状态解耦 —— 先取 [roomStatsProvider] 的新鲜
 /// 解析快照(与桌面侧栏信息头同一条解析真源,任意房间可查),再经
 /// [mergeDisplayStats] 逐字段回退 [followProvider] 中当前房间关注条目的
-/// [RoomSummary](`followers`/`online` 由 `FollowController.refreshStatuses`
-/// 维护的本地统计快照)。点关注引入的空统计不会盖掉已知解析值;
-/// 两侧都没有的项一律显示「—」,不伪造;解析出错也只回退本地或「—」,
-/// 不冒充有效零。开播时间取 [RoomPayload].`startedAt`(斗鱼等平台真实返回);
-/// 弹幕总数上游无字段,恒为「—」(会话内已收条数不是平台弹幕总数,不冒充)。
+/// 本地统计快照(关注存储仍是 [RoomSummary],在调用点经
+/// `RoomRecord.fromSummary` 转成统一记录后走同一份合并,不复制平台分支;
+/// `followers`/`audience` 由 `FollowController.refreshStatuses` 维护)。点关注
+/// 引入的空统计不会盖掉已知解析值;两侧都没有的项一律显示「—」,不伪造;
+/// 解析出错也只回退本地或「—」,不冒充有效零。开播时间取 [RoomPayload]
+/// .`startedAt`(斗鱼等平台真实返回);弹幕总数上游无字段,恒为「—」
+/// (会话内已收条数不是平台弹幕总数,不冒充)。
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:live_parser/live_parser.dart'
-    show RoomPayload, RoomStatField, RoomStatTone, RoomSummary;
+    show RoomPayload, RoomRecord, RoomStatField, RoomStatTone;
 
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_display.dart';
@@ -76,12 +78,12 @@ class PlayMetaBar extends ConsumerWidget {
     final matched = ref
         .watch(followProvider)
         .where((entry) => entry.key == '$site:$roomId');
-    final RoomSummary? followedSummary = matched.isNotEmpty
-        ? matched.first.room
+    final RoomRecord? followedRecord = matched.isNotEmpty
+        ? RoomRecord.fromSummary(matched.first.room)
         : null;
-    final RoomSummary? summary = mergeDisplayStats(
+    final RoomRecord? summary = mergeDisplayStats(
       parsed: ref.watch(roomStatsProvider((site: site, roomId: roomId))).value,
-      local: followedSummary,
+      local: followedRecord,
     );
     final display = displaySpecFor(site);
     final followersText = formatFollowersValue(summary?.followers);

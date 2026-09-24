@@ -10,7 +10,7 @@ import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:live_parser/live_parser.dart'
-    show RoomPayload, RoomState, RoomSummary;
+    show RoomPayload, RoomRecord, RoomState, RoomSummary;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
@@ -94,7 +94,7 @@ class _MatrixRefresher implements RoomRefresher {
   final List<String> calls = [];
 
   @override
-  Future<RoomSummary> refreshRoom({
+  Future<RoomRecord> refreshRoom({
     required String site,
     required String roomId,
   }) async {
@@ -103,7 +103,9 @@ class _MatrixRefresher implements RoomRefresher {
     if (failures.contains(key)) throw StateError('refresh failed: $key');
     final result = results[key];
     if (result == null) throw StateError('missing result: $key');
-    return result;
+    // 刷新端口已返回统一 RoomRecord:脚本仍按 RoomSummary 描述平台返回值,
+    // 在端口边界经 fromSummary 转换(关注存储本切片仍为 RoomSummary)。
+    return RoomRecord.fromSummary(result);
   }
 
   @override

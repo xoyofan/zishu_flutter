@@ -27,7 +27,9 @@ class _SideHeader extends ConsumerWidget {
   /// [mergeDisplayStats]):统计独立来自 roomStatsProvider 的新鲜解析值,
   /// 与关注状态解耦 —— 关注与否都不改变取数来源,刚关注条目里的空统计
   /// 不得盖掉已知解析值;本地已知值只在解析缺字段/出错时逐字段回退,
-  /// 未知保持「—」,不伪造数据。
+  /// 未知保持「—」,不伪造数据。存储仍是 [RoomSummary](关注轨本切片不迁移),
+  /// 在调用点经 `RoomRecord.fromSummary` 转成统一记录后走同一份合并,
+  /// 不在 UI 里复制平台分支。
   final RoomSummary? followRoom;
 
   final bool followed;
@@ -59,9 +61,9 @@ class _SideHeader extends ConsumerWidget {
     // (mergeDisplayStats)。取数与关注状态解耦;上游未提供 → '—' 占位,
     // 不伪造(数据诚实性)。
     final followRoom = this.followRoom;
-    final RoomSummary? stats = mergeDisplayStats(
+    final RoomRecord? stats = mergeDisplayStats(
       parsed: ref.watch(roomStatsProvider((site: site, roomId: roomId))).value,
-      local: followRoom,
+      local: followRoom == null ? null : RoomRecord.fromSummary(followRoom),
     );
     final display = displaySpecFor(site);
     final followersText = formatFollowersValue(stats?.followers);
