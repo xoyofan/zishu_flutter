@@ -156,6 +156,8 @@ class DouyuBrowseRepository implements BrowseRepository {
       online: formatOnlineCount(item['ol'] ?? item['online']),
       cover: cover,
       promoTag: pickDouyuPromoTag(item),
+      // mixList 目录 live-only:状态真源(6sol 裁决 Task 4a-i)。
+      roomState: RoomState.live,
     );
   }
 
@@ -179,6 +181,8 @@ class DouyuBrowseRepository implements BrowseRepository {
       online: hn.isNotEmpty ? hn : formatOnlineCount(item['online'] ?? item['viewerCount']),
       cover: jsonText(item['roomSrc'] ?? item['verticalSrc']),
       promoTag: pickDouyuPromoTag(item),
+      // 移动端列表目录 live-only:状态真源(6sol 裁决 Task 4a-i)。
+      roomState: RoomState.live,
     );
   }
 }

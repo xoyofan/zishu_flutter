@@ -205,6 +205,8 @@ class HuyaBrowseRepository implements BrowseRepository {
       online: formatOnlineCount(item['lTotalCount'] ?? item['lUserCount']),
       cover: cover,
       promoTag: pickHuyaPromoTag(item),
+      // getLiveList 目录 live-only:状态真源(6sol 裁决 Task 4a-i)。
+      roomState: RoomState.live,
     );
   }
 }

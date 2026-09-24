@@ -143,6 +143,8 @@ query DirectoryPage_Game(\$id: ID!, \$limit: Int) {
         category: remapCategoryName('twitch', _text(_mapOf(node['game'])?['name'])),
         online: formatOnlineCount(node['viewersCount']),
         cover: fillTwitchImageTemplate(_text(node['previewImageURL'])),
+        // streams 连接 live-only:状态真源(6sol 裁决 Task 4a-i)。
+        roomState: RoomState.live,
       ),
   ]..removeWhere((room) => room.roomId.isEmpty);
 }

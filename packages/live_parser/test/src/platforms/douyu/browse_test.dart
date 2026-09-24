@@ -68,6 +68,12 @@ void main() {
     final record = RoomRecord.fromSummary(first);
     expect(record.site, 'douyu');
     expect(record.roomId, '111');
+    // 浏览目录 live-only(6sol 裁决,Task 4a-i):状态真源显式为 live。
+    expect(
+      record.roomState,
+      RoomState.live,
+      reason: 'mixList 分类目录条目来自直播列表,roomState 应为 live',
+    );
     expect(record.audience, '10.2万');
     expect(record.promoTag, '官方赛况');
     expect(record.followers, isNull);
@@ -87,6 +93,12 @@ void main() {
 
     expect(result.rooms, hasLength(2));
     expect(result.hasMore, isFalse, reason: '上游 2 条 < limit=30');
+    // 浏览目录 live-only(6sol 裁决,Task 4a-i):0_0 首页 mixList 同为 live。
+    expect(
+      RoomRecord.fromSummary(result.rooms.first).roomState,
+      RoomState.live,
+      reason: '首页 mixList 目录条目状态真源为 live',
+    );
     expect(result.rooms[0].online, '6.7万');
     expect(result.rooms[0].promoTag, '高能时刻');
     expect(result.rooms[1].online, '12345.7万');
@@ -109,6 +121,13 @@ void main() {
     expect(result.rooms[0].online, '1.2万', reason: 'hn 已是人类可读格式直接采用');
     expect(result.rooms[1].category, 'DNF', reason: '分类名从缓存按 cid 补全');
     expect(result.rooms[1].online, '850');
+
+    // 浏览目录 live-only(6sol 裁决,Task 4a-i):移动端回退列表同为 live。
+    expect(
+      RoomRecord.fromSummary(result.rooms.first).roomState,
+      RoomState.live,
+      reason: 'm.douyu.com/api/room/list 目录条目状态真源为 live',
+    );
 
     expect(
       fake.requests.any((r) => r.url.contains('/api/room/list?page=1&limit=30')),

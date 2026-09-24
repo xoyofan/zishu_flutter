@@ -156,6 +156,9 @@ class BilibiliBrowseRepository implements BrowseRepository {
       online: formatOnlineCount(item['online']),
       cover: cover,
       promoTag: pickBilibiliPromoTag(item),
+      // getRoomList/webMain 目录 live-only(fixture live_status=1):
+      // 状态真源(6sol 裁决 Task 4a-i)。
+      roomState: RoomState.live,
     );
   }
 

@@ -54,6 +54,12 @@ void main() {
       final record = RoomRecord.fromSummary(room);
       expect(record.site, 'kuaishou');
       expect(record.roomId, 'ks_board_1');
+      // 浏览目录 live-only(6sol 裁决,Task 4a-i):状态真源显式为 live。
+      expect(
+        record.roomState,
+        RoomState.live,
+        reason: 'gameboard 分类目录条目来自直播列表,roomState 应为 live',
+      );
       expect(record.audience, '1.2千');
       expect(record.followers, isNull);
       expect(record.vip, isNull);
@@ -82,6 +88,12 @@ void main() {
       expect(room.online, '10.0千');
       expect(room.cover, 'https://p1.kuaishou.com/home/1.jpg');
       expect(result.hasMore, isFalse);
+      // 浏览目录 live-only(6sol 裁决,Task 4a-i):首页推荐嵌套列表同为 live。
+      expect(
+        RoomRecord.fromSummary(room).roomState,
+        RoomState.live,
+        reason: 'home/list gameLiveInfo/liveInfo 条目状态真源为 live',
+      );
       expect(
         RoomRecord.fromSummary(room).audience,
         '10.0千',

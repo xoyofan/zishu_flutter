@@ -73,6 +73,13 @@ void main() {
 
       expect(result.rooms[1].cover, 'https://img.huya.com/b.jpg', reason: '// 补 https');
       expect(result.rooms[1].online, '999');
+
+      // 浏览目录 live-only(6sol 裁决,Task 4a-i):状态真源显式为 live。
+      expect(
+        RoomRecord.fromSummary(first).roomState,
+        RoomState.live,
+        reason: 'getLiveList 分类目录条目来自直播列表,roomState 应为 live',
+      );
     });
   });
 

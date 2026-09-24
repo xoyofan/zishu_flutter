@@ -120,6 +120,8 @@ List<RoomSummary> _roomsFromInitialData(String html, String categoryName) {
         category: categoryName,
         online: _runsText(renderer['viewCountText']) ?? '',
         cover: cover,
+        // 直播页目录 live-only:状态真源(6sol 裁决 Task 4a-i)。
+        roomState: RoomState.live,
       ),
     );
   }
@@ -174,6 +176,8 @@ List<RoomSummary> _roomsFromRegex(String html, String categoryName) {
         category: categoryName,
         online: '',
         cover: _listCoverUrl(videoId),
+        // 直播页目录 live-only(正则兜底同页):状态真源(6sol 裁决 Task 4a-i)。
+        roomState: RoomState.live,
       ),
     );
   }

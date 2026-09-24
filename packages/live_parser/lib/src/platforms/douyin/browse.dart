@@ -382,6 +382,8 @@ RoomSummary? _normalizePartitionRoom(
     category: partitionName,
     online: formatOnlineCount(douyinOnlineRaw(room)),
     cover: coverList.isEmpty ? '' : httpsDouyinUrl(coverList.first),
+    // 直播分区目录 live-only:状态真源(6sol 裁决 Task 4a-i)。
+    roomState: RoomState.live,
   );
 }
 

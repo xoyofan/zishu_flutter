@@ -35,11 +35,15 @@ void main() {
     // 统一记录:fromSummary 映射列表 fixture 真值;viewCountText 是真实
     // 展示值("1,234 watching")原样透传,不转数字。上游列表没有
     // followers/vip/svip → 保持 null,不编造数字。
-    // 注意:roomState 的批量默认 offline 是 Task 4 范围(6sol 裁决),
-    // 本测试不断言。
+    // 浏览目录 live-only(6sol 裁决,Task 4a-i):状态真源显式为 live。
     final record = RoomRecord.fromSummary(result.rooms.first);
     expect(record.site, 'youtube');
     expect(record.roomId, 'AAAAAAAAAAA');
+    expect(
+      record.roomState,
+      RoomState.live,
+      reason: '/live 直播页目录条目(viewCountText=watching),状态真源为 live',
+    );
     expect(record.audience, '1,234 watching', reason: 'viewCountText 原样透传');
     expect(record.followers, isNull);
     expect(record.vip, isNull);

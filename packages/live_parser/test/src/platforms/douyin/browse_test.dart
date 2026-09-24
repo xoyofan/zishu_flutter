@@ -61,6 +61,12 @@ void main() {
       final record = RoomRecord.fromSummary(first);
       expect(record.site, 'douyin');
       expect(record.roomId, '123456');
+      // 浏览目录 live-only(6sol 裁决,Task 4a-i):状态真源显式为 live。
+      expect(
+        record.roomState,
+        RoomState.live,
+        reason: 'partition/detail/room/v2 是直播分区目录,roomState 应为 live',
+      );
       expect(record.audience, '1.2万');
       expect(record.followers, isNull);
       expect(record.vip, isNull);

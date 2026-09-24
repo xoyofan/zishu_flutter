@@ -174,6 +174,8 @@ class SoopBrowseRepository implements BrowseRepository {
           category: category,
           online: formatOnlineCount(soopOnlineViewers(item)),
           cover: httpsSoopUrl(item[coverKey] ?? item['thumbnail']),
+          // 直播推荐/分类目录 live-only(szType=live):状态真源(6sol 裁决 Task 4a-i)。
+          roomState: RoomState.live,
         ),
       );
       if (rooms.length >= limit) break;

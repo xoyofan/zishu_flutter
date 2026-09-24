@@ -122,6 +122,8 @@ class KuaishouBrowseRepository implements BrowseRepository {
           category: jsonText(gameInfo['name']),
           online: formatOnlineCount(item['watchingCount']),
           cover: kuaishouPosterUrl(item['poster']),
+          // 分类目录 live-only:状态真源(6sol 裁决 Task 4a-i)。
+          roomState: RoomState.live,
         ),
       );
       if (rooms.length >= limit) break;
@@ -156,6 +158,8 @@ class KuaishouBrowseRepository implements BrowseRepository {
               category: jsonText(gameInfo['name']),
               online: formatOnlineCount(live['watchingCount']),
               cover: kuaishouPosterUrl(gameInfo['poster']),
+              // 首页推荐 live-only 目录:状态真源(6sol 裁决 Task 4a-i)。
+              roomState: RoomState.live,
             ),
           );
           if (rooms.length >= limit) {

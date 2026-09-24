@@ -73,6 +73,12 @@ void main() {
       final record = RoomRecord.fromSummary(result.rooms.first);
       expect(record.site, 'yy');
       expect(record.roomId, '1414787909');
+      // 浏览目录 live-only(6sol 裁决,Task 4a-i):状态真源显式为 live。
+      expect(
+        record.roomState,
+        RoomState.live,
+        reason: 'more/page.action 直播目录条目,roomState 应为 live',
+      );
       expect(record.audience, '4.1万');
       expect(record.followers, isNull);
       expect(record.vip, isNull);

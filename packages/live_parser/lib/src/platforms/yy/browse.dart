@@ -182,6 +182,8 @@ class YyBrowseRepository implements BrowseRepository {
           }(),
           online: formatOnlineCount(item['users']),
           cover: httpsYyUrl(item['thumb2'] ?? item['thumb'] ?? item['avatar']),
+          // more/page.action 目录 live-only:状态真源(6sol 裁决 Task 4a-i)。
+          roomState: RoomState.live,
         ),
       );
       if (rooms.length >= limit) break;

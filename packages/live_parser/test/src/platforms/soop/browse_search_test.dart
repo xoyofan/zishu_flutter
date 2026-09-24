@@ -53,11 +53,15 @@ void main() {
 
       // 统一记录:fromSummary 映射列表 fixture 真值(audience);上游列表
       // 没有 followers/vip/svip → 保持 null,不编造数字。
-      // 注意:roomState 的批量默认 offline 是 Task 4 范围(6sol 裁决),
-      // 本测试不断言。
+      // 浏览目录 live-only(6sol 裁决,Task 4a-i):状态真源显式为 live。
       final record = RoomRecord.fromSummary(result.rooms.first);
       expect(record.site, 'soop');
       expect(record.roomId, 'rec_a');
+      expect(
+        record.roomState,
+        RoomState.live,
+        reason: 'main_broad_list 直播推荐目录,roomState 应为 live',
+      );
       expect(record.audience, '5.4万', reason: 'view_cnt=54321 → online 透传');
       expect(record.followers, isNull);
       expect(record.vip, isNull);
@@ -74,11 +78,16 @@ void main() {
       expect(result.rooms.first.online, '1.2万');
       expect(result.rooms.last.online, '1.0千');
 
-      // 统一记录:分类列表同口径;roomState 批量默认 offline 不断言
-      // (6sol 裁决,Task 4)。
+      // 统一记录:分类列表同口径(6sol 裁决,Task 4a-i):live-only 目录
+      // 状态真源显式为 live。
       final record = RoomRecord.fromSummary(result.rooms.first);
       expect(record.site, 'soop');
       expect(record.roomId, 'room_a');
+      expect(
+        record.roomState,
+        RoomState.live,
+        reason: 'categoryContentsList(szType=live) 分类目录状态真源为 live',
+      );
       expect(record.audience, '1.2万');
       expect(record.followers, isNull);
       expect(record.vip, isNull);

@@ -67,6 +67,14 @@ void main() {
     expect(first.promoTag, '知名游戏UP', reason: 'TS truncatePromoTag 同样按 6 字截断');
     expect(result.rooms[1].promoTag, 'PK中');
     expect(result.rooms[1].cover, 'https://i0.hdslb.com/b.jpg');
+
+    // 浏览目录 live-only(6sol 裁决,Task 4a-i):状态真源显式为 live,
+    // 不再回落默认 offline(fixture live_status 全为 1)。
+    expect(
+      RoomRecord.fromSummary(first).roomState,
+      RoomState.live,
+      reason: 'getRoomList 分区目录条目来自直播列表,roomState 应为 live',
+    );
   });
 
   test('首页:getRoomList + webMain 推荐合并去重', () async {
@@ -76,6 +84,13 @@ void main() {
     );
     // broad 2 条 + webMain 新增 333(111 重复) = 3
     expect(result.rooms.map((r) => r.roomId).toList(), ['111', '222', '333']);
+
+    // 浏览目录 live-only(6sol 裁决,Task 4a-i):合并推荐位后同为 live。
+    expect(
+      RoomRecord.fromSummary(result.rooms.first).roomState,
+      RoomState.live,
+      reason: 'getRoomList + webMain 推荐合并列表,状态真源为 live',
+    );
   });
 
   test('搜索:主播与房间合并去重,em 高亮剥离', () async {
