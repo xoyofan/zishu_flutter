@@ -202,6 +202,131 @@ void main() {
     });
   });
 
+  group('YouTube 恢复重解析(绕开 20s/60s 播放缓存)', () {
+    late FakeYoutubeApi fake;
+    late SiteRegistration registration;
+
+    const request = RoomRequest(
+      site: 'youtube',
+      roomIdOrUrl: 'dQw4w9WgXcQ',
+    );
+
+    setUp(() {
+      fake = FakeYoutubeApi()
+        ..watchHtml = youtubeFixture('watch_live.html')
+        ..masterPlaylist = youtubeFixture('master.m3u8')
+        ..variantPlaylist = youtubeFixture('variant.m3u8');
+      registration = buildYoutubeRegistration(
+        httpClient: fake,
+        dlpAvailableCheck: () async => false,
+      );
+    });
+
+    test('普通连续解析 20s 内只请求一次;恢复重新拉页并返回新地址', () async {
+      expect(
+        registration.resolver,
+        isA<RoomRecoveryResolver>(),
+        reason: 'YouTube 内层自带播放缓存,必须实现恢复接口,否则恢复会复用旧线路',
+      );
+      final resolver = registration.resolver;
+      final recovery = resolver as RoomRecoveryResolver;
+
+      final first = await resolver.resolveRoom(request);
+      expect(first.roomState, RoomState.live);
+      final requestsAfterFirst = fake.requests.length;
+
+      final second = await resolver.resolveRoom(request);
+      expect(
+        fake.requests.length,
+        requestsAfterFirst,
+        reason: '普通解析应命中 20s 短缓存,0 新请求(保留短缓存性能)',
+      );
+      expect(second.playUrl, first.playUrl);
+
+      // 上游地址刷新:watch 页里的 manifest 换新链接(带 query 不改路由路径)。
+      fake.watchHtml = fake.watchHtml!.replaceFirst(
+        'live/master.m3u8',
+        'live/master.m3u8?expire=9999',
+      );
+
+      final recovered = await recovery.recoverRoom(request);
+      expect(
+        fake.requests.length,
+        greaterThan(requestsAfterFirst),
+        reason: '恢复必须重新拉页获取地址,不能命中 20s 内层缓存',
+      );
+      expect(recovered.roomState, RoomState.live);
+      expect(
+        recovered.playUrl,
+        contains('expire=9999'),
+        reason: '恢复必须返回新地址,不得复用缓存里的旧线路',
+      );
+      expect(recovered.playUrl, isNot(first.playUrl));
+
+      // 恢复后的新结果重新进入短缓存:后续普通解析不再发请求。
+      final third = await resolver.resolveRoom(request);
+      expect(third.playUrl, recovered.playUrl);
+      expect(fake.requests.length, greaterThanOrEqualTo(requestsAfterFirst));
+      final requestsAfterRecovery = fake.requests.length;
+      final fourth = await resolver.resolveRoom(request);
+      expect(fourth.playUrl, recovered.playUrl);
+      expect(fake.requests.length, requestsAfterRecovery);
+    });
+
+    test('dlp 路线:普通解析 20s 内只提取一次,恢复再次提取并拿到新线路', () async {
+      var dlpCalls = 0;
+      final dlpRegistration = buildYoutubeRegistration(
+        httpClient: fake,
+        dlpAvailableCheck: () async => true,
+        dlpExtractor: (videoId) async {
+          dlpCalls++;
+          return YoutubeDlpExtract(
+            tiers: [
+              YoutubeDlpTier(
+                label: '720p60',
+                // 指向可路由的 master(带 query 区分新旧),后台链校验可确定性通过。
+                url:
+                    'https://manifest.googlevideo.com/api/manifest/'
+                    'hls_variant/live/master.m3u8?dlp=$dlpCalls',
+                height: 720,
+                fps: 60,
+              ),
+            ],
+            liveStartAtSec: 1788911253,
+          );
+        },
+      );
+      final resolver = dlpRegistration.resolver;
+      final recovery = resolver as RoomRecoveryResolver;
+
+      final first = await resolver.resolveRoom(request);
+      expect(first.roomState, RoomState.live);
+      expect(first.playUrl, contains('dlp=1'));
+      expect(dlpCalls, 1);
+
+      final second = await resolver.resolveRoom(request);
+      expect(dlpCalls, 1, reason: '20s 内普通解析命中缓存,不再跑 dlp');
+      expect(second.playUrl, first.playUrl);
+
+      final recovered = await recovery.recoverRoom(request);
+      expect(dlpCalls, 2, reason: '恢复必须重新执行 dlp 提取,不能复用 60s dlp 缓存');
+      expect(
+        recovered.playUrl,
+        contains('dlp=2'),
+        reason: '恢复必须拿到新线路',
+      );
+    });
+
+    test('无效 ID 恢复不崩溃,返回 notFound', () async {
+      final recovery = registration.resolver as RoomRecoveryResolver;
+      final payload = await recovery.recoverRoom(
+        const RoomRequest(site: 'youtube', roomIdOrUrl: 'not a url'),
+      );
+      expect(payload.roomState, RoomState.notFound);
+      expect(payload.error, '无法解析 YouTube URL');
+    });
+  });
+
   group('InnerTube ANDROID_VR 兜底(2026-09-22 实测修复)', () {
     test('必须下发 X-Goog-Visitor-Id,否则上游固定返回 LOGIN_REQUIRED', () async {
       // 真机实测:不带头 → status=LOGIN_REQUIRED(reason "Sign in to confirm you're not a bot")、

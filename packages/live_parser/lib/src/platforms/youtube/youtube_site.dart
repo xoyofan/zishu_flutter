@@ -16,7 +16,7 @@ import 'dlp.dart';
 import 'normalize.dart';
 import 'room_api.dart';
 
-class YoutubeRoomResolver implements RoomResolver {
+class YoutubeRoomResolver implements RoomRecoveryResolver {
   YoutubeRoomResolver(
     this._client, {
     this.dlpExtractor,
@@ -191,6 +191,22 @@ class YoutubeRoomResolver implements RoomResolver {
     );
     _cache[videoId] = (at: DateTime.now(), payload: payload);
     return payload;
+  }
+
+  @override
+  Future<RoomPayload> recoverRoom(RoomRequest request) {
+    // 恢复契约(RoomRecoveryResolver):不得复用上一次的地址。本解析器有
+    // 两级播放缓存(短缓存 20s + dlp 提取 60s),对外层缓存包装的恢复
+    // 也只会清它自己那层,不清这里恢复就会拿到完全相同的旧线路。
+    // 只清当前视频的两个播放缓存;负缓存(_dlpRejectedUntil)与后台
+    // 校验时间戳(_dlpValidatedAt)语义不动 —— 前者避免恢复后立刻重蹈
+    // 已判无效的 dlp 地址,后者仍按原 TTL 控制重复校验。
+    final videoId = extractYoutubeVideoId(request.roomIdOrUrl);
+    if (videoId != null) {
+      _cache.remove(videoId);
+      _dlpCache.remove(videoId);
+    }
+    return resolveRoom(request);
   }
 
   /// 是否已在 [_dlpCacheTtl] 内校验过该视频的地址链(命中则跳过重复校验)。
