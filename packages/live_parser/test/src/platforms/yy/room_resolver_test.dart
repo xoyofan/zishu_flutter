@@ -195,7 +195,7 @@ void main() {
     });
   });
 
-  test('YY 注册项声明浏览、搜索、多清晰度和多线路，无弹幕', () {
+  test('YY 注册项声明浏览、搜索、多清晰度、多线路和弹幕', () {
     final registration = buildYyRegistration(httpClient: FakeYyApi());
 
     expect(registration.id, 'yy');
@@ -208,7 +208,7 @@ void main() {
     expect(registration.capabilities.anchorSearch, isTrue);
     expect(registration.capabilities.multiQuality, isTrue);
     expect(registration.capabilities.multiLine, isTrue);
-    expect(registration.capabilities.danmaku, isFalse);
-    expect(registration.danmaku, isNull);
+    expect(registration.capabilities.danmaku, isTrue);
+    expect(registration.danmaku, isNotNull);
   });
 }

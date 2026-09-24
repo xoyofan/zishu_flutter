@@ -77,8 +77,8 @@ void main() {
     expect(yy.capabilities.anchorSearch, isTrue);
     expect(yy.capabilities.multiQuality, isTrue);
     expect(yy.capabilities.multiLine, isTrue);
-    expect(yy.capabilities.danmaku, isFalse, reason: 'YY 弹幕协议尚未接入 live_parser');
-    expect(yy.danmaku, isNull);
+    expect(yy.capabilities.danmaku, isTrue, reason: 'YY trident 弹幕协议已接入');
+    expect(yy.danmaku, isNotNull);
   });
 
   test('buildSiteRegistry 注册全平台聚合(现有可浏览直播站)', () async {

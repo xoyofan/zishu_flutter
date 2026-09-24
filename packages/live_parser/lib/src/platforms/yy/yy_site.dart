@@ -10,6 +10,7 @@ import '../../registry/cached_room_resolver.dart';
 import '../../registry/site_display.dart';
 import 'biz_names.dart';
 import 'browse.dart';
+import 'danmaku.dart';
 import 'normalize.dart';
 import 'room_api.dart';
 import 'search.dart';
@@ -239,7 +240,7 @@ class YyRoomResolver implements RoomResolver, RoomSummaryRefresher {
       );
 }
 
-/// YY 注册项。YY 当前只声明 resolve/browse/search，无弹幕 connector。
+/// YY 注册项：resolve/browse/search + trident 弹幕连接器。
 SiteRegistration buildYyRegistration({
   http.Client? httpClient,
   YyClient? client,
@@ -252,6 +253,7 @@ SiteRegistration buildYyRegistration({
       browse: true,
       roomSearch: true,
       anchorSearch: true,
+      danmaku: true,
       multiQuality: true,
       multiLine: true,
     ),
@@ -259,5 +261,16 @@ SiteRegistration buildYyRegistration({
     resolver: CachedRoomResolver(YyRoomResolver(effectiveClient)),
     browse: YyBrowseRepository(effectiveClient.parserHttp),
     search: YySearchRepository(effectiveClient.parserHttp),
+    danmaku: YyDanmakuConnector(
+      sidResolver: (roomId) async {
+        final result = await fetchYyRoomDetail(
+          effectiveClient.parserHttp,
+          roomId,
+        );
+        final detail = result.detail;
+        final topSid = detail == null ? null : int.tryParse(detail.sid);
+        return topSid ?? int.tryParse(roomId) ?? 0;
+      },
+    ),
   );
 }
