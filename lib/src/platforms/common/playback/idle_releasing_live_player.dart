@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart' show BoxFit, SizedBox, Widget;
 import 'package:live_parser/live_parser.dart' show StreamLine;
 
 import 'live_player.dart';
+import 'playback_log.dart';
 import 'media_kit_live_player.dart';
 
 /// 稳定播放器代理，通过活动房间租约管理 native 播放器生命周期。
@@ -31,6 +32,7 @@ class IdleReleasingLivePlayer implements LivePlayer, LineRecoveryAware {
   Future<void>? _rootRelease;
   int _sequence = 0;
   int? _active;
+  Future<void>? _leaveStop;
   bool _closed = false;
   final _snapshots = StreamController<PlayerSnapshot>.broadcast();
   StreamSubscription<PlayerSnapshot>? _subscription;
@@ -38,6 +40,7 @@ class IdleReleasingLivePlayer implements LivePlayer, LineRecoveryAware {
   LineRecoveryHandler? _recovery;
   int _viewGeneration = 0;
 
+  int? get activeRoomToken => _active;
   Stream<int> get viewChanges => _viewChanges.stream;
   LineRecoveryHandler? get debugRecoveryHandler => _recovery;
   LivePlayer? get currentPlayer => _inner;
@@ -47,6 +50,7 @@ class IdleReleasingLivePlayer implements LivePlayer, LineRecoveryAware {
     _active = token;
     _timer?.cancel();
     _timer = null;
+    PlaybackLog.write('player_idle_cancelled', {'reason': 'room_enter'});
     return token;
   }
 
@@ -54,9 +58,16 @@ class IdleReleasingLivePlayer implements LivePlayer, LineRecoveryAware {
     if (_active != token || _closed) return;
     _active = null;
     final stopGeneration = token;
-    await _inner?.stop();
+    final previousStop = _leaveStop;
+    final stop = _inner?.stop() ?? Future<void>.value();
+    _leaveStop = stop;
+    if (previousStop != null) await previousStop;
+    await stop;
     if (_closed || _active != null || stopGeneration != _sequence) return;
     _timer?.cancel();
+    PlaybackLog.write('player_idle_scheduled', {
+      'delay_ms': idleDelay.inMilliseconds,
+    });
     _timer = Timer(idleDelay, () {
       if (!_closed && _active == null) unawaited(_disposeIdle());
     });
@@ -87,7 +98,7 @@ class IdleReleasingLivePlayer implements LivePlayer, LineRecoveryAware {
     final player = _inner;
     if (player == null) return Future<void>.value();
     _inner = null;
-    final previous = _disposing;
+    final previous = _disposing ?? _leaveStop;
     final releaseSequence = _sequence;
     final release = Completer<void>();
     _disposing = release.future;
@@ -109,7 +120,16 @@ class IdleReleasingLivePlayer implements LivePlayer, LineRecoveryAware {
       if (releaseSequence == _sequence && _active == null) _recovery = null;
       _viewGeneration++;
       if (!_viewChanges.isClosed) _viewChanges.add(_viewGeneration);
+      PlaybackLog.writeResourceSample('player_dispose_start', {
+        'generation': releaseSequence,
+      });
+      final disposeWatch = Stopwatch()..start();
       await _release(player);
+      disposeWatch.stop();
+      PlaybackLog.writeResourceSample('player_dispose_end', {
+        'generation': releaseSequence,
+        'elapsed_ms': disposeWatch.elapsedMilliseconds,
+      });
       release.complete();
       if (!_closed && _active != null) await _getOrCreate();
     } catch (error, stack) {
@@ -122,6 +142,9 @@ class IdleReleasingLivePlayer implements LivePlayer, LineRecoveryAware {
   Future<LivePlayer?> _getOrCreate() async {
     if (_closed || _active == null) return null;
     final token = _active;
+    final leavingStop = _leaveStop;
+    if (leavingStop != null) await leavingStop;
+    if (_closed || token != _active || _active == null) return null;
     final disposing = _disposing;
     if (disposing != null) await disposing;
     if (_closed || token != _active || _active == null) return null;
@@ -142,6 +165,7 @@ class IdleReleasingLivePlayer implements LivePlayer, LineRecoveryAware {
     });
     _viewGeneration++;
     if (!_viewChanges.isClosed) _viewChanges.add(_viewGeneration);
+    PlaybackLog.write('player_created', {'generation': _viewGeneration});
     if (!_snapshots.isClosed) _snapshots.add(const PlayerSnapshot());
     return created;
   }
@@ -169,9 +193,22 @@ class IdleReleasingLivePlayer implements LivePlayer, LineRecoveryAware {
     StreamLine line, [
     List<StreamLine> fallbacks = const [],
     bool resetRetries = true,
-  ]) async => (await _getOrCreate())?.open(line, fallbacks, resetRetries);
+  ]) async {
+    _timer?.cancel();
+    _timer = null;
+    PlaybackLog.write('player_idle_cancelled', {'reason': 'open_requested'});
+    final player = await _getOrCreate();
+    if (player == null) return;
+    await player.open(line, fallbacks, resetRetries);
+  }
+
   @override
   Future<void> stop() async {
+    if (_active != null) {
+      final token = _active!;
+      await leaveRoom(token);
+      return;
+    }
     await _inner?.stop();
   }
 

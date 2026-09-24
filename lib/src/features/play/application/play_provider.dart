@@ -189,7 +189,6 @@ class PlayController extends AsyncNotifier<PlayState> {
     if (generation != _generation) {
       return state.value ?? PlayState(generation: generation);
     }
-
     final quality = _pickPlayableQuality(payload, preferredQuality);
     // 传入 site:白名单站点 auto 起播优选 FLV(首帧提速,见 play_selection)。
     final line = pickStreamLine(quality, preferredFormat, site: params.site);

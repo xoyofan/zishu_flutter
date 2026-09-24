@@ -1,10 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/widgets.dart' show BoxFit, Widget, SizedBox;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:live_parser/live_parser.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/idle_releasing_live_player.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
+import 'package:zishu_flutter/src/platforms/common/playback/playback_log.dart';
 
 const _line = StreamLine(
   name: 'A',
@@ -13,6 +15,89 @@ const _line = StreamLine(
 );
 
 void main() {
+  late Directory directory;
+  setUp(() {
+    directory = Directory.systemTemp.createTempSync('idle_player_log');
+    PlaybackLog.initForTest(
+      '${directory.path}${Platform.pathSeparator}playback.log',
+    );
+  });
+  tearDown(() {
+    PlaybackLog.resetForTest();
+    directory.deleteSync(recursive: true);
+  });
+
+  test('lifecycle events log idle/create/dispose and RSS duration', () async {
+    final fake = _FakePlayer();
+    final player = IdleReleasingLivePlayer(
+      createPlayer: () => fake,
+      idleDelay: const Duration(milliseconds: 5),
+    );
+    final lease = player.enterRoom();
+    await player.open(_line);
+    await player.leaveRoom(lease);
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+    final text = File('${directory.path}${Platform.pathSeparator}playback.log')
+        .readAsStringSync();
+    expect(text, contains('player_idle_cancelled'));
+    expect(text, contains('player_created'));
+    expect(text, contains('player_idle_scheduled'));
+    expect(text, contains('player_dispose_start'));
+    expect(text, contains('player_dispose_end'));
+    expect(text, contains('elapsed_ms='));
+    expect(text, contains('rss_mb='));
+    player.dispose();
+  });
+
+  test('old leave stop is fenced before B open and A-B-C ends at C', () async {
+    final fake = _GatedStopPlayer();
+    final player = IdleReleasingLivePlayer(createPlayer: () => fake);
+    final a = player.enterRoom();
+    await player.open(_line);
+    fake.gateStop();
+    final leavingA = player.leaveRoom(a);
+    await fake.stopStarted.future;
+    player.enterRoom();
+    final openingB = player.open(_line);
+    final c = player.enterRoom();
+    final openingC = player.open(_line);
+    fake.finishStop();
+    await leavingA;
+    await openingB;
+    await openingC;
+    expect(fake.stops, 1);
+    expect(fake.opens, 2);
+    expect(player.activeRoomToken, c);
+    expect(player.currentPlayer, same(fake));
+    player.dispose();
+  });
+
+  test(
+    'old leave stop cannot schedule idle timer after rapid re-entry',
+    () async {
+      final fake = _GatedStopPlayer();
+      var releases = 0;
+      final player = IdleReleasingLivePlayer(
+        createPlayer: () => fake,
+        releasePlayer: (_) async {
+          releases++;
+        },
+        idleDelay: const Duration(milliseconds: 5),
+      );
+      final a = player.enterRoom();
+      await player.open(_line);
+      fake.gateStop();
+      final leaving = player.leaveRoom(a);
+      await fake.stopStarted.future;
+      player.enterRoom();
+      fake.finishStop();
+      await leaving;
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(releases, 0);
+      player.dispose();
+    },
+  );
+
   test(
     'root disposal releases an existing player once and rejects later opens',
     () async {
@@ -157,6 +242,26 @@ void main() {
   });
 }
 
+class _GatedStopPlayer extends _FakePlayer {
+  Completer<void>? _stopGate;
+  final Completer<void> stopStarted = Completer<void>();
+  void gateStop() {
+    _stopGate = Completer<void>();
+  }
+
+  void finishStop() {
+    final gate = _stopGate;
+    if (gate != null && !gate.isCompleted) gate.complete();
+  }
+
+  @override
+  Future<void> stop() async {
+    stops++;
+    if (!stopStarted.isCompleted) stopStarted.complete();
+    await _stopGate?.future;
+  }
+}
+
 class _AwareFakePlayer extends _FakePlayer implements LineRecoveryAware {
   LineRecoveryHandler? handler;
   @override
@@ -166,7 +271,8 @@ class _AwareFakePlayer extends _FakePlayer implements LineRecoveryAware {
 }
 
 class _FakePlayer implements LivePlayer {
-  int opens = 0;
+  int get opens => openCount;
+  int openCount = 0;
   int stops = 0;
   int disposes = 0;
   @override
@@ -180,7 +286,7 @@ class _FakePlayer implements LivePlayer {
     List<StreamLine> fallbacks = const [],
     bool resetRetries = true,
   ]) async {
-    opens++;
+    openCount++;
   }
 
   @override

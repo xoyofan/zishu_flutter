@@ -29,6 +29,13 @@ class _FakePlatformPlayer extends PlatformPlayer {
   final Completer<void> openStarted = Completer<void>();
 
   Completer<void>? _gate;
+  int disposeCalls = 0;
+
+  @override
+  Future<void> dispose() async {
+    disposeCalls++;
+    await super.dispose();
+  }
 
   @override
   Future<void> open(Playable playable, {bool play = true}) async {
@@ -118,6 +125,33 @@ void main() {
     if (!file.existsSync()) return const [];
     return file.readAsLinesSync().where((line) => line.isNotEmpty).toList();
   }
+
+  group('releaseNative 底层释放围栏', () {
+    test('挂起的 native open 结束前不 dispose，重复请求只 dispose 一次', () async {
+      fake.gateNextOpen();
+      final opening = player.open(lineA);
+      await fake.openStarted.future;
+      final firstRelease = player.releaseNative();
+      final secondRelease = player.releaseNative();
+      expect(identical(firstRelease, secondRelease), isTrue);
+      await Future<void>.delayed(Duration.zero);
+      expect(fake.disposeCalls, 0);
+      fake.releaseGatedOpen();
+      await opening;
+      await firstRelease;
+      expect(fake.disposeCalls, 1);
+    });
+
+    test('已排队 stop 完成后才释放 PlatformPlayer', () async {
+      await player.open(lineA);
+      final stopping = player.stop();
+      final releasing = player.releaseNative();
+      await stopping;
+      await releasing;
+      expect(fake.disposeCalls, 1);
+      expect(fake.calls.last, 'stop');
+    });
+  });
 
   group('A1 生命周期串行队列', () {
     test('open 未落地时 stop 不抢占,旧 stop 不会卸载新源', () async {
