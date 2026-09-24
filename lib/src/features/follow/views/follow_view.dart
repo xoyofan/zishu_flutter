@@ -27,7 +27,6 @@ class FollowView extends ConsumerStatefulWidget {
 
 class _FollowViewState extends ConsumerState<FollowView> {
   String _siteFilter = 'all';
-  FollowSort _sort = FollowSort.liveFirst;
   FollowDensity _density = FollowDensity.card;
   bool _batchMode = false;
   bool _refreshing = false;
@@ -35,10 +34,12 @@ class _FollowViewState extends ConsumerState<FollowView> {
 
   /// 平台筛选 + 排序(纯视图计算,不改动 controller 状态)。
   ///
-  /// 排序口径见 [visibleFollowEntries]:**超关 → 开播 → 未开播**,档内按关注时间倒序。
-  /// 抽到 follow_sort.dart 是为了与播放页侧栏关注面板共用同一口径。
+  /// 排序口径见 [visibleFollowEntries]:**超关 → 开播 → 轮播 → 未直播**,
+  /// 档内按观看数倒序、缺失沉底、平局回退关注时间倒序。
+  /// 抽到 follow_sort.dart 是为了与播放页侧栏关注面板共用同一口径;
+  /// 排序方式已固定(无下拉,用户口径 2026-09-22),走默认 liveFirst。
   List<FollowEntry> _visible(List<FollowEntry> entries) =>
-      visibleFollowEntries(entries, site: _siteFilter, sort: _sort);
+      visibleFollowEntries(entries, site: _siteFilter);
 
   /// 刷新封面与状态:真实解析源走 [FollowController.refreshStatuses],
   /// fixture / 未开真实解析保持原「模拟耗时」反馈,不产生任何网络调用。
@@ -276,7 +277,10 @@ class _FollowViewState extends ConsumerState<FollowView> {
     );
   }
 
-  /// 筛选行:平台 chips + 排序下拉 + 视图切换(卡片/列表)。
+  /// 筛选行:平台 chips + 视图切换(卡片/列表)。
+  ///
+  /// 原「排序方式」下拉(开播优先/最近关注)已随口径固定一并移除 ——
+  /// 排序唯一口径见 follow_sort.dart,不再向用户提供选项。
   Widget _buildToolbar() {
     final tokens = context.tokens;
     return Padding(
@@ -289,33 +293,6 @@ class _FollowViewState extends ConsumerState<FollowView> {
           FollowPlatformFilter(
             value: _siteFilter,
             onChanged: (site) => setState(() => _siteFilter = site),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
-            decoration: BoxDecoration(
-              color: tokens.surface,
-              borderRadius: AppRadius.allSm,
-              border: Border.all(color: tokens.border),
-            ),
-            child: DropdownButton<FollowSort>(
-              value: _sort,
-              isDense: true,
-              underline: const SizedBox.shrink(),
-              dropdownColor: tokens.surfaceRaised,
-              icon: Icon(
-                Icons.expand_more_rounded,
-                size: 16,
-                color: tokens.textSecondary,
-              ),
-              style: context.textBody,
-              items: [
-                for (final sort in FollowSort.values)
-                  DropdownMenuItem(value: sort, child: Text(sort.label)),
-              ],
-              onChanged: (sort) {
-                if (sort != null) setState(() => _sort = sort);
-              },
-            ),
           ),
           SegmentedButton<FollowDensity>(
             segments: [

@@ -5,12 +5,17 @@
 /// UI 层只负责把结果铺开,不各自实现 sort。
 library;
 
+import 'package:live_parser/live_parser.dart' show parseOnlineCount;
+
 import 'follow_provider.dart';
 
 /// 列表排序方式。
+///
+/// 「最近关注」选项已按用户口径(2026-09-22)移除,枚举只剩 [FollowSort.liveFirst];
+/// 保留枚举与 [sortFollowEntries] 的参数签名,让「我的关注」页与播放侧栏的
+/// 调用点不变,未来若新增档位必须在 sortFollowEntries 显式接线。
 enum FollowSort {
-  liveFirst('开播优先'),
-  recentlyFollowed('最近关注');
+  liveFirst('开播优先');
 
   const FollowSort(this.label);
 
@@ -31,21 +36,42 @@ int followSortRank(FollowEntry entry) {
   return 3;
 }
 
+/// 单条观看数:解析失败/0 视为**缺失**(null),排序时沉底。
+///
+/// 复用解析核心 `parseOnlineCount`(1.2万/3.4千/1,234 同一尺),不复制解析规则。
+/// 口径依据:`formatOnlineCount` 对 0/非法一律返回空串,所以线上字符串里
+/// 「parseOnlineCount 回 0」等价于「无有效观看数」(缺失或不可解析)。
+int? _onlineCountOrNull(FollowEntry entry) {
+  final count = parseOnlineCount(entry.room.online);
+  return count == 0 ? null : count;
+}
+
+/// 档内次序:观看数倒序(缺失/不可解析沉底) → 平局回退关注时间倒序。
+int _byOnlineThenFollowedAtDesc(FollowEntry a, FollowEntry b) {
+  final onlineA = _onlineCountOrNull(a);
+  final onlineB = _onlineCountOrNull(b);
+  if (onlineA == null || onlineB == null) {
+    if (onlineA == null && onlineB == null) {
+      return b.followedAt.compareTo(a.followedAt);
+    }
+    return onlineA == null ? 1 : -1;
+  }
+  if (onlineA != onlineB) return onlineB.compareTo(onlineA);
+  return b.followedAt.compareTo(a.followedAt);
+}
+
 /// 按 [sort] 就地排序。
 ///
-/// 两个排序方式都以「关注时间倒序」作为档内次序,与参考实现一致:
-/// 同档内新关注的在前。
+/// 四档(见 [followSortRank])之后,档内按**观看数从高到低**;
+/// 观看数缺失/不可解析排档尾,数值相同或同缺失时按关注时间倒序
+/// (用户口径 2026-09-22,取代原「一律关注时间倒序」)。
 void sortFollowEntries(List<FollowEntry> items, FollowSort sort) {
-  int byFollowedDesc(FollowEntry a, FollowEntry b) =>
-      b.followedAt.compareTo(a.followedAt);
   switch (sort) {
-    case FollowSort.recentlyFollowed:
-      items.sort(byFollowedDesc);
     case FollowSort.liveFirst:
       items.sort((a, b) {
         final rank = followSortRank(a).compareTo(followSortRank(b));
         if (rank != 0) return rank;
-        return byFollowedDesc(a, b);
+        return _byOnlineThenFollowedAtDesc(a, b);
       });
   }
 }
@@ -64,8 +90,9 @@ bool isPlayFollowVisible(FollowEntry entry) => entry.isLive;
 
 /// 播放页侧栏的关注列表:平台筛选 + 侧栏可见性 + 统一排序。
 ///
-/// 排序走 [sortFollowEntries] 同一档位(超关在播 → 普通在播;只显在播后
-/// 轮播/离线档自然为空),保证侧栏与「我的关注」页在播条目的相对顺序一致。
+/// 排序走 [sortFollowEntries] 同一档位(超关在播 → 普通在播,档内观看数
+/// 倒序;只显在播后轮播/离线档自然为空),保证侧栏与「我的关注」页在播
+/// 条目的相对顺序一致。
 List<FollowEntry> playSidebarFollowEntries(
   Iterable<FollowEntry> entries, {
   String site = 'all',

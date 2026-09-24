@@ -18,6 +18,7 @@ import 'package:shared_preferences_platform_interface/shared_preferences_async_p
 import 'package:zishu_flutter/src/app/app_router.dart';
 import 'package:zishu_flutter/src/apps/windows/windows_app.dart';
 import 'package:zishu_flutter/src/features/follow/application/follow_provider.dart';
+import 'package:zishu_flutter/src/features/follow/application/follow_sort.dart';
 import 'package:zishu_flutter/src/features/follow/views/follow_view.dart';
 import 'package:zishu_flutter/src/features/follow/widgets/follow_common.dart';
 import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_card.dart';
@@ -350,6 +351,18 @@ void main() {
         find.byType(SegmentedButton<FollowDensity>),
       );
       expect(segment.selected, {FollowDensity.card});
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('排序下拉已移除:关注页无 DropdownButton<FollowSort>', (tester) async {
+      suppressRenderFlexOverflow();
+      await pumpFollowApp(tester);
+
+      // 用户口径:排序固定为四档+档内观看数,不再提供 排序方式 下拉。
+      expect(find.byType(DropdownButton<FollowSort>), findsNothing);
+      expect(find.byType(DropdownMenuItem<FollowSort>), findsNothing);
+      // 密度切换仍在(确认删的是排序下拉,不是整个工具行)。
+      expect(find.byKey(const Key('follow-density-card')), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });

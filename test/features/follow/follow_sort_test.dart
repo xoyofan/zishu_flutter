@@ -4,8 +4,9 @@
 /// 1. **四档**:超关在播 0 / 普通在播 1 / 轮播 2 / 离线 3 —— 超关只在
 ///    在播段置顶(用户在意的是人,但「在意」的排序权不越过直播状态);
 ///    轮播(replay)排在全部在播之后、离线之前,且不分超关;
-/// 2. 档内按关注时间倒序;
-/// 3. 「最近关注」排序不受超关/开播/轮播影响;
+/// 2. 档内按观看数倒序(parseOnlineCount 口径:1.2万/3.4千/1,234 同尺),
+///    缺失或不可解析排末尾,数值相同/同缺失按关注时间倒序;
+/// 3. FollowSort 只剩 liveFirst,「最近关注」选项不再暴露;
 /// 4. 播放页侧栏只显在播(轮播/离线归「我的关注」页),两页共用同一
 ///    followSortRank。
 library;
@@ -15,9 +16,12 @@ import 'package:live_parser/live_parser.dart' show RoomState, RoomSummary;
 import 'package:zishu_flutter/src/features/follow/application/follow_provider.dart';
 import 'package:zishu_flutter/src/features/follow/application/follow_sort.dart';
 
-/// 构造一条关注:只关心 site / 状态(live/replay/offline)/ 超关 / 关注时间。
+/// 构造一条关注:只关心 site / 状态(live/replay/offline)/ 超关 /
+/// 观看数 / 关注时间。
 ///
 /// [followedDaysAgo] 越大表示关注得越早(时间越旧),便于校验档内倒序。
+/// [online] 覆盖默认观看数(默认在播 1.2万、未开播空串);传不可解析
+/// 文案(如「人气」)可构造「在播但观看数缺失」的边界。
 FollowEntry _entry({
   String roomId = '1',
   String site = 'douyu',
@@ -25,6 +29,7 @@ FollowEntry _entry({
   bool replay = false,
   bool special = false,
   int followedDaysAgo = 1,
+  String? online,
 }) {
   return FollowEntry(
     room: RoomSummary(
@@ -35,7 +40,7 @@ FollowEntry _entry({
       cid: 'c-$roomId',
       category: '分类',
       // fixture 约定:online 为空即未开播;轮播同样空串、靠 roomState 区分。
-      online: live ? '1.2万' : '',
+      online: online ?? (live ? '1.2万' : ''),
       cover: '',
       roomState: live
           ? RoomState.live
@@ -114,17 +119,57 @@ void main() {
     });
   });
 
-  group('sortFollowEntries / recentlyFollowed', () {
-    test('纯按关注时间倒序,超关与开播状态都不参与', () {
+  group('档内按观看数倒序', () {
+    test('同档观看数从高到低,跨 万/千/逗号/plain 同一尺(解析复用 parseOnlineCount)', () {
+      // 关注时间刻意与观看数反序:新关注的观看低,必须仍排后面。
       final items = [
-        _entry(roomId: 'n1', followedDaysAgo: 1),
-        _entry(roomId: 'x1', live: false, followedDaysAgo: 2),
-        _entry(roomId: 'n2', followedDaysAgo: 3),
-        _entry(roomId: 's1', special: true, followedDaysAgo: 5),
-        _entry(roomId: 'x2', live: false, special: true, followedDaysAgo: 30),
+        _entry(roomId: 'a', online: '3.4千', followedDaysAgo: 1), // 3400
+        _entry(roomId: 'b', online: '1.2万', followedDaysAgo: 5), // 12000
+        _entry(roomId: 'c', online: '1,234', followedDaysAgo: 2), // 1234
+        _entry(roomId: 'd', online: '8921', followedDaysAgo: 3), // 8921
       ];
-      sortFollowEntries(items, FollowSort.recentlyFollowed);
-      expect(_ids(items), ['n1', 'x1', 'n2', 's1', 'x2']);
+      sortFollowEntries(items, FollowSort.liveFirst);
+      expect(_ids(items), ['b', 'd', 'a', 'c']);
+    });
+
+    test('观看数不可解析的在播条目排末尾;同为不可解析按关注时间倒序', () {
+      final items = [
+        _entry(roomId: 'ok', online: '1.2万', followedDaysAgo: 9),
+        _entry(roomId: 'bad1', online: '人气', followedDaysAgo: 1),
+        _entry(roomId: 'bad2', online: '—', followedDaysAgo: 5),
+      ];
+      sortFollowEntries(items, FollowSort.liveFirst);
+      expect(_ids(items), ['ok', 'bad1', 'bad2']);
+    });
+
+    test('档内观看数相同:按关注时间倒序', () {
+      final items = [
+        _entry(roomId: 'old', online: '5.0万', followedDaysAgo: 9),
+        _entry(roomId: 'new', online: '5.0万', followedDaysAgo: 1),
+        _entry(roomId: 'mid', online: '5.0万', followedDaysAgo: 4),
+      ];
+      sortFollowEntries(items, FollowSort.liveFirst);
+      expect(_ids(items), ['new', 'mid', 'old']);
+    });
+
+    test('未直播档观看数全缺失:按关注时间倒序(与同缺失平局规则一致)', () {
+      final items = [
+        _entry(roomId: 'x1', live: false, followedDaysAgo: 2),
+        _entry(roomId: 'x2', live: false, followedDaysAgo: 1),
+        _entry(roomId: 'x3', live: false, followedDaysAgo: 3),
+      ];
+      sortFollowEntries(items, FollowSort.liveFirst);
+      expect(_ids(items), ['x2', 'x1', 'x3']);
+    });
+  });
+
+  group('FollowSort 枚举口径', () {
+    test('RecentlyFollowed 不再暴露:枚举只剩 liveFirst', () {
+      expect(
+        FollowSort.values.map((sort) => sort.name),
+        isNot(contains('recentlyFollowed')),
+      );
+      expect(FollowSort.values, [FollowSort.liveFirst]);
     });
   });
 
