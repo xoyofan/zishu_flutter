@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:live_parser/live_parser.dart' show RoomSummary;
+import 'package:live_parser/live_parser.dart'
+    show RoomSummary, tryParseOnlineCount;
 
 import '../../../shared/application/providers.dart' show roomRefresherProvider;
 
@@ -37,27 +38,41 @@ final roomStatsProvider = FutureProvider.autoDispose
 /// (回归根因:此前整份快照按 followed 有无切换数据源,点关注瞬间
 /// 空统计盖掉解析值、数值全部消失)。
 ///
+/// **观看人数(online)例外,只认可可信数值**:online 同时承载在播占位
+/// 文案(点关注写入的「直播中」、SOOP `kSoopLiveOnlineFallback`),它们
+/// 只表达在播、不是人数 —— 该字段两侧都必须通过 [tryParseOnlineCount]
+/// (可解析含合法 0)才可展示,否则取另一个可信值,再否则置空 →「—」。
+/// 仅清洗展示取数,不回写任何快照,roomState/是否开播判据不受影响;
+/// followers/vip/diamondFans 仍按「非空字符串即有效」的既有口径不变。
+///
 /// 返回值仅供统计展示取数,不参与在播判据等业务语义。
 RoomSummary? mergeDisplayStats({RoomSummary? parsed, RoomSummary? local}) {
-  if (parsed == null) return local;
-  if (local == null) return parsed;
+  final base = parsed ?? local;
+  if (base == null) return null;
   String fresh(String parsedValue, String localValue) =>
       parsedValue.trim().isNotEmpty ? parsedValue : localValue;
+  // 观看人数数值边界:两侧只认可 tryParseOnlineCount 可解析的可信文案。
+  String onlineCount(String parsedOnline, String localOnline) {
+    if (tryParseOnlineCount(parsedOnline) != null) return parsedOnline;
+    if (tryParseOnlineCount(localOnline) != null) return localOnline;
+    return '';
+  }
+
   return RoomSummary(
-    site: parsed.site,
-    roomId: parsed.roomId,
-    title: fresh(parsed.title, local.title),
-    anchorName: fresh(parsed.anchorName, local.anchorName),
-    cid: fresh(parsed.cid, local.cid),
-    category: fresh(parsed.category, local.category),
-    online: fresh(parsed.online, local.online),
-    cover: fresh(parsed.cover, local.cover),
-    avatar: fresh(parsed.avatar, local.avatar),
-    promoTag: parsed.promoTag ?? local.promoTag,
-    followers: fresh(parsed.followers, local.followers),
-    vip: fresh(parsed.vip, local.vip),
-    diamondFans: fresh(parsed.diamondFans, local.diamondFans),
-    roomState: parsed.roomState,
-    startedAt: parsed.startedAt ?? local.startedAt,
+    site: base.site,
+    roomId: base.roomId,
+    title: fresh(parsed?.title ?? '', local?.title ?? ''),
+    anchorName: fresh(parsed?.anchorName ?? '', local?.anchorName ?? ''),
+    cid: fresh(parsed?.cid ?? '', local?.cid ?? ''),
+    category: fresh(parsed?.category ?? '', local?.category ?? ''),
+    online: onlineCount(parsed?.online ?? '', local?.online ?? ''),
+    cover: fresh(parsed?.cover ?? '', local?.cover ?? ''),
+    avatar: fresh(parsed?.avatar ?? '', local?.avatar ?? ''),
+    promoTag: parsed?.promoTag ?? local?.promoTag,
+    followers: fresh(parsed?.followers ?? '', local?.followers ?? ''),
+    vip: fresh(parsed?.vip ?? '', local?.vip ?? ''),
+    diamondFans: fresh(parsed?.diamondFans ?? '', local?.diamondFans ?? ''),
+    roomState: parsed?.roomState ?? local!.roomState,
+    startedAt: parsed?.startedAt ?? local?.startedAt,
   );
 }

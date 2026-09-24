@@ -827,5 +827,127 @@ void main() {
       );
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets('解析缺观看数且刚关注:人气「—」,「直播中」占位不冒充人数', (tester) async {
+      SharedPreferencesAsyncPlatform.instance =
+          InMemorySharedPreferencesAsync.withData(<String, Object>{});
+
+      // 解析快照缺 online(观看数),但 followers/vip 正常 ——
+      // 刚关注的占位 online='直播中' 只是在播判据,不是人数。
+      final play = await _pumpFollowTab(
+        tester,
+        location: '/douyu/play/88888',
+        overrides: [
+          roomRefresherProvider.overrideWithValue(
+            _ScriptedRefresher({
+              '88888': _statsRoom(
+                roomId: '88888',
+                online: '',
+                followers: '123456',
+                vip: '321',
+              ),
+            }),
+          ),
+        ],
+      );
+      await _pumpFrames(tester, 3);
+
+      expect(find.byKey(const Key('play-side-header')), findsOneWidget);
+      // 未关注:解析缺观看数 → 人气「—」(此时本地快照也为空)。
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('play-side-stat-audience')),
+          matching: find.text('—'),
+        ),
+        findsOneWidget,
+        reason: '解析缺观看数时未知显示「—」',
+      );
+      expect(headerTextOf('关注 12.3万'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('play-side-follow-btn')));
+      await _pumpFrames(tester, 3);
+
+      expect(
+        play.container.read(followProvider).any((e) => e.key == 'douyu:88888'),
+        isTrue,
+        reason: '前置:点关注已落库(占位 online=直播中随之进入本地快照)',
+      );
+      // 数据诚实性:占位文案不得当观看数展示;其他统计字段行为不变。
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('play-side-stat-audience')),
+          matching: find.text('—'),
+        ),
+        findsOneWidget,
+        reason: '刚关注的「直播中」占位是在播判据,人气格必须仍显示「—」',
+      );
+      expect(
+        headerTextOf('关注 12.3万'),
+        findsOneWidget,
+        reason: 'followers 行为不变',
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('play-side-stat-vip')),
+          matching: find.text('321'),
+        ),
+        findsOneWidget,
+        reason: 'vip 行为不变',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('SOOP 占位:在播但人数未知(kSoopLiveOnlineFallback)不进人气格', (
+      tester,
+    ) async {
+      SharedPreferencesAsyncPlatform.instance =
+          InMemorySharedPreferencesAsync.withData(<String, Object>{});
+
+      // SOOP 解析器在播但取不到观看数时回填 '直播中'
+      // (kSoopLiveOnlineFallback):只是在播标注,人数未知 → 「—」。
+      final play = await _pumpFollowTab(
+        tester,
+        location: '/soop/play/9527',
+        overrides: [
+          roomRefresherProvider.overrideWithValue(
+            _ScriptedRefresher({
+              '9527': _statsRoom(roomId: '9527', online: '直播中', vip: '321'),
+            }),
+          ),
+        ],
+      );
+      await _pumpFrames(tester, 3);
+
+      expect(find.byKey(const Key('play-side-header')), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('play-side-stat-audience')),
+          matching: find.text('—'),
+        ),
+        findsOneWidget,
+        reason: 'SOOP 在播但人数未知:人气格显示「—」',
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('play-side-header')),
+          matching: find.text('直播中'),
+        ),
+        findsNothing,
+        reason: '占位文案不得作为观看人数出现在信息头',
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('play-side-stat-vip')),
+          matching: find.text('321'),
+        ),
+        findsOneWidget,
+        reason: 'vip 是可信数值,照常展示(其他字段行为不变)',
+      );
+      expect(
+        play.container.read(followProvider).any((e) => e.key == 'soop:9527'),
+        isFalse,
+      );
+      expect(tester.takeException(), isNull);
+    });
   });
 }

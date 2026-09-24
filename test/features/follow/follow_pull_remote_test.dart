@@ -92,18 +92,23 @@ Map<String, Object> _localEntry({
   'lastLiveAt': 1700000000000,
 };
 
-/// 远端条目:契约只有关注状态与基础展示字段,**不含统计/分类/在播**。
+/// 远端条目:契约只有关注状态与基础展示字段(title/anchor/cover),
+/// **不含统计/分类/在播**;三基础字段缺省给非空默认值,可显式传空串
+/// 构造「云端空回退」场景。
 RemoteFollow _remoteEntry({
   required String id,
   String site = 'douyu',
   bool superFollow = false,
   bool liveNotify = false,
+  String? title,
+  String? anchor,
+  String? cover,
 }) => RemoteFollow(
   site: site,
   id: id,
-  title: '远端标题$id',
-  anchor: '远端主播$id',
-  cover: 'https://cdn/remote.jpg',
+  title: title ?? '远端标题$id',
+  anchor: anchor ?? '远端主播$id',
+  cover: cover ?? 'https://cdn/remote.jpg',
   avatar: '',
   addedAt: DateTime(2026, 9, 2).millisecondsSinceEpoch,
   superFollow: superFollow,
@@ -250,6 +255,85 @@ void main() {
         '123456',
         reason: '保留的同 key 条目统计仍在',
       );
+      expect(api.pushes, isEmpty);
+    });
+
+    test('远端与本地冲突:非空 title/anchor/cover 以远端为准,统计等仍保留本地', () async {
+      final (:container, :api) = await _container(
+        localSeed: [
+          _localEntry(
+            roomId: '1001',
+            online: '1.2万',
+            followers: '123456',
+            category: '网游',
+          ),
+        ],
+        // 另一台设备更新了标题/主播名/封面(与本地旧值冲突)。
+        remote: [
+          _remoteEntry(
+            id: '1001',
+            title: '另一台设备的新标题',
+            anchor: '另一台设备的新主播',
+            cover: 'https://cdn/remote-new.jpg',
+          ),
+        ],
+      );
+      container.read(authProvider);
+
+      await container.read(followProvider.notifier).pullRemote();
+
+      final entry = container.read(followProvider).single;
+      // 云端契约携带的基础展示字段:云端非空优先(审阅 P1-B)。
+      expect(entry.room.title, '另一台设备的新标题', reason: '远端非空 title 必须覆盖本地旧标题');
+      expect(
+        entry.room.anchorName,
+        '另一台设备的新主播',
+        reason: '远端非空 anchor 必须覆盖本地旧主播名',
+      );
+      expect(
+        entry.room.cover,
+        'https://cdn/remote-new.jpg',
+        reason: '远端非空 cover 必须覆盖本地旧封面',
+      );
+      // 云端未携带的字段仍保留本地已知值。
+      expect(entry.room.followers, '123456', reason: '统计云端未携带,本地保留');
+      expect(entry.room.online, '1.2万', reason: '在播/人数云端未携带,本地保留');
+      expect(entry.room.category, '网游', reason: '分类云端未携带,本地保留');
+      expect(
+        entry.room.avatar,
+        'https://cdn/local-avatar.jpg',
+        reason: '头像云端未携带,本地保留',
+      );
+      expect(entry.room.roomState, RoomState.live, reason: 'roomState 本地保留');
+      expect(api.pushes, isEmpty);
+    });
+
+    test('云端空回退:远端 title/anchor/cover 为空串时保留本地非空值', () async {
+      final (:container, :api) = await _container(
+        localSeed: [
+          _localEntry(
+            roomId: '1001',
+            online: '1.2万',
+            followers: '123456',
+            category: '网游',
+          ),
+        ],
+        // 远端三基础字段显式为空。
+        remote: [_remoteEntry(id: '1001', title: '', anchor: '', cover: '')],
+      );
+      container.read(authProvider);
+
+      await container.read(followProvider.notifier).pullRemote();
+
+      final entry = container.read(followProvider).single;
+      expect(entry.room.title, '本地标题1001', reason: '云端空 → 回退本地非空 title');
+      expect(entry.room.anchorName, '本地主播1001', reason: '云端空 → 回退本地非空 anchor');
+      expect(
+        entry.room.cover,
+        'https://cdn/local.jpg',
+        reason: '云端空 → 回退本地非空 cover',
+      );
+      expect(entry.room.followers, '123456', reason: '统计仍本地保留');
       expect(api.pushes, isEmpty);
     });
   });

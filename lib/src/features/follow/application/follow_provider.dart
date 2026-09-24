@@ -526,10 +526,9 @@ class FollowController extends Notifier<List<FollowEntry>> {
   ///
   /// [previous] 为本地已有条目(按同 key 匹配):
   /// - 关注维度(`isSpecial`/`remindOn`/`followedAt`)以远端为准;
-  /// - 房间记录按 [RoomSummary] 字段本地已知值优先(_mergeLocalRoom):
-  ///   云端契约不含统计/分类/在播/roomState/avatar/startedAt 等房间元信息,
-  ///   全量替换不得把已知本地值抹成空,保留至紧接着的 `refreshStatuses`
-  ///   刷新回填;
+  /// - 房间记录按字段来源合并(_mergeLocalRoom):云端携带的 title/anchor/
+  ///   cover 云端非空优先;统计/分类/在播状态等云端未携带字段本地已知值
+  ///   优先保留至刷新;
   /// - 「上次开播」类时间戳与本地取 max —— 云端可能是旧值/0 值,不得把
   ///   本地刚记录的跃迁抹掉。
   ///
@@ -563,28 +562,31 @@ class FollowController extends Notifier<List<FollowEntry>> {
     );
   }
 
-  /// 同 key 回拉时的房间记录合并:本地已知值优先 —— 统计与房间元信息
-  /// 保留至下一轮刷新(远端契约根本不携带这些字段,取远端只会得到空);
-  /// 本地为空的字段(标题/封面等远端自带字段)用远端补齐。
+  /// 同 key 回拉时的房间记录合并,按字段来源分两类(审阅 P1-B):
+  /// - **云端契约携带**的 `title`/`anchorName`/`cover`:云端非空优先
+  ///   (另一设备可能刚更新过),云端为空才回退本地非空值;
+  /// - **云端未携带**的统计(cid/category/online/roomState/avatar/
+  ///   startedAt/followers/vip/diamondFans 等):本地已知值原样保留至
+  ///   下一轮 `refreshStatuses` 刷新,取远端只会得到空。
   static RoomSummary _mergeLocalRoom(RoomSummary remote, RoomSummary local) {
-    String known(String localValue, String remoteValue) =>
-        localValue.trim().isNotEmpty ? localValue : remoteValue;
+    String remoteFirst(String remoteValue, String localValue) =>
+        remoteValue.trim().isNotEmpty ? remoteValue : localValue;
     return RoomSummary(
       site: local.site,
       roomId: local.roomId,
-      title: known(local.title, remote.title),
-      anchorName: known(local.anchorName, remote.anchorName),
+      title: remoteFirst(remote.title, local.title),
+      anchorName: remoteFirst(remote.anchorName, local.anchorName),
+      cover: remoteFirst(remote.cover, local.cover),
       cid: local.cid,
       category: local.category,
-      online: known(local.online, remote.online),
-      cover: known(local.cover, remote.cover),
-      avatar: known(local.avatar, remote.avatar),
-      promoTag: local.promoTag ?? remote.promoTag,
+      online: local.online,
+      avatar: local.avatar,
+      promoTag: local.promoTag,
       followers: local.followers,
       vip: local.vip,
       diamondFans: local.diamondFans,
       roomState: local.roomState,
-      startedAt: local.startedAt ?? remote.startedAt,
+      startedAt: local.startedAt,
     );
   }
 

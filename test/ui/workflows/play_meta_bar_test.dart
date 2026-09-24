@@ -412,6 +412,70 @@ void main() {
       );
       expect(tester.takeException(), isNull);
     });
+
+    testWidgets('解析失败且刚关注:人气「—」,不回落「直播中」占位(375x812)', (tester) async {
+      final container = await _pumpPlay(
+        tester,
+        size: const Size(375, 812),
+        // 空脚本:刷新对所有房间抛错 → 解析快照整体为 null(失败态)。
+        refresher: _ScriptedRefresher({}),
+      );
+      container.read(followProvider.notifier).remove('douyu:63136');
+      await _pumpFrames(tester, 3);
+
+      // 未关注:解析失败且无本地快照 → 全部「—」。
+      expect(_inMetaBar('人气 —'), findsOneWidget, reason: '前置:解析失败时未知显示「—」');
+
+      await tester.tap(find.byKey(const Key('play-side-follow-btn')));
+      await _pumpFrames(tester, 3);
+
+      expect(
+        container.read(followProvider).any((e) => e.key == 'douyu:63136'),
+        isTrue,
+        reason: '前置:点关注已落库(占位 online=直播中随之进入本地快照)',
+      );
+      // 数据诚实性:解析失败回退本地时,占位文案也不得冒充观看人数。
+      expect(
+        _inMetaBar('人气 —'),
+        findsOneWidget,
+        reason: '刚关注的「直播中」占位不是人数,人气格必须保持「—」',
+      );
+      expect(
+        _inMetaBar('关注 —'),
+        findsOneWidget,
+        reason: 'followers 未知仍「—」(行为不变)',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('解析返回「直播中」占位(SOOP 同文案):人气「—」,VIP 照常(375x812)', (tester) async {
+      final container = await _pumpPlay(
+        tester,
+        size: const Size(375, 812),
+        // 与 SOOP kSoopLiveOnlineFallback 同文案:在播但人数未知。
+        refresher: _ScriptedRefresher({
+          '63136': _statsRoom(roomId: '63136', online: '直播中', vip: '321'),
+        }),
+      );
+      container.read(followProvider.notifier).remove('douyu:63136');
+      await _pumpFrames(tester, 3);
+
+      expect(
+        _inMetaBar('人气 —'),
+        findsOneWidget,
+        reason: '解析占位只表达在播,不是人数 → 「—」',
+      );
+      expect(_inMetaBar('人气 直播中'), findsNothing, reason: '占位文案不得作为观看人数展示');
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('play-meta-stat-vip')),
+          matching: find.textContaining('321'),
+        ),
+        findsOneWidget,
+        reason: 'vip 可信数值照常展示(其他字段行为不变)',
+      );
+      expect(tester.takeException(), isNull);
+    });
   });
 
   group('桌面不回归', () {
