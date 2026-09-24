@@ -111,7 +111,7 @@ void main() {
     expect(backend.lastUrl, 'https://a.b/x.m3u8');
     expect(adapter.state, PlayerState.ready);
 
-    // 3) IPTV ts → mpegts 后端
+    // 3) IPTV 协议 ts → mpegts 后端
     await adapter.setDataSource('http://a.b/x.ts', const [], const {});
     expect(backend.lastFormat, 'mpegts');
 

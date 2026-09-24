@@ -17,7 +17,7 @@ void main() {
       expect(playbackUrlKind('https://a.b/x.flv?wsSecret=a'), 'flv');
     });
 
-    test('mpegts：.ts 直链（IPTV）', () {
+    test('mpegts：.ts 直链', () {
       expect(playbackUrlKind('http://a.b/x.ts'), 'mpegts');
       expect(playbackUrlKind('http://a.b/x.ts?token=1'), 'mpegts');
     });

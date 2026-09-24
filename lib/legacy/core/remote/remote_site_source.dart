@@ -22,7 +22,7 @@ import 'stream_api_client.dart';
 
 class RemoteSiteSource implements LiveSite {
   /// streaming-server 平台 id：douyu/huya/bilibili/douyin/kuaishou/yy/
-  /// twitch/soop/youtube/xhs/iptv。
+  /// twitch/soop/youtube/xhs。
   @override
   String id;
 

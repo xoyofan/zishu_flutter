@@ -469,7 +469,7 @@ void main() {
 
       expect(
         SiteRegistry.knownSiteIds,
-        containsAll(['douyu', 'huya', 'bilibili', 'xhs', 'iptv']),
+        containsAll(['douyu', 'huya', 'bilibili', 'xhs']),
       );
 
       SiteRegistry.reset();

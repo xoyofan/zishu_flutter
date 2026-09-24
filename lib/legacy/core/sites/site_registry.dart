@@ -1,9 +1,7 @@
 /// 站点注册表：siteId → RemoteSiteSource 单例。
 ///
 /// streaming-server 的平台 id 即站点 id：
-/// douyu/huya/bilibili/douyin/kuaishou/yy/twitch/soop/youtube/xhs/iptv。
-/// iptv 是否可用取决于 server /api/config/playback 的能力矩阵，
-/// 这里不做能力判断，由调用方按需取用。
+/// douyu/huya/bilibili/douyin/kuaishou/yy/twitch/soop/youtube/xhs。
 library;
 
 import '../remote/remote_site_source.dart';
@@ -27,7 +25,6 @@ class SiteRegistry {
     'soop',
     'youtube',
     'xhs',
-    'iptv',
   ];
 
   /// 注入 API 客户端（app 启动时调用一次；重复调用覆盖）。

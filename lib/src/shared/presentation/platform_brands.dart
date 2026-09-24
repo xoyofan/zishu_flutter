@@ -132,19 +132,13 @@ abstract final class PlatformBrandCatalog {
     color: Color(0xFFFF0000),
   );
 
-  static const PlatformBrand iptv = PlatformBrand(
-    id: 'iptv',
-    name: 'IPTV',
-    color: Color(0xFF2B7FFF),
-  );
-
   static const bool realParserEnabled = bool.fromEnvironment(
     'ZISHU_REAL_PARSER',
     defaultValue: false,
   );
 
   /// 真实解析模式下按注册表的 browse 能力裁剪导航平台；同时要求实际
-  /// 注册了 browse repository，避免 IPTV 空数据源等「声明能力但不可用」的平台
+  /// 注册了 browse repository，避免「声明能力但不可用」的平台
   /// 出现在入口里。fixture 模式保留完整视觉目录，避免离线 UI 测试漂移。
   static List<PlatformBrand> get browsePlatforms => _platformsWith(
     (registration) =>
@@ -193,7 +187,7 @@ abstract final class PlatformBrandCatalog {
   /// `SearchDialog.vue:207` 的 `supportsAnchorSearch(site)`。
   ///
   /// 用于搜索弹框的「主播 / 房间」双档显隐:只支持房间搜索的平台
-  /// (如 IPTV)不出现主播档。
+  /// 不出现主播档。
   static bool supportsAnchorSearch(String site) =>
       _capabilitySearch(site, (c) => c.anchorSearch);
 
@@ -216,7 +210,6 @@ abstract final class PlatformBrandCatalog {
     return test(registration.capabilities);
   }
 
-  /// CC 已停运,不加入导航;保留在 parser 层但不作为 UI 入口。
   static const List<PlatformBrand> navPlatforms = [
     all,
     douyu,
@@ -229,7 +222,6 @@ abstract final class PlatformBrandCatalog {
     soop,
     xhs,
     youtube,
-    iptv,
   ];
 
   static PlatformBrand? byId(String id) {

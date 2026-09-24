@@ -12,7 +12,6 @@ const _sites = <String>[
   'twitch',
   'soop',
   'youtube',
-  'iptv',
 ];
 
 void main() {

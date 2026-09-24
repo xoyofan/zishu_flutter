@@ -84,7 +84,7 @@ if ([string]::IsNullOrWhiteSpace($ScreenshotPath)) {
 
 $platforms = @(
     'douyu', 'huya', 'bilibili', 'douyin', 'kuaishou',
-    'yy', 'twitch', 'soop', 'youtube', 'iptv'
+    'yy', 'twitch', 'soop', 'youtube'
 )
 $testCases = @(
     @{ id = 'VOL'; name = 'room volume isolation and restore' },

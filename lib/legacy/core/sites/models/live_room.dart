@@ -78,11 +78,6 @@ class LiveRoom {
       hasTotalViewers: false,
       onlineAvailability: AudienceOnlineAvailability.roomList,
     ),
-    'cc': AudiencePlatformCapability(
-      hasPopularity: true,
-      hasTotalViewers: false,
-      onlineAvailability: AudienceOnlineAvailability.roomList,
-    ),
     // Twitch GraphQL exposes viewersCount as the concurrent viewer count in
     // directory, search and room metadata responses.
     'twitch': AudiencePlatformCapability(
@@ -474,7 +469,6 @@ class LiveRoom {
       'bilibili' ||
       'douyu' ||
       'huya' ||
-      'cc' ||
       'yy' => AudienceMetricType.popularity,
       'kuaishou' || 'twitch' || 'soop' => AudienceMetricType.onlineViewers,
       'douyin' => AudienceMetricType.totalViewers,

@@ -21,7 +21,6 @@ abstract final class ZishuColors {
     'soop': Color(0xFF00A8FF),
     'xhs': Color(0xFFFF2442),
     'youtube': Color(0xFFFF0000),
-    'iptv': Color(0xFF2B7FFF),
   };
 
   static Color platformOf(String site) => platform[site] ?? primary;

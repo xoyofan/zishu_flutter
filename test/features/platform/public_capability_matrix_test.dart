@@ -13,7 +13,6 @@ const _sites = <String>{
   'twitch',
   'soop',
   'youtube',
-  'iptv',
 };
 
 void main() {
@@ -130,7 +129,6 @@ void main() {
         multiQuality: true,
         multiLine: true,
       ),
-      'iptv': SiteCapabilities(browse: true, roomSearch: true, multiLine: true),
     };
 
     for (final entry in expected.entries) {
@@ -161,11 +159,9 @@ void main() {
     }
   });
 
-  test('不支持能力不会伪造接口，IPTV 与 YY 的弹幕入口保持关闭', () {
+  test('不支持能力不会伪造接口，YY 的弹幕入口保持关闭', () {
     final registry = buildSiteRegistry();
 
-    expect(registry['iptv']!.capabilities.danmaku, isFalse);
-    expect(registry['iptv']!.danmaku, isNull);
     expect(registry['yy']!.capabilities.danmaku, isFalse);
     expect(registry['yy']!.danmaku, isNull);
     expect(registry['twitch']!.capabilities.multiLine, isFalse);

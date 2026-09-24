@@ -41,8 +41,7 @@ class ParserSearchSource implements SearchSource {
   @override
   List<String> get aggregateSites => [
         for (final site in _registry.supportedSites)
-          if (site != 'iptv' &&
-              _registry[site]?.search != null &&
+          if (_registry[site]?.search != null &&
               (_registry[site]!.capabilities.roomSearch ||
                   _registry[site]!.capabilities.anchorSearch))
             site,

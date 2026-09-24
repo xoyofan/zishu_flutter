@@ -22,7 +22,7 @@ import 'speech_tap_factory.dart';
 
 /// 支持语音字幕的站点(用户口径 2026-09-22:只做这三个平台)。
 ///
-/// 其余平台(斗鱼/虎牙/B站/抖音/快手/YY/IPTV)无论翻译开关如何都**不加载**
+/// 其余平台(斗鱼/虎牙/B站/抖音/快手/YY)无论翻译开关如何都**不加载**
 /// 语音字幕:不下载模型、不启采集、控制条也不出「译」按钮 —— 避免为看国内
 /// 直播白白下载 70MB 模型并占用 CPU。
 const Set<String> kSpeechCaptionSites = {'youtube', 'twitch', 'soop'};
