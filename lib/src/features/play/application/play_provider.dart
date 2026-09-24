@@ -8,6 +8,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:live_parser/live_parser.dart';
 
+import '../../../platforms/common/playback/idle_releasing_live_player.dart';
 import '../../../platforms/common/playback/live_player.dart';
 import '../../../platforms/common/playback/media_kit_live_player.dart';
 import '../../../platforms/common/playback/playback_log.dart';
@@ -25,7 +26,7 @@ int _latestPlayerOpenToken = 0;
 /// 播放器单例:app 生命周期内复用,不随页面销毁。
 /// dispose 由根 ProviderContainer 统一触发(仅 app 退出时执行)。
 final playerProvider = Provider<LivePlayer>((ref) {
-  final player = MediaKitLivePlayer();
+  final player = IdleReleasingLivePlayer(createPlayer: MediaKitLivePlayer.new);
   ref.onDispose(player.dispose);
   return player;
 });
@@ -124,18 +125,36 @@ class PlayController extends AsyncNotifier<PlayState> {
     // 仅卸载媒体源,不 dispose 实例(下次进房复用同一 Player)。捕获实例而非在
     // 回调里 ref.read,避免 provider 销毁期再去读依赖。
     final player = ref.read(playerProvider);
+    final token = player is IdleReleasingLivePlayer ? player.enterRoom() : null;
     ref.onDispose(() {
       // 先注销恢复回调再 stop:回调是播放器持有的**指向本 controller** 的活引用,
       // autoDispose 后播放器仍可能在自动重连里调用它,而那时 ref/state 已失效
       // (`_recoverLines` 读 state 会报 “Cannot use Ref after dispose”)。
       // 回调只能在本层注销 —— 播放器不知道宿主已离场。
-      if (player case LineRecoveryAware aware) {
+      if (player is IdleReleasingLivePlayer && token != null) {
+        player.clearLineRecovery(token);
+      } else if (player case LineRecoveryAware aware) {
         aware.setLineRecovery(null);
       }
       final stopWatch = Stopwatch()..start();
-      final fields = <String, Object?>{'site': params.site, 'room': params.roomId};
+      final fields = <String, Object?>{
+        'site': params.site,
+        'room': params.roomId,
+      };
       PlaybackLog.writeResourceSample('room_release_start', fields);
-      unawaited(_stopAndSampleRelease(player, stopWatch, fields));
+      if (token != null && player is IdleReleasingLivePlayer) {
+        unawaited(
+          player.leaveRoom(token).whenComplete(() {
+            stopWatch.stop();
+            PlaybackLog.writeResourceSample('room_release_end', {
+              ...fields,
+              'elapsed_ms': stopWatch.elapsedMilliseconds,
+            });
+          }),
+        );
+      } else {
+        unawaited(_stopAndSampleRelease(player, stopWatch, fields));
+      }
     });
     // 数据源端口变化(G1 换真实解析)时自动重建,Widget 无感。
     final source = ref.watch(roomSourceProvider);
