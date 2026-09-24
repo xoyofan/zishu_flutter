@@ -204,11 +204,6 @@ class IdleReleasingLivePlayer implements LivePlayer, LineRecoveryAware {
 
   @override
   Future<void> stop() async {
-    if (_active != null) {
-      final token = _active!;
-      await leaveRoom(token);
-      return;
-    }
     await _inner?.stop();
   }
 

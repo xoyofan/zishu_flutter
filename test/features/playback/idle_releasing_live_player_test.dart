@@ -99,6 +99,29 @@ void main() {
   );
 
   test(
+    'public stop keeps active room lease; only leave schedules idle expiry',
+    () async {
+      final fake = _FakePlayer();
+      final player = IdleReleasingLivePlayer(
+        createPlayer: () => fake,
+        idleDelay: const Duration(milliseconds: 5),
+      );
+      final lease = player.enterRoom();
+      await player.open(_line);
+      await player.stop();
+      expect(player.currentPlayer, same(fake));
+      await player.open(_line);
+      expect(fake.opens, 2);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(fake.disposes, 0);
+      await player.leaveRoom(lease);
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+      expect(fake.disposes, 1);
+      player.dispose();
+    },
+  );
+
+  test(
     'root disposal releases an existing player once and rejects later opens',
     () async {
       final fake = _FakePlayer();
