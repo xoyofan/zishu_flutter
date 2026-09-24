@@ -57,8 +57,9 @@ class YoutubeBrowseRepository implements BrowseRepository {
 
 /// 抓取指定 YouTube 直播页并归一为房间摘要。
 ///
-/// 优先解析 `ytInitialData`(videoRenderer 与标题一一对应);失败才退回
-/// 正则扫描(正则的标题匹配可能挂到相邻视频上)。
+/// 只解析 `ytInitialData`(videoRenderer 与标题一一对应);**不做整页正则
+/// 兜底** —— 正则结果无法逐条归属在播证据(标题匹配也可能挂到相邻视频),
+/// 按 6sol P1 裁决宁可返回空列表,也不假 live。
 Future<List<RoomSummary>> fetchYoutubeLiveRooms(
   ParserHttp http, {
   required String cid,
@@ -76,9 +77,7 @@ Future<List<RoomSummary>> fetchYoutubeLiveRooms(
       headers: youtubePageHeaders(),
     );
     final html = utf8.decode(response.bodyBytes);
-    final fromJson = _roomsFromInitialData(html, categoryName);
-    if (fromJson.isNotEmpty) return fromJson;
-    return _roomsFromRegex(html, categoryName);
+    return _roomsFromInitialData(html, categoryName);
   } on Object {
     return const [];
   }
@@ -108,6 +107,8 @@ List<RoomSummary> _roomsFromInitialData(String html, String categoryName) {
   for (final renderer in renderers) {
     final videoId = '${renderer['videoId'] ?? ''}'.trim();
     if (!isValidYoutubeVideoId(videoId) || !seen.add(videoId)) continue;
+    // 6sol P1:无在播证据的条目不进列表(宁可空,不得假 live)。
+    if (!_hasLiveEvidence(renderer)) continue;
     final title = _runsText(renderer['title']) ?? '';
     final cover = _listCoverUrl(videoId);
     rooms.add(
@@ -120,12 +121,46 @@ List<RoomSummary> _roomsFromInitialData(String html, String categoryName) {
         category: categoryName,
         online: _runsText(renderer['viewCountText']) ?? '',
         cover: cover,
-        // 直播页目录 live-only:状态真源(6sol 裁决 Task 4a-i)。
+        // 在播证据确认后才赋 live 状态真源(6sol P1)。
         roomState: RoomState.live,
       ),
     );
   }
   return rooms;
+}
+
+/// 在播证据判定(6sol P1 裁决):列表条目必须可确认在播才进入列表。
+///
+/// 证据形态(真机 ytInitialData):
+/// - `viewCountText` 含 "watching"(请求头固定 `Accept-Language: en-US`,
+///   上游直出英文在播口径,如 `1,234 watching`);
+/// - LIVE 徽章 `badges[].metadataBadgeRenderer` / `badgeMetadataRenderer`
+///   (`style` 含 `LIVE` 或 `label=LIVE`);
+/// - 缩略图浮层 `thumbnailOverlays[].thumbnailOverlayTimeStatusRenderer`
+///   `style == LIVE`。
+///
+/// 无任何证据(upcoming、纯观看数 VOD、缺字段)→ false,条目不进列表
+/// (宁可空,不得假 live)。
+bool _hasLiveEvidence(Map<String, dynamic> renderer) {
+  final viewText = _runsText(renderer['viewCountText']) ?? '';
+  if (viewText.toLowerCase().contains('watching')) return true;
+  for (final badge in jsonListOf(renderer['badges'])) {
+    final badgeMap = jsonMapOf(badge);
+    final badgeRenderer = jsonMapOf(
+      badgeMap['metadataBadgeRenderer'] ?? badgeMap['badgeMetadataRenderer'],
+    );
+    if (jsonText(badgeRenderer['style']).toUpperCase().contains('LIVE')) {
+      return true;
+    }
+    if (jsonText(badgeRenderer['label']).toUpperCase() == 'LIVE') return true;
+  }
+  for (final overlay in jsonListOf(renderer['thumbnailOverlays'])) {
+    final timeStatus = jsonMapOf(
+      jsonMapOf(overlay)['thumbnailOverlayTimeStatusRenderer'],
+    );
+    if (jsonText(timeStatus['style']).toUpperCase() == 'LIVE') return true;
+  }
+  return false;
 }
 
 void _collectVideoRenderers(Object? node, List<Map<String, dynamic>> out) {
@@ -156,32 +191,6 @@ String? _runsText(Object? raw) {
   }
   final text = buffer.toString();
   return text.isEmpty ? null : text;
-}
-
-List<RoomSummary> _roomsFromRegex(String html, String categoryName) {
-  final seen = <String>{};
-  final rooms = <RoomSummary>[];
-  for (final match in RegExp(
-    r'"videoId":"([A-Za-z0-9_-]{11})"',
-  ).allMatches(html)) {
-    final videoId = match.group(1)!;
-    if (!seen.add(videoId)) continue;
-    rooms.add(
-      RoomSummary(
-        site: kYoutubeSiteId,
-        roomId: videoId,
-        title: '',
-        anchorName: '',
-        cid: videoId,
-        category: categoryName,
-        online: '',
-        cover: _listCoverUrl(videoId),
-        // 直播页目录 live-only(正则兜底同页):状态真源(6sol 裁决 Task 4a-i)。
-        roomState: RoomState.live,
-      ),
-    );
-  }
-  return rooms;
 }
 
 String _categoryLabel(String cid) => switch (cid) {
