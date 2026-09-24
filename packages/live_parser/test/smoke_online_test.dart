@@ -3,7 +3,6 @@
 library;
 
 import 'package:live_parser/live_parser.dart';
-import 'package:live_parser/src/utils/format_online.dart';
 import 'package:test/test.dart';
 
 void main() {
