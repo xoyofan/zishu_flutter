@@ -153,8 +153,8 @@ void main() {
     expect(yy.capabilities.anchorSearch, isTrue);
     expect(yy.capabilities.multiQuality, isTrue);
     expect(yy.capabilities.multiLine, isTrue);
-    expect(yy.capabilities.danmaku, isFalse, reason: 'YY 弹幕协议尚未接入 live_parser');
-    expect(yy.danmaku, isNull);
+    expect(yy.capabilities.danmaku, isTrue, reason: 'YY trident 弹幕协议已接入');
+    expect(yy.danmaku, isNotNull);
   });
 
   test('buildSiteRegistry 注册全平台聚合(现有可浏览直播站)', () async {
@@ -209,7 +209,18 @@ void main() {
     ];
 
     test('不支持弹幕的站点返回 null,而不是空连接', () {
-      final site = buildSiteRegistry().site('yy')!;
+      // 九站现已全部接入弹幕,用合成站点锁定「不声明能力即不暴露部件」的
+      // 契约,避免把真实站点的能力变化误当成外观缺陷。
+      final registry = SiteRegistry()
+        ..register(
+          SiteRegistration(
+            id: 'no-danmaku',
+            name: '无弹幕测试站',
+            capabilities: const SiteCapabilities(browse: true),
+            resolver: UnsupportedRoomResolver('no-danmaku'),
+          ),
+        );
+      final site = registry.site('no-danmaku')!;
       expect(site.danmaku, isNull);
       expect(site.capabilities.danmaku, isFalse);
     });

@@ -13,7 +13,7 @@
 | `bilibili` | B站 | 已注册，主链路全能力 |
 | `douyin` | 抖音 | 已注册，主链路全能力 |
 | `kuaishou` | 快手 | 已注册，**无搜索**（见 §4） |
-| `yy` | YY | 已注册，**无弹幕**（见 §4） |
+| `yy` | YY | 已注册,弹幕已接入(现行 trident 协议) |
 | `twitch` | Twitch | 已注册，**无 multiLine**（单线路 HLS） |
 | `soop` | SOOP | 已注册，主链路全能力 |
 | `youtube` | YouTube | 已注册，**无搜索**；依赖 yt-dlp 子进程 |
@@ -30,12 +30,13 @@
 | bilibili | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | douyin | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | kuaishou | ✓ | — | — | ✓ | ✓ | ✓ |
-| yy | ✓ | ✓ | ✓ | — | ✓ | ✓ |
+| yy | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | twitch | ✓ | ✓ | ✓ | ✓ | ✓ | — |
 | soop | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 | youtube | ✓ | — | — | ✓ | ✓ | ✓ |
 
-- 能力为 `—` 的组合：UI 不渲染对应入口（YY/IPTV 弹幕为明确 N/A 空态，不伪造）。
+- 能力为 `—` 的组合：UI 不渲染对应入口（不支持弹幕的站点显示明确 N/A 空态,不伪造）。
+- YY 弹幕 2026-09-24 接入现行官方 Web trident 协议(h5-sinchl.yy.com,登录/注册/模板订阅/80216 弹幕帧,参考 SFVideoLive yy-stream.ts 2026-09-04 逆向);旧 pure_live 游客 join(uri=3104100)路径失效结论仅针对旧协议。**真实网络连通性待在线 smoke**。
 - `all` 聚合（浏览/搜索/推荐）由注册表能力动态派生（`eligibleCrossBrowseSites` / `SearchSource.aggregateSites`），排除 `all` 自身；单站失败只损失该站结果。
 
 ## 3. 展示契约矩阵（`SiteRegistration.display`）
@@ -81,7 +82,7 @@
 3. **快手表情真实图片 URL 未从协议取得**（PARSER-GAP-002，当前文本兜底）；
 4. **YouTube 个别频道源不可播**（OBS-WIN-PLAY-001）；冷解析受 yt-dlp 子进程 2.8–4.7s 主导；
 5. **飘屏多轨重叠观感**；
-6. **功能缺口**：YY 弹幕 connector、快手搜索能力、A11 导航能力过滤（tasks.md）。
+6. **功能缺口**：快手搜索能力、A11 导航能力过滤（已完成 438f743）、YY 弹幕（已完成,见 §2 注）；**待办**：YY 弹幕真实在线 smoke。
 
 **不属于缺口（用户口径 2026-09-24）**：
 - Twitch / 虎牙的上游代理（VPN）代码是正常功能，保留不处理；

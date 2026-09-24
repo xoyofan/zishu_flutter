@@ -30,7 +30,7 @@
 | P4 | cross browse + catalog(全平台聚合首页数据) | P1-P3 | [x] 同上 | dart test ✓ |
 | P5 | IPTV(M3U 解析)——**2026-09-24 已整平台移除**(解析轨 85b0471 / UI 轨 deb5096),平台不再存在,历史结果保留备查 | P0 | [x] 已移除 | 历史 dart test ✓ |
 | P6 | 抖音(a_bogus/SM3、Cookie、protobuf) | P1 | [~] 已实现 resolve(a_bogus+X-Bogus 纯 Dart)/browse(游戏分类+娱乐 tab)/search(discover+直播搜)/弹幕(WS+protobuf-lite);真实 smoke 通过 | dart test ✓ + 在线 smoke ✓ |
-| P7 | 长尾平台:虎牙、B站、YY、Twitch、快手、SOOP、YouTube、小红书 | P4 | [~] 虎牙(tars/anti_code)/B站(wbi)/Twitch/**YY(resolve+browse+search,提交 e2007a4)** 已实现;YY 弹幕未做;快手(resolve+browse+feed 弹幕,无搜索)/SOOP(resolve+browse+search+WS 弹幕,瞬时传输错误重试)/**YouTube(resolve yt-dlp 优先+页面链回退,浏览/聊天弹幕)** 已实现;小红书未做 | dart test + 平台完成定义(implementation-plan 5.2) |
+| P7 | 长尾平台:虎牙、B站、YY、Twitch、快手、SOOP、YouTube、小红书 | P4 | [~] 虎牙(tars/anti_code)/B站(wbi)/Twitch/**YY(resolve+browse+search+trident 弹幕,2026-09-24 接入 YyDanmakuConnector)** 已实现;快手(resolve+browse+feed 弹幕,无搜索)/SOOP(resolve+browse+search+WS 弹幕,瞬时传输错误重试)/**YouTube(resolve yt-dlp 优先+页面链回退,浏览/聊天弹幕)** 已实现;小红书未做 | dart test + 平台完成定义(implementation-plan 5.2) |
 | P8 | Dart streaming-server(live_server:shelf + SSE/WS,snake_case 兼容层) | P4 | [ ] 未开始 | dart test + flutter build web |
 | P9 | 弹幕协议 codec 与会话(douyu WS 等) | P1 | [~] douyu/bilibili codec 已实现;会话管理待验 | dart test |
 
@@ -328,6 +328,7 @@ A1 分支合并(master,零冲突)+ 真实解析版真机模拟中发现的三个
 | 2026-09-20 | Twitch 中插广告过滤(`9ab4196` 解析轨 + `d232889` UI 轨):parser dart test 378 过(analyze 0);app analyze 0 issue(余 1 条 master 既有 prefer_is_empty)、build windows --debug(真实解析开关)OK、真机 zackrawrr 经代理稳定播放(playback.log:`ad_filter_wrap lines=1`,40s+ 无重连) | 根因:Twitch SSAI 把中插广告段(Commercial break in progress 板)直接拼进 usher media playlist,mpv 不识别 DATERANGE 广告标记照常播出。修复:live_parser 新增纯函数过滤(streamlink 口径:stitched-ad DATERANGE 窗口 + Amazon 标题,MS 重写防漂移/回滚)+ 平台层 127.0.0.1 playlist 代理(段流量仍直连 CDN)+ 看门狗广告期豁免(3min 预算封顶)。广告判定 fixtures 用真实抓取样本(rubius 频道 MIDROLL)。注意:app 全量 flutter test 余 2 失败为音量轨在途 WIP 既有问题(已对照验证,与本修复无关) |
 | 2026-09-24 | 显示补齐计划 Task 8 收口 + IPTV/CC 移除(解析轨 85b0471 / UI 轨 deb5096):parser analyze 0 + dart test 420 过/9 skip;app analyze 0;token guard OK(28→28);flutter test 754 全过;golden 7 张按入口移除逐张核对后更新;build windows --debug ✓ | Task 8 产物 `docs/ui-parity/platform-display-matrix.md`(9站能力/展示契约/startedAt/空值语义/non-fixes)入库;windows-public-function-matrix 去 iptv;本机 VS 环境修复(新实例 D:\VS2022 17.14.41)恢复构建链 |
 | 2026-09-24 | A11 导航能力过滤(TDD):`filterPlatforms` 纯函数 + 4 例契约测试;settings/follow 筛选入口切 `navigationPlatforms`;flutter analyze 0;全量 flutter test 758 全过;build windows --debug 27.6s ✓ | 真实解析下入口列表只含注册表可浏览站点,xhs/iptv/cc 不渲染,分类点击不再有 StateError 路径 |
+| 2026-09-24 | YY 弹幕接入(解析轨):YyDanmakuConnector 移植现行 trident 协议(登录 778244/注册 775684/56 条订阅模板/心跳 794116/80216 弹幕帧/勋章缓存);dart analyze 0;parser dart test 434 过/9 skip;app analyze 0;全量 flutter test 758 全过;build windows --debug ✓ | 参考 SFVideoLive yy-stream.ts(2026-09-04 逆向)；旧游客 join(3104100)失效结论仅针对旧协议;capability/registry/matrix/siteSupportsDanmaku 断言同步更新;**真实网络连通性待在线 smoke** |
 | 2026-09-11 | 修复后门禁:`flutter analyze` + `flutter test` 全量 | **No issues / 229 passed / 0 failed**(较上轮 +7 转发器单测) |
 | 2026-09-11 | `flutter build windows --debug`(真实解析开关) | OK(18.0s) |
 | 2026-09-11 | 对齐服务器:reset --hard origin/master(f1397e4)+release 重建 | exe OK(39.3s),纯远端代码 |

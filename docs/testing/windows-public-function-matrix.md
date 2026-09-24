@@ -15,7 +15,7 @@
 | `bilibili` | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS |
 | `douyin` | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS |
 | `kuaishou` | PASS | N/A | PASS | PASS | PASS | NOT_RUN | NOT_RUN | PASS | PASS |
-| `yy` | PASS | PASS | PASS | PASS | N/A | NOT_RUN | NOT_RUN | PASS | PASS |
+| `yy` | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS | PASS |
 | `twitch` | PASS | PASS | PASS | PASS | PASS | PASS | NOT_RUN | PASS | BLOCKED |
 | `soop` | PASS | PASS | PASS | PASS | PASS | NOT_RUN | NOT_RUN | PASS | PASS |
 | `youtube` | PASS | N/A | PASS | PASS | PASS | N/A | NOT_RUN | PASS | PASS |
