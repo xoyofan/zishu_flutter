@@ -349,6 +349,8 @@ https://usher.example/v1/playlist/720p60.m3u8
       expect(record.category, '失控进化-RUST');
       expect(record.cid, '263490');
       expect(record.audience, '2.3万', reason: 'viewersCount 22942 过万显示 X.X万');
+      expect(record.roomState, RoomState.live, reason: '状态真源:非空 stream 即在播');
+      expect(record.isLive, isTrue);
       expect(record.cover, isNotEmpty);
       // 头像:UseLive 查询已带回的 profileImageURL(零额外请求)。
       expect(
@@ -372,6 +374,8 @@ https://usher.example/v1/playlist/720p60.m3u8
         const RoomRequest(site: 'twitch', roomIdOrUrl: 'shroud'),
       );
       expect(record.audience, isNull);
+      expect(record.roomState, RoomState.offline, reason: '状态真源:无 stream 即离线');
+      expect(record.isLive, isFalse);
       expect(record.anchorName, 'shroud');
       expect(record.title, isNull);
       // 离线仍有主播头像(web 快照离线分支同样带 stats.avatar)。

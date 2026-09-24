@@ -110,6 +110,8 @@ class TwitchRoomResolver implements RoomResolver, RoomSummaryRefresher {
       cid: stream?.gameId ?? '',
       category: stream?.gameName ?? '',
       online: stream == null ? '' : twitchOnlineText(stream.viewers),
+      // 状态真源：有 stream 即在播，否则离线（不靠观看数推断）。
+      roomState: stream == null ? RoomState.offline : RoomState.live,
       cover: stream?.preview ?? '',
       // 头像:UseLive 查询已带回的 profileImageURL(零额外请求)。
       avatar: user.avatar,
