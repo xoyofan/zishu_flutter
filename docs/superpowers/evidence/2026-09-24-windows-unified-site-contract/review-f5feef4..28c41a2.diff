@@ -1,0 +1,581 @@
+# Review package: f5feef4..HEAD
+
+## Commits
+28c41a2 解析轨：聚合浏览全部来源失败时抛可诊断聚合异常，成功空结果与 0 来源仍返回空
+32ef9d8 解析轨：YouTube 恢复重解析绕开自身 20s/60s 播放缓存重新取流
+e31b567 解析轨：未声明搜索能力的站点在统一外观中不暴露占位搜索部件
+
+## Files changed
+ .../live_parser/lib/src/contracts/contracts.dart   |  14 ++-
+ .../live_parser/lib/src/cross/cross_browse.dart    |  43 ++++++-
+ .../lib/src/platforms/youtube/youtube_site.dart    |  18 ++-
+ packages/live_parser/test/registry_test.dart       |  23 ++--
+ .../test/src/cross/cross_browse_test.dart          |  62 ++++++++++
+ .../src/platforms/youtube/room_resolver_test.dart  | 125 +++++++++++++++++++++
+ 6 files changed, 270 insertions(+), 15 deletions(-)
+
+## Diff
+diff --git a/packages/live_parser/lib/src/contracts/contracts.dart b/packages/live_parser/lib/src/contracts/contracts.dart
+index 44ad66b..301fb91 100644
+--- a/packages/live_parser/lib/src/contracts/contracts.dart
++++ b/packages/live_parser/lib/src/contracts/contracts.dart
+@@ -191,21 +191,22 @@ abstract interface class LiveSite {
+   /// UI 共享的平台展示语义。
+   SiteDisplaySpec get display;
+ 
+   /// 统一房间解析:失败抛异常;「房间不存在」返回
+   /// `roomState == notFound` 的记录,不以空房间冒充成功。
+   Future<RoomRecord> resolveRoom(RoomRequest request);
+ 
+   /// 栏目浏览;不支持为 `null`。
+   BrowseRepository? get browse;
+ 
+-  /// 搜索;不支持为 `null`。
++  /// 搜索;不声明能力(`roomSearch` 与 `anchorSearch` 均为 false)时
++  /// 为 `null`,即使旧注册项带占位部件(不把空结果占位伪装成支持)。
+   SearchRepository? get search;
+ 
+   /// 弹幕连接;不支持为 `null`(不返回空连接占位)。
+   DanmakuConnector? get danmaku;
+ 
+   /// 轻量状态刷新(只取元信息、不取流不写缓存);未实现为 `null`。
+   RoomSummaryRefresher? get refresher;
+ 
+   /// 恢复重解析(绕开短缓存重新获取地址);不支持为 `null`。
+   RoomRecoveryResolver? get recovery;
+@@ -231,21 +232,30 @@ class _RegistrationLiveSite implements LiveSite {
+   SiteDisplaySpec get display => _registration.display;
+ 
+   @override
+   Future<RoomRecord> resolveRoom(RoomRequest request) async =>
+       RoomRecord.fromPayload(await _registration.resolver.resolveRoom(request));
+ 
+   @override
+   BrowseRepository? get browse => _registration.browse;
+ 
+   @override
+-  SearchRepository? get search => _registration.search;
++  SearchRepository? get search {
++    // 未声明搜索能力的站点即使旧注册项带占位部件(固定返回空结果)也
++    // 必须暴露为 null —— 调用方看到 N/A,而不是「支持但无结果」的
++    // 能力假阳性;旧 `SiteRegistration.search` 视图不变,迁移期兼容。
++    if (!_registration.capabilities.roomSearch &&
++        !_registration.capabilities.anchorSearch) {
++      return null;
++    }
++    return _registration.search;
++  }
+ 
+   @override
+   DanmakuConnector? get danmaku => _registration.danmaku;
+ 
+   @override
+   RoomSummaryRefresher? get refresher {
+     final resolver = _registration.resolver;
+     // 短缓存包装恒 `is RoomSummaryRefresher`,必须再问装饰器内层真实能力,
+     // 否则未实现刷新的站点会被装饰器误称为支持。
+     if (resolver is RefreshCapabilityProbe && !resolver.innerRefreshSupported) {
+diff --git a/packages/live_parser/lib/src/cross/cross_browse.dart b/packages/live_parser/lib/src/cross/cross_browse.dart
+index 73c8631..6f129ee 100644
+--- a/packages/live_parser/lib/src/cross/cross_browse.dart
++++ b/packages/live_parser/lib/src/cross/cross_browse.dart
+@@ -24,20 +24,36 @@ enum CrossMergeMode {
+ class UnsupportedSiteFeature implements Exception {
+   const UnsupportedSiteFeature(this.site, this.feature);
+ 
+   final String site;
+   final String feature;
+ 
+   @override
+   String toString() => '站点 $site 不支持 $feature';
+ }
+ 
++/// 聚合浏览本轮所有实际请求的来源都全部失败时抛出。
++///
++/// 用于区分「确实没有房间」的空结果与「请求全挂了」的错误态:
++/// 至少一站成功(即使成功结果为空)时不抛,部分失败继续隔离。
++class CrossBrowseAllSourcesFailed implements Exception {
++  const CrossBrowseAllSourcesFailed(this.failures);
++
++  /// 站点 id -> 该站本轮的原始失败原因,便于逐站诊断。
++  final Map<String, Object> failures;
++
++  @override
++  String toString() =>
++      '全平台浏览失败: ${failures.length} 个来源本轮全部失败; '
++      '${failures.entries.map((e) => '${e.key}: ${e.value}').join('; ')}';
++}
++
+ /// 占位 resolver:聚合站点没有自己的房间接口,解析必须落到具体平台。
+ class UnsupportedRoomResolver implements RoomResolver {
+   const UnsupportedRoomResolver(this.site);
+ 
+   final String site;
+ 
+   /// 异步抛出,保证调用方可以用 Future 的错误处理捕获(await / catchError)。
+   @override
+   Future<RoomPayload> resolveRoom(RoomRequest request) async =>
+       throw UnsupportedSiteFeature(site, '房间解析');
+@@ -120,23 +136,33 @@ class CrossBrowseRepository implements BrowseRepository {
+             _fetchSite(
+               site: site,
+               category: category,
+               page: request.page,
+               limit: perSite,
+             ),
+         ]),
+       );
+     }
+ 
++    // 本轮所有实际请求的来源都失败时抛聚合错,不能伪装成成功空列表。
++    final failures = <String, Object>{
++      for (final result in results)
++        if (result.error != null) result.site: result.error!,
++    };
++    if (failures.length == targets.length) {
++      throw CrossBrowseAllSourcesFailed(Map.unmodifiable(failures));
++    }
++
+     var hasMore = false;
+     final buckets = <List<RoomSummary>>[];
+     for (final result in results) {
++      if (result.error != null) continue; // 部分失败隔离:失败站本轮空缺。
+       if (result.hasMore) hasMore = true;
+       if (result.rooms.isNotEmpty) buckets.add(result.rooms);
+     }
+     if (buckets.isEmpty) {
+       return RoomListResult(rooms: const [], page: request.page, hasMore: hasMore);
+     }
+ 
+     final merged = _merge(buckets);
+     return RoomListResult(
+       rooms: merged.length > request.limit
+@@ -176,23 +202,24 @@ class CrossBrowseRepository implements BrowseRepository {
+           : result.rooms
+                 .where(
+                   (room) => category.matches(
+                     site: site,
+                     cid: room.cid,
+                     categoryName: room.category,
+                   ),
+                 )
+                 .toList(growable: false);
+       return _SiteRooms(site: site, rooms: rooms, hasMore: result.hasMore);
+-    } on Object {
+-      // 单平台失败隔离:该站本轮空缺,其余平台照常展示。
+-      return _SiteRooms(site: site, rooms: const [], hasMore: false);
++    } on Object catch (error) {
++      // 单平台失败隔离:记录原始错误,该站本轮空缺,其余平台照常展示;
++      // 若全部来源都失败,由 fetchRooms 统一抛出。
++      return _SiteRooms(site: site, rooms: const [], hasMore: false, error: error);
+     }
+   }
+ 
+   /// cross-map 登记的平台原生 cid;命中时用平台自身分类接口,结果更准。
+   String? _nativeCid(String site, CrossCategory category) {
+     final cids = category.siteCids[site];
+     if (cids == null || cids.isEmpty) return null;
+     return cids.first;
+   }
+ 
+@@ -237,16 +264,24 @@ SiteRegistration buildCrossRegistration({
+   resolver: const UnsupportedRoomResolver(kCrossSiteId),
+   browse: CrossBrowseRepository(
+     registry: registry,
+     siteIds: siteIds,
+     catalog: catalog,
+     mergeMode: mergeMode,
+   ),
+ );
+ 
+ class _SiteRooms {
+-  const _SiteRooms({required this.site, required this.rooms, required this.hasMore});
++  const _SiteRooms({
++    required this.site,
++    required this.rooms,
++    required this.hasMore,
++    this.error,
++  });
+ 
+   final String site;
+   final List<RoomSummary> rooms;
+   final bool hasMore;
++
++  /// 该站本轮的原始失败原因;非 null 表示请求失败而非空结果。
++  final Object? error;
+ }
+diff --git a/packages/live_parser/lib/src/platforms/youtube/youtube_site.dart b/packages/live_parser/lib/src/platforms/youtube/youtube_site.dart
+index 23b9e84..3d30b87 100644
+--- a/packages/live_parser/lib/src/platforms/youtube/youtube_site.dart
++++ b/packages/live_parser/lib/src/platforms/youtube/youtube_site.dart
+@@ -9,21 +9,21 @@ import '../../contracts/contracts.dart';
+ import '../../models/models.dart';
+ import '../../registry/cached_room_resolver.dart';
+ import '../../registry/site_display.dart';
+ import '../douyu/json_utils.dart';
+ import 'browse.dart';
+ import 'danmaku.dart';
+ import 'dlp.dart';
+ import 'normalize.dart';
+ import 'room_api.dart';
+ 
+-class YoutubeRoomResolver implements RoomResolver {
++class YoutubeRoomResolver implements RoomRecoveryResolver {
+   YoutubeRoomResolver(
+     this._client, {
+     this.dlpExtractor,
+     this.dlpAvailableCheck,
+   });
+ 
+   final YoutubeClient _client;
+   final YoutubeDlpExtractor? dlpExtractor;
+   final YoutubeDlpAvailability? dlpAvailableCheck;
+ 
+@@ -186,20 +186,36 @@ class YoutubeRoomResolver implements RoomResolver {
+       roomState: RoomState.live,
+       title: title,
+       anchorName: author,
+       cover: cover,
+       streams: tiers,
+     );
+     _cache[videoId] = (at: DateTime.now(), payload: payload);
+     return payload;
+   }
+ 
++  @override
++  Future<RoomPayload> recoverRoom(RoomRequest request) {
++    // 恢复契约(RoomRecoveryResolver):不得复用上一次的地址。本解析器有
++    // 两级播放缓存(短缓存 20s + dlp 提取 60s),对外层缓存包装的恢复
++    // 也只会清它自己那层,不清这里恢复就会拿到完全相同的旧线路。
++    // 只清当前视频的两个播放缓存;负缓存(_dlpRejectedUntil)与后台
++    // 校验时间戳(_dlpValidatedAt)语义不动 —— 前者避免恢复后立刻重蹈
++    // 已判无效的 dlp 地址,后者仍按原 TTL 控制重复校验。
++    final videoId = extractYoutubeVideoId(request.roomIdOrUrl);
++    if (videoId != null) {
++      _cache.remove(videoId);
++      _dlpCache.remove(videoId);
++    }
++    return resolveRoom(request);
++  }
++
+   /// 是否已在 [_dlpCacheTtl] 内校验过该视频的地址链(命中则跳过重复校验)。
+   bool _recentlyValidated(String videoId) {
+     final at = _dlpValidatedAt[videoId];
+     return at != null && DateTime.now().difference(at) < _dlpCacheTtl;
+   }
+ 
+   /// 后台校验 dlp 地址链:成功记时间戳;失败则作废该视频的 dlp 缓存与负标记,
+   /// 使下一次解析改走页面链。
+   Future<void> _validateInBackground(String videoId, String url) async {
+     var ok = false;
+diff --git a/packages/live_parser/test/registry_test.dart b/packages/live_parser/test/registry_test.dart
+index b014a7b..8d34ffb 100644
+--- a/packages/live_parser/test/registry_test.dart
++++ b/packages/live_parser/test/registry_test.dart
+@@ -207,54 +207,61 @@ void main() {
+       'douyin',
+       'youtube',
+     ];
+ 
+     test('不支持弹幕的站点返回 null,而不是空连接', () {
+       final site = buildSiteRegistry().site('yy')!;
+       expect(site.danmaku, isNull);
+       expect(site.capabilities.danmaku, isFalse);
+     });
+ 
+-    test('九站:LiveSite 与注册项同源,声明的 browse/search/danmaku 与部件一致', () {
++    test('九站:LiveSite 与注册项同源,声明的 browse/search/danmaku 与部件双向一致', () {
+       final registry = buildSiteRegistry();
+       for (final id in nineSites) {
+         final registration = registry[id]!;
+         final site = registry.site(id)!;
+         expect(site.id, registration.id, reason: id);
+         expect(site.name, registration.name, reason: id);
+         expect(site.capabilities, same(registration.capabilities), reason: id);
+         expect(site.display, same(registration.display), reason: id);
+ 
+         expect(
+           site.capabilities.browse,
+           site.browse != null,
+           reason: '$id browse 能力与部件一致',
+         );
+         expect(
+           site.capabilities.danmaku,
+           site.danmaku != null,
+           reason: '$id danmaku 能力与部件一致',
+         );
+-        // 声明房间/主播搜索即注册部件。快手平台不开放搜索:capabilities
+-        // 不声明、search 部件是返回空结果的占位 —— 声明侧为假不违反
+-        // 「声明即有部件」。
+-        if (site.capabilities.roomSearch || site.capabilities.anchorSearch) {
+-          expect(site.search, isNotNull, reason: '$id 声明搜索即注册部件');
+-        }
++        // 搜索能力与部件双向一致:声明即有部件;未声明(快手/YouTube)
++        // 即使旧注册项带返回空结果的占位部件,新外观也必须暴露为 null ——
++        // 否则调用方看到「支持但无结果」而非 N/A(能力假阳性)。
++        expect(
++          site.capabilities.roomSearch || site.capabilities.anchorSearch,
++          site.search != null,
++          reason: '$id 搜索能力与部件双向一致',
++        );
+       }
+     });
+ 
+-    test('未声明的能力部件为 null(YouTube 无搜索、聚合站只有浏览)', () {
++    test('未声明的能力部件为 null(YouTube/快手无搜索、聚合站只有浏览)', () {
+       final registry = buildSiteRegistry();
+       final youtube = registry.site('youtube')!;
+       expect(youtube.capabilities.roomSearch, isFalse);
+       expect(youtube.search, isNull);
++      // 快手旧注册项带占位搜索部件,新外观按能力过滤为 null(N/A)。
++      final kuaishou = registry.site('kuaishou')!;
++      expect(kuaishou.capabilities.roomSearch, isFalse);
++      expect(kuaishou.capabilities.anchorSearch, isFalse);
++      expect(kuaishou.search, isNull);
+ 
+       final all = registry.site('all')!;
+       expect(all.capabilities.browse, isTrue);
+       expect(all.browse, isNotNull);
+       expect(all.search, isNull);
+       expect(all.danmaku, isNull);
+     });
+ 
+     test('refresher 按内层真实能力逐站判定:装饰器不可把未实现刷新误称为支持', () {
+       final registry = buildSiteRegistry();
+diff --git a/packages/live_parser/test/src/cross/cross_browse_test.dart b/packages/live_parser/test/src/cross/cross_browse_test.dart
+index b379e1e..b195b11 100644
+--- a/packages/live_parser/test/src/cross/cross_browse_test.dart
++++ b/packages/live_parser/test/src/cross/cross_browse_test.dart
+@@ -122,20 +122,82 @@ void main() {
+         siteIds: ['douyu'],
+       );
+       final result = await registry['all']!.browse!.fetchRooms(
+         const RoomListRequest(site: 'all'),
+       );
+       expect(result.rooms, isEmpty);
+       expect(result.hasMore, isFalse);
+     });
+   });
+ 
++  group('全平台失败与空结果语义', () {
++    test('全部实际来源失败时抛可诊断聚合异常,不返回成功空列表', () async {
++      final registry = _registryWith(browses: {
++        'douyu': FakeBrowseRepository(site: 'douyu', fail: true),
++        'huya': FakeBrowseRepository(site: 'huya', fail: true),
++        'bilibili': FakeBrowseRepository(site: 'bilibili', fail: true),
++      });
++
++      await expectLater(
++        registry['all']!.browse!.fetchRooms(
++          const RoomListRequest(site: 'all'),
++        ),
++        throwsA(
++          isA<CrossBrowseAllSourcesFailed>()
++              .having((e) => e.failures.keys.toSet(), 'failures.keys',
++                  {'douyu', 'huya', 'bilibili'})
++              .having((e) => e.failures.values,
++                  '每站保留原始失败原因',
++                  everyElement(isA<ParserHttpException>())),
++        ),
++      );
++    });
++
++    test('部分失败仍隔离:至少一站成功即正常返回,不抛错', () async {
++      final registry = _registryWith(browses: {
++        'douyu': FakeBrowseRepository(site: 'douyu', fail: true),
++        'huya': FakeBrowseRepository(site: 'huya', rooms: [fakeRoom('huya', 'h1')]),
++        'bilibili': FakeBrowseRepository(site: 'bilibili', fail: true),
++      });
++
++      final result = await registry['all']!.browse!.fetchRooms(
++        const RoomListRequest(site: 'all'),
++      );
++      expect(result.rooms.map((r) => r.roomId).toList(), ['h1']);
++      expect(result.hasMore, isFalse);
++    });
++
++    test('成功但空是正常空结果,不抛错;hasMore 仍来自成功来源', () async {
++      final registry = _registryWith(browses: {
++        'douyu': FakeBrowseRepository(site: 'douyu', rooms: const []),
++        'huya': FakeBrowseRepository(site: 'huya', rooms: const [], hasMore: true),
++      }, siteIds: ['douyu', 'huya']);
++
++      final result = await registry['all']!.browse!.fetchRooms(
++        const RoomListRequest(site: 'all'),
++      );
++      expect(result.rooms, isEmpty);
++      expect(result.hasMore, isTrue, reason: '成功来源的 hasMore 不被空结果吞掉');
++      expect(result.page, 1);
++    });
++
++    test('0 个可用来源仍返回空,不制造异常', () async {
++      final registry = _registryWith(browses: const {}, siteIds: ['douyu']);
++
++      final result = await registry['all']!.browse!.fetchRooms(
++        const RoomListRequest(site: 'all'),
++      );
++      expect(result.rooms, isEmpty);
++      expect(result.hasMore, isFalse);
++    });
++  });
++
+   group('跨平台分类房间', () {
+     test('按 cross key 过滤,并用平台原生 cid 拉取', () async {
+       final douyu = FakeBrowseRepository(
+         site: 'douyu',
+         rooms: [
+           fakeRoom('douyu', 'd1', cid: '1', category: '英雄联盟'),
+           fakeRoom('douyu', 'd2', cid: '9', category: '其他游戏'),
+         ],
+       );
+       final huya = FakeBrowseRepository(
+diff --git a/packages/live_parser/test/src/platforms/youtube/room_resolver_test.dart b/packages/live_parser/test/src/platforms/youtube/room_resolver_test.dart
+index b1758f0..7d4f02d 100644
+--- a/packages/live_parser/test/src/platforms/youtube/room_resolver_test.dart
++++ b/packages/live_parser/test/src/platforms/youtube/room_resolver_test.dart
+@@ -195,20 +195,145 @@ void main() {
+       expect(registration.resolver, isA<RoomResolver>());
+       expect(registration.browse, isA<BrowseRepository>());
+       expect(registration.danmaku, isA<DanmakuConnector>());
+       expect(registration.capabilities.browse, isTrue);
+       expect(registration.capabilities.danmaku, isTrue);
+       expect(registration.capabilities.roomSearch, isFalse);
+       expect(registration.search, isNull);
+     });
+   });
+ 
++  group('YouTube 恢复重解析(绕开 20s/60s 播放缓存)', () {
++    late FakeYoutubeApi fake;
++    late SiteRegistration registration;
++
++    const request = RoomRequest(
++      site: 'youtube',
++      roomIdOrUrl: 'dQw4w9WgXcQ',
++    );
++
++    setUp(() {
++      fake = FakeYoutubeApi()
++        ..watchHtml = youtubeFixture('watch_live.html')
++        ..masterPlaylist = youtubeFixture('master.m3u8')
++        ..variantPlaylist = youtubeFixture('variant.m3u8');
++      registration = buildYoutubeRegistration(
++        httpClient: fake,
++        dlpAvailableCheck: () async => false,
++      );
++    });
++
++    test('普通连续解析 20s 内只请求一次;恢复重新拉页并返回新地址', () async {
++      expect(
++        registration.resolver,
++        isA<RoomRecoveryResolver>(),
++        reason: 'YouTube 内层自带播放缓存,必须实现恢复接口,否则恢复会复用旧线路',
++      );
++      final resolver = registration.resolver;
++      final recovery = resolver as RoomRecoveryResolver;
++
++      final first = await resolver.resolveRoom(request);
++      expect(first.roomState, RoomState.live);
++      final requestsAfterFirst = fake.requests.length;
++
++      final second = await resolver.resolveRoom(request);
++      expect(
++        fake.requests.length,
++        requestsAfterFirst,
++        reason: '普通解析应命中 20s 短缓存,0 新请求(保留短缓存性能)',
++      );
++      expect(second.playUrl, first.playUrl);
++
++      // 上游地址刷新:watch 页里的 manifest 换新链接(带 query 不改路由路径)。
++      fake.watchHtml = fake.watchHtml!.replaceFirst(
++        'live/master.m3u8',
++        'live/master.m3u8?expire=9999',
++      );
++
++      final recovered = await recovery.recoverRoom(request);
++      expect(
++        fake.requests.length,
++        greaterThan(requestsAfterFirst),
++        reason: '恢复必须重新拉页获取地址,不能命中 20s 内层缓存',
++      );
++      expect(recovered.roomState, RoomState.live);
++      expect(
++        recovered.playUrl,
++        contains('expire=9999'),
++        reason: '恢复必须返回新地址,不得复用缓存里的旧线路',
++      );
++      expect(recovered.playUrl, isNot(first.playUrl));
++
++      // 恢复后的新结果重新进入短缓存:后续普通解析不再发请求。
++      final third = await resolver.resolveRoom(request);
++      expect(third.playUrl, recovered.playUrl);
++      expect(fake.requests.length, greaterThanOrEqualTo(requestsAfterFirst));
++      final requestsAfterRecovery = fake.requests.length;
++      final fourth = await resolver.resolveRoom(request);
++      expect(fourth.playUrl, recovered.playUrl);
++      expect(fake.requests.length, requestsAfterRecovery);
++    });
++
++    test('dlp 路线:普通解析 20s 内只提取一次,恢复再次提取并拿到新线路', () async {
++      var dlpCalls = 0;
++      final dlpRegistration = buildYoutubeRegistration(
++        httpClient: fake,
++        dlpAvailableCheck: () async => true,
++        dlpExtractor: (videoId) async {
++          dlpCalls++;
++          return YoutubeDlpExtract(
++            tiers: [
++              YoutubeDlpTier(
++                label: '720p60',
++                // 指向可路由的 master(带 query 区分新旧),后台链校验可确定性通过。
++                url:
++                    'https://manifest.googlevideo.com/api/manifest/'
++                    'hls_variant/live/master.m3u8?dlp=$dlpCalls',
++                height: 720,
++                fps: 60,
++              ),
++            ],
++            liveStartAtSec: 1788911253,
++          );
++        },
++      );
++      final resolver = dlpRegistration.resolver;
++      final recovery = resolver as RoomRecoveryResolver;
++
++      final first = await resolver.resolveRoom(request);
++      expect(first.roomState, RoomState.live);
++      expect(first.playUrl, contains('dlp=1'));
++      expect(dlpCalls, 1);
++
++      final second = await resolver.resolveRoom(request);
++      expect(dlpCalls, 1, reason: '20s 内普通解析命中缓存,不再跑 dlp');
++      expect(second.playUrl, first.playUrl);
++
++      final recovered = await recovery.recoverRoom(request);
++      expect(dlpCalls, 2, reason: '恢复必须重新执行 dlp 提取,不能复用 60s dlp 缓存');
++      expect(
++        recovered.playUrl,
++        contains('dlp=2'),
++        reason: '恢复必须拿到新线路',
++      );
++    });
++
++    test('无效 ID 恢复不崩溃,返回 notFound', () async {
++      final recovery = registration.resolver as RoomRecoveryResolver;
++      final payload = await recovery.recoverRoom(
++        const RoomRequest(site: 'youtube', roomIdOrUrl: 'not a url'),
++      );
++      expect(payload.roomState, RoomState.notFound);
++      expect(payload.error, '无法解析 YouTube URL');
++    });
++  });
++
+   group('InnerTube ANDROID_VR 兜底(2026-09-22 实测修复)', () {
+     test('必须下发 X-Goog-Visitor-Id,否则上游固定返回 LOGIN_REQUIRED', () async {
+       // 真机实测:不带头 → status=LOGIN_REQUIRED(reason "Sign in to confirm you're not a bot")、
+       // hlsManifestUrl 空;补上后曾出现 status=OK + 6 档 HLS + 分片 200。
+       // 该头是必要条件(IP 未被挑战时可用),但上游会按 IP 状态重新发起挑战 ——
+       // 因此本改动只是让兜底不再必然失败,不构成可靠主路径。
+       // 此前 WEB 分支发了这个头,ANDROID_VR 分支漏发 —— 于是兜底形同虚设。
+       final fake = FakeYoutubeApi()..playerResponse = {'streamingData': <String, Object?>{}};
+       final client = YoutubeClient(httpClient: fake);
+       final context = YoutubePageContext(

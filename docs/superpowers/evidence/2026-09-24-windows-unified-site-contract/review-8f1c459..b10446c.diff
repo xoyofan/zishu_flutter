@@ -1,0 +1,823 @@
+# Review package: 8f1c459..HEAD
+
+## Commits
+b10446c 解析轨：新增统一房间记录与旧格式兼容
+
+## Files changed
+ packages/live_parser/lib/live_parser.dart          |   1 +
+ .../live_parser/lib/src/models/room_record.dart    | 344 +++++++++++++++++
+ .../test/src/models/room_record_test.dart          | 429 +++++++++++++++++++++
+ 3 files changed, 774 insertions(+)
+
+## Diff
+diff --git a/packages/live_parser/lib/live_parser.dart b/packages/live_parser/lib/live_parser.dart
+index 7f5304a..9437770 100644
+--- a/packages/live_parser/lib/live_parser.dart
++++ b/packages/live_parser/lib/live_parser.dart
+@@ -5,20 +5,21 @@
+ library;
+ 
+ export 'src/catalog/cross_catalog.dart';
+ export 'src/catalog/cross_hot_categories_generated.dart';
+ export 'src/contracts/contracts.dart';
+ export 'src/cross/cross_browse.dart';
+ export 'src/http/danmaku_transport.dart';
+ export 'src/http/parser_http.dart';
+ export 'src/http/upstream_proxy.dart';
+ export 'src/models/models.dart';
++export 'src/models/room_record.dart';
+ export 'src/platforms/douyin/browse.dart';
+ export 'src/platforms/douyin/danmaku.dart';
+ export 'src/platforms/douyin/douyin_site.dart';
+ export 'src/platforms/douyin/normalize.dart';
+ export 'src/platforms/douyin/room_api.dart';
+ export 'src/platforms/douyin/search.dart';
+ export 'src/platforms/kuaishou/browse.dart';
+ export 'src/platforms/kuaishou/danmaku.dart';
+ export 'src/platforms/kuaishou/kuaishou_site.dart';
+ export 'src/platforms/kuaishou/normalize.dart';
+diff --git a/packages/live_parser/lib/src/models/room_record.dart b/packages/live_parser/lib/src/models/room_record.dart
+new file mode 100644
+index 0000000..e98f12e
+--- /dev/null
++++ b/packages/live_parser/lib/src/models/room_record.dart
+@@ -0,0 +1,344 @@
++/// 统一房间记录:浏览列表、状态刷新与播放详情共享的同一种房间(不可变)。
++///
++/// 钉住三类语义(2026-09-24 Windows 统一契约 Task 1):
++/// 1. 状态真源是 [roomState],统计缺失为 `null`,有效 `'0'` 不当作缺失;
++/// 2. 旧 JSON 键(`online`/`diamondFans`/缺 `roomState`)可读,[toJson]
++///    迁移期同时输出兼容键,历史数据不丢;
++/// 3. 刷新合并只覆盖有值字段、状态强制取 fresh,不把已有已知字段清空。
++///
++/// 请求/协议失败通过异常或 [error] 显式表达,不以“空房间”冒充成功。
++library;
++
++import 'models.dart';
++
++/// 站点专属信息的类型化扩展上界。
++///
++/// 仅在统一公共字段不能无损表达、且 UI 确有展示需求时才新增 `sealed`
++/// 子类;序列化必须带 [site] + 版本化判别标识,Windows 只能按类型匹配
++/// 访问。当前没有具体子类,未知判别读取时安全回落 `null`(公共字段
++/// 不受影响),不为九站创建空扩展。
++sealed class RoomExtension {
++  const RoomExtension({required this.site, required this.version});
++
++  /// 扩展归属站点 id(序列化判别之一)。
++  final String site;
++
++  /// 扩展结构版本(序列化判别之一,子类结构变化时递增)。
++  final int version;
++
++  /// 输出带站点与版本判别的 JSON。
++  Map<String, dynamic> toJson();
++}
++
++/// 统一房间记录:九站与 Windows 消费层共享的同一种房间值对象。
++class RoomRecord {
++  const RoomRecord({
++    required this.site,
++    required this.roomId,
++    required this.roomState,
++    this.title,
++    this.anchorName,
++    this.audience,
++    this.followers,
++    this.vip,
++    this.svip,
++    this.sourceUrl,
++    this.cover,
++    this.avatar,
++    this.category,
++    this.cid,
++    this.cateNo,
++    this.promoTag,
++    this.startedAt,
++    this.streams = const [],
++    this.availableQualities = const [],
++    this.source,
++    this.fetchedAt,
++    this.error,
++    this.extension,
++  });
++
++  final String site;
++  final String roomId;
++  final RoomState roomState;
++
++  // 展示。
++  final String? title;
++  final String? anchorName;
++  final String? sourceUrl;
++  final String? cover;
++  final String? avatar;
++  final String? category;
++  final String? cid;
++  final String? cateNo;
++  final String? promoTag;
++
++  /// 本场开播时间(平台真实返回时才有值,不伪造)。
++  final DateTime? startedAt;
++
++  // 统计:沿用当前格式化字符串口径;无实际值为 null,有效 `'0'` 不当作缺失。
++  final String? audience;
++  final String? followers;
++  final String? vip;
++  final String? svip;
++
++  // 播放:非播放请求或离线为空列表,不凭空制造播放地址。
++  final List<StreamQuality> streams;
++  final List<QualityOption> availableQualities;
++
++  // 来源/诊断:列表无此信息时可空。
++  final String? source;
++  final DateTime? fetchedAt;
++
++  /// 请求/解析错误:显式保留,不转换为空房间。
++  final String? error;
++
++  /// 站点专属扩展(无实际扩展的站点为 null)。
++  final RoomExtension? extension;
++
++  /// 在播(状态真源是 [roomState],与统计数字无关)。
++  bool get isLive => roomState == RoomState.live;
++
++  /// 轮播/录播循环态(非实时直播)。
++  bool get isReplay => roomState == RoomState.replay;
++
++  /// 默认播放地址:首选画质的首选线路。
++  String get playUrl =>
++      streams.isEmpty ? '' : (streams.first.preferredLine?.url ?? '');
++
++  /// 按画质名选择档位;未命中时回退首选档。
++  ///
++  /// 与 [RoomPayload.qualityByName] 同语义:精确、双向包含、回退首选档。
++  StreamQuality? qualityByName(String? name) {
++    if (streams.isEmpty) return null;
++    if (name == null || name.isEmpty) return streams.first;
++    for (final stream in streams) {
++      if (stream.name == name) return stream;
++    }
++    for (final stream in streams) {
++      if (name.contains(stream.name) || stream.name.contains(name)) {
++        return stream;
++      }
++    }
++    return streams.first;
++  }
++
++  /// 从浏览/刷新摘要转换(状态取 [RoomSummary.roomState] 真源,不从
++  /// 统计数字推断在线)。
++  factory RoomRecord.fromSummary(RoomSummary summary) => RoomRecord(
++    site: summary.site,
++    roomId: summary.roomId,
++    roomState: summary.roomState,
++    title: _blankToNull(summary.title),
++    anchorName: _blankToNull(summary.anchorName),
++    audience: _blankToNull(summary.online),
++    followers: _blankToNull(summary.followers),
++    vip: _blankToNull(summary.vip),
++    svip: _blankToNull(summary.diamondFans),
++    cover: _blankToNull(summary.cover),
++    avatar: _blankToNull(summary.avatar),
++    category: _blankToNull(summary.category),
++    cid: _blankToNull(summary.cid),
++    promoTag: _blankToNull(summary.promoTag),
++    startedAt: summary.startedAt,
++  );
++
++  /// 回写浏览/刷新摘要(迁移期兼容;`null` 统计回旧口径空串)。
++  RoomSummary toSummary() => RoomSummary(
++    site: site,
++    roomId: roomId,
++    title: title ?? '',
++    anchorName: anchorName ?? '',
++    cid: cid ?? '',
++    category: category ?? '',
++    online: audience ?? '',
++    cover: cover ?? '',
++    avatar: avatar ?? '',
++    promoTag: promoTag,
++    followers: followers ?? '',
++    vip: vip ?? '',
++    diamondFans: svip ?? '',
++    roomState: roomState,
++    startedAt: startedAt,
++  );
++
++  /// 从播放详情转换(error/线路/来源诊断原样保留)。
++  factory RoomRecord.fromPayload(RoomPayload payload) => RoomRecord(
++    site: payload.site,
++    roomId: payload.roomId,
++    roomState: payload.roomState,
++    title: _blankToNull(payload.title),
++    anchorName: _blankToNull(payload.anchorName),
++    sourceUrl: _blankToNull(payload.sourceUrl),
++    cover: _blankToNull(payload.cover),
++    avatar: _blankToNull(payload.avatar),
++    category: _blankToNull(payload.category),
++    cid: _blankToNull(payload.cid),
++    cateNo: _blankToNull(payload.cateNo),
++    streams: payload.streams,
++    availableQualities: payload.availableQualities,
++    source: _blankToNull(payload.source),
++    fetchedAt: payload.fetchedAt,
++    error: _blankToNull(payload.error),
++    startedAt: payload.startedAt,
++  );
++
++  /// 回写播放详情(迁移期兼容;旧模型必填空字段以空串占位)。
++  RoomPayload toPayload() => RoomPayload(
++    site: site,
++    roomId: roomId,
++    sourceUrl: sourceUrl ?? '',
++    anchorName: anchorName ?? '',
++    title: title ?? '',
++    cover: cover ?? '',
++    avatar: avatar ?? '',
++    category: category ?? '',
++    cid: cid ?? '',
++    roomState: roomState,
++    cateNo: cateNo ?? '',
++    streams: streams,
++    availableQualities: availableQualities,
++    source: source ?? '',
++    fetchedAt: fetchedAt ?? DateTime.fromMillisecondsSinceEpoch(0),
++    error: error,
++    startedAt: startedAt,
++  );
++
++  /// 轻量刷新合并:校验房间身份;状态强制取 [fresh];每个字段“此次
++  /// 提供的覆盖、未提供的保留”;线路与画质仅在 fresh 非空时覆盖,
++  /// 不把已有已知字段清空;真实离线状态靠 [RoomState] 覆盖旧在播。
++  RoomRecord mergeRefresh(RoomRecord fresh) {
++    if (site != fresh.site || roomId != fresh.roomId) {
++      throw ArgumentError('cannot merge different rooms');
++    }
++    return RoomRecord(
++      site: site,
++      roomId: roomId,
++      roomState: fresh.roomState,
++      title: fresh.title ?? title,
++      anchorName: fresh.anchorName ?? anchorName,
++      audience: fresh.audience ?? audience,
++      followers: fresh.followers ?? followers,
++      vip: fresh.vip ?? vip,
++      svip: fresh.svip ?? svip,
++      sourceUrl: fresh.sourceUrl ?? sourceUrl,
++      cover: fresh.cover ?? cover,
++      avatar: fresh.avatar ?? avatar,
++      category: fresh.category ?? category,
++      cid: fresh.cid ?? cid,
++      cateNo: fresh.cateNo ?? cateNo,
++      promoTag: fresh.promoTag ?? promoTag,
++      startedAt: fresh.startedAt ?? startedAt,
++      streams: fresh.streams.isNotEmpty ? fresh.streams : streams,
++      availableQualities: fresh.availableQualities.isNotEmpty
++          ? fresh.availableQualities
++          : availableQualities,
++      source: fresh.source ?? source,
++      fetchedAt: fresh.fetchedAt ?? fetchedAt,
++      error: fresh.error ?? error,
++      extension: fresh.extension ?? extension,
++    );
++  }
++
++  Map<String, dynamic> toJson() => {
++    'site': site,
++    'roomId': roomId,
++    'roomState': roomState.name,
++    if (title != null) 'title': title,
++    if (anchorName != null) 'anchorName': anchorName,
++    if (sourceUrl != null) 'sourceUrl': sourceUrl,
++    if (cover != null) 'cover': cover,
++    if (avatar != null) 'avatar': avatar,
++    if (category != null) 'category': category,
++    if (cid != null) 'cid': cid,
++    if (cateNo != null) 'cateNo': cateNo,
++    if (promoTag != null) 'promoTag': promoTag,
++    if (startedAt != null) 'startedAt': startedAt!.toIso8601String(),
++    if (audience != null) 'audience': audience,
++    if (followers != null) 'followers': followers,
++    if (vip != null) 'vip': vip,
++    if (svip != null) 'svip': svip,
++    // 迁移期兼容键:旧消费者依赖 online 键恒存在,空串表示未提供;
++    // diamondFans 仅在有值时输出,不序列化伪造的零。
++    'online': audience ?? '',
++    if (svip != null) 'diamondFans': svip,
++    'streams': streams.map((s) => s.toJson()).toList(),
++    'availableQualities': availableQualities.map((q) => q.toJson()).toList(),
++    if (source != null) 'source': source,
++    if (fetchedAt != null) 'fetchedAt': fetchedAt!.toIso8601String(),
++    if (error != null) 'error': error,
++    if (extension != null) 'extension': extension!.toJson(),
++  };
++
++  /// 读取新旧 JSON:旧键 `online`/`diamondFans`/`nickname` 归一到公共
++  /// 字段;缺 `roomState` 的历史数据按旧 `online` 非空判在播(仅用于
++  /// 读取历史数据,显式 `roomState` 是真源);未知扩展安全回落 null。
++  factory RoomRecord.fromJson(Map<String, dynamic> json) {
++    final audience = _blankToNull(
++      (json['audience'] ?? json['online'])?.toString(),
++    );
++    return RoomRecord(
++      site: json['site']?.toString() ?? '',
++      roomId: json['roomId']?.toString() ?? '',
++      roomState: _roomStateFromJson(json, audience),
++      title: _blankToNull(json['title']?.toString()),
++      anchorName: _blankToNull(
++        (json['nickname'] ?? json['anchorName'])?.toString(),
++      ),
++      audience: audience,
++      followers: _blankToNull(json['followers']?.toString()),
++      vip: _blankToNull(json['vip']?.toString()),
++      svip: _blankToNull((json['svip'] ?? json['diamondFans'])?.toString()),
++      sourceUrl: _blankToNull(json['sourceUrl']?.toString()),
++      cover: _blankToNull(json['cover']?.toString()),
++      avatar: _blankToNull(json['avatar']?.toString()),
++      category: _blankToNull(json['category']?.toString()),
++      cid: _blankToNull(json['cid']?.toString()),
++      cateNo: _blankToNull(json['cateNo']?.toString()),
++      promoTag: _blankToNull(json['promoTag']?.toString()),
++      startedAt: DateTime.tryParse(json['startedAt']?.toString() ?? ''),
++      streams: ((json['streams'] as List?) ?? const [])
++          .whereType<Map>()
++          .map(
++            (item) => StreamQuality.fromJson(Map<String, dynamic>.from(item)),
++          )
++          .toList(growable: false),
++      availableQualities: ((json['availableQualities'] as List?) ?? const [])
++          .whereType<Map>()
++          .map(
++            (item) => QualityOption.fromJson(Map<String, dynamic>.from(item)),
++          )
++          .toList(growable: false),
++      source: _blankToNull(json['source']?.toString()),
++      fetchedAt: DateTime.tryParse(json['fetchedAt']?.toString() ?? ''),
++      error: _blankToNull(json['error']?.toString()),
++      extension: _readExtension(json['extension']),
++    );
++  }
++
++  /// 空串视作“未提供”归一为 null;有效 `'0'` 保留。
++  static String? _blankToNull(String? value) =>
++      (value == null || value.isEmpty) ? null : value;
++
++  static RoomState _roomStateFromJson(
++    Map<String, dynamic> json,
++    String? audience,
++  ) {
++    final raw = json['roomState']?.toString();
++    if (raw == null) {
++      // 历史数据缺 roomState:按旧 online 非空判在播,仅用于读取旧数据。
++      return audience != null ? RoomState.live : RoomState.offline;
++    }
++    // 未知值与 RoomSummary.fromJson 同口径回落 offline。
++    return RoomState.values.firstWhere(
++      (state) => state.name == raw,
++      orElse: () => RoomState.offline,
++    );
++  }
++
++  static RoomExtension? _readExtension(Object? raw) {
++    // 当前尚无已知扩展子类:未知或缺失判别一律安全回落 null,公共字段
++    // 照常读取;首个具体子类落地时在此按 site + version 分发。
++    return null;
++  }
++}
+diff --git a/packages/live_parser/test/src/models/room_record_test.dart b/packages/live_parser/test/src/models/room_record_test.dart
+new file mode 100644
+index 0000000..9f20c0d
+--- /dev/null
++++ b/packages/live_parser/test/src/models/room_record_test.dart
+@@ -0,0 +1,429 @@
++/// RoomRecord 模型契约:live/无观众、有效 0、replay、旧 JSON 键与刷新合并。
++///
++/// 钉住统一房间记录的三类语义(2026-09-24 Windows 统一契约 Task 1):
++/// 1. 状态真源是 `roomState`,统计缺失为 `null`,有效 `'0'` 不当作缺失;
++/// 2. 旧 JSON 键(`online`/`diamondFans`/缺 `roomState`)可读,`toJson`
++///    迁移期同时输出兼容键;
++/// 3. `mergeRefresh` 校验房间身份,只覆盖有值字段、状态强制取 fresh,
++///    且不把已有已知字段覆盖为空。
++library;
++
++import 'package:live_parser/live_parser.dart';
++import 'package:test/test.dart';
++
++void main() {
++  group('RoomRecord 状态与统计空值', () {
++    test('live 房间即使没有 audience 仍为 live', () {
++      final room = RoomRecord(
++        site: 'douyu',
++        roomId: '1',
++        roomState: RoomState.live,
++      );
++      expect(room.isLive, isTrue);
++      expect(room.audience, isNull);
++      expect(room.toJson().containsKey('audience'), isFalse);
++    });
++
++    test('0 与未知不同,刷新只覆盖有值字段而始终更新状态', () {
++      final old = RoomRecord(
++        site: 'huya',
++        roomId: '2',
++        roomState: RoomState.live,
++        audience: '123',
++        followers: '9',
++      );
++      final fresh = RoomRecord(
++        site: 'huya',
++        roomId: '2',
++        roomState: RoomState.replay,
++        audience: '0',
++      );
++      final merged = old.mergeRefresh(fresh);
++      expect(merged.roomState, RoomState.replay);
++      expect(merged.isLive, isFalse);
++      expect(merged.audience, '0');
++      expect(merged.followers, '9');
++    });
++
++    test('replay 与 notFound 状态保留,isLive 均为 false', () {
++      final replay = RoomRecord(
++        site: 'bilibili',
++        roomId: '9',
++        roomState: RoomState.replay,
++      );
++      expect(replay.isReplay, isTrue);
++      expect(replay.isLive, isFalse);
++
++      final missing = RoomRecord(
++        site: 'douyu',
++        roomId: '0',
++        roomState: RoomState.notFound,
++      );
++      expect(missing.roomState, RoomState.notFound);
++      expect(missing.isLive, isFalse);
++      expect(
++        RoomRecord.fromJson(missing.toJson()).roomState,
++        RoomState.notFound,
++      );
++    });
++  });
++
++  group('RoomRecord 旧 JSON 兼容', () {
++    test('旧 JSON 统计键能读取', () {
++      final room = RoomRecord.fromJson({
++        'site': 'huya',
++        'roomId': '2',
++        'online': '12',
++        'diamondFans': '3',
++        'roomState': 'live',
++      });
++      expect(room.audience, '12');
++      expect(room.svip, '3');
++    });
++
++    test('缺 roomState 的旧 JSON 按旧 online 判据映射,显式状态优先', () {
++      expect(
++        RoomRecord.fromJson({'site': 'douyu', 'roomId': '1', 'online': '9'})
++            .roomState,
++        RoomState.live,
++      );
++      expect(
++        RoomRecord.fromJson({'site': 'douyu', 'roomId': '1', 'online': ''})
++            .roomState,
++        RoomState.offline,
++      );
++      expect(
++        RoomRecord.fromJson({
++          'site': 'douyu',
++          'roomId': '1',
++          'online': '9',
++          'roomState': 'offline',
++        }).roomState,
++        RoomState.offline,
++        reason: '显式 roomState 是真源,不被统计数字推翻',
++      );
++      expect(
++        RoomRecord.fromJson({
++          'site': 'huya',
++          'roomId': '9527',
++          'nickname': '虎牙主播',
++          'online': '',
++        }).anchorName,
++        '虎牙主播',
++        reason: '旧摘要 JSON 的 nickname 键可读',
++      );
++    });
++
++    test('toJson 迁移期输出兼容键 online/diamondFans', () {
++      final room = RoomRecord(
++        site: 'huya',
++        roomId: '2',
++        roomState: RoomState.live,
++        audience: '12',
++        svip: '3',
++      );
++      final json = room.toJson();
++      expect(json['audience'], '12');
++      expect(json['online'], '12');
++      expect(json['svip'], '3');
++      expect(json['diamondFans'], '3');
++
++      final blank = RoomRecord(
++        site: 'douyu',
++        roomId: '1',
++        roomState: RoomState.offline,
++      );
++      expect(
++        blank.toJson()['online'],
++        '',
++        reason: '迁移期兼容键:旧消费者依赖 online 键存在,空串表示未提供',
++      );
++      expect(blank.toJson().containsKey('diamondFans'), isFalse);
++      expect(blank.toJson().containsKey('error'), isFalse);
++    });
++
++    test('roundtrip:状态、统计与展示字段经 toJson/fromJson 保留', () {
++      final room = RoomRecord(
++        site: 'douyu',
++        roomId: '1',
++        roomState: RoomState.replay,
++        title: '标题',
++        anchorName: '主播',
++        audience: '0',
++        followers: '0',
++        vip: '1',
++        svip: '2',
++        sourceUrl: 'https://r/1',
++        cover: 'c',
++        avatar: 'a',
++        category: 'cat',
++        cid: '1',
++        cateNo: '2',
++        promoTag: 'p',
++        startedAt: DateTime(2026, 9, 24, 20),
++        source: 'live_parser/douyu',
++        fetchedAt: DateTime(2026, 9, 24, 21),
++      );
++
++      final restored = RoomRecord.fromJson(room.toJson());
++      expect(restored.roomState, RoomState.replay);
++      expect(restored.title, '标题');
++      expect(restored.anchorName, '主播');
++      expect(restored.audience, '0', reason: '有效数值 0 不当作缺失');
++      expect(restored.followers, '0');
++      expect(restored.vip, '1');
++      expect(restored.svip, '2');
++      expect(restored.sourceUrl, 'https://r/1');
++      expect(restored.cover, 'c');
++      expect(restored.avatar, 'a');
++      expect(restored.category, 'cat');
++      expect(restored.cid, '1');
++      expect(restored.cateNo, '2');
++      expect(restored.promoTag, 'p');
++      expect(restored.startedAt, DateTime(2026, 9, 24, 20));
++      expect(restored.source, 'live_parser/douyu');
++      expect(restored.fetchedAt, DateTime(2026, 9, 24, 21));
++    });
++
++    test('未知扩展不影响公共字段读取', () {
++      final room = RoomRecord.fromJson({
++        'site': 'douyu',
++        'roomId': '1',
++        'roomState': 'live',
++        'title': '标题',
++        'extension': {'site': 'douyu', 'version': 99, 'foo': 'bar'},
++      });
++      expect(room.roomState, RoomState.live);
++      expect(room.title, '标题');
++      expect(room.extension, isNull, reason: '尚无已知扩展子类可映射');
++    });
++  });
++
++  group('RoomRecord 刷新合并', () {
++    test('不同房间合并抛 ArgumentError', () {
++      final old = RoomRecord(
++        site: 'huya',
++        roomId: '2',
++        roomState: RoomState.live,
++      );
++      expect(
++        () => old.mergeRefresh(
++          RoomRecord(site: 'douyu', roomId: '2', roomState: RoomState.live),
++        ),
++        throwsArgumentError,
++      );
++      expect(
++        () => old.mergeRefresh(
++          RoomRecord(site: 'huya', roomId: '3', roomState: RoomState.live),
++        ),
++        throwsArgumentError,
++      );
++    });
++
++    test('真实离线状态覆盖旧在播,刷新未提供的线路不被清空', () {
++      const line = StreamLine(
++        name: '线路1',
++        url: 'https://a/hls',
++        format: 'hls',
++        headers: {'Referer': 'https://r/'},
++      );
++      const quality = StreamQuality(name: '原画', rate: 10000, lines: [line]);
++      final old = RoomRecord(
++        site: 'douyu',
++        roomId: '1',
++        roomState: RoomState.live,
++        title: '标题',
++        audience: '100',
++        streams: const [quality],
++      );
++      final fresh = RoomRecord(
++        site: 'douyu',
++        roomId: '1',
++        roomState: RoomState.offline,
++        fetchedAt: DateTime(2026, 9, 24),
++      );
++      final merged = old.mergeRefresh(fresh);
++      expect(merged.roomState, RoomState.offline);
++      expect(merged.isLive, isFalse);
++      expect(merged.title, '标题');
++      expect(merged.audience, '100');
++      expect(merged.streams, const [quality]);
++      expect(merged.fetchedAt, DateTime(2026, 9, 24));
++    });
++  });
++
++  group('RoomRecord 与旧模型转换', () {
++    test('fromSummary/toSummary:online ↔ audience、diamondFans ↔ svip', () {
++      const summary = RoomSummary(
++        site: 'huya',
++        roomId: '2',
++        title: '标题',
++        anchorName: '主播',
++        cid: '1',
++        category: '分类',
++        online: '12',
++        cover: 'c',
++        avatar: 'a',
++        promoTag: 'p',
++        followers: '9',
++        vip: '75',
++        diamondFans: '3',
++        roomState: RoomState.live,
++      );
++      final record = RoomRecord.fromSummary(summary);
++      expect(record.audience, '12');
++      expect(record.followers, '9');
++      expect(record.vip, '75');
++      expect(record.svip, '3');
++      expect(record.roomState, RoomState.live);
++      expect(record.isLive, isTrue);
++
++      final back = record.toSummary();
++      expect(back.online, '12');
++      expect(back.followers, '9');
++      expect(back.vip, '75');
++      expect(back.diamondFans, '3');
++      expect(back.roomState, RoomState.live);
++      expect(back.promoTag, 'p');
++      expect(back.avatar, 'a');
++    });
++
++    test('fromSummary:online 空串归 null,不误判在播', () {
++      const summary = RoomSummary(
++        site: 'douyu',
++        roomId: '1',
++        title: '',
++        anchorName: '',
++        cid: '',
++        category: '',
++        online: '',
++        cover: '',
++      );
++      final record = RoomRecord.fromSummary(summary);
++      expect(record.audience, isNull);
++      expect(record.title, isNull);
++      expect(record.isLive, isFalse);
++      expect(record.roomState, RoomState.offline);
++      expect(record.toSummary().online, '');
++    });
++
++    test('fromSummary replay 摘要按 roomState 判定,不看 online', () {
++      const summary = RoomSummary(
++        site: 'bilibili',
++        roomId: '9',
++        title: '',
++        anchorName: '',
++        cid: '',
++        category: '',
++        online: '',
++        cover: '',
++        roomState: RoomState.replay,
++      );
++      final record = RoomRecord.fromSummary(summary);
++      expect(record.roomState, RoomState.replay);
++      expect(record.isLive, isFalse);
++      expect(record.isReplay, isTrue);
++    });
++
++    test('fromPayload/toPayload:streams/headers/error 保留,错误不转换为空', () {
++      const line = StreamLine(
++        name: '线路1',
++        url: 'https://a/flv',
++        format: 'flv',
++        headers: {'Referer': 'https://r/'},
++      );
++      final payload = RoomPayload(
++        site: 'douyu',
++        roomId: '1',
++        sourceUrl: 'https://r/1',
++        anchorName: '主播',
++        title: '标题',
++        cover: 'c',
++        avatar: 'av',
++        category: '分类',
++        cid: '1',
++        roomState: RoomState.live,
++        streams: const [
++          StreamQuality(name: '原画', rate: 10000, lines: [line]),
++        ],
++        availableQualities: const [QualityOption(name: '原画', rate: 10000)],
++        source: 'live_parser/douyu',
++        fetchedAt: DateTime(2026, 9, 24, 20),
++        error: '解析失败',
++        startedAt: DateTime(2026, 9, 24, 19),
++      );
++
++      final record = RoomRecord.fromPayload(payload);
++      expect(record.error, '解析失败', reason: '请求错误不转换为空');
++      expect(record.source, 'live_parser/douyu');
++      expect(record.fetchedAt, payload.fetchedAt);
++      expect(
++        record.streams.single.lines.single.headers['Referer'],
++        'https://r/',
++      );
++      expect(record.startedAt, DateTime(2026, 9, 24, 19));
++
++      final back = record.toPayload();
++      expect(back.error, '解析失败');
++      expect(back.sourceUrl, 'https://r/1');
++      expect(back.source, 'live_parser/douyu');
++      expect(back.fetchedAt, payload.fetchedAt);
++      expect(back.startedAt, payload.startedAt);
++      expect(back.roomState, RoomState.live);
++      expect(back.streams.single.lines.single.headers, {
++        'Referer': 'https://r/',
++      }, reason: '线路 headers 随转换保留');
++      expect(back.availableQualities.single.name, '原画');
++    });
++  });
++
++  group('RoomRecord 播放只读行为', () {
++    const hd = StreamQuality(
++      name: '蓝光10M',
++      rate: 10000,
++      lines: [
++        StreamLine(name: '线路1', url: 'https://a/flv', format: 'flv'),
++        StreamLine(name: '线路2', url: 'https://a/hls', format: 'hls'),
++      ],
++    );
++    const sd = StreamQuality(
++      name: '超清',
++      rate: 5000,
++      lines: [StreamLine(name: 's', url: 'https://a/s', format: 'flv')],
++    );
++    final room = RoomRecord(
++      site: 'douyu',
++      roomId: '1',
++      roomState: RoomState.live,
++      streams: const [hd, sd],
++    );
++
++    test('playUrl 取首选画质的首选线路(hls 优先)', () {
++      expect(room.playUrl, 'https://a/hls');
++      expect(
++        RoomRecord(
++          site: 'douyu',
++          roomId: '1',
++          roomState: RoomState.offline,
++        ).playUrl,
++        '',
++      );
++    });
++
++    test('qualityByName 与 RoomPayload 同语义:精确、双向包含、回退首选档', () {
++      expect(room.qualityByName('超清'), sd);
++      expect(room.qualityByName('超'), sd);
++      expect(room.qualityByName(null), hd);
++      expect(room.qualityByName(''), hd);
++      expect(room.qualityByName('不存在'), hd);
++      expect(
++        RoomRecord(
++          site: 'douyu',
++          roomId: '1',
++          roomState: RoomState.offline,
++        ).qualityByName('超清'),
++        isNull,
++      );
++    });
++  });
++}

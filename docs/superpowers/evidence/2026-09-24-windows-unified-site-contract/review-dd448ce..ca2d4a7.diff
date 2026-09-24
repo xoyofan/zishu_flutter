@@ -1,0 +1,1754 @@
+# Review package: dd448ce..HEAD
+
+## Commits
+ca2d4a7 UI轨:修复播放页关注统计回归——统计与关注态解耦,云端回拉保留本地已知值
+
+## Files changed
+ .../follow/application/follow_provider.dart        | 126 +++++++---
+ .../play/application/room_stats_provider.dart      |  47 +++-
+ lib/src/features/play/widgets/play_meta_bar.dart   |  62 ++---
+ .../play/widgets/side_panel/side_panel_header.dart |  26 ++-
+ test/features/follow/follow_pull_remote_test.dart  | 256 +++++++++++++++++++++
+ test/ui/workflows/play_follow_panel_test.dart      | 236 ++++++++++++++++---
+ test/ui/workflows/play_meta_bar_test.dart          | 143 ++++++++++--
+ 7 files changed, 765 insertions(+), 131 deletions(-)
+
+## Diff
+diff --git a/lib/src/features/follow/application/follow_provider.dart b/lib/src/features/follow/application/follow_provider.dart
+index 3cee1d0..d0367d7 100644
+--- a/lib/src/features/follow/application/follow_provider.dart
++++ b/lib/src/features/follow/application/follow_provider.dart
+@@ -1,16 +1,18 @@
+ /// 我的关注状态层:关注条目模型 + Notifier 控制器 + data-server 云同步。
+ /// UI(follow_view / widgets)只负责渲染,业务状态全部收敛在此。
+ ///
+ /// 云同步策略(整表替换,后写赢):
+-/// - 启动/登录后:拉取远端关注;远端非空则**替换**本地(服务端为准),
+-///   远端为空(首次使用)则把本地整表推上去;
++/// - 启动/登录后:拉取远端关注;远端非空则**替换**本地条目集合与
++///   isSpecial/remindOn 等关注标记(服务端为准;同 key 条目已知的统计/
++///   房间元信息保留至下一轮刷新,远端删除的条目不复活),远端为空(首次
++///   使用)则把本地整表推上去;
+ /// - 本地任何增删改:落盘后把当前整表推给服务端
+ ///   (服务端 `POST /api/me/follows` = 全量替换 + clientUpdatedAt 逐条合并,
+ ///   删除随之同步)。
+ library;
+ 
+ import 'dart:async';
+ import 'dart:convert';
+ 
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:live_parser/live_parser.dart';
+@@ -89,22 +91,28 @@ class FollowEntry {
+   }
+ }
+ 
+ /// 「上次开播」类时间戳的合并口径:取较大者。
+ ///
+ /// 云端拉回可能是旧值或 0(远端从未见过该房开播),本地跃迁记录又可能比
+ /// 云端新 —— 一律取 max,任何一侧都不得把另一侧抹成更早/空。
+ int mergedInt(int a, int b) => a > b ? a : b;
+ 
+ /// 关注列表控制器:单条增删、特别关注/提醒开关、批量操作与云端同步。
++///
++/// [api] 可选注入 data-server 客户端(缺省生产实例);测试经
++/// `followProvider.overrideWith(() => FollowController(api: …))` 注入
++/// 脚本化 API,保持零真实网络。
+ class FollowController extends Notifier<List<FollowEntry>> {
+-  final DataServerApi _api = DataServerApi();
++  FollowController({DataServerApi? api}) : _api = api ?? DataServerApi();
++
++  final DataServerApi _api;
+ 
+   /// 云同步进行中标记(防 pull/push 重入)。
+   bool _syncing = false;
+ 
+   /// 分批刷新的游标(见 [refreshStatuses]):在关注列表上环状推进,
+   /// 让定时轮询每周期只打一批而不重复同一批。
+   int _refreshCursor = 0;
+ 
+   @override
+   List<FollowEntry> build() {
+@@ -114,31 +122,31 @@ class FollowController extends Notifier<List<FollowEntry>> {
+   }
+ 
+   /// fixture 初始 6 条:由 kFixtureRooms 派生,
+   /// 含 2 条特别关注、1 条离线(离线条目把 online 置空,用 online.isEmpty 表达)。
+   static List<FollowEntry> _seed() {
+     final rooms = kFixtureRooms.take(6).toList();
+     final now = DateTime.now();
+ 
+     // 复制为离线房间:online 置空,其余字段保持契约形状。
+     RoomSummary asOffline(RoomSummary source) => RoomSummary(
+-          site: source.site,
+-          roomId: source.roomId,
+-          title: source.title,
+-          anchorName: source.anchorName,
+-          cid: source.cid,
+-          category: source.category,
+-          online: '',
+-          cover: source.cover,
+-          avatar: source.avatar,
+-          startedAt: source.startedAt,
+-        );
++      site: source.site,
++      roomId: source.roomId,
++      title: source.title,
++      anchorName: source.anchorName,
++      cid: source.cid,
++      category: source.category,
++      online: '',
++      cover: source.cover,
++      avatar: source.avatar,
++      startedAt: source.startedAt,
++    );
+ 
+     return [
+       FollowEntry(
+         room: rooms[0],
+         isSpecial: true,
+         remindOn: true,
+         followedAt: now.subtract(const Duration(hours: 3)),
+       ),
+       FollowEntry(
+         room: rooms[1],
+@@ -170,44 +178,56 @@ class FollowController extends Notifier<List<FollowEntry>> {
+         remindOn: false,
+         followedAt: now.subtract(const Duration(days: 15)),
+       ),
+     ];
+   }
+ 
+   /// 切换特别关注标记。
+   void toggleSpecial(String key) {
+     state = [
+       for (final entry in state)
+-        if (entry.key == key) entry.copyWith(isSpecial: !entry.isSpecial) else entry,
++        if (entry.key == key)
++          entry.copyWith(isSpecial: !entry.isSpecial)
++        else
++          entry,
+     ];
+     _persist();
+   }
+ 
+   /// 切换单条开播提醒。
+   void toggleRemind(String key) {
+     state = [
+       for (final entry in state)
+-        if (entry.key == key) entry.copyWith(remindOn: !entry.remindOn) else entry,
++        if (entry.key == key)
++          entry.copyWith(remindOn: !entry.remindOn)
++        else
++          entry,
+     ];
+     _persist();
+   }
+ 
+   /// 移除单条关注。
+   void remove(String key) {
+-    state = [for (final entry in state) if (entry.key != key) entry];
++    state = [
++      for (final entry in state)
++        if (entry.key != key) entry,
++    ];
+     _persist();
+   }
+ 
+   /// 批量移除(删除所选)。
+   void removeMany(Iterable<String> keys) {
+     final targets = keys.toSet();
+-    state = [for (final entry in state) if (!targets.contains(entry.key)) entry];
++    state = [
++      for (final entry in state)
++        if (!targets.contains(entry.key)) entry,
++    ];
+     _persist();
+   }
+ 
+   /// 批量开关提醒。
+   void setRemindMany(Iterable<String> keys, bool enabled) {
+     final targets = keys.toSet();
+     state = [
+       for (final entry in state)
+         targets.contains(entry.key) ? entry.copyWith(remindOn: enabled) : entry,
+     ];
+@@ -376,22 +396,21 @@ class FollowController extends Notifier<List<FollowEntry>> {
+       // 上游没取到(huya wup 失败 / 平台未实现)时保留已有值,不抹成空。
+       diamondFans: fresh.diamondFans.trim().isNotEmpty
+           ? fresh.diamondFans
+           : current.diamondFans,
+     );
+   }
+ 
+   /// 登录 token:登录态 provider 尚未构建时返回 null,不强制构建
+   /// authProvider——播放页等非壳场景不触发其启动登录链(测试零网络)。
+   /// 容器已销毁时同样返回 null:异步恢复任务可能在 dispose 后到达此处。
+-  String? get _authToken =>
+-      ref.mounted && ref.exists(authProvider)
++  String? get _authToken => ref.mounted && ref.exists(authProvider)
+       ? ref.read(authProvider).token
+       : null;
+ 
+   /// 拉取云端关注并合并到本地(登录态才有效)。
+   /// 远端非空 → 替换本地;远端为空 → 把本地整表推上去(首次云同步)。
+   Future<void> pullRemote() async {
+     final token = _authToken;
+     if (token == null || _syncing) return;
+     _syncing = true;
+     try {
+@@ -399,24 +418,25 @@ class FollowController extends Notifier<List<FollowEntry>> {
+       if (!ref.mounted) return;
+       if (remote.isNotEmpty) {
+         // 整表以云端为准,但「上次开播」类时间戳与本地同 key 条目取 max:
+         // 本地跃迁记录可能比云端新,不得被拉回抹掉。
+         final localByKey = {for (final entry in state) entry.key: entry};
+         state = [
+           for (final item in remote)
+             _fromRemote(item, localByKey['${item.site}:${item.id}']),
+         ];
+         await _persist(syncRemote: false);
+-        // 云端契约不带分类/在播/统计元信息(见 [_fromRemote] 的置空),整表
+-        // 替换后立即补一轮刷新回填,不等 60s 轮询 —— 否则关注行分类条与
+-        // 侧栏头统计要空一个轮询周期。无 refresher(fixture/单测)时该调用
+-        // 零网络直接返回 0。
++        // 云端契约不带分类/在播/统计元信息:同 key 条目已在 [_mergeLocalRoom]
++        // 保留本地已知值,但远端新增条目这些字段仍为空 —— 整表替换后立即
++        // 补一轮刷新回填,不等 60s 轮询 —— 否则关注行分类条与侧栏头统计
++        // 要空一个轮询周期。无 refresher(fixture/单测)时该调用零网络
++        // 直接返回 0。
+         unawaited(refreshStatuses());
+       } else {
+         await _pushRemote(token);
+       }
+     } on Exception {
+       // 网络失败/会话失效:保留本地数据,不阻塞 UI;下次改动会再次尝试推送。
+     } finally {
+       _syncing = false;
+     }
+   }
+@@ -434,41 +454,44 @@ class FollowController extends Notifier<List<FollowEntry>> {
+         if (decoded is List) {
+           final entries = [
+             for (final item in decoded)
+               if (item is Map)
+                 FollowEntry(
+                   room: RoomSummary(
+                     site: item['site']?.toString() ?? '',
+                     roomId: item['roomId']?.toString() ?? '',
+                     title: item['title']?.toString() ?? '',
+                     anchorName:
+-                        item['uname']?.toString() ?? item['anchorName']?.toString() ?? '',
++                        item['uname']?.toString() ??
++                        item['anchorName']?.toString() ??
++                        '',
+                     cid: item['cid']?.toString() ?? '',
+                     category: item['category']?.toString() ?? '',
+                     online: item['online']?.toString() ?? '',
+                     cover: item['cover']?.toString() ?? '',
+                     avatar: item['avatar']?.toString() ?? '',
+                     roomState: RoomState.values.firstWhere(
+                       (state) => state.name == item['roomState'],
+                       orElse: () => RoomState.offline,
+                     ),
+                     startedAt: DateTime.tryParse(
+                       item['startedAt']?.toString() ?? '',
+                     ),
+                     followers: item['followers']?.toString() ?? '',
+                     vip: item['vip']?.toString() ?? '',
+                     diamondFans: item['diamondFans']?.toString() ?? '',
+                   ),
+                   isSpecial: item['isSpecial'] == true,
+                   remindOn: item['remindOn'] == true,
+                   followedAt: item['followedAt'] is String
+-                      ? DateTime.tryParse(item['followedAt'] as String) ?? DateTime.now()
++                      ? DateTime.tryParse(item['followedAt'] as String) ??
++                            DateTime.now()
+                       : DateTime.now(),
+                   lastLiveAt: (item['lastLiveAt'] as num?)?.toInt() ?? 0,
+                   liveStartAt: (item['liveStartAt'] as num?)?.toInt() ?? 0,
+                 ),
+           ];
+           if (entries.isNotEmpty) state = entries;
+         }
+       }
+     } catch (_) {
+       // 存储不可用/数据损坏:静默保留种子,不阻塞 UI。
+@@ -492,24 +515,33 @@ class FollowController extends Notifier<List<FollowEntry>> {
+       avatar: '',
+       addedAt: entry.followedAt.millisecondsSinceEpoch,
+       superFollow: entry.isSpecial,
+       liveNotify: entry.remindOn,
+       clientUpdatedAt: nowMs,
+       lastLiveAt: entry.lastLiveAt,
+       liveStartAt: entry.liveStartAt,
+     );
+   }
+ 
+-  /// 远端契约 → 本地条目(开播状态远端不回传,先按离线呈现,待真实解析链路回填)。
++  /// 远端契约 → 本地条目。
+   ///
+-  /// [previous] 为本地已有条目(按同 key 匹配):「上次开播」类时间戳与本地
+-  /// 取 max —— 云端可能是旧值/0 值,不得把本地刚记录的跃迁抹掉。
++  /// [previous] 为本地已有条目(按同 key 匹配):
++  /// - 关注维度(`isSpecial`/`remindOn`/`followedAt`)以远端为准;
++  /// - 房间记录按 [RoomSummary] 字段本地已知值优先(_mergeLocalRoom):
++  ///   云端契约不含统计/分类/在播/roomState/avatar/startedAt 等房间元信息,
++  ///   全量替换不得把已知本地值抹成空,保留至紧接着的 `refreshStatuses`
++  ///   刷新回填;
++  /// - 「上次开播」类时间戳与本地取 max —— 云端可能是旧值/0 值,不得把
++  ///   本地刚记录的跃迁抹掉。
++  ///
++  /// 本地无记录(远端新增)时统计/开播状态保持空串,待真实解析链路回填,
++  /// 展示层显示「—」,不伪造 0。
+   FollowEntry _fromRemote(RemoteFollow item, [FollowEntry? previous]) {
+     final entry = FollowEntry(
+       room: RoomSummary(
+         site: item.site,
+         roomId: item.id,
+         title: item.title,
+         anchorName: item.anchor,
+         cid: '',
+         category: '',
+         online: '',
+@@ -518,25 +550,51 @@ class FollowController extends Notifier<List<FollowEntry>> {
+       isSpecial: item.superFollow,
+       remindOn: item.liveNotify,
+       followedAt: item.addedAt > 0
+           ? DateTime.fromMillisecondsSinceEpoch(item.addedAt)
+           : DateTime.now(),
+       lastLiveAt: item.lastLiveAt,
+       liveStartAt: item.liveStartAt,
+     );
+     if (previous == null) return entry;
+     return entry.copyWith(
++      room: _mergeLocalRoom(entry.room, previous.room),
+       lastLiveAt: mergedInt(entry.lastLiveAt, previous.lastLiveAt),
+       liveStartAt: mergedInt(entry.liveStartAt, previous.liveStartAt),
+     );
+   }
+ 
++  /// 同 key 回拉时的房间记录合并:本地已知值优先 —— 统计与房间元信息
++  /// 保留至下一轮刷新(远端契约根本不携带这些字段,取远端只会得到空);
++  /// 本地为空的字段(标题/封面等远端自带字段)用远端补齐。
++  static RoomSummary _mergeLocalRoom(RoomSummary remote, RoomSummary local) {
++    String known(String localValue, String remoteValue) =>
++        localValue.trim().isNotEmpty ? localValue : remoteValue;
++    return RoomSummary(
++      site: local.site,
++      roomId: local.roomId,
++      title: known(local.title, remote.title),
++      anchorName: known(local.anchorName, remote.anchorName),
++      cid: local.cid,
++      category: local.category,
++      online: known(local.online, remote.online),
++      cover: known(local.cover, remote.cover),
++      avatar: known(local.avatar, remote.avatar),
++      promoTag: local.promoTag ?? remote.promoTag,
++      followers: local.followers,
++      vip: local.vip,
++      diamondFans: local.diamondFans,
++      roomState: local.roomState,
++      startedAt: local.startedAt ?? remote.startedAt,
++    );
++  }
++
+   /// 整表推送到服务端(登录态才有效)。
+   Future<void> _pushRemote(String token) async {
+     if (_syncing || !ref.mounted) return;
+     _syncing = true;
+     try {
+       final now = DateTime.now().millisecondsSinceEpoch;
+       await _api.pushFollows(token, [
+         for (final entry in state) _toRemote(entry, now),
+       ]);
+     } on Exception {
+@@ -571,26 +629,30 @@ class FollowController extends Notifier<List<FollowEntry>> {
+             'followers': entry.room.followers,
+             'vip': entry.room.vip,
+             'diamondFans': entry.room.diamondFans,
+             'isSpecial': entry.isSpecial,
+             'remindOn': entry.remindOn,
+             'followedAt': entry.followedAt.toIso8601String(),
+             'lastLiveAt': entry.lastLiveAt,
+             'liveStartAt': entry.liveStartAt,
+           },
+       ];
+-      await SharedPreferencesAsync().setString(_kFollowList, jsonEncode(payload));
++      await SharedPreferencesAsync().setString(
++        _kFollowList,
++        jsonEncode(payload),
++      );
+     } catch (_) {
+       // 写盘失败:内存态仍生效,下次启动回退旧值。
+     }
+     if (syncRemote) {
+       final token = _authToken;
+       if (token != null) {
+         unawaited(_pushRemote(token));
+       }
+     }
+   }
+ }
+ 
+ /// 关注列表 provider(应用级,不随页面销毁)。
+-final followProvider =
+-    NotifierProvider<FollowController, List<FollowEntry>>(FollowController.new);
++final followProvider = NotifierProvider<FollowController, List<FollowEntry>>(
++  FollowController.new,
++);
+diff --git a/lib/src/features/play/application/room_stats_provider.dart b/lib/src/features/play/application/room_stats_provider.dart
+index c8762ff..937002e 100644
+--- a/lib/src/features/play/application/room_stats_provider.dart
++++ b/lib/src/features/play/application/room_stats_provider.dart
+@@ -1,26 +1,63 @@
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:live_parser/live_parser.dart' show RoomSummary;
+ 
+ import '../../../shared/application/providers.dart' show roomRefresherProvider;
+ 
+-/// 播放页当前房间的统计兜底(用户口径 2026-09-20:huya 等平台的关注/VIP
+-/// 统计不能只服务已关注房间)。
++/// 播放页当前房间的统计快照(用户口径 2026-09-20:huya 等平台的关注/VIP
++/// 统计不能只服务已关注房间;2026-09-24 回归口径:统计与关注状态完全分离)。
+ ///
+ /// 对任意房间直接调解析侧 `RoomSummaryRefresher.refreshRoom` —— 与关注行
+ /// 刷新同一条真源链(huya profileRoom / douyu getAnchorNewCard 等),不需要
+-/// 关注状态。已关注房间优先消费关注条目的 summary(关注链路维护、带离线
+-/// 跃迁记账),本 provider 只在条目缺失/未回填时兜底。
++/// 关注状态。展示层经 [mergeDisplayStats] 逐字段合并新鲜解析值与本地已有
++/// 统计快照,任何一侧的空缺互不遮蔽。
+ ///
+-/// 单房间 10s 超时;失败返回 null(展示「—」,数据诚实性:不伪造)。
++/// 单房间 10s 超时;失败返回 null(回退本地快照或展示「—」,数据诚实性:
++/// 不伪造)。
+ final roomStatsProvider = FutureProvider.autoDispose
+     .family<RoomSummary?, ({String site, String roomId})>((ref, key) async {
+       final refresher = ref.read(roomRefresherProvider);
+       if (refresher == null) return null;
+       try {
+         return await refresher
+             .refreshRoom(site: key.site, roomId: key.roomId)
+             .timeout(const Duration(seconds: 10));
+       } catch (_) {
+         return null;
+       }
+     });
++
++/// 展示统计的逐字段合并(桌面信息头与窄屏信息条共用)。
++///
++/// 统计取数与关注状态**完全分离**:每个统计字段独立选值 ——
++/// 先取 [parsed](roomStatsProvider 的新鲜解析快照)中该字段的非空值;
++/// 该字段解析缺失时再回退 [local](关注条目维护的本地统计快照)的非空值;
++/// 两侧都未知则保持空串,展示层渲染「—」。
++/// [parsed] 为 null(解析失败/无刷新能力)时整体回退本地快照:错误只表现为
++/// 回退或「—」,不冒充有效零,也绝不从关注布尔值推任何人数
++/// (回归根因:此前整份快照按 followed 有无切换数据源,点关注瞬间
++/// 空统计盖掉解析值、数值全部消失)。
++///
++/// 返回值仅供统计展示取数,不参与在播判据等业务语义。
++RoomSummary? mergeDisplayStats({RoomSummary? parsed, RoomSummary? local}) {
++  if (parsed == null) return local;
++  if (local == null) return parsed;
++  String fresh(String parsedValue, String localValue) =>
++      parsedValue.trim().isNotEmpty ? parsedValue : localValue;
++  return RoomSummary(
++    site: parsed.site,
++    roomId: parsed.roomId,
++    title: fresh(parsed.title, local.title),
++    anchorName: fresh(parsed.anchorName, local.anchorName),
++    cid: fresh(parsed.cid, local.cid),
++    category: fresh(parsed.category, local.category),
++    online: fresh(parsed.online, local.online),
++    cover: fresh(parsed.cover, local.cover),
++    avatar: fresh(parsed.avatar, local.avatar),
++    promoTag: parsed.promoTag ?? local.promoTag,
++    followers: fresh(parsed.followers, local.followers),
++    vip: fresh(parsed.vip, local.vip),
++    diamondFans: fresh(parsed.diamondFans, local.diamondFans),
++    roomState: parsed.roomState,
++    startedAt: parsed.startedAt ?? local.startedAt,
++  );
++}
+diff --git a/lib/src/features/play/widgets/play_meta_bar.dart b/lib/src/features/play/widgets/play_meta_bar.dart
+index e5472ad..f5921d5 100644
+--- a/lib/src/features/play/widgets/play_meta_bar.dart
++++ b/lib/src/features/play/widgets/play_meta_bar.dart
+@@ -3,25 +3,27 @@
+ /// 对齐参考实现 `SFVideoLive/apps/web/src/components/play/play-side/SideHeader.vue`
+ /// 在移动竖屏堆叠布局(`styles/play-layout.css` 的 `.play-layout--stack`)下的呈现,
+ /// 也即 `docs/ui-parity/visual-confirm.md`「新增 B. 直播信息条(mobile play meta bar)」:
+ /// 34px 圆形头像 + 昵称 + 4 项统计(关注 / 开播 / 人气 / 弹幕,每项图标 + 数值,
+ /// 2 行 × 2 列)+ 右贴边竖排「关注 / 超关」按钮(列宽 72,关注红、超关紫)。
+ ///
+ /// 归属:桌面(>=768)仍用 [PlaySidePanel] 的完整信息头(54px 头像 + 角标按钮),
+ /// 本组件只在窄屏由侧栏以 compact 形态渲染 —— 信息条与侧栏信息头共用同一份
+ /// 关注状态与切换回调,不重复实现关注语义。
+ ///
+-/// **数据诚实性**:统计格取自与桌面侧栏信息头**同一份**数据源 ——
+-/// [followProvider] 中当前房间关注条目的 [RoomSummary](`followers`/`online`
+-/// 由 `FollowController.refreshStatuses` 按各站真源回填,commit 6d920cf)。
+-/// 未关注、或解析层没给的项一律显示「—」,不伪造;纯复用已回填的关注快照,
+-/// 不另发网络请求。开播时间取 [RoomPayload].`startedAt`(斗鱼等平台真实返回);
++/// **数据诚实性**:统计格与关注状态解耦 —— 先取 [roomStatsProvider] 的新鲜
++/// 解析快照(与桌面侧栏信息头同一条解析真源,任意房间可查),再经
++/// [mergeDisplayStats] 逐字段回退 [followProvider] 中当前房间关注条目的
++/// [RoomSummary](`followers`/`online` 由 `FollowController.refreshStatuses`
++/// 维护的本地统计快照)。点关注引入的空统计不会盖掉已知解析值;
++/// 两侧都没有的项一律显示「—」,不伪造;解析出错也只回退本地或「—」,
++/// 不冒充有效零。开播时间取 [RoomPayload].`startedAt`(斗鱼等平台真实返回);
+ /// 弹幕总数上游无字段,恒为「—」(会话内已收条数不是平台弹幕总数,不冒充)。
+ library;
+ 
+ import 'package:flutter/material.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:live_parser/live_parser.dart'
+     show RoomPayload, RoomStatField, RoomStatTone, RoomSummary;
+ 
+ import '../../../shared/presentation/design_tokens.dart';
+ import '../../../shared/presentation/platform_display.dart';
+@@ -58,35 +60,36 @@ class PlayMetaBar extends ConsumerWidget {
+   static const double _kStatIconSize = 12;
+ 
+   @override
+   Widget build(BuildContext context, WidgetRef ref) {
+     final tokens = context.tokens;
+     final payload = this.payload;
+     final anchor = payload?.anchorName.trim().isNotEmpty == true
+         ? payload!.anchorName.trim()
+         : '主播信息';
+     final isLive = payload?.isLive ?? false;
+-    // 统计区数据源(用户口径 2026-09-20 huya 等平台统计不能只服务已关注
+-    // 房间):已关注房间取关注条目的 [RoomSummary](refreshStatuses 按真源
+-    // 回填);未关注/未回填时兜底调 [roomStatsProvider](同一条解析真源,
+-    // 对任意房间可查)。上游未提供的字段仍显示「—」,不伪造。
++    // 统计区数据源(用户口径 2026-09-20:统计不能只服务已关注房间;
++    // 2026-09-24 回归口径:取数与关注状态解耦)——先取 [roomStatsProvider]
++    // 的新鲜解析快照,再经 [mergeDisplayStats] 逐字段回退关注条目维护的
++    // 本地统计快照。上游未提供的字段仍显示「—」,不伪造。
+     final site = payload?.site ?? '';
+     final roomId = payload?.roomId ?? '';
+     final matched = ref
+         .watch(followProvider)
+         .where((entry) => entry.key == '$site:$roomId');
+     final RoomSummary? followedSummary = matched.isNotEmpty
+         ? matched.first.room
+         : null;
+-    final RoomSummary? summary =
+-        followedSummary ??
+-        ref.watch(roomStatsProvider((site: site, roomId: roomId))).value;
++    final RoomSummary? summary = mergeDisplayStats(
++      parsed: ref.watch(roomStatsProvider((site: site, roomId: roomId))).value,
++      local: followedSummary,
++    );
+     final display = displaySpecFor(site);
+     final followersText = formatFollowersValue(summary?.followers);
+     final startedText = formatStartedAt(payload?.startedAt, isLive: isLive);
+     final statItems = <Widget>[
+       if (display.showFollowers)
+         _MetaStat(
+           key: const Key('play-meta-stat-followers'),
+           icon: Icons.favorite_border_rounded,
+           iconColor: tokens.playFollowText,
+           label: '关注',
+@@ -180,25 +183,26 @@ class PlayMetaBar extends ConsumerWidget {
+       ),
+     );
+   }
+ 
+   IconData _metaStatIcon(RoomStatField field) => switch (field) {
+     RoomStatField.audience => Icons.people_alt_outlined,
+     RoomStatField.vip => Icons.workspace_premium_outlined,
+     RoomStatField.svip => Icons.diamond_outlined,
+   };
+ 
+-  Color _metaStatColor(BuildContext context, RoomStatTone tone) => switch (tone) {
+-    RoomStatTone.audience => context.tokens.statAudience,
+-    RoomStatTone.vip => context.tokens.statVip,
+-    RoomStatTone.svip => context.tokens.statSvip,
+-  };
++  Color _metaStatColor(BuildContext context, RoomStatTone tone) =>
++      switch (tone) {
++        RoomStatTone.audience => context.tokens.statAudience,
++        RoomStatTone.vip => context.tokens.statVip,
++        RoomStatTone.svip => context.tokens.statSvip,
++      };
+ }
+ 
+ /// 圆形头像:无图时以昵称首字兜底(品牌色底 + 主文字色)。
+ class _MetaAvatar extends StatelessWidget {
+   const _MetaAvatar({
+     required this.avatar,
+     required this.label,
+     required this.live,
+   });
+ 
+@@ -268,34 +272,34 @@ class _MetaStat extends StatelessWidget {
+   final String value;
+ 
+   @override
+   Widget build(BuildContext context) {
+     final tokens = context.tokens;
+     return ConstrainedBox(
+       constraints: const BoxConstraints(maxWidth: AppSpacing.xl * 7),
+       child: Row(
+         mainAxisSize: MainAxisSize.min,
+         children: [
+-        Icon(icon, size: PlayMetaBar._kStatIconSize, color: iconColor),
+-        const SizedBox(width: 3),
+-        Flexible(
+-          child: Text(
+-            '$label $value',
+-            maxLines: 1,
+-            overflow: TextOverflow.ellipsis,
+-            style: TextStyle(
+-              fontSize: AppFontSize.caption,
+-              height: 1.05,
+-              color: tokens.textSecondary,
++          Icon(icon, size: PlayMetaBar._kStatIconSize, color: iconColor),
++          const SizedBox(width: 3),
++          Flexible(
++            child: Text(
++              '$label $value',
++              maxLines: 1,
++              overflow: TextOverflow.ellipsis,
++              style: TextStyle(
++                fontSize: AppFontSize.caption,
++                height: 1.05,
++                color: tokens.textSecondary,
++              ),
+             ),
+           ),
+-        ),
+         ],
+       ),
+     );
+   }
+ }
+ 
+ /// 右贴边竖排「关注 / 超关」。
+ ///
+ /// 与侧栏 `_SideActionButton` 同语义、同 token(该类为 play_side_panel.dart 的
+ /// 私有类,跨文件不可复用,故在此实现等价样式);锚点沿用既有测试契约
+diff --git a/lib/src/features/play/widgets/side_panel/side_panel_header.dart b/lib/src/features/play/widgets/side_panel/side_panel_header.dart
+index ea3fcee..bbe3ac9 100644
+--- a/lib/src/features/play/widgets/side_panel/side_panel_header.dart
++++ b/lib/src/features/play/widgets/side_panel/side_panel_header.dart
+@@ -16,25 +16,25 @@ class _SideHeader extends ConsumerWidget {
+     required this.onToggleRemind,
+     required this.onOpenExternal,
+   });
+ 
+   final String site;
+   final String roomId;
+   final RoomPayload? payload;
+ 
+   /// 当前房间的关注条目(null = 未关注)。
+   ///
+-  /// 统计区数据源对齐 web `SideHeader.vue` + `useRoomStats.ts`:粉丝/贵宾/
+-  /// 人气等统计来自关注状态快照(本仓等价物 = 关注条目随
+-  /// `FollowController.refreshStatuses` 回填的 [RoomSummary]);[RoomPayload]
+-  /// 不携带统计字段,故未关注(或尚未刷新回填)时该项显示「—」,
+-  /// 不伪造数据。
++  /// 仅作为统计区的**本地回退快照**参与逐字段合并(见 build 内
++  /// [mergeDisplayStats]):统计独立来自 roomStatsProvider 的新鲜解析值,
++  /// 与关注状态解耦 —— 关注与否都不改变取数来源,刚关注条目里的空统计
++  /// 不得盖掉已知解析值;本地已知值只在解析缺字段/出错时逐字段回退,
++  /// 未知保持「—」,不伪造数据。
+   final RoomSummary? followRoom;
+ 
+   final bool followed;
+   final bool superFollowed;
+ 
+   /// 开播提醒开关(关注条目 remindOn)。未关注时按钮禁用,该值无意义。
+   final bool remindOn;
+ 
+   /// 当前房间 web 页地址(null = 无稳定外链,按钮禁用)。
+   final String? externalUrl;
+@@ -46,28 +46,30 @@ class _SideHeader extends ConsumerWidget {
+   @override
+   Widget build(BuildContext context, WidgetRef ref) {
+     final tokens = context.tokens;
+     final anchor = payload?.anchorName.trim().isNotEmpty == true
+         ? payload!.anchorName
+         : '主播信息';
+     final avatar = payload?.avatar.trim() ?? '';
+     final title = payload?.title.trim() ?? '';
+     final category = payload?.category.trim() ?? '';
+     final isLive = payload?.isLive ?? false;
+-    // 统计区(对齐 web SideHeader「关注：N」行 + stats 列):已关注房间
+-    // 取关注条目回填;未关注/未回填时兜底调 roomStatsProvider(同一条解析
+-    // 真源,任意房间可查 —— 用户口径 2026-09-20 huya 等平台统计不能只服务
+-    // 已关注房间)。上游未提供 → '—' 占位,不伪造(数据诚实性)。
++    // 统计区(对齐 web SideHeader「关注：N」行 + stats 列):先取
++    // roomStatsProvider 的新鲜解析快照(同一条解析真源,任意房间可查 ——
++    // 用户口径 2026-09-20),再逐字段回退关注条目维护的本地统计快照
++    // (mergeDisplayStats)。取数与关注状态解耦;上游未提供 → '—' 占位,
++    // 不伪造(数据诚实性)。
+     final followRoom = this.followRoom;
+-    final RoomSummary? stats =
+-        followRoom ??
+-        ref.watch(roomStatsProvider((site: site, roomId: roomId))).value;
++    final RoomSummary? stats = mergeDisplayStats(
++      parsed: ref.watch(roomStatsProvider((site: site, roomId: roomId))).value,
++      local: followRoom,
++    );
+     final display = displaySpecFor(site);
+     final followersText = formatFollowersValue(stats?.followers);
+ 
+     // 信息头留出稳定的三行排版空间：昵称、分类、统计各占一行，
+     // 统一使用紧凑但可读的行高，避免大字体或窄侧栏下互相挤压。
+     final headerHeight = MediaQuery.textScalerOf(context).scale(72.0);
+     return Container(
+       key: const Key('play-side-header'),
+       height: headerHeight,
+       decoration: BoxDecoration(
+diff --git a/test/features/follow/follow_pull_remote_test.dart b/test/features/follow/follow_pull_remote_test.dart
+new file mode 100644
+index 0000000..4640fd8
+--- /dev/null
++++ b/test/features/follow/follow_pull_remote_test.dart
+@@ -0,0 +1,256 @@
++/// 云端关注回拉(`FollowController.pullRemote`)契约单测。
++///
++/// 覆盖整表以远端为准时的四条口径(用户确认的 Windows 回归 bug,2026-09-24):
++/// 1. **同 key 本地已知统计/房间元信息保留**:云端契约只带关注状态与基础
++///    展示字段,不含 followers/vip/diamondFans/online/roomState/category 等
++///    —— 全量替换不得把已知本地值抹成空,保留至下一轮 `refreshStatuses` 刷新;
++/// 2. **远端决定条目集合与关注维度标记**:isSpecial/remindOn/followedAt
++///    以远端为准;已在远端删除的本地条目不复活;
++/// 3. **未知保持空**:远端新增(本地无记录)条目的统计字段为空串,
++///    展示层据此显示「—」,不伪造 0;
++/// 4. 「上次开播」类时间戳与本地取 max(既有口径,防回退)。
++///
++/// 测试 seam(主管确认的方案 C):`FollowController` 可选构造参数注入
++/// `DataServerApi`,经 `followProvider.overrideWith` 携带脚本化 API 进入;
++/// 登录态用 `authProvider.overrideWith` 的测试替身提供 token。
++/// 全程零真实网络。
++library;
++
++import 'dart:convert';
++
++import 'package:flutter_riverpod/flutter_riverpod.dart';
++import 'package:flutter_test/flutter_test.dart';
++import 'package:live_parser/live_parser.dart' show RoomState;
++import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
++import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
++import 'package:zishu_flutter/src/features/follow/application/follow_provider.dart';
++import 'package:zishu_flutter/src/shared/application/auth_provider.dart';
++import 'package:zishu_flutter/src/shared/application/data_server_api.dart';
++
++/// 脚本化 data-server API:fetchFollows 返回远端快照,pushFollows 只记账。
++class _FakeDataServerApi extends DataServerApi {
++  _FakeDataServerApi({this.remote = const []});
++
++  /// 远端关注快照(GET /api/me/follows 的 follows)。
++  final List<RemoteFollow> remote;
++
++  /// pushFollows 调用记录(远端非空时不应发生推送)。
++  final List<List<RemoteFollow>> pushes = [];
++
++  @override
++  Future<List<RemoteFollow>> fetchFollows(String token) async => remote;
++
++  @override
++  Future<void> pushFollows(String token, List<RemoteFollow> items) async {
++    pushes.add(items);
++  }
++}
++
++/// 假登录态:直接进入已登录,供 FollowController._authToken 取 token。
++class _FakeAuthController extends AuthController {
++  @override
++  AuthState build() => AuthState(
++    phase: AuthPhase.authenticated,
++    session: DataSession(
++      token: 'test-token',
++      expiresAt: DateTime.now().millisecondsSinceEpoch + 3600_000,
++      userId: 1,
++      username: 'tester',
++    ),
++  );
++}
++
++/// 本地种子条目(带已知统计与房间元信息)。
++Map<String, Object> _localEntry({
++  required String roomId,
++  String site = 'douyu',
++  String online = '',
++  String followers = '',
++  String vip = '',
++  String diamondFans = '',
++  String category = '',
++  String cid = '',
++  bool isSpecial = false,
++}) => {
++  'site': site,
++  'roomId': roomId,
++  'title': '本地标题$roomId',
++  'uname': '本地主播$roomId',
++  'cover': 'https://cdn/local.jpg',
++  'avatar': 'https://cdn/local-avatar.jpg',
++  'cid': cid,
++  'category': category,
++  'online': online,
++  'roomState': 'live',
++  'startedAt': '2026-09-20T08:00:00.000Z',
++  'followers': followers,
++  'vip': vip,
++  'diamondFans': diamondFans,
++  'isSpecial': isSpecial,
++  'remindOn': false,
++  'followedAt': '2026-09-01T00:00:00.000Z',
++  'lastLiveAt': 1700000000000,
++};
++
++/// 远端条目:契约只有关注状态与基础展示字段,**不含统计/分类/在播**。
++RemoteFollow _remoteEntry({
++  required String id,
++  String site = 'douyu',
++  bool superFollow = false,
++  bool liveNotify = false,
++}) => RemoteFollow(
++  site: site,
++  id: id,
++  title: '远端标题$id',
++  anchor: '远端主播$id',
++  cover: 'https://cdn/remote.jpg',
++  avatar: '',
++  addedAt: DateTime(2026, 9, 2).millisecondsSinceEpoch,
++  superFollow: superFollow,
++  liveNotify: liveNotify,
++  clientUpdatedAt: 1,
++  lastLiveAt: 0,
++  liveStartAt: 0,
++);
++
++Future<({ProviderContainer container, _FakeDataServerApi api})> _container({
++  required List<Map<String, Object>> localSeed,
++  required List<RemoteFollow> remote,
++}) async {
++  SharedPreferencesAsyncPlatform.instance =
++      InMemorySharedPreferencesAsync.withData(<String, Object>{
++        'zishu.follow.list': jsonEncode(localSeed),
++      });
++  final api = _FakeDataServerApi(remote: remote);
++  final container = ProviderContainer(
++    overrides: [
++      followProvider.overrideWith(() => FollowController(api: api)),
++      authProvider.overrideWith(_FakeAuthController.new),
++    ],
++  );
++  addTearDown(container.dispose);
++  // 等 _restore 从存储灌入本地种子。
++  for (var i = 0; i < 20; i++) {
++    if (container.read(followProvider).length == localSeed.length) break;
++    await Future<void>.delayed(Duration.zero);
++  }
++  return (container: container, api: api);
++}
++
++void main() {
++  group('pullRemote 整表以远端为准', () {
++    test('同 key 本地已知统计/房间元信息保留,不被云端空统计抹掉', () async {
++      final (:container, :api) = await _container(
++        localSeed: [
++          _localEntry(
++            roomId: '1001',
++            online: '1.2万',
++            followers: '123456',
++            vip: '321',
++            diamondFans: '1300',
++            category: '网游',
++            cid: 'cid-local',
++          ),
++        ],
++        // 云端返回同 key,但契约里没有任何统计字段。
++        remote: [_remoteEntry(id: '1001', superFollow: true, liveNotify: true)],
++      );
++      container.read(authProvider); // 触发假登录态,供 _authToken 取 token。
++
++      await container.read(followProvider.notifier).pullRemote();
++
++      final entries = container.read(followProvider);
++      expect(entries, hasLength(1), reason: '前置:远端决定条目集合');
++      final entry = entries.single;
++      expect(entry.key, 'douyu:1001');
++      // 远端决定关注维度标记。
++      expect(entry.isSpecial, isTrue, reason: 'isSpecial 以远端为准');
++      expect(entry.remindOn, isTrue, reason: 'remindOn 以远端为准');
++      // 同 key 的本地已知统计/房间元信息必须保留到下一轮刷新。
++      expect(
++        entry.room.followers,
++        '123456',
++        reason: '云端不带 followers,不得把本地已知值抹成空',
++      );
++      expect(entry.room.vip, '321', reason: '云端不带 vip,本地值保留');
++      expect(entry.room.diamondFans, '1300', reason: '云端不带 diamondFans,本地值保留');
++      expect(entry.room.online, '1.2万', reason: '开播/在线状态远端不回传,本地已知值保留(不得闪离线)');
++      expect(entry.room.category, '网游', reason: '分类远端不回传,本地值保留');
++      expect(entry.room.cid, 'cid-local', reason: '跳转上下文 cid 本地保留');
++      expect(
++        entry.room.avatar,
++        'https://cdn/local-avatar.jpg',
++        reason: '头像远端为扩展字段(zishu 侧置空),本地值保留',
++      );
++      expect(
++        entry.room.roomState,
++        RoomState.live,
++        reason: 'roomState 本地保留,不被重置为 offline',
++      );
++      expect(
++        entry.room.startedAt,
++        DateTime.utc(2026, 9, 20, 8),
++        reason: '开播时间本地保留',
++      );
++      // 时间戳 max 合并:本地 lastLiveAt 不被远端 0 抹掉。
++      expect(
++        entry.lastLiveAt,
++        1700000000000,
++        reason: '远端为 0 时本地跃迁记录保留(max 合并)',
++      );
++      // 远端非空 → 只拉不推。
++      expect(api.pushes, isEmpty, reason: '远端非空走拉取分支,不应触发整表推送');
++    });
++
++    test('远端新增条目统计保持空串(展示「—」,不伪造 0)', () async {
++      final (:container, :api) = await _container(
++        localSeed: [
++          _localEntry(roomId: '1001', online: '1.2万', followers: '123456'),
++        ],
++        remote: [
++          _remoteEntry(id: '1001'),
++          _remoteEntry(id: '2001', site: 'huya'),
++        ],
++      );
++      container.read(authProvider);
++
++      await container.read(followProvider.notifier).pullRemote();
++
++      final entries = container.read(followProvider);
++      expect(entries.map((e) => e.key).toSet(), {
++        'douyu:1001',
++        'huya:2001',
++      }, reason: '远端决定条目集合');
++      final added = entries.singleWhere((e) => e.key == 'huya:2001');
++      expect(added.room.followers, '', reason: '本地无记录 → 未知保持空(「—」)');
++      expect(added.room.online, '', reason: '开播状态待真实解析链路回填');
++      expect(added.isSpecial, isFalse);
++      expect(api.pushes, isEmpty);
++    });
++
++    test('已在远端删除的本地条目不复活', () async {
++      final (:container, :api) = await _container(
++        localSeed: [
++          _localEntry(roomId: '1001', online: '1.2万', followers: '123456'),
++          _localEntry(roomId: '1002', online: '3千', followers: '654'),
++        ],
++        // 远端只剩 1001:1002 已在云端删除。
++        remote: [_remoteEntry(id: '1001')],
++      );
++      container.read(authProvider);
++
++      await container.read(followProvider.notifier).pullRemote();
++
++      final entries = container.read(followProvider);
++      expect(entries.map((e) => e.key), [
++        'douyu:1001',
++      ], reason: '远端删除的条目不得被本地残留复活');
++      expect(
++        entries.single.room.followers,
++        '123456',
++        reason: '保留的同 key 条目统计仍在',
++      );
++      expect(api.pushes, isEmpty);
++    });
++  });
++}
+diff --git a/test/ui/workflows/play_follow_panel_test.dart b/test/ui/workflows/play_follow_panel_test.dart
+index 8f9c7a5..38f2f7a 100644
+--- a/test/ui/workflows/play_follow_panel_test.dart
++++ b/test/ui/workflows/play_follow_panel_test.dart
+@@ -9,33 +9,37 @@
+ ///
+ /// 宿主写法与 side_panel_features_test.dart 一致:真实 router + 注入
+ /// FakeLivePlayer(VM 下禁止初始化 media_kit)+ InMemorySharedPreferencesAsync,
+ /// 固定次数 pump,不用 pumpAndSettle(封面图在 VM 中不会真正加载)。
+ library;
+ 
+ import 'dart:convert';
+ 
+ import 'package:flutter/material.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
++import 'package:flutter_riverpod/misc.dart' show Override;
+ import 'package:flutter_test/flutter_test.dart';
+ import 'package:go_router/go_router.dart';
+-import 'package:live_parser/live_parser.dart' show StreamLine;
++import 'package:live_parser/live_parser.dart'
++    show RoomPayload, RoomState, RoomSummary, StreamLine;
+ import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+ import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
+ import 'package:zishu_flutter/src/app/app_router.dart';
+ import 'package:zishu_flutter/src/app/app_theme.dart';
+ import 'package:zishu_flutter/src/features/follow/application/follow_provider.dart';
+ import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_card.dart';
+ import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_row.dart';
+ import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
+ import 'package:zishu_flutter/src/features/play/views/play_view.dart';
+ import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
++import 'package:zishu_flutter/src/shared/application/browse_source.dart';
++import 'package:zishu_flutter/src/shared/application/providers.dart';
+ 
+ /// 深链播放页:关注种子里的样例房间(douyu/63136)。
+ const String _playLocation = '/douyu/play/63136';
+ 
+ /// 固定 pump 步长,与既有 workflow 测试一致。
+ const Duration _kFrame = Duration(milliseconds: 50);
+ 
+ /// 侧栏关注面板的分页窗口(与实现/web `PLAY_FOLLOW_PAGE_SIZE` 对齐)。
+ const int _kPageSize = 48;
+ 
+@@ -159,67 +163,121 @@ Future<void> _pumpFrames(WidgetTester tester, int times) async {
+ /// 启动真实宿主 → 深链播放页 → 切到侧栏「关注」tab。
+ ///
+ /// [location] 缺省为种子样例房间(douyu/63136);「未关注」场景需传一个
+ /// **不在 fixture 种子前 6 条**里的房间(种子会自动成为关注,见
+ /// FollowController._seed)。
+ Future<({GoRouter router, ProviderContainer container})> _pumpFollowTab(
+   WidgetTester tester, {
+   String location = _playLocation,
+   double width = 1600,
+   double height = 1200,
++  List<Override> overrides = const [],
+ }) async {
+   tester.view.devicePixelRatio = 1.0;
+   tester.view.physicalSize = Size(width, height);
+   addTearDown(tester.view.resetPhysicalSize);
+   addTearDown(tester.view.resetDevicePixelRatio);
+ 
+   await tester.pumpWidget(
+     ProviderScope(
+-      overrides: [playerProvider.overrideWithValue(FakeLivePlayer())],
++      overrides: [
++        playerProvider.overrideWithValue(FakeLivePlayer()),
++        ...overrides,
++      ],
+       child: const _TestApp(),
+     ),
+   );
+   await _pumpFrames(tester, 2);
+ 
+   final element = tester.element(find.byType(Navigator).first);
+   final container = ProviderScope.containerOf(element);
+   final router = container.read(routerProvider);
+   router.go(location);
+   await _pumpFrames(tester, 3);
+ 
+   // TabBar 切换动画约 300ms,pump 不足时点击会落在滑动中的旧坐标上。
+   await tester.tap(find.byKey(const Key('play-side-tab-follow')));
+   await _pumpFrames(tester, 8);
+   return (router: router, container: container);
+ }
+ 
++/// 按脚本返回房间统计的假解析刷新源:命中 roomId 返回快照,其余抛错
++/// (与 follow_status_refresh_test 的 FakeRefresher 同构,零网络)。
++class _ScriptedRefresher implements RoomRefresher {
++  _ScriptedRefresher(this.results);
++
++  final Map<String, RoomSummary> results;
++
++  @override
++  Future<RoomSummary> refreshRoom({
++    required String site,
++    required String roomId,
++  }) async {
++    final room = results[roomId];
++    if (room == null) throw StateError('no scripted result: $roomId');
++    return room;
++  }
++
++  @override
++  Future<RoomPayload> resolveRoom({
++    required String site,
++    required String roomIdOrUrl,
++    String? preferredQuality,
++  }) async {
++    throw UnimplementedError('本轨不校验解析路径');
++  }
++}
++
++/// 解析统计快照(只承载展示统计字段,其余按契约形状置空)。
++RoomSummary _statsRoom({
++  required String roomId,
++  String online = '',
++  String followers = '',
++  String vip = '',
++  String diamondFans = '',
++}) => RoomSummary(
++  site: 'douyu',
++  roomId: roomId,
++  title: '',
++  anchorName: '',
++  cid: '',
++  category: '',
++  online: online,
++  cover: '',
++  followers: followers,
++  vip: vip,
++  diamondFans: diamondFans,
++  roomState: RoomState.live,
++);
++
+ /// 关注面板内的房间卡锚点(网格视图,共享组件 `FollowEntryCard`)。
+-/// 卡片/单行同用 `follow-entry-{site}-{roomId}` key,故按外层组件类型定位。
+ Finder _card(String site, String roomId) => find.ancestor(
+   of: find.byKey(Key('follow-entry-$site-$roomId')),
+   matching: find.byType(FollowEntryCard),
+ );
+ 
+ /// 关注面板内的四列单行锚点(列表视图,共享组件 `FollowEntryRow`)。
+ Finder _row(String site, String roomId) => find.ancestor(
+   of: find.byKey(Key('follow-entry-$site-$roomId')),
+   matching: find.byType(FollowEntryRow),
+ );
+ 
+ /// 面板内的**垂直**关注列表。列表档是垂直 GridView(300–400px 自适应
+ /// 多列,窄侧栏单列),卡片档是垂直 ListView —— 都按 ScrollView 读。
+-Finder _followList() => find.descendant(
+-  of: find.byKey(const Key('play-side-follow-panel')),
+-  matching: find.byWidgetPredicate(
+-    (w) => w is ScrollView && w.scrollDirection == Axis.vertical,
+-  ),
+-).first;
++Finder _followList() => find
++    .descendant(
++      of: find.byKey(const Key('play-side-follow-panel')),
++      matching: find.byWidgetPredicate(
++        (w) => w is ScrollView && w.scrollDirection == Axis.vertical,
++      ),
++    )
++    .first;
+ 
+ /// 列表当前**窗口**条目数:读 builder delegate 声明的 childCount
+ /// (行自带底边框;GridView/ListView 的 builder delegate 都是精确 childCount,
+ /// 不能用 estimatedChildCount —— 那是按可视区估算的)。
+ int _listChildCount(WidgetTester tester) {
+   final widget = tester.widget<Widget>(_followList());
+   final SliverChildBuilderDelegate delegate;
+   if (widget is GridView) {
+     delegate = widget.childrenDelegate as SliverChildBuilderDelegate;
+   } else if (widget is ListView) {
+@@ -282,23 +340,21 @@ void main() {
+       final play = await _pumpFollowTab(tester);
+       await _awaitFollowRestored(tester, play.container, 2);
+       await _pumpFrames(tester, 3);
+ 
+       expect(find.text(_kEmptyHint), findsOneWidget);
+       expect(_row('douyu', '3001'), findsNothing);
+       expect(_row('douyu', '3002'), findsNothing);
+       expect(tester.takeException(), isNull);
+     });
+ 
+-    testWidgets('轮播(replay)不进侧栏,归「我的关注」页(用户口径 2026-09-19)', (
+-      tester,
+-    ) async {
++    testWidgets('轮播(replay)不进侧栏,归「我的关注」页(用户口径 2026-09-19)', (tester) async {
+       SharedPreferencesAsyncPlatform.instance =
+           InMemorySharedPreferencesAsync.withData(<String, Object>{
+             'zishu.follow.list': jsonEncode([
+               _seedEntry(roomId: '9001', title: '在播照常'),
+               _seedEntry(
+                 roomId: '9002',
+                 online: '',
+                 roomState: 'replay',
+                 title: '轮播房间',
+               ),
+@@ -442,35 +498,29 @@ void main() {
+         findsOneWidget,
+         reason: '用户口径(2026-09-19):默认用列表显示,每条一行',
+       );
+       // 视图形态按锚点断言(面板里 'all' 平台图标的四象限色块内部也有
+       // 一个 2x2 GridView,按 GridView 类型断言会误中)。
+       expect(_card('douyu', '6001'), findsNothing, reason: '默认不是封面网格');
+ 
+       await tester.tap(find.byKey(const Key('play-side-follow-view-toggle')));
+       await _pumpFrames(tester, 3);
+       expect(_card('douyu', '6001'), findsOneWidget, reason: '切换后是封面网格');
+-      expect(
+-        _row('douyu', '6001'),
+-        findsNothing,
+-        reason: '网格视图下不应残留列表行',
+-      );
++      expect(_row('douyu', '6001'), findsNothing, reason: '网格视图下不应残留列表行');
+ 
+       await tester.tap(find.byKey(const Key('play-side-follow-view-toggle')));
+       await _pumpFrames(tester, 3);
+       expect(_row('douyu', '6001'), findsOneWidget, reason: '可切回列表');
+       expect(tester.takeException(), isNull);
+     });
+ 
+-    testWidgets('列表行四列:分类 / 主播名 / 标题 / 观看人数(对齐 web RowView)', (
+-      tester,
+-    ) async {
++    testWidgets('列表行四列:分类 / 主播名 / 标题 / 观看人数(对齐 web RowView)', (tester) async {
+       SharedPreferencesAsyncPlatform.instance =
+           InMemorySharedPreferencesAsync.withData(<String, Object>{
+             'zishu.follow.list': jsonEncode([
+               _seedEntry(
+                 roomId: '7001',
+                 title: '四列样式的标题',
+                 anchor: '四列主播',
+                 online: '2.3万',
+               ),
+             ]),
+@@ -483,30 +533,26 @@ void main() {
+       final rowRect = tester.getRect(_row('douyu', '7001'));
+       // 四列内容齐备:分类(种子固定英雄联盟)/ 主播名 / 标题 / 人数。
+       expect(find.text('英雄联盟'), findsWidgets);
+       expect(find.text('四列主播'), findsOneWidget);
+       expect(find.text('四列样式的标题'), findsOneWidget);
+       expect(find.text('2.3万'), findsOneWidget);
+ 
+       // 单行:主播名与标题在同一行内(y 重叠),行高紧凑(<30)。
+       final anchorRect = tester.getRect(find.text('四列主播'));
+       final titleRect = tester.getRect(find.text('四列样式的标题'));
+-      expect(titleRect.top, closeTo(anchorRect.top, 8),
+-          reason: '四列应水平排布在同一行');
+-      expect(rowRect.height, lessThan(30),
+-          reason: '对齐 web 行高 1.4rem 的紧凑观感');
++      expect(titleRect.top, closeTo(anchorRect.top, 8), reason: '四列应水平排布在同一行');
++      expect(rowRect.height, lessThan(30), reason: '对齐 web 行高 1.4rem 的紧凑观感');
+       expect(tester.takeException(), isNull);
+     });
+ 
+-    testWidgets('切房后右侧仍停在关注 tab(会话级偏好,顶部/左侧/右侧解耦)', (
+-      tester,
+-    ) async {
++    testWidgets('切房后右侧仍停在关注 tab(会话级偏好,顶部/左侧/右侧解耦)', (tester) async {
+       SharedPreferencesAsyncPlatform.instance =
+           InMemorySharedPreferencesAsync.withData(<String, Object>{
+             'zishu.follow.list': jsonEncode([
+               _seedEntry(roomId: '5001', title: '待进入的房间'),
+             ]),
+           });
+ 
+       final play = await _pumpFollowTab(tester);
+       await _awaitFollowRestored(tester, play.container, 1);
+       await _pumpFrames(tester, 3);
+@@ -534,24 +580,21 @@ void main() {
+     /// 的热度徽章等同名文本互相命中)。
+     Finder headerTextOf(String text) => find.descendant(
+       of: find.byKey(const Key('play-side-header')),
+       matching: find.text(text),
+     );
+ 
+     testWidgets('已关注:关注数/人气/VIP/第 3 列显示关注条目刷新回填的值', (tester) async {
+       SharedPreferencesAsyncPlatform.instance =
+           InMemorySharedPreferencesAsync.withData(<String, Object>{
+             'zishu.follow.list': jsonEncode([
+-              _seedEntry(
+-                roomId: '63136',
+-                online: '8.9万',
+-              )
++              _seedEntry(roomId: '63136', online: '8.9万')
+                 ..['followers'] = '123456'
+                 ..['vip'] = '321'
+                 ..['diamondFans'] = '1300',
+             ]),
+           });
+ 
+       final play = await _pumpFollowTab(tester);
+       // 深链房间就是种子房间(douyu/63136);统计值来自关注条目,必须等
+       // 异步恢复落地后再断言。
+       await _awaitFollowRestored(tester, play.container, 1);
+@@ -588,24 +631,21 @@ void main() {
+ 
+       expect(find.byKey(const Key('play-side-header')), findsOneWidget);
+       expect(headerTextOf('关注 —'), findsOneWidget);
+       // 人气/VIP/第 3 列三个 _StatValue 在无数据时各显示「—」(不是 0)。
+       for (final key in const [
+         'play-side-stat-audience',
+         'play-side-stat-vip',
+         'play-side-stat-svip',
+       ]) {
+         expect(
+-          find.descendant(
+-            of: find.byKey(Key(key)),
+-            matching: find.text('—'),
+-          ),
++          find.descendant(of: find.byKey(Key(key)), matching: find.text('—')),
+           findsOneWidget,
+           reason: '$key 无数据必须显示「—」,不伪造 0',
+         );
+       }
+       // 三列统计 = 信息头内 3 个独立的「—」文本(「关注 —」是单个
+       // 拼接文本,不单独匹配 find.text('—'))。
+       expect(
+         find.descendant(
+           of: find.byKey(const Key('play-side-header')),
+           matching: find.text('—'),
+@@ -654,12 +694,138 @@ void main() {
+             ]),
+           });
+ 
+       final play = await _pumpFollowTab(tester, width: 768);
+       await _awaitFollowRestored(tester, play.container, 1);
+       await _pumpFrames(tester, 2);
+ 
+       expect(find.byKey(const Key('play-side-header')), findsOneWidget);
+       expect(tester.takeException(), isNull, reason: '四段统计不得溢出');
+     });
++
++    testWidgets('未关注有解析统计:点关注后数值不消失(取数不随关注态切换)', (tester) async {
++      SharedPreferencesAsyncPlatform.instance =
++          InMemorySharedPreferencesAsync.withData(<String, Object>{});
++
++      // 88888 不在 fixture 种子里:未关注,统计只能来自解析快照
++      // (roomStatsProvider,任意房间可查)。
++      final play = await _pumpFollowTab(
++        tester,
++        location: '/douyu/play/88888',
++        overrides: [
++          roomRefresherProvider.overrideWithValue(
++            _ScriptedRefresher({
++              '88888': _statsRoom(
++                roomId: '88888',
++                online: '1.2万',
++                followers: '123456',
++                vip: '321',
++                diamondFans: '1300',
++              ),
++            }),
++          ),
++        ],
++      );
++      await _pumpFrames(tester, 3);
++
++      expect(find.byKey(const Key('play-side-header')), findsOneWidget);
++      // 未关注:三列 + 关注数均来自解析快照。
++      expect(headerTextOf('关注 12.3万'), findsOneWidget);
++      for (final (key, value) in const [
++        ('play-side-stat-audience', '1.2万'),
++        ('play-side-stat-vip', '321'),
++        ('play-side-stat-svip', '1300'),
++      ]) {
++        expect(
++          find.descendant(of: find.byKey(Key(key)), matching: find.text(value)),
++          findsOneWidget,
++          reason: '未关注时 $key 应显示解析快照值',
++        );
++      }
++
++      await tester.tap(find.byKey(const Key('play-side-follow-btn')));
++      await _pumpFrames(tester, 3);
++
++      expect(
++        play.container.read(followProvider).any((e) => e.key == 'douyu:88888'),
++        isTrue,
++        reason: '前置:点关注已落库',
++      );
++      // 回归点:关注状态与统计取数必须分离 —— 刚关注的条目统计未回填,
++      // 不得盖掉已知的解析快照值(否则点关注瞬间数值全部消失)。
++      expect(
++        headerTextOf('关注 12.3万'),
++        findsOneWidget,
++        reason: '点关注后关注数不得变回「—」',
++      );
++      for (final (key, value) in const [
++        ('play-side-stat-audience', '1.2万'),
++        ('play-side-stat-vip', '321'),
++        ('play-side-stat-svip', '1300'),
++      ]) {
++        expect(
++          find.descendant(of: find.byKey(Key(key)), matching: find.text(value)),
++          findsOneWidget,
++          reason: '点关注后 $key 数值不得消失',
++        );
++      }
++      expect(tester.takeException(), isNull);
++    });
++
++    testWidgets('parser 某字段缺时逐字段回退:缺的字段取本地快照,有的字段取新鲜解析值', (tester) async {
++      // 本地已关注条目:已知 followers/diamondFans/online(旧值 2.3万),缺 vip。
++      SharedPreferencesAsyncPlatform.instance =
++          InMemorySharedPreferencesAsync.withData(<String, Object>{
++            'zishu.follow.list': jsonEncode([
++              _seedEntry(roomId: '63136', online: '2.3万')
++                ..['followers'] = '123456'
++                ..['diamondFans'] = '1300',
++            ]),
++          });
++
++      // 解析快照:fresh 但上游缺 followers/diamondFans 字段。
++      final play = await _pumpFollowTab(
++        tester,
++        overrides: [
++          roomRefresherProvider.overrideWithValue(
++            _ScriptedRefresher({
++              '63136': _statsRoom(roomId: '63136', online: '8.9万', vip: '321'),
++            }),
++          ),
++        ],
++      );
++      await _awaitFollowRestored(tester, play.container, 1);
++      await _pumpFrames(tester, 3);
++
++      expect(
++        headerTextOf('关注 12.3万'),
++        findsOneWidget,
++        reason: 'parser 缺 followers → 逐字段回退本地已有统计快照',
++      );
++      expect(
++        find.descendant(
++          of: find.byKey(const Key('play-side-stat-audience')),
++          matching: find.text('8.9万'),
++        ),
++        findsOneWidget,
++        reason: '新鲜解析值(8.9万)优先于本地旧值(2.3万)',
++      );
++      expect(
++        find.descendant(
++          of: find.byKey(const Key('play-side-stat-vip')),
++          matching: find.text('321'),
++        ),
++        findsOneWidget,
++        reason: '本地缺 vip → 取解析新鲜值',
++      );
++      expect(
++        find.descendant(
++          of: find.byKey(const Key('play-side-stat-svip')),
++          matching: find.text('1300'),
++        ),
++        findsOneWidget,
++        reason: 'parser 缺 diamondFans → 回退本地已有值',
++      );
++      expect(tester.takeException(), isNull);
++    });
+   });
+ }
+diff --git a/test/ui/workflows/play_meta_bar_test.dart b/test/ui/workflows/play_meta_bar_test.dart
+index 454ce03..770e18a 100644
+--- a/test/ui/workflows/play_meta_bar_test.dart
++++ b/test/ui/workflows/play_meta_bar_test.dart
+@@ -32,23 +32,25 @@ class _FakeLivePlayer implements LivePlayer {
+ 
+   @override
+   Stream<PlayerSnapshot> get snapshots =>
+       Stream<PlayerSnapshot>.value(const PlayerSnapshot());
+ 
+   @override
+   Widget buildVideoView({BoxFit fit = BoxFit.contain}) =>
+       const SizedBox.expand();
+ 
+   @override
+-  Future<void> open(StreamLine line,
+-          [List<StreamLine> fallbacks = const [], bool resetRetries = true]) async =>
+-      calls.add('open:${line.url}');
++  Future<void> open(
++    StreamLine line, [
++    List<StreamLine> fallbacks = const [],
++    bool resetRetries = true,
++  ]) async => calls.add('open:${line.url}');
+ 
+   @override
+   Future<void> play() async => calls.add('play');
+ 
+   @override
+   Future<void> pause() async => calls.add('pause');
+ 
+   @override
+   Future<void> setVolume(double volume) async => calls.add('volume:$volume');
+ 
+@@ -122,54 +124,107 @@ class _RoomSourceWithStartedAt implements RoomSource {
+ }
+ 
+ const Duration _kFrame = Duration(milliseconds: 50);
+ 
+ Future<void> _pumpFrames(WidgetTester tester, [int times = 4]) async {
+   for (var i = 0; i < times; i++) {
+     await tester.pump(_kFrame);
+   }
+ }
+ 
++/// 按脚本返回房间统计的假解析刷新源:命中 roomId 返回快照,其余抛错
++/// (零网络;与 play_follow_panel_test 的同名替身同构)。
++class _ScriptedRefresher implements RoomRefresher {
++  _ScriptedRefresher(this.results);
++
++  final Map<String, RoomSummary> results;
++
++  @override
++  Future<RoomSummary> refreshRoom({
++    required String site,
++    required String roomId,
++  }) async {
++    final room = results[roomId];
++    if (room == null) throw StateError('no scripted result: $roomId');
++    return room;
++  }
++
++  @override
++  Future<RoomPayload> resolveRoom({
++    required String site,
++    required String roomIdOrUrl,
++    String? preferredQuality,
++  }) async {
++    throw UnimplementedError('本轨不校验解析路径');
++  }
++}
++
++/// 解析统计快照(只承载展示统计字段,其余按契约形状置空)。
++RoomSummary _statsRoom({
++  required String roomId,
++  String online = '',
++  String followers = '',
++  String vip = '',
++  String diamondFans = '',
++}) => RoomSummary(
++  site: 'douyu',
++  roomId: roomId,
++  title: '',
++  anchorName: '',
++  cid: '',
++  category: '',
++  online: online,
++  cover: '',
++  followers: followers,
++  vip: vip,
++  diamondFans: diamondFans,
++  roomState: RoomState.live,
++);
++
+ /// pump 播放页:注入 FakeLivePlayer(可选覆盖 roomSourceProvider),设定视口。
+ Future<ProviderContainer> _pumpPlay(
+   WidgetTester tester, {
+   required Size size,
+   RoomSource? roomSource,
++  RoomRefresher? refresher,
+ }) async {
+   tester.view.devicePixelRatio = 1.0;
+   tester.view.physicalSize = size;
+   addTearDown(tester.view.resetPhysicalSize);
+   addTearDown(tester.view.resetDevicePixelRatio);
+   await tester.pumpWidget(
+     ProviderScope(
+       overrides: [
+         playerProvider.overrideWithValue(_FakeLivePlayer()),
+-        if (roomSource != null) roomSourceProvider.overrideWithValue(roomSource),
++        if (roomSource != null)
++          roomSourceProvider.overrideWithValue(roomSource),
++        if (refresher != null)
++          roomRefresherProvider.overrideWithValue(refresher),
+       ],
+       child: MaterialApp(
+         theme: ZishuTheme.dark(),
+         home: const Material(
+           type: MaterialType.transparency,
+           child: PlayView(site: 'douyu', roomId: '63136'),
+         ),
+       ),
+     ),
+   );
+   await _pumpFrames(tester, 5);
+   return ProviderScope.containerOf(tester.element(find.byType(PlayView)));
+ }
+ 
+ /// 信息条子树内的文本查找(避免与画质 chip 等处的同名字样混淆)。
+ Finder _inMetaBar(String text) => find.descendant(
+-      of: find.byKey(const Key('play-meta-bar')),
+-      matching: find.text(text),
+-    );
++  of: find.byKey(const Key('play-meta-bar')),
++  matching: find.text(text),
++);
+ 
+ void main() {
+   setUp(() {
+     SharedPreferencesAsyncPlatform.instance =
+         InMemorySharedPreferencesAsync.withData(<String, Object>{});
+   });
+ 
+   group('窄屏移动信息条', () {
+     testWidgets('375x812:视频下方渲染头像/昵称/4 项统计/关注与超关按钮', (tester) async {
+       await _pumpPlay(tester, size: const Size(375, 812));
+@@ -190,61 +245,59 @@ void main() {
+       }
+ 
+       // 两个动作按钮各一处(锚点沿用侧栏契约,不重复)。
+       expect(find.byKey(const Key('play-side-follow-btn')), findsOneWidget);
+       expect(find.byKey(const Key('play-side-super-follow')), findsOneWidget);
+ 
+       // 布局不溢出(信息条是新增的结构,溢出会先在这里暴露)。
+       expect(tester.takeException(), isNull);
+     });
+ 
+-    testWidgets('点关注/超关:状态落库并回显(复用侧栏同一份 followProvider 语义)',
+-        (tester) async {
++    testWidgets('点关注/超关:状态落库并回显(复用侧栏同一份 followProvider 语义)', (tester) async {
+       final container = await _pumpPlay(tester, size: const Size(375, 812));
+       const roomKey = 'douyu:63136';
+       // fixture 关注种子可能已含该房;先清空再验证从「关注」开始。
+       container.read(followProvider.notifier).remove(roomKey);
+       await _pumpFrames(tester, 2);
+       expect(_inMetaBar('关注'), findsOneWidget);
+ 
+       await tester.tap(find.byKey(const Key('play-side-follow-btn')));
+       await _pumpFrames(tester, 2);
+       expect(
+         container.read(followProvider).any((e) => e.key == roomKey),
+         isTrue,
+         reason: '信息条上的关注按钮应写入 followProvider',
+       );
+       expect(_inMetaBar('已关注'), findsOneWidget);
+ 
+       await tester.tap(find.byKey(const Key('play-side-super-follow')));
+       await _pumpFrames(tester, 2);
+-      final entry = container.read(followProvider).firstWhere(
+-            (e) => e.key == roomKey,
+-          );
++      final entry = container
++          .read(followProvider)
++          .firstWhere((e) => e.key == roomKey);
+       expect(entry.isSpecial, isTrue, reason: '超关应把该房标记为特别关注');
+       expect(_inMetaBar('已超关'), findsOneWidget);
+       expect(tester.takeException(), isNull);
+     });
+ 
+     testWidgets('开播格:有 startedAt 时显示 MM-DD HH:mm(参考实现同格式)', (tester) async {
+       await _pumpPlay(
+         tester,
+         size: const Size(375, 812),
+         roomSource: _RoomSourceWithStartedAt(DateTime(2026, 9, 10, 8, 8)),
+       );
+ 
+       expect(_inMetaBar('开播 09-10 08:08'), findsOneWidget);
+       expect(tester.takeException(), isNull);
+     });
+ 
+-    testWidgets('统计格回填:关注条目 summary 有值时显示数值(PARSER-GAP-001)',
+-        (tester) async {
++    testWidgets('统计格回填:关注条目 summary 有值时显示数值(PARSER-GAP-001)', (tester) async {
+       final container = await _pumpPlay(tester, size: const Size(375, 812));
+       // fixture 种子可能已含该房;替换为带真源回填统计的关注条目
+       // (followers/online 同桌面侧栏信息头共用 followProvider 快照)。
+       container.read(followProvider.notifier).remove('douyu:63136');
+       container
+           .read(followProvider.notifier)
+           .addFromRoom(
+             const RoomSummary(
+               site: 'douyu',
+               roomId: '63136',
+@@ -260,22 +313,21 @@ void main() {
+           );
+       await _pumpFrames(tester, 2);
+ 
+       expect(_inMetaBar('关注 540万'), findsOneWidget);
+       expect(_inMetaBar('人气 341.2万'), findsOneWidget);
+       // 弹幕总数上游无字段,保持「—」不冒充。
+       expect(_inMetaBar('弹幕 —'), findsOneWidget);
+       expect(tester.takeException(), isNull);
+     });
+ 
+-    testWidgets('统计格:已关注但上游未提供 followers/online 时仍显示「—」',
+-        (tester) async {
++    testWidgets('统计格:已关注但上游未提供 followers/online 时仍显示「—」', (tester) async {
+       final container = await _pumpPlay(tester, size: const Size(375, 812));
+       container.read(followProvider.notifier).remove('douyu:63136');
+       // yy/kuaishou 等上游无免登录统计接口,回填值为空 → 占位不伪造。
+       container
+           .read(followProvider.notifier)
+           .addFromRoom(
+             const RoomSummary(
+               site: 'douyu',
+               roomId: '63136',
+               title: '',
+@@ -286,32 +338,87 @@ void main() {
+               cover: '',
+             ),
+           );
+       await _pumpFrames(tester, 2);
+ 
+       expect(_inMetaBar('关注 —'), findsOneWidget);
+       expect(_inMetaBar('人气 —'), findsOneWidget);
+       expect(tester.takeException(), isNull);
+     });
+ 
+-    testWidgets('360x640:缺开播时间显示「开播中」,解析层缺字段一律占位不伪造',
+-        (tester) async {
++    testWidgets('360x640:缺开播时间显示「开播中」,解析层缺字段一律占位不伪造', (tester) async {
+       await _pumpPlay(tester, size: const Size(360, 640));
+ 
+       // fixture 种子首条即本房(douyu:63136):online='42.1万' 已回填 → 人气
+       // 显示真值;followers 上游未提供 → 「—」;弹幕总数无字段 → 「—」。
+       expect(_inMetaBar('开播 开播中'), findsOneWidget);
+       expect(_inMetaBar('关注 —'), findsOneWidget);
+       expect(_inMetaBar('人气 42.1万'), findsOneWidget);
+       expect(_inMetaBar('弹幕 —'), findsOneWidget);
+       expect(tester.takeException(), isNull);
+     });
++
++    testWidgets('未关注有解析统计:点关注后信息条数值不消失(375x812)', (tester) async {
++      final container = await _pumpPlay(
++        tester,
++        size: const Size(375, 812),
++        refresher: _ScriptedRefresher({
++          '63136': _statsRoom(
++            roomId: '63136',
++            online: '1.2万',
++            followers: '123456',
++            vip: '321',
++            diamondFans: '1300',
++          ),
++        }),
++      );
++      // fixture 种子首条即本房:先移除,构造「未关注但有解析统计」的场景。
++      container.read(followProvider.notifier).remove('douyu:63136');
++      await _pumpFrames(tester, 3);
++
++      // 未关注:统计来自解析快照(任意房间可查)。
++      expect(_inMetaBar('关注 12.3万'), findsOneWidget);
++      expect(_inMetaBar('人气 1.2万'), findsOneWidget);
++
++      await tester.tap(find.byKey(const Key('play-side-follow-btn')));
++      await _pumpFrames(tester, 3);
++
++      expect(
++        container.read(followProvider).any((e) => e.key == 'douyu:63136'),
++        isTrue,
++        reason: '前置:点关注已落库',
++      );
++      // 回归点:关注状态与统计取数分离,刚关注的空统计不得盖掉解析值。
++      expect(_inMetaBar('关注 12.3万'), findsOneWidget, reason: '点关注后关注数不得变回「—」');
++      expect(
++        _inMetaBar('人气 1.2万'),
++        findsOneWidget,
++        reason: '点关注后人气不得被占位文案/空值替代',
++      );
++      expect(
++        find.descendant(
++          of: find.byKey(const Key('play-meta-stat-vip')),
++          matching: find.textContaining('321'),
++        ),
++        findsOneWidget,
++        reason: '点关注后 VIP 数值不得消失',
++      );
++      expect(
++        find.descendant(
++          of: find.byKey(const Key('play-meta-stat-svip')),
++          matching: find.textContaining('1300'),
++        ),
++        findsOneWidget,
++        reason: '点关注后 SVIP 数值不得消失',
++      );
++      expect(tester.takeException(), isNull);
++    });
+   });
+ 
+   group('桌面不回归', () {
+     testWidgets('1024x768:仍是侧栏完整信息头,信息条不出现且锚点不重复', (tester) async {
+       await _pumpPlay(tester, size: const Size(1024, 768));
+ 
+       expect(find.byKey(const Key('play-meta-bar')), findsNothing);
+       expect(find.byKey(const Key('play-side-header')), findsOneWidget);
+       expect(find.byKey(const Key('play-side-follow-btn')), findsOneWidget);
+       expect(find.byKey(const Key('play-side-super-follow')), findsOneWidget);

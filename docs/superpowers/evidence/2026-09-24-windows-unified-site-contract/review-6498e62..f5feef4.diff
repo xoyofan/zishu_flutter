@@ -1,0 +1,743 @@
+# Review package: 6498e62..HEAD
+
+## Commits
+f5feef4 解析轨：统一站点接口并保持缓存恢复语义
+
+## Files changed
+ .../live_parser/lib/src/contracts/contracts.dart   | 115 ++++++++-
+ .../lib/src/registry/cached_room_resolver.dart     |  12 +-
+ .../lib/src/registry/site_registry.dart            |   4 +
+ packages/live_parser/test/registry_test.dart       | 275 +++++++++++++++++++++
+ .../cached_room_resolver_refresh_test.dart         |  47 ++++
+ .../src/registry/cached_room_resolver_test.dart    |  39 ++-
+ 6 files changed, 481 insertions(+), 11 deletions(-)
+
+## Diff
+diff --git a/packages/live_parser/lib/src/contracts/contracts.dart b/packages/live_parser/lib/src/contracts/contracts.dart
+index 4d66d10..44ad66b 100644
+--- a/packages/live_parser/lib/src/contracts/contracts.dart
++++ b/packages/live_parser/lib/src/contracts/contracts.dart
+@@ -1,14 +1,15 @@
+ /// 稳定解析契约:UI / server 只依赖这些小接口与 facade,不接触站点实现。
+ library;
+ 
+ import '../models/models.dart';
++import '../models/room_record.dart';
+ 
+ /// 房间解析请求:房间号或完整 URL 二选一,由站点实现归一。
+ class RoomRequest {
+   const RoomRequest({required this.site, required this.roomIdOrUrl, this.preferredQuality});
+ 
+   final String site;
+   final String roomIdOrUrl;
+   final String? preferredQuality;
+ }
+ 
+@@ -149,22 +150,134 @@ class SiteRegistration {
+   final SiteCapabilities capabilities;
+   final RoomResolver resolver;
+   final BrowseRepository? browse;
+   final SearchRepository? search;
+   final DanmakuConnector? danmaku;
+ 
+   /// UI 共享的平台展示语义,默认不暴露任何统计列。
+   final SiteDisplaySpec display;
+ }
+ 
++/// 装饰型刷新包装的能力内省(实现者必然同时实现 [RoomSummaryRefresher])。
++///
++/// `CachedRoomResolver` 这类包装恒实现 [RoomSummaryRefresher](内层缺失时
++/// 运行期抛 [UnsupportedError]),单凭 `is` 探测会把「未实现刷新的站点」
++/// 误称为支持。注册 [LiveSite] 时按被包装 resolver 的**真实实现**决定
++/// [LiveSite.refresher] 是否为 `null`,包装类通过本接口如实上报。
++abstract interface class RefreshCapabilityProbe
++    implements RoomSummaryRefresher {
++  /// 被包装的内层 resolver 是否真实实现 [RoomSummaryRefresher]。
++  bool get innerRefreshSupported;
++}
++
++/// 统一站点抽象:九站与 Windows 消费层只认这一种站点入口。
++///
++/// 迁移期约定(2026-09-24 Windows 统一契约):
++/// * [resolveRoom] 是唯一强制返回 [RoomRecord] 的出口;可选接口部件
++///   ([browse]/[search]/[danmaku]/[refresher]/[recovery])暂时沿用旧类型,
++///   由后续任务逐个切换;
++/// * 不支持的能力部件返回 `null`(不是空列表/空连接),支持后请求失败
++///   必须抛异常 —— [SiteCapabilities] 与部件是否存在保持一致,注册时用
++///   契约测试核查;
++/// * [recovery] 绕开短缓存重新获取播放地址;[refresher] 只取元信息、不
++///   做取流/签名 —— 注册时按内层真实实现判定,未实现刷新的站点即使被
++///   装饰成 `RoomSummaryRefresher` 也必须为 `null`。
++abstract interface class LiveSite {
++  String get id;
++  String get name;
++
++  /// UI 能力声明,与下方可空部件保持一致。
++  SiteCapabilities get capabilities;
++
++  /// UI 共享的平台展示语义。
++  SiteDisplaySpec get display;
++
++  /// 统一房间解析:失败抛异常;「房间不存在」返回
++  /// `roomState == notFound` 的记录,不以空房间冒充成功。
++  Future<RoomRecord> resolveRoom(RoomRequest request);
++
++  /// 栏目浏览;不支持为 `null`。
++  BrowseRepository? get browse;
++
++  /// 搜索;不支持为 `null`。
++  SearchRepository? get search;
++
++  /// 弹幕连接;不支持为 `null`(不返回空连接占位)。
++  DanmakuConnector? get danmaku;
++
++  /// 轻量状态刷新(只取元信息、不取流不写缓存);未实现为 `null`。
++  RoomSummaryRefresher? get refresher;
++
++  /// 恢复重解析(绕开短缓存重新获取地址);不支持为 `null`。
++  RoomRecoveryResolver? get recovery;
++}
++
++/// [SiteRegistration] 到 [LiveSite] 的薄适配:不改九站 HTTP 逻辑,
++/// 只在注册边界转换返回类型与部件可见性。
++class _RegistrationLiveSite implements LiveSite {
++  _RegistrationLiveSite(this._registration);
++
++  final SiteRegistration _registration;
++
++  @override
++  String get id => _registration.id;
++
++  @override
++  String get name => _registration.name;
++
++  @override
++  SiteCapabilities get capabilities => _registration.capabilities;
++
++  @override
++  SiteDisplaySpec get display => _registration.display;
++
++  @override
++  Future<RoomRecord> resolveRoom(RoomRequest request) async =>
++      RoomRecord.fromPayload(await _registration.resolver.resolveRoom(request));
++
++  @override
++  BrowseRepository? get browse => _registration.browse;
++
++  @override
++  SearchRepository? get search => _registration.search;
++
++  @override
++  DanmakuConnector? get danmaku => _registration.danmaku;
++
++  @override
++  RoomSummaryRefresher? get refresher {
++    final resolver = _registration.resolver;
++    // 短缓存包装恒 `is RoomSummaryRefresher`,必须再问装饰器内层真实能力,
++    // 否则未实现刷新的站点会被装饰器误称为支持。
++    if (resolver is RefreshCapabilityProbe && !resolver.innerRefreshSupported) {
++      return null;
++    }
++    return resolver is RoomSummaryRefresher ? resolver : null;
++  }
++
++  @override
++  RoomRecoveryResolver? get recovery {
++    final resolver = _registration.resolver;
++    return resolver is RoomRecoveryResolver ? resolver : null;
++  }
++}
++
+ /// 站点能力注册表。
+ class SiteRegistry {
+   final Map<String, SiteRegistration> _sites = {};
++  final Map<String, LiveSite> _liveSites = {};
+ 
+-  void register(SiteRegistration registration) => _sites[registration.id] = registration;
++  void register(SiteRegistration registration) {
++    _sites[registration.id] = registration;
++    _liveSites[registration.id] = _RegistrationLiveSite(registration);
++  }
+ 
+   SiteRegistration? byId(String site) => _sites[site];
+ 
++  /// 统一站点外观:迁移期新消费方(Windows)走这里;
++  /// 旧 `operator []` 保留到 Windows 切换为止。
++  LiveSite? site(String id) => _liveSites[id];
++
+   Set<String> get supportedSites => _sites.keys.toSet();
+ 
+   SiteRegistration? operator [](String site) => _sites[site];
+ }
+diff --git a/packages/live_parser/lib/src/registry/cached_room_resolver.dart b/packages/live_parser/lib/src/registry/cached_room_resolver.dart
+index 27eee07..37414aa 100644
+--- a/packages/live_parser/lib/src/registry/cached_room_resolver.dart
++++ b/packages/live_parser/lib/src/registry/cached_room_resolver.dart
+@@ -8,31 +8,41 @@ import '../models/models.dart';
+ /// - 键 = `site + roomIdOrUrl + preferredQuality`,同一入口短时间重复进房
+ ///   (含切档回退)直接复用,0 请求;
+ /// - 不带 `preferredQuality` 的裸解析保持实时(浏览/测试语义不变);
+ /// - 离线/不存在/异常不缓存,开播或修好后立即重试;
+ /// - 并发的同键请求合并到同一个 Future,避免 UI 重建触发重复请求。
+ ///
+ /// 同时实现 [RoomRecoveryResolver]:恢复路径**必须绕开本缓存**——缓存里的
+ /// 地址可能已过期,复用即等于反复重开失效源。故 `recoverRoom` 先失效键,
+ /// 再委托内层重新解析。
+ class CachedRoomResolver
+-    implements RoomResolver, RoomRecoveryResolver, RoomSummaryRefresher {
++    implements
++        RoomResolver,
++        RoomRecoveryResolver,
++        RoomSummaryRefresher,
++        RefreshCapabilityProbe {
+   CachedRoomResolver(
+     this._inner, {
+     this.ttl = const Duration(seconds: 60),
+     this.maxEntries = 64,
+   });
+ 
+   final RoomResolver _inner;
+   final Duration ttl;
+   final int maxEntries;
+ 
++  /// 注册期能力内省:本类恒 `is RoomSummaryRefresher`(内层缺失时运行期
++  /// 抛 [UnsupportedError]),[LiveSite.refresher] 必须按内层真实能力判
++  /// null,不能被本装饰器误称为支持刷新。
++  @override
++  bool get innerRefreshSupported => _inner is RoomSummaryRefresher;
++
+   final Map<String, _CacheEntry> _entries = {};
+ 
+   /// 缓存键:与 [resolveRoom] 的命中判据严格一致。
+   String _keyOf(RoomRequest request) =>
+       '${request.site}\u0000${request.roomIdOrUrl}\u0000'
+       '${request.preferredQuality?.trim() ?? ''}';
+ 
+   /// 恢复重解析:先失效本键短缓存,再委托内层。
+   ///
+   /// 内层若自身就是 [RoomRecoveryResolver](签名平台实现),优先调用其
+diff --git a/packages/live_parser/lib/src/registry/site_registry.dart b/packages/live_parser/lib/src/registry/site_registry.dart
+index 9c46513..d215c56 100644
+--- a/packages/live_parser/lib/src/registry/site_registry.dart
++++ b/packages/live_parser/lib/src/registry/site_registry.dart
+@@ -7,20 +7,24 @@ import '../platforms/bilibili/bilibili_site.dart';
+ import '../platforms/douyin/douyin_site.dart';
+ import '../platforms/douyu/douyu_site.dart';
+ import '../platforms/huya/huya_site.dart';
+ import '../platforms/kuaishou/kuaishou_site.dart';
+ import '../platforms/soop/soop_site.dart';
+ import '../platforms/twitch/twitch_site.dart';
+ import '../platforms/youtube/youtube_site.dart';
+ import '../platforms/yy/yy_site.dart';
+ 
+ /// 构建默认注册表。平台实现按 P1-P7 顺序在此 register。
++///
++/// 每个注册项同时以 [LiveSite] 薄适配暴露:`registry.site(id)` 返回统一
++/// 站点外观(resolveRoom → RoomRecord,可空部件按内层真实能力判定),
++/// 旧 `registry[id]` 注册项视图保留到 Windows 切换。
+ SiteRegistry buildSiteRegistry() {
+   final registry = SiteRegistry();
+   registry.register(buildDouyuRegistration());
+   registry.register(buildHuyaRegistration());
+   registry.register(buildBilibiliRegistration());
+   registry.register(buildTwitchRegistration());
+   registry.register(buildYyRegistration());
+   registry.register(buildSoopRegistration());
+   registry.register(buildKuaishouRegistration());
+   registry.register(buildDouyinRegistration());
+diff --git a/packages/live_parser/test/registry_test.dart b/packages/live_parser/test/registry_test.dart
+index cc20eab..b014a7b 100644
+--- a/packages/live_parser/test/registry_test.dart
++++ b/packages/live_parser/test/registry_test.dart
+@@ -1,13 +1,89 @@
+ import 'package:live_parser/live_parser.dart';
++import 'package:live_parser/src/registry/cached_room_resolver.dart';
+ import 'package:test/test.dart';
+ 
++import 'support/fake_browse.dart';
++
++/// 最小 fake 解析器:按调用序轮换播放 URL,可注入失败。
++class _SequenceResolver implements RoomResolver {
++  int calls = 0;
++  Object? failure;
++
++  @override
++  Future<RoomPayload> resolveRoom(RoomRequest request) async {
++    calls++;
++    final failure = this.failure;
++    if (failure != null) throw failure;
++    return RoomPayload(
++      site: request.site,
++      roomId: request.roomIdOrUrl,
++      sourceUrl: 'https://demo/room/${request.roomIdOrUrl}',
++      anchorName: '主播',
++      title: '房间',
++      cover: '',
++      avatar: '',
++      category: '',
++      cid: '1',
++      roomState: RoomState.live,
++      streams: [
++        StreamQuality(
++          name: '高清',
++          rate: 1,
++          lines: [
++            StreamLine(
++              name: '线路',
++              url: 'https://stream/$calls.m3u8',
++              format: 'hls',
++            ),
++          ],
++        ),
++      ],
++      availableQualities: const [QualityOption(name: '高清', rate: 1)],
++      source: 'test',
++      fetchedAt: DateTime.now(),
++    );
++  }
++}
++
++/// 直接实现刷新的 fake(用于 refresher 部件失败传播)。
++class _FailingRefresher implements RoomResolver, RoomSummaryRefresher {
++  int refreshCalls = 0;
++
++  @override
++  Future<RoomPayload> resolveRoom(RoomRequest request) async =>
++      throw UnimplementedError();
++
++  @override
++  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
++    refreshCalls++;
++    throw StateError('refresh boom');
++  }
++}
++
++/// 搜索部件:存在但 Future 失败。
++class _FailingSearch implements SearchRepository {
++  @override
++  Future<SearchResult> search(SearchRequest request) async =>
++      throw StateError('search boom');
++}
++
++/// 弹幕部件:存在但 Future 失败。
++class _FailingDanmaku implements DanmakuConnector {
++  @override
++  SiteCapabilities get capabilities => const SiteCapabilities(danmaku: true);
++
++  @override
++  Future<DanmakuSession> connect(DanmakuSessionRequest request) async =>
++      throw StateError('danmaku boom');
++}
++
+ void main() {
+   test('buildSiteRegistry 注册斗鱼并声明能力', () {
+     final registry = buildSiteRegistry();
+ 
+     expect(registry.supportedSites, contains('douyu'));
+     final douyu = registry['douyu']!;
+     expect(douyu.id, 'douyu');
+     expect(douyu.name, '斗鱼');
+     expect(douyu.resolver, isA<RoomResolver>());
+     expect(douyu.browse, isA<BrowseRepository>());
+@@ -111,11 +187,210 @@ void main() {
+       'twitch',
+       'soop',
+       'youtube',
+     ]);
+     expect(
+       cross.registry['douyu']?.browse,
+       isNotNull,
+       reason: '聚合持有宿主同一 registry,参与站点可解析',
+     );
+   });
++
++  group('LiveSite 统一站点外观', () {
++    const nineSites = [
++      'douyu',
++      'huya',
++      'bilibili',
++      'twitch',
++      'yy',
++      'soop',
++      'kuaishou',
++      'douyin',
++      'youtube',
++    ];
++
++    test('不支持弹幕的站点返回 null,而不是空连接', () {
++      final site = buildSiteRegistry().site('yy')!;
++      expect(site.danmaku, isNull);
++      expect(site.capabilities.danmaku, isFalse);
++    });
++
++    test('九站:LiveSite 与注册项同源,声明的 browse/search/danmaku 与部件一致', () {
++      final registry = buildSiteRegistry();
++      for (final id in nineSites) {
++        final registration = registry[id]!;
++        final site = registry.site(id)!;
++        expect(site.id, registration.id, reason: id);
++        expect(site.name, registration.name, reason: id);
++        expect(site.capabilities, same(registration.capabilities), reason: id);
++        expect(site.display, same(registration.display), reason: id);
++
++        expect(
++          site.capabilities.browse,
++          site.browse != null,
++          reason: '$id browse 能力与部件一致',
++        );
++        expect(
++          site.capabilities.danmaku,
++          site.danmaku != null,
++          reason: '$id danmaku 能力与部件一致',
++        );
++        // 声明房间/主播搜索即注册部件。快手平台不开放搜索:capabilities
++        // 不声明、search 部件是返回空结果的占位 —— 声明侧为假不违反
++        // 「声明即有部件」。
++        if (site.capabilities.roomSearch || site.capabilities.anchorSearch) {
++          expect(site.search, isNotNull, reason: '$id 声明搜索即注册部件');
++        }
++      }
++    });
++
++    test('未声明的能力部件为 null(YouTube 无搜索、聚合站只有浏览)', () {
++      final registry = buildSiteRegistry();
++      final youtube = registry.site('youtube')!;
++      expect(youtube.capabilities.roomSearch, isFalse);
++      expect(youtube.search, isNull);
++
++      final all = registry.site('all')!;
++      expect(all.capabilities.browse, isTrue);
++      expect(all.browse, isNotNull);
++      expect(all.search, isNull);
++      expect(all.danmaku, isNull);
++    });
++
++    test('refresher 按内层真实能力逐站判定:装饰器不可把未实现刷新误称为支持', () {
++      final registry = buildSiteRegistry();
++      const refreshImplemented = {
++        'douyu': true,
++        'huya': true,
++        'bilibili': true,
++        'twitch': true,
++        'yy': true,
++        'soop': true,
++        'kuaishou': true,
++        'douyin': true,
++        // YouTube 内层未实现刷新:短缓存包装恒 `is RoomSummaryRefresher`,
++        // 但注册时必须按内层真实能力判 null。
++        'youtube': false,
++      };
++      refreshImplemented.forEach((id, implemented) {
++        expect(
++          registry.site(id)!.refresher != null,
++          implemented,
++          reason: '$id refresher 应按内层真实实现判定',
++        );
++      });
++      // 聚合站占位 resolver 无刷新能力。
++      expect(registry.site('all')!.refresher, isNull);
++    });
++
++    test('recovery:九站经短缓存包装均可恢复;聚合站为 null', () {
++      final registry = buildSiteRegistry();
++      for (final id in nineSites) {
++        expect(registry.site(id)!.recovery, isNotNull, reason: id);
++      }
++      expect(registry.site('all')!.recovery, isNull);
++    });
++
++    test('resolveRoom 返回 RoomRecord;偏好档第二次命中缓存,recovery 绕开且 URL 更新', () async {
++      final inner = _SequenceResolver();
++      final registry = SiteRegistry()
++        ..register(
++          SiteRegistration(
++            id: 'demo',
++            name: '演示',
++            capabilities: const SiteCapabilities(multiQuality: true),
++            resolver: CachedRoomResolver(inner),
++          ),
++        );
++      final site = registry.site('demo')!;
++      const request = RoomRequest(
++        site: 'demo',
++        roomIdOrUrl: '42',
++        preferredQuality: '高清',
++      );
++
++      final first = await site.resolveRoom(request);
++      final second = await site.resolveRoom(request);
++      expect(first, isA<RoomRecord>());
++      expect(first.roomState, RoomState.live);
++      expect(first.playUrl, 'https://stream/1.m3u8');
++      expect(second.playUrl, 'https://stream/1.m3u8');
++      expect(inner.calls, 1, reason: '带偏好画质的第二次解析走短缓存');
++
++      final recovered = await site.recovery!.recoverRoom(request);
++      expect(inner.calls, 2, reason: '恢复绕开缓存新增一次真实请求');
++      expect(
++        recovered.playUrl,
++        'https://stream/2.m3u8',
++        reason: '恢复必须返回更新后的播放 URL',
++      );
++    });
++
++    test('部件存在但 Future 失败:异常原样传播,不伪装成空值', () async {
++      final inner = _SequenceResolver();
++      final registry = SiteRegistry()
++        ..register(
++          SiteRegistration(
++            id: 'demo',
++            name: '演示',
++            capabilities: const SiteCapabilities(
++              browse: true,
++              roomSearch: true,
++              danmaku: true,
++              multiQuality: true,
++            ),
++            resolver: CachedRoomResolver(inner),
++            browse: FakeBrowseRepository(site: 'demo', fail: true),
++            search: _FailingSearch(),
++            danmaku: _FailingDanmaku(),
++          ),
++        );
++      final site = registry.site('demo')!;
++      const request = RoomRequest(site: 'demo', roomIdOrUrl: '42');
++
++      inner.failure = StateError('resolve boom');
++      await expectLater(
++        site.resolveRoom(request),
++        throwsA(isA<StateError>()),
++      );
++      await expectLater(
++        site.recovery!.recoverRoom(request),
++        throwsA(isA<StateError>()),
++      );
++      await expectLater(
++        site.browse!.fetchRooms(const RoomListRequest(site: 'demo')),
++        throwsA(isA<ParserHttpException>()),
++      );
++      await expectLater(
++        site.search!.search(const SearchRequest(site: 'demo', query: 'q')),
++        throwsA(isA<StateError>()),
++      );
++      await expectLater(
++        site.danmaku!.connect(
++          const DanmakuSessionRequest(site: 'demo', roomId: '42'),
++        ),
++        throwsA(isA<StateError>()),
++      );
++    });
++
++    test('refresher 部件存在但刷新失败:throwsA 原样传播', () async {
++      final registry = SiteRegistry()
++        ..register(
++          SiteRegistration(
++            id: 'demo',
++            name: '演示',
++            capabilities: const SiteCapabilities(),
++            resolver: CachedRoomResolver(_FailingRefresher()),
++          ),
++        );
++      final site = registry.site('demo')!;
++      expect(site.refresher, isNotNull);
++
++      await expectLater(
++        site.refresher!.refreshRoomSummary(
++          const RoomRequest(site: 'demo', roomIdOrUrl: '42'),
++        ),
++        throwsA(isA<StateError>()),
++      );
++    });
++  });
+ }
+diff --git a/packages/live_parser/test/src/registry/cached_room_resolver_refresh_test.dart b/packages/live_parser/test/src/registry/cached_room_resolver_refresh_test.dart
+index 4938ca8..33b3697 100644
+--- a/packages/live_parser/test/src/registry/cached_room_resolver_refresh_test.dart
++++ b/packages/live_parser/test/src/registry/cached_room_resolver_refresh_test.dart
+@@ -13,20 +13,49 @@ import 'package:test/test.dart';
+ 
+ import '../../support/fake_douyu_api.dart';
+ 
+ /// 未实现刷新能力的占位 resolver(模拟尚未接入的站点)。
+ class _PlainResolver implements RoomResolver {
+   @override
+   Future<RoomPayload> resolveRoom(RoomRequest request) async =>
+       throw UnimplementedError();
+ }
+ 
++/// 同时具备解析与刷新的内层 fake:resolveRoom 视作取流入口,只计数;
++/// refreshRoomSummary 只回元信息,不碰取流。
++class _StreamCountingRefresher implements RoomResolver, RoomSummaryRefresher {
++  int streamCalls = 0;
++  int refreshCalls = 0;
++
++  @override
++  Future<RoomPayload> resolveRoom(RoomRequest request) async {
++    streamCalls++;
++    throw UnimplementedError('刷新路径不得触发取流');
++  }
++
++  @override
++  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
++    refreshCalls++;
++    return RoomSummary(
++      site: request.site,
++      roomId: request.roomIdOrUrl,
++      title: '标题',
++      anchorName: '主播',
++      cid: '1',
++      category: '分类',
++      online: '',
++      cover: '',
++      roomState: RoomState.offline,
++    );
++  }
++}
++
+ void main() {
+   test('包装后仍可被探测到 RoomSummaryRefresher(能力透传)', () {
+     final fake = FakeDouyuApi();
+     final cached = CachedRoomResolver(DouyuRoomResolver(DouyuClient(httpClient: fake)));
+     expect(cached, isA<RoomSummaryRefresher>());
+   });
+ 
+   test('刷新不写短缓存:连续两次刷新各打一次上游', () async {
+     final fake = FakeDouyuApi()
+       ..betardResponse = {
+@@ -54,20 +83,38 @@ void main() {
+     final afterFirst = fake.requests.length;
+     await refresher.refreshRoomSummary(request);
+ 
+     expect(
+       fake.requests.length,
+       greaterThan(afterFirst),
+       reason: '刷新必须重新打上游,不能命中 60s 短缓存',
+     );
+   });
+ 
++  test('refreshRoomSummary 不调用取流接口(resolveRoom)', () async {
++    final inner = _StreamCountingRefresher();
++    final cached = CachedRoomResolver(inner);
++    expect(cached, isA<RoomSummaryRefresher>());
++
++    const request = RoomRequest(site: 'demo', roomIdOrUrl: '42');
++    final summary = await
++        (cached as RoomSummaryRefresher).refreshRoomSummary(request);
++
++    expect(inner.refreshCalls, 1);
++    expect(
++      inner.streamCalls,
++      0,
++      reason: '刷新只取元信息,不得触发取流/签名等昂贵步骤',
++    );
++    expect(summary.roomId, '42');
++  });
++
+   test('内层未实现刷新能力:抛错(由调用方按条目隔离)', () async {
+     final cached = CachedRoomResolver(_PlainResolver());
+     await expectLater(
+       (cached as RoomSummaryRefresher).refreshRoomSummary(
+         const RoomRequest(site: 'douyu', roomIdOrUrl: '9527'),
+       ),
+       throwsA(isA<UnsupportedError>()),
+     );
+   });
+ }
+diff --git a/packages/live_parser/test/src/registry/cached_room_resolver_test.dart b/packages/live_parser/test/src/registry/cached_room_resolver_test.dart
+index a5fe0af..640947a 100644
+--- a/packages/live_parser/test/src/registry/cached_room_resolver_test.dart
++++ b/packages/live_parser/test/src/registry/cached_room_resolver_test.dart
+@@ -1,42 +1,40 @@
+ /// CachedRoomResolver:结果短缓存的命中/失效/并发合并语义。
+ library;
+ 
+ import 'dart:async';
+ 
+ import 'package:live_parser/live_parser.dart';
+ import 'package:live_parser/src/registry/cached_room_resolver.dart';
+ import 'package:test/test.dart';
+ 
+-RoomPayload _payload(RoomState state, {bool withLines = true}) => RoomPayload(
++RoomPayload _payload(
++  RoomState state, {
++  bool withLines = true,
++  String url = 'https://demo/live.m3u8',
++}) => RoomPayload(
+   site: 'demo',
+   roomId: '42',
+   sourceUrl: 'https://demo/42',
+   anchorName: '主播',
+   title: '房间',
+   cover: '',
+   avatar: '',
+   category: '',
+   cid: '42',
+   roomState: state,
+   streams: withLines
+-      ? const [
++      ? [
+           StreamQuality(
+             name: '高清',
+             rate: 1,
+-            lines: [
+-              StreamLine(
+-                name: '线路',
+-                url: 'https://demo/live.m3u8',
+-                format: 'hls',
+-              ),
+-            ],
++            lines: [StreamLine(name: '线路', url: url, format: 'hls')],
+           ),
+         ]
+       : const [],
+   availableQualities: const [QualityOption(name: '高清', rate: 1)],
+   source: 'test',
+   fetchedAt: DateTime.now(),
+ );
+ 
+ class _FakeResolver implements RoomResolver {
+   _FakeResolver(this.respond);
+@@ -190,20 +188,43 @@ void main() {
+       final inner = _FakeResolver((_) async => _payload(RoomState.live));
+       final cached = CachedRoomResolver(inner);
+ 
+       await cached.resolveRoom(request);
+       await cached.recoverRoom(request);
+       await cached.resolveRoom(request);
+ 
+       expect(inner.calls, hasLength(3), reason: '恢复失效键后,下一次解析不再命中旧缓存');
+     });
+ 
++    test('恢复请求次数增加且返回更新后的播放 URL(不复用缓存旧地址)', () async {
++      var sequence = 0;
++      final inner = _FakeResolver((_) async {
++        sequence++;
++        return _payload(RoomState.live, url: 'https://stream/$sequence.m3u8');
++      });
++      final cached = CachedRoomResolver(inner);
++
++      final first = await cached.resolveRoom(request);
++      final second = await cached.resolveRoom(request);
++      expect(inner.calls, hasLength(1), reason: 'TTL 内命中缓存');
++      expect(first.playUrl, 'https://stream/1.m3u8');
++      expect(second.playUrl, 'https://stream/1.m3u8');
++
++      final recovered = await cached.recoverRoom(request);
++      expect(inner.calls, hasLength(2), reason: '恢复必须新增一次真实请求');
++      expect(
++        recovered.playUrl,
++        'https://stream/2.m3u8',
++        reason: '恢复必须返回更新后的播放 URL',
++      );
++    });
++
+     test('内层具备恢复能力时优先委托 recoverRoom(而非 resolveRoom)', () async {
+       final inner = _FakeRecoveringResolver((_) async => _payload(RoomState.live));
+       final cached = CachedRoomResolver(inner);
+ 
+       await cached.resolveRoom(request);
+       await cached.recoverRoom(request);
+ 
+       expect(inner.recoverCalls, hasLength(1));
+       expect(inner.resolveCalls, hasLength(1), reason: '内层 resolveRoom 只被首次解析用过');
+     });

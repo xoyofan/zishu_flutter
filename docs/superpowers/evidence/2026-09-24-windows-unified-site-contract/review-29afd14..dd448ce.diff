@@ -1,0 +1,312 @@
+# Review package: 29afd14..HEAD
+
+## Commits
+dd448ce UI轨:关注档内排序区分合法零与观看数缺失
+7f8eb56 解析轨:新增 tryParseOnlineCount 区分合法零与缺失
+
+## Files changed
+ .../features/follow/application/follow_sort.dart   | 21 ++++-----
+ .../live_parser/lib/src/utils/format_online.dart   | 22 +++++++--
+ .../test/src/utils/format_online_test.dart         | 53 ++++++++++++++++++++++
+ test/features/follow/follow_sort_test.dart         | 43 +++++++++++++++++-
+ 4 files changed, 122 insertions(+), 17 deletions(-)
+
+## Diff
+diff --git a/lib/src/features/follow/application/follow_sort.dart b/lib/src/features/follow/application/follow_sort.dart
+index 5280c07..90e317e 100644
+--- a/lib/src/features/follow/application/follow_sort.dart
++++ b/lib/src/features/follow/application/follow_sort.dart
+@@ -1,18 +1,18 @@
+ /// 关注条目的排序与筛选**单一来源**。
+ ///
+ /// 「我的关注」页(FollowView)与播放页侧栏关注面板(_FollowPanel)共用本文件:
+ /// 同一份关注列表在两个入口必须呈现同一顺序,否则用户会看到两个不同的世界。
+ /// UI 层只负责把结果铺开,不各自实现 sort。
+ library;
+ 
+-import 'package:live_parser/live_parser.dart' show parseOnlineCount;
++import 'package:live_parser/live_parser.dart' show tryParseOnlineCount;
+ 
+ import 'follow_provider.dart';
+ 
+ /// 列表排序方式。
+ ///
+ /// 「最近关注」选项已按用户口径(2026-09-22)移除,枚举只剩 [FollowSort.liveFirst];
+ /// 保留枚举与 [sortFollowEntries] 的参数签名,让「我的关注」页与播放侧栏的
+ /// 调用点不变,未来若新增档位必须在 sortFollowEntries 显式接线。
+ enum FollowSort {
+   liveFirst('开播优先');
+@@ -29,49 +29,48 @@ enum FollowSort {
+ /// 排在全部在播之后、离线之前,且不分超关(对齐 web `followSortTier` 的
+ /// replay=2 档,SFVideoLive `followDisplay.ts:92`);没直播的沉底。
+ /// 播放页侧栏只显在播([isPlayFollowVisible]),轮播/离线档自然为空 ——
+ /// 两页共用同一 [followSortRank],顺序口径单一来源。
+ int followSortRank(FollowEntry entry) {
+   if (entry.isLive) return entry.isSpecial ? 0 : 1;
+   if (entry.isReplay) return 2;
+   return 3;
+ }
+ 
+-/// 单条观看数:解析失败/0 视为**缺失**(null),排序时沉底。
++/// 单条观看数:**缺失(空串/不可解析)为 null 沉底,合法零是有效值 0**。
+ ///
+-/// 复用解析核心 `parseOnlineCount`(1.2万/3.4千/1,234 同一尺),不复制解析规则。
+-/// 口径依据:`formatOnlineCount` 对 0/非法一律返回空串,所以线上字符串里
+-/// 「parseOnlineCount 回 0」等价于「无有效观看数」(缺失或不可解析)。
+-int? _onlineCountOrNull(FollowEntry entry) {
+-  final count = parseOnlineCount(entry.room.online);
+-  return count == 0 ? null : count;
+-}
++/// 复用解析核心 `tryParseOnlineCount`(1.2万/3.4千/1,234 同尺),不复制解析规则。
++/// 合法零必须与缺失区分:关注记录可从本地原样恢复 `online: "0"`
++/// (follow_provider 视非空串为在播),它参与数值序排在所有正数之后、
++/// 不可解析/缺失之前(审阅口径 2026-09-24)。
++int? _onlineCountOrNull(FollowEntry entry) =>
++    tryParseOnlineCount(entry.room.online);
+ 
+ /// 档内次序:观看数倒序(缺失/不可解析沉底) → 平局回退关注时间倒序。
+ int _byOnlineThenFollowedAtDesc(FollowEntry a, FollowEntry b) {
+   final onlineA = _onlineCountOrNull(a);
+   final onlineB = _onlineCountOrNull(b);
+   if (onlineA == null || onlineB == null) {
+     if (onlineA == null && onlineB == null) {
+       return b.followedAt.compareTo(a.followedAt);
+     }
+     return onlineA == null ? 1 : -1;
+   }
+   if (onlineA != onlineB) return onlineB.compareTo(onlineA);
+   return b.followedAt.compareTo(a.followedAt);
+ }
+ 
+ /// 按 [sort] 就地排序。
+ ///
+ /// 四档(见 [followSortRank])之后,档内按**观看数从高到低**;
+-/// 观看数缺失/不可解析排档尾,数值相同或同缺失时按关注时间倒序
+-/// (用户口径 2026-09-22,取代原「一律关注时间倒序」)。
++/// 合法零参与数值序,观看数缺失/不可解析排档尾,数值相同或同缺失时
++/// 按关注时间倒序(用户口径 2026-09-22,审阅 P2 边界 2026-09-24)。
+ void sortFollowEntries(List<FollowEntry> items, FollowSort sort) {
+   switch (sort) {
+     case FollowSort.liveFirst:
+       items.sort((a, b) {
+         final rank = followSortRank(a).compareTo(followSortRank(b));
+         if (rank != 0) return rank;
+         return _byOnlineThenFollowedAtDesc(a, b);
+       });
+   }
+ }
+diff --git a/packages/live_parser/lib/src/utils/format_online.dart b/packages/live_parser/lib/src/utils/format_online.dart
+index 87fa125..caa4a96 100644
+--- a/packages/live_parser/lib/src/utils/format_online.dart
++++ b/packages/live_parser/lib/src/utils/format_online.dart
+@@ -15,27 +15,41 @@ String formatOnlineCount(Object? count) {
+ 
+ /// 计数展示(粉丝数等):显示实际数字不做万/千省略;0/非法为空。
+ String formatExactCount(Object? count) {
+   final value = count is num ? count : num.tryParse('${count ?? ''}'.trim());
+   if (value == null || value <= 0) return '';
+   return value.truncate().toString();
+ }
+ 
+ /// [formatOnlineCount] 的逆运算:把「1.2万 / 3.4千 / 1234」还原为整数,用于跨站热度排序。
+ /// 无法解析或为空一律返回 0,保证排序稳定。
+-int parseOnlineCount(Object? count) {
++///
++/// 需要区分「合法的 0」与「缺失/不可解析」时用 [tryParseOnlineCount];
++/// 本函数是其 `?? 0` 的兼容包装,两老共用同一个私有 parser,不会漂移。
++int parseOnlineCount(Object? count) => tryParseOnlineCount(count) ?? 0;
++
++/// [parseOnlineCount] 的可空变体:合法数值(**含 0**)→ int;
++/// 空串 / null / 不可解析 → null。
++///
++/// 排序等调用方需要把「缺失沉底」与「合法零参与数值序」分开时用本函数
++/// (关注列表档内观看数排序,审阅口径 2026-09-24)。解析规则与
++/// [parseOnlineCount] 同一份实现([_parseOnlineCountOrNull])。
++int? tryParseOnlineCount(Object? count) => _parseOnlineCountOrNull(count);
++
++/// 唯一解析实现:返回 null 表示空/不可解析,合法数值(含 0)返回 int。
++int? _parseOnlineCountOrNull(Object? count) {
+   final text = '${count ?? ''}'.trim().replaceAll(',', '');
+-  if (text.isEmpty) return 0;
++  if (text.isEmpty) return null;
+   final match = RegExp(r'^([\d.]+)\s*([万千wk]?)$').firstMatch(text.toLowerCase());
+-  if (match == null) return 0;
++  if (match == null) return null;
+   final value = double.tryParse(match.group(1)!);
+-  if (value == null) return 0;
++  if (value == null) return null;
+   return switch (match.group(2)) {
+     '万' || 'w' => (value * 10000).round(),
+     '千' || 'k' => (value * 1000).round(),
+     _ => value.round(),
+   };
+ }
+ 
+ String _formatWan(double value) {
+   final wan = value / 10000;
+   if (wan == wan.truncateToDouble()) return '${wan.truncate()}万';
+diff --git a/packages/live_parser/test/src/utils/format_online_test.dart b/packages/live_parser/test/src/utils/format_online_test.dart
+new file mode 100644
+index 0000000..d2ede80
+--- /dev/null
++++ b/packages/live_parser/test/src/utils/format_online_test.dart
+@@ -0,0 +1,53 @@
++/// format_online 数值解析单测:展示格式化与排序解析(合法零 vs 缺失)。
++///
++/// 关键契约(审阅 P2):
++/// - [tryParseOnlineCount]:合法数值(**含 0**)→ int;空串/null/不可解析 → null。
++/// - [parseOnlineCount]:兼容口径不变,合法零与非法/空串一律回 0。
++library;
++
++import 'package:live_parser/src/utils/format_online.dart';
++import 'package:test/test.dart';
++
++void main() {
++  group('tryParseOnlineCount', () {
++    test('合法数值(含 万/千/逗号/plain)返回整数', () {
++      expect(tryParseOnlineCount('1.2万'), 12000);
++      expect(tryParseOnlineCount('3.4千'), 3400);
++      expect(tryParseOnlineCount('1,234'), 1234);
++      expect(tryParseOnlineCount('8921'), 8921);
++      expect(tryParseOnlineCount('5.0w'), 50000);
++    });
++
++    test('合法零返回 0,不是 null(本地可原样恢复 online="0")', () {
++      expect(tryParseOnlineCount('0'), 0);
++      expect(tryParseOnlineCount('0.0万'), 0);
++      expect(tryParseOnlineCount(0), 0);
++      expect(tryParseOnlineCount(' 0 '), 0);
++    });
++
++    test('空串/null/不可解析返回 null(缺失必须能与合法零区分)', () {
++      expect(tryParseOnlineCount(''), isNull);
++      expect(tryParseOnlineCount('   '), isNull);
++      expect(tryParseOnlineCount(null), isNull);
++      expect(tryParseOnlineCount('人气'), isNull);
++      expect(tryParseOnlineCount('—'), isNull);
++      expect(tryParseOnlineCount('12人'), isNull);
++      expect(tryParseOnlineCount('1.2.3'), isNull);
++    });
++  });
++
++  group('parseOnlineCount 兼容口径', () {
++    test('合法零与非法/空串都回 0,既有调用点行为不变', () {
++      expect(parseOnlineCount('0'), 0);
++      expect(parseOnlineCount(''), 0);
++      expect(parseOnlineCount(null), 0);
++      expect(parseOnlineCount('人气'), 0);
++    });
++
++    test('有数值时与 tryParseOnlineCount 同源同结果', () {
++      expect(parseOnlineCount('1.2万'), tryParseOnlineCount('1.2万'));
++      expect(parseOnlineCount('1,234'), tryParseOnlineCount('1,234'));
++      expect(parseOnlineCount('3.4千'), tryParseOnlineCount('3.4千'));
++    });
++  });
++}
+diff --git a/test/features/follow/follow_sort_test.dart b/test/features/follow/follow_sort_test.dart
+index e66e191..24839b9 100644
+--- a/test/features/follow/follow_sort_test.dart
++++ b/test/features/follow/follow_sort_test.dart
+@@ -1,18 +1,19 @@
+ /// 关注排序/筛选单一来源单测(纯 Dart,无 Flutter 运行时依赖)。
+ ///
+ /// 覆盖用户口径(2026-09-19)「超关 关注 轮播 没直播的顺序排」:
+ /// 1. **四档**:超关在播 0 / 普通在播 1 / 轮播 2 / 离线 3 —— 超关只在
+ ///    在播段置顶(用户在意的是人,但「在意」的排序权不越过直播状态);
+ ///    轮播(replay)排在全部在播之后、离线之前,且不分超关;
+-/// 2. 档内按观看数倒序(parseOnlineCount 口径:1.2万/3.4千/1,234 同尺),
+-///    缺失或不可解析排末尾,数值相同/同缺失按关注时间倒序;
++/// 2. 档内按观看数倒序(解析复用 live_parser tryParseOnlineCount:
++///    1.2万/3.4千/1,234 同尺),**合法零(如本地恢复的 "0")参与数值序**、
++///    缺失/不可解析沉底,数值相同/同缺失按关注时间倒序;
+ /// 3. FollowSort 只剩 liveFirst,「最近关注」选项不再暴露;
+ /// 4. 播放页侧栏只显在播(轮播/离线归「我的关注」页),两页共用同一
+ ///    followSortRank。
+ library;
+ 
+ import 'package:flutter_test/flutter_test.dart';
+ import 'package:live_parser/live_parser.dart' show RoomState, RoomSummary;
+ import 'package:zishu_flutter/src/features/follow/application/follow_provider.dart';
+ import 'package:zishu_flutter/src/features/follow/application/follow_sort.dart';
+ 
+@@ -154,20 +155,43 @@ void main() {
+ 
+     test('未直播档观看数全缺失:按关注时间倒序(与同缺失平局规则一致)', () {
+       final items = [
+         _entry(roomId: 'x1', live: false, followedDaysAgo: 2),
+         _entry(roomId: 'x2', live: false, followedDaysAgo: 1),
+         _entry(roomId: 'x3', live: false, followedDaysAgo: 3),
+       ];
+       sortFollowEntries(items, FollowSort.liveFirst);
+       expect(_ids(items), ['x2', 'x1', 'x3']);
+     });
++
++    test('合法零不是缺失:排在有数值之后、不可解析/缺失之前', () {
++      // 审阅 P2:本地可原样恢复 online="0"(follow_provider 视其为在播),
++      // 不得与不可解析/空串混成「同缺失」按关注时间排。
++      // zero 关注更早,若被误当缺失会排到 bad 之后 → 当前实现红灯。
++      final items = [
++        _entry(roomId: 'zero', online: '0', followedDaysAgo: 9), // 合法 0
++        _entry(roomId: 'bad', online: '人气', followedDaysAgo: 1), // 不可解析
++        _entry(roomId: 'big', online: '1.2万', followedDaysAgo: 5),
++      ];
++      sortFollowEntries(items, FollowSort.liveFirst);
++      expect(_ids(items), ['big', 'zero', 'bad']);
++    });
++
++    test('多个合法零同数:按关注时间倒序(零参与数值序而非缺失平局)', () {
++      final items = [
++        _entry(roomId: 'z-old', online: '0', followedDaysAgo: 9),
++        _entry(roomId: 'z-new', online: '0', followedDaysAgo: 1),
++        _entry(roomId: 'bad', online: '人气', followedDaysAgo: 5),
++      ];
++      sortFollowEntries(items, FollowSort.liveFirst);
++      expect(_ids(items), ['z-new', 'z-old', 'bad']);
++    });
+   });
+ 
+   group('FollowSort 枚举口径', () {
+     test('RecentlyFollowed 不再暴露:枚举只剩 liveFirst', () {
+       expect(
+         FollowSort.values.map((sort) => sort.name),
+         isNot(contains('recentlyFollowed')),
+       );
+       expect(FollowSort.values, [FollowSort.liveFirst]);
+     });
+@@ -189,20 +213,35 @@ void main() {
+     });
+ 
+     test('「我的关注」页(默认不过滤)保留轮播,且排在在播之后、离线之前', () {
+       final entries = [
+         _entry(roomId: 'x1', live: false, followedDaysAgo: 2),
+         _entry(roomId: 'r1', live: false, replay: true, followedDaysAgo: 1),
+         _entry(roomId: 'n1', followedDaysAgo: 1),
+       ];
+       expect(_ids(visibleFollowEntries(entries)), ['n1', 'r1', 'x1']);
+     });
++
++    test('侧栏档内按观看数倒序:合法零在数值后、不可解析前(共用同一排序)', () {
++      // 审阅 P2:侧栏与关注页共用 sortFollowEntries,档内次序必须同口径。
++      final entries = [
++        _entry(roomId: 'zero', online: '0', followedDaysAgo: 9),
++        _entry(roomId: 'bad', online: '人气', followedDaysAgo: 1),
++        _entry(roomId: 'big', online: '5.8万', followedDaysAgo: 5),
++        _entry(roomId: 'off', live: false, followedDaysAgo: 1), // 只显在播→滤掉
++        _entry(roomId: 'sp', special: true, online: '1.2万', followedDaysAgo: 7),
++      ];
++      expect(
++        _ids(playSidebarFollowEntries(entries)),
++        ['sp', 'big', 'zero', 'bad'],
++      );
++    });
+   });
+ 
+   group('visibleFollowEntries', () {
+     test('liveOnly 过滤掉未开播与轮播(播放页侧栏口径)', () {
+       final entries = [
+         _entry(roomId: 's1', special: true, followedDaysAgo: 5),
+         _entry(roomId: 'n1', followedDaysAgo: 1),
+         _entry(roomId: 'r1', live: false, replay: true, followedDaysAgo: 2),
+         _entry(roomId: 'x1', live: false, followedDaysAgo: 3),
+         _entry(roomId: 'x2', live: false, special: true, followedDaysAgo: 30),

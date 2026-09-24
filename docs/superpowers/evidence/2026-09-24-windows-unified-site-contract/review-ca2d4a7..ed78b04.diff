@@ -1,0 +1,555 @@
+# Review package: ca2d4a7..HEAD
+
+## Commits
+ed78b04 UI轨:观看人数统计边界只认可可信数值,云端回拉基础字段改为远端非空优先
+
+## Files changed
+ .../follow/application/follow_provider.dart        |  34 +++---
+ .../play/application/room_stats_provider.dart      |  51 ++++++---
+ test/features/follow/follow_pull_remote_test.dart  |  92 +++++++++++++++-
+ test/ui/workflows/play_follow_panel_test.dart      | 122 +++++++++++++++++++++
+ test/ui/workflows/play_meta_bar_test.dart          |  64 +++++++++++
+ 5 files changed, 325 insertions(+), 38 deletions(-)
+
+## Diff
+diff --git a/lib/src/features/follow/application/follow_provider.dart b/lib/src/features/follow/application/follow_provider.dart
+index d0367d7..4dd5da7 100644
+--- a/lib/src/features/follow/application/follow_provider.dart
++++ b/lib/src/features/follow/application/follow_provider.dart
+@@ -519,24 +519,23 @@ class FollowController extends Notifier<List<FollowEntry>> {
+       clientUpdatedAt: nowMs,
+       lastLiveAt: entry.lastLiveAt,
+       liveStartAt: entry.liveStartAt,
+     );
+   }
+ 
+   /// 远端契约 → 本地条目。
+   ///
+   /// [previous] 为本地已有条目(按同 key 匹配):
+   /// - 关注维度(`isSpecial`/`remindOn`/`followedAt`)以远端为准;
+-  /// - 房间记录按 [RoomSummary] 字段本地已知值优先(_mergeLocalRoom):
+-  ///   云端契约不含统计/分类/在播/roomState/avatar/startedAt 等房间元信息,
+-  ///   全量替换不得把已知本地值抹成空,保留至紧接着的 `refreshStatuses`
+-  ///   刷新回填;
++  /// - 房间记录按字段来源合并(_mergeLocalRoom):云端携带的 title/anchor/
++  ///   cover 云端非空优先;统计/分类/在播状态等云端未携带字段本地已知值
++  ///   优先保留至刷新;
+   /// - 「上次开播」类时间戳与本地取 max —— 云端可能是旧值/0 值,不得把
+   ///   本地刚记录的跃迁抹掉。
+   ///
+   /// 本地无记录(远端新增)时统计/开播状态保持空串,待真实解析链路回填,
+   /// 展示层显示「—」,不伪造 0。
+   FollowEntry _fromRemote(RemoteFollow item, [FollowEntry? previous]) {
+     final entry = FollowEntry(
+       room: RoomSummary(
+         site: item.site,
+         roomId: item.id,
+@@ -556,42 +555,45 @@ class FollowController extends Notifier<List<FollowEntry>> {
+       liveStartAt: item.liveStartAt,
+     );
+     if (previous == null) return entry;
+     return entry.copyWith(
+       room: _mergeLocalRoom(entry.room, previous.room),
+       lastLiveAt: mergedInt(entry.lastLiveAt, previous.lastLiveAt),
+       liveStartAt: mergedInt(entry.liveStartAt, previous.liveStartAt),
+     );
+   }
+ 
+-  /// 同 key 回拉时的房间记录合并:本地已知值优先 —— 统计与房间元信息
+-  /// 保留至下一轮刷新(远端契约根本不携带这些字段,取远端只会得到空);
+-  /// 本地为空的字段(标题/封面等远端自带字段)用远端补齐。
++  /// 同 key 回拉时的房间记录合并,按字段来源分两类(审阅 P1-B):
++  /// - **云端契约携带**的 `title`/`anchorName`/`cover`:云端非空优先
++  ///   (另一设备可能刚更新过),云端为空才回退本地非空值;
++  /// - **云端未携带**的统计(cid/category/online/roomState/avatar/
++  ///   startedAt/followers/vip/diamondFans 等):本地已知值原样保留至
++  ///   下一轮 `refreshStatuses` 刷新,取远端只会得到空。
+   static RoomSummary _mergeLocalRoom(RoomSummary remote, RoomSummary local) {
+-    String known(String localValue, String remoteValue) =>
+-        localValue.trim().isNotEmpty ? localValue : remoteValue;
++    String remoteFirst(String remoteValue, String localValue) =>
++        remoteValue.trim().isNotEmpty ? remoteValue : localValue;
+     return RoomSummary(
+       site: local.site,
+       roomId: local.roomId,
+-      title: known(local.title, remote.title),
+-      anchorName: known(local.anchorName, remote.anchorName),
++      title: remoteFirst(remote.title, local.title),
++      anchorName: remoteFirst(remote.anchorName, local.anchorName),
++      cover: remoteFirst(remote.cover, local.cover),
+       cid: local.cid,
+       category: local.category,
+-      online: known(local.online, remote.online),
+-      cover: known(local.cover, remote.cover),
+-      avatar: known(local.avatar, remote.avatar),
+-      promoTag: local.promoTag ?? remote.promoTag,
++      online: local.online,
++      avatar: local.avatar,
++      promoTag: local.promoTag,
+       followers: local.followers,
+       vip: local.vip,
+       diamondFans: local.diamondFans,
+       roomState: local.roomState,
+-      startedAt: local.startedAt ?? remote.startedAt,
++      startedAt: local.startedAt,
+     );
+   }
+ 
+   /// 整表推送到服务端(登录态才有效)。
+   Future<void> _pushRemote(String token) async {
+     if (_syncing || !ref.mounted) return;
+     _syncing = true;
+     try {
+       final now = DateTime.now().millisecondsSinceEpoch;
+       await _api.pushFollows(token, [
+diff --git a/lib/src/features/play/application/room_stats_provider.dart b/lib/src/features/play/application/room_stats_provider.dart
+index 937002e..fbca2d3 100644
+--- a/lib/src/features/play/application/room_stats_provider.dart
++++ b/lib/src/features/play/application/room_stats_provider.dart
+@@ -1,12 +1,13 @@
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+-import 'package:live_parser/live_parser.dart' show RoomSummary;
++import 'package:live_parser/live_parser.dart'
++    show RoomSummary, tryParseOnlineCount;
+ 
+ import '../../../shared/application/providers.dart' show roomRefresherProvider;
+ 
+ /// 播放页当前房间的统计快照(用户口径 2026-09-20:huya 等平台的关注/VIP
+ /// 统计不能只服务已关注房间;2026-09-24 回归口径:统计与关注状态完全分离)。
+ ///
+ /// 对任意房间直接调解析侧 `RoomSummaryRefresher.refreshRoom` —— 与关注行
+ /// 刷新同一条真源链(huya profileRoom / douyu getAnchorNewCard 等),不需要
+ /// 关注状态。展示层经 [mergeDisplayStats] 逐字段合并新鲜解析值与本地已有
+ /// 统计快照,任何一侧的空缺互不遮蔽。
+@@ -30,34 +31,48 @@ final roomStatsProvider = FutureProvider.autoDispose
+ ///
+ /// 统计取数与关注状态**完全分离**:每个统计字段独立选值 ——
+ /// 先取 [parsed](roomStatsProvider 的新鲜解析快照)中该字段的非空值;
+ /// 该字段解析缺失时再回退 [local](关注条目维护的本地统计快照)的非空值;
+ /// 两侧都未知则保持空串,展示层渲染「—」。
+ /// [parsed] 为 null(解析失败/无刷新能力)时整体回退本地快照:错误只表现为
+ /// 回退或「—」,不冒充有效零,也绝不从关注布尔值推任何人数
+ /// (回归根因:此前整份快照按 followed 有无切换数据源,点关注瞬间
+ /// 空统计盖掉解析值、数值全部消失)。
+ ///
++/// **观看人数(online)例外,只认可可信数值**:online 同时承载在播占位
++/// 文案(点关注写入的「直播中」、SOOP `kSoopLiveOnlineFallback`),它们
++/// 只表达在播、不是人数 —— 该字段两侧都必须通过 [tryParseOnlineCount]
++/// (可解析含合法 0)才可展示,否则取另一个可信值,再否则置空 →「—」。
++/// 仅清洗展示取数,不回写任何快照,roomState/是否开播判据不受影响;
++/// followers/vip/diamondFans 仍按「非空字符串即有效」的既有口径不变。
++///
+ /// 返回值仅供统计展示取数,不参与在播判据等业务语义。
+ RoomSummary? mergeDisplayStats({RoomSummary? parsed, RoomSummary? local}) {
+-  if (parsed == null) return local;
+-  if (local == null) return parsed;
++  final base = parsed ?? local;
++  if (base == null) return null;
+   String fresh(String parsedValue, String localValue) =>
+       parsedValue.trim().isNotEmpty ? parsedValue : localValue;
++  // 观看人数数值边界:两侧只认可 tryParseOnlineCount 可解析的可信文案。
++  String onlineCount(String parsedOnline, String localOnline) {
++    if (tryParseOnlineCount(parsedOnline) != null) return parsedOnline;
++    if (tryParseOnlineCount(localOnline) != null) return localOnline;
++    return '';
++  }
++
+   return RoomSummary(
+-    site: parsed.site,
+-    roomId: parsed.roomId,
+-    title: fresh(parsed.title, local.title),
+-    anchorName: fresh(parsed.anchorName, local.anchorName),
+-    cid: fresh(parsed.cid, local.cid),
+-    category: fresh(parsed.category, local.category),
+-    online: fresh(parsed.online, local.online),
+-    cover: fresh(parsed.cover, local.cover),
+-    avatar: fresh(parsed.avatar, local.avatar),
+-    promoTag: parsed.promoTag ?? local.promoTag,
+-    followers: fresh(parsed.followers, local.followers),
+-    vip: fresh(parsed.vip, local.vip),
+-    diamondFans: fresh(parsed.diamondFans, local.diamondFans),
+-    roomState: parsed.roomState,
+-    startedAt: parsed.startedAt ?? local.startedAt,
++    site: base.site,
++    roomId: base.roomId,
++    title: fresh(parsed?.title ?? '', local?.title ?? ''),
++    anchorName: fresh(parsed?.anchorName ?? '', local?.anchorName ?? ''),
++    cid: fresh(parsed?.cid ?? '', local?.cid ?? ''),
++    category: fresh(parsed?.category ?? '', local?.category ?? ''),
++    online: onlineCount(parsed?.online ?? '', local?.online ?? ''),
++    cover: fresh(parsed?.cover ?? '', local?.cover ?? ''),
++    avatar: fresh(parsed?.avatar ?? '', local?.avatar ?? ''),
++    promoTag: parsed?.promoTag ?? local?.promoTag,
++    followers: fresh(parsed?.followers ?? '', local?.followers ?? ''),
++    vip: fresh(parsed?.vip ?? '', local?.vip ?? ''),
++    diamondFans: fresh(parsed?.diamondFans ?? '', local?.diamondFans ?? ''),
++    roomState: parsed?.roomState ?? local!.roomState,
++    startedAt: parsed?.startedAt ?? local?.startedAt,
+   );
+ }
+diff --git a/test/features/follow/follow_pull_remote_test.dart b/test/features/follow/follow_pull_remote_test.dart
+index 4640fd8..c4dbb1e 100644
+--- a/test/features/follow/follow_pull_remote_test.dart
++++ b/test/features/follow/follow_pull_remote_test.dart
+@@ -85,32 +85,37 @@ Map<String, Object> _localEntry({
+   'startedAt': '2026-09-20T08:00:00.000Z',
+   'followers': followers,
+   'vip': vip,
+   'diamondFans': diamondFans,
+   'isSpecial': isSpecial,
+   'remindOn': false,
+   'followedAt': '2026-09-01T00:00:00.000Z',
+   'lastLiveAt': 1700000000000,
+ };
+ 
+-/// 远端条目:契约只有关注状态与基础展示字段,**不含统计/分类/在播**。
++/// 远端条目:契约只有关注状态与基础展示字段(title/anchor/cover),
++/// **不含统计/分类/在播**;三基础字段缺省给非空默认值,可显式传空串
++/// 构造「云端空回退」场景。
+ RemoteFollow _remoteEntry({
+   required String id,
+   String site = 'douyu',
+   bool superFollow = false,
+   bool liveNotify = false,
++  String? title,
++  String? anchor,
++  String? cover,
+ }) => RemoteFollow(
+   site: site,
+   id: id,
+-  title: '远端标题$id',
+-  anchor: '远端主播$id',
+-  cover: 'https://cdn/remote.jpg',
++  title: title ?? '远端标题$id',
++  anchor: anchor ?? '远端主播$id',
++  cover: cover ?? 'https://cdn/remote.jpg',
+   avatar: '',
+   addedAt: DateTime(2026, 9, 2).millisecondsSinceEpoch,
+   superFollow: superFollow,
+   liveNotify: liveNotify,
+   clientUpdatedAt: 1,
+   lastLiveAt: 0,
+   liveStartAt: 0,
+ );
+ 
+ Future<({ProviderContainer container, _FakeDataServerApi api})> _container({
+@@ -245,12 +250,91 @@ void main() {
+       expect(entries.map((e) => e.key), [
+         'douyu:1001',
+       ], reason: '远端删除的条目不得被本地残留复活');
+       expect(
+         entries.single.room.followers,
+         '123456',
+         reason: '保留的同 key 条目统计仍在',
+       );
+       expect(api.pushes, isEmpty);
+     });
++
++    test('远端与本地冲突:非空 title/anchor/cover 以远端为准,统计等仍保留本地', () async {
++      final (:container, :api) = await _container(
++        localSeed: [
++          _localEntry(
++            roomId: '1001',
++            online: '1.2万',
++            followers: '123456',
++            category: '网游',
++          ),
++        ],
++        // 另一台设备更新了标题/主播名/封面(与本地旧值冲突)。
++        remote: [
++          _remoteEntry(
++            id: '1001',
++            title: '另一台设备的新标题',
++            anchor: '另一台设备的新主播',
++            cover: 'https://cdn/remote-new.jpg',
++          ),
++        ],
++      );
++      container.read(authProvider);
++
++      await container.read(followProvider.notifier).pullRemote();
++
++      final entry = container.read(followProvider).single;
++      // 云端契约携带的基础展示字段:云端非空优先(审阅 P1-B)。
++      expect(entry.room.title, '另一台设备的新标题', reason: '远端非空 title 必须覆盖本地旧标题');
++      expect(
++        entry.room.anchorName,
++        '另一台设备的新主播',
++        reason: '远端非空 anchor 必须覆盖本地旧主播名',
++      );
++      expect(
++        entry.room.cover,
++        'https://cdn/remote-new.jpg',
++        reason: '远端非空 cover 必须覆盖本地旧封面',
++      );
++      // 云端未携带的字段仍保留本地已知值。
++      expect(entry.room.followers, '123456', reason: '统计云端未携带,本地保留');
++      expect(entry.room.online, '1.2万', reason: '在播/人数云端未携带,本地保留');
++      expect(entry.room.category, '网游', reason: '分类云端未携带,本地保留');
++      expect(
++        entry.room.avatar,
++        'https://cdn/local-avatar.jpg',
++        reason: '头像云端未携带,本地保留',
++      );
++      expect(entry.room.roomState, RoomState.live, reason: 'roomState 本地保留');
++      expect(api.pushes, isEmpty);
++    });
++
++    test('云端空回退:远端 title/anchor/cover 为空串时保留本地非空值', () async {
++      final (:container, :api) = await _container(
++        localSeed: [
++          _localEntry(
++            roomId: '1001',
++            online: '1.2万',
++            followers: '123456',
++            category: '网游',
++          ),
++        ],
++        // 远端三基础字段显式为空。
++        remote: [_remoteEntry(id: '1001', title: '', anchor: '', cover: '')],
++      );
++      container.read(authProvider);
++
++      await container.read(followProvider.notifier).pullRemote();
++
++      final entry = container.read(followProvider).single;
++      expect(entry.room.title, '本地标题1001', reason: '云端空 → 回退本地非空 title');
++      expect(entry.room.anchorName, '本地主播1001', reason: '云端空 → 回退本地非空 anchor');
++      expect(
++        entry.room.cover,
++        'https://cdn/local.jpg',
++        reason: '云端空 → 回退本地非空 cover',
++      );
++      expect(entry.room.followers, '123456', reason: '统计仍本地保留');
++      expect(api.pushes, isEmpty);
++    });
+   });
+ }
+diff --git a/test/ui/workflows/play_follow_panel_test.dart b/test/ui/workflows/play_follow_panel_test.dart
+index 38f2f7a..2d3a371 100644
+--- a/test/ui/workflows/play_follow_panel_test.dart
++++ b/test/ui/workflows/play_follow_panel_test.dart
+@@ -820,12 +820,134 @@ void main() {
+       expect(
+         find.descendant(
+           of: find.byKey(const Key('play-side-stat-svip')),
+           matching: find.text('1300'),
+         ),
+         findsOneWidget,
+         reason: 'parser 缺 diamondFans → 回退本地已有值',
+       );
+       expect(tester.takeException(), isNull);
+     });
++
++    testWidgets('解析缺观看数且刚关注:人气「—」,「直播中」占位不冒充人数', (tester) async {
++      SharedPreferencesAsyncPlatform.instance =
++          InMemorySharedPreferencesAsync.withData(<String, Object>{});
++
++      // 解析快照缺 online(观看数),但 followers/vip 正常 ——
++      // 刚关注的占位 online='直播中' 只是在播判据,不是人数。
++      final play = await _pumpFollowTab(
++        tester,
++        location: '/douyu/play/88888',
++        overrides: [
++          roomRefresherProvider.overrideWithValue(
++            _ScriptedRefresher({
++              '88888': _statsRoom(
++                roomId: '88888',
++                online: '',
++                followers: '123456',
++                vip: '321',
++              ),
++            }),
++          ),
++        ],
++      );
++      await _pumpFrames(tester, 3);
++
++      expect(find.byKey(const Key('play-side-header')), findsOneWidget);
++      // 未关注:解析缺观看数 → 人气「—」(此时本地快照也为空)。
++      expect(
++        find.descendant(
++          of: find.byKey(const Key('play-side-stat-audience')),
++          matching: find.text('—'),
++        ),
++        findsOneWidget,
++        reason: '解析缺观看数时未知显示「—」',
++      );
++      expect(headerTextOf('关注 12.3万'), findsOneWidget);
++
++      await tester.tap(find.byKey(const Key('play-side-follow-btn')));
++      await _pumpFrames(tester, 3);
++
++      expect(
++        play.container.read(followProvider).any((e) => e.key == 'douyu:88888'),
++        isTrue,
++        reason: '前置:点关注已落库(占位 online=直播中随之进入本地快照)',
++      );
++      // 数据诚实性:占位文案不得当观看数展示;其他统计字段行为不变。
++      expect(
++        find.descendant(
++          of: find.byKey(const Key('play-side-stat-audience')),
++          matching: find.text('—'),
++        ),
++        findsOneWidget,
++        reason: '刚关注的「直播中」占位是在播判据,人气格必须仍显示「—」',
++      );
++      expect(
++        headerTextOf('关注 12.3万'),
++        findsOneWidget,
++        reason: 'followers 行为不变',
++      );
++      expect(
++        find.descendant(
++          of: find.byKey(const Key('play-side-stat-vip')),
++          matching: find.text('321'),
++        ),
++        findsOneWidget,
++        reason: 'vip 行为不变',
++      );
++      expect(tester.takeException(), isNull);
++    });
++
++    testWidgets('SOOP 占位:在播但人数未知(kSoopLiveOnlineFallback)不进人气格', (
++      tester,
++    ) async {
++      SharedPreferencesAsyncPlatform.instance =
++          InMemorySharedPreferencesAsync.withData(<String, Object>{});
++
++      // SOOP 解析器在播但取不到观看数时回填 '直播中'
++      // (kSoopLiveOnlineFallback):只是在播标注,人数未知 → 「—」。
++      final play = await _pumpFollowTab(
++        tester,
++        location: '/soop/play/9527',
++        overrides: [
++          roomRefresherProvider.overrideWithValue(
++            _ScriptedRefresher({
++              '9527': _statsRoom(roomId: '9527', online: '直播中', vip: '321'),
++            }),
++          ),
++        ],
++      );
++      await _pumpFrames(tester, 3);
++
++      expect(find.byKey(const Key('play-side-header')), findsOneWidget);
++      expect(
++        find.descendant(
++          of: find.byKey(const Key('play-side-stat-audience')),
++          matching: find.text('—'),
++        ),
++        findsOneWidget,
++        reason: 'SOOP 在播但人数未知:人气格显示「—」',
++      );
++      expect(
++        find.descendant(
++          of: find.byKey(const Key('play-side-header')),
++          matching: find.text('直播中'),
++        ),
++        findsNothing,
++        reason: '占位文案不得作为观看人数出现在信息头',
++      );
++      expect(
++        find.descendant(
++          of: find.byKey(const Key('play-side-stat-vip')),
++          matching: find.text('321'),
++        ),
++        findsOneWidget,
++        reason: 'vip 是可信数值,照常展示(其他字段行为不变)',
++      );
++      expect(
++        play.container.read(followProvider).any((e) => e.key == 'soop:9527'),
++        isFalse,
++      );
++      expect(tester.takeException(), isNull);
++    });
+   });
+ }
+diff --git a/test/ui/workflows/play_meta_bar_test.dart b/test/ui/workflows/play_meta_bar_test.dart
+index 770e18a..a44657b 100644
+--- a/test/ui/workflows/play_meta_bar_test.dart
++++ b/test/ui/workflows/play_meta_bar_test.dart
+@@ -405,20 +405,84 @@ void main() {
+       expect(
+         find.descendant(
+           of: find.byKey(const Key('play-meta-stat-svip')),
+           matching: find.textContaining('1300'),
+         ),
+         findsOneWidget,
+         reason: '点关注后 SVIP 数值不得消失',
+       );
+       expect(tester.takeException(), isNull);
+     });
++
++    testWidgets('解析失败且刚关注:人气「—」,不回落「直播中」占位(375x812)', (tester) async {
++      final container = await _pumpPlay(
++        tester,
++        size: const Size(375, 812),
++        // 空脚本:刷新对所有房间抛错 → 解析快照整体为 null(失败态)。
++        refresher: _ScriptedRefresher({}),
++      );
++      container.read(followProvider.notifier).remove('douyu:63136');
++      await _pumpFrames(tester, 3);
++
++      // 未关注:解析失败且无本地快照 → 全部「—」。
++      expect(_inMetaBar('人气 —'), findsOneWidget, reason: '前置:解析失败时未知显示「—」');
++
++      await tester.tap(find.byKey(const Key('play-side-follow-btn')));
++      await _pumpFrames(tester, 3);
++
++      expect(
++        container.read(followProvider).any((e) => e.key == 'douyu:63136'),
++        isTrue,
++        reason: '前置:点关注已落库(占位 online=直播中随之进入本地快照)',
++      );
++      // 数据诚实性:解析失败回退本地时,占位文案也不得冒充观看人数。
++      expect(
++        _inMetaBar('人气 —'),
++        findsOneWidget,
++        reason: '刚关注的「直播中」占位不是人数,人气格必须保持「—」',
++      );
++      expect(
++        _inMetaBar('关注 —'),
++        findsOneWidget,
++        reason: 'followers 未知仍「—」(行为不变)',
++      );
++      expect(tester.takeException(), isNull);
++    });
++
++    testWidgets('解析返回「直播中」占位(SOOP 同文案):人气「—」,VIP 照常(375x812)', (tester) async {
++      final container = await _pumpPlay(
++        tester,
++        size: const Size(375, 812),
++        // 与 SOOP kSoopLiveOnlineFallback 同文案:在播但人数未知。
++        refresher: _ScriptedRefresher({
++          '63136': _statsRoom(roomId: '63136', online: '直播中', vip: '321'),
++        }),
++      );
++      container.read(followProvider.notifier).remove('douyu:63136');
++      await _pumpFrames(tester, 3);
++
++      expect(
++        _inMetaBar('人气 —'),
++        findsOneWidget,
++        reason: '解析占位只表达在播,不是人数 → 「—」',
++      );
++      expect(_inMetaBar('人气 直播中'), findsNothing, reason: '占位文案不得作为观看人数展示');
++      expect(
++        find.descendant(
++          of: find.byKey(const Key('play-meta-stat-vip')),
++          matching: find.textContaining('321'),
++        ),
++        findsOneWidget,
++        reason: 'vip 可信数值照常展示(其他字段行为不变)',
++      );
++      expect(tester.takeException(), isNull);
++    });
+   });
+ 
+   group('桌面不回归', () {
+     testWidgets('1024x768:仍是侧栏完整信息头,信息条不出现且锚点不重复', (tester) async {
+       await _pumpPlay(tester, size: const Size(1024, 768));
+ 
+       expect(find.byKey(const Key('play-meta-bar')), findsNothing);
+       expect(find.byKey(const Key('play-side-header')), findsOneWidget);
+       expect(find.byKey(const Key('play-side-follow-btn')), findsOneWidget);
+       expect(find.byKey(const Key('play-side-super-follow')), findsOneWidget);

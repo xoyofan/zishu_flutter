@@ -1,0 +1,215 @@
+# Review package: fac8f6c..HEAD
+
+## Commits
+bb77bc5 解析轨:补强三站统一出口线路断言并澄清虎牙超粉原始零语义
+
+## Files changed
+ .../test/src/models/room_record_test.dart          | 22 ++++++++++++++++++++++
+ .../src/platforms/bilibili/room_resolver_test.dart | 11 ++++++++++-
+ .../src/platforms/douyu/room_resolver_test.dart    |  8 +++++++-
+ .../src/platforms/huya/room_resolver_test.dart     | 12 +++++++++++-
+ .../platforms/huya/room_summary_refresh_test.dart  |  7 +++++--
+ 5 files changed, 55 insertions(+), 5 deletions(-)
+
+## Diff
+diff --git a/packages/live_parser/test/src/models/room_record_test.dart b/packages/live_parser/test/src/models/room_record_test.dart
+index 7515bf2..af3ab05 100644
+--- a/packages/live_parser/test/src/models/room_record_test.dart
++++ b/packages/live_parser/test/src/models/room_record_test.dart
+@@ -324,20 +324,42 @@ void main() {
+         cover: '',
+       );
+       final record = RoomRecord.fromSummary(summary);
+       expect(record.audience, isNull);
+       expect(record.title, isNull);
+       expect(record.isLive, isFalse);
+       expect(record.roomState, RoomState.offline);
+       expect(record.toSummary().online, '');
+     });
+ 
++    test('fromSummary:站点层判定有效的统计字符串 "0" 保留,不当作缺失', () {
++      // 与 huya 原始零裁决互补:不可信的原始 0 由站点层挡在 summary 之外;
++      // 一旦摘要合法携带 "0",fromSummary 必须保留(toJson/mergeRefresh 此前
++      // 已有同口径断言,此处只补 fromSummary 路径)。
++      const summary = RoomSummary(
++        site: 'huya',
++        roomId: '2',
++        title: '标题',
++        anchorName: '主播',
++        cid: '1',
++        category: '分类',
++        online: '0',
++        diamondFans: '0',
++        cover: '',
++        roomState: RoomState.live,
++      );
++      final record = RoomRecord.fromSummary(summary);
++      expect(record.audience, '0', reason: '确定有效的 "0" 不归 null');
++      expect(record.svip, '0');
++      expect(record.followers, isNull, reason: '未提供仍为 null');
++    });
++
+     test('fromSummary replay 摘要按 roomState 判定,不看 online', () {
+       const summary = RoomSummary(
+         site: 'bilibili',
+         roomId: '9',
+         title: '',
+         anchorName: '',
+         cid: '',
+         category: '',
+         online: '',
+         cover: '',
+diff --git a/packages/live_parser/test/src/platforms/bilibili/room_resolver_test.dart b/packages/live_parser/test/src/platforms/bilibili/room_resolver_test.dart
+index 5aec03c..beb56f7 100644
+--- a/packages/live_parser/test/src/platforms/bilibili/room_resolver_test.dart
++++ b/packages/live_parser/test/src/platforms/bilibili/room_resolver_test.dart
+@@ -249,21 +249,30 @@ void main() {
+       expect(room, isA<RoomRecord>());
+       expect(room.site, 'bilibili');
+       expect(room.roomId, '9527');
+       expect(room.roomState, RoomState.live);
+       expect(room.isLive, isTrue);
+       expect(room.title, 'B站测试房间');
+ 
+       // 线路与播放请求头经统一记录透传(CDN 防盗链 Referer/Origin)。
+       expect(room.streams, isNotEmpty);
+       final line = room.streams.first.lines.first;
+-      expect(line.url, isNotEmpty);
++      // P2:首条为 avc HLS(host+base_url+extra 拼接),断言稳定 host/路径/
++      // 查询参数 —— 均来自既有 fixture room_play_info.json 的 url_info[0]
++      // 与既有 resolver 断言口径,防止适配层整体换值仍通过。
++      expect(
++        line.url,
++        startsWith('https://cn-hbxy-cm-01.bilivideo.com/live-bvc/9527'),
++        reason: '首个 url_info host + base_url(fixture 真值)',
++      );
++      expect(line.url, contains('live-bvc/9527?proto=ts'));
++      expect(line.url, contains('expires='));
+       expect(line.headers['referer'], 'https://live.bilibili.com/');
+       expect(line.headers['origin'], 'https://live.bilibili.com');
+       expect(room.playUrl, room.streams.first.preferredLine?.url);
+ 
+       // 6sol 口径:RoomPayload 没有统计字段,详情出口统计为 null。
+       expect(room.audience, isNull);
+       expect(room.followers, isNull);
+       expect(room.vip, isNull);
+       expect(room.svip, isNull);
+     });
+diff --git a/packages/live_parser/test/src/platforms/douyu/room_resolver_test.dart b/packages/live_parser/test/src/platforms/douyu/room_resolver_test.dart
+index c5760dc..905bfa8 100644
+--- a/packages/live_parser/test/src/platforms/douyu/room_resolver_test.dart
++++ b/packages/live_parser/test/src/platforms/douyu/room_resolver_test.dart
+@@ -349,21 +349,27 @@ void main() {
+       expect(room.site, 'douyu');
+       expect(room.roomId, '9527');
+       expect(room.roomState, RoomState.live);
+       expect(room.isLive, isTrue);
+       expect(room.title, '斗鱼测试房间');
+       expect(room.sourceUrl, 'https://www.douyu.com/9527');
+ 
+       // 线路与播放请求头经统一记录透传(边界深冻结不改变可读值)。
+       expect(room.streams, isNotEmpty);
+       final line = room.streams.first.lines.first;
+-      expect(line.url, isNotEmpty);
++      // P2:锁定既有 resolver 同源的已知 fixture 线路(play_v1_probe.json),
++      // 防止适配层把两处 URL 一起换成别的非空值仍通过。
++      expect(
++        line.url,
++        'https://hw-tct.douyucdn.cn/live/9527probe_0_0.flv',
++        reason: 'rate=0 hw-h5 探测线路(与既有 resolver 断言同源)',
++      );
+       expect(line.headers['referer'], 'https://www.douyu.com/9527');
+       expect(line.headers['user-agent'], contains('Chrome/'));
+       expect(room.playUrl, room.streams.first.preferredLine?.url);
+ 
+       // 6sol 口径:RoomPayload 本身没有 audience/followers/vip/svip,
+       // 详情出口的统计必须为 null,不伪造 0/空串。
+       expect(room.audience, isNull);
+       expect(room.followers, isNull);
+       expect(room.vip, isNull);
+       expect(room.svip, isNull);
+diff --git a/packages/live_parser/test/src/platforms/huya/room_resolver_test.dart b/packages/live_parser/test/src/platforms/huya/room_resolver_test.dart
+index 532a3aa..5855803 100644
+--- a/packages/live_parser/test/src/platforms/huya/room_resolver_test.dart
++++ b/packages/live_parser/test/src/platforms/huya/room_resolver_test.dart
+@@ -179,21 +179,31 @@ void main() {
+       expect(room.site, 'huya');
+       expect(room.roomId, '9527');
+       expect(room.roomState, RoomState.live);
+       expect(room.isLive, isTrue);
+       expect(room.title, '虎牙测试房间');
+       expect(room.sourceUrl, 'https://www.huya.com/9527');
+ 
+       // 线路与播放请求头经统一记录透传(防盗链 Referer/Origin)。
+       expect(room.streams, isNotEmpty);
+       final line = room.streams.first.lines.first;
+-      expect(line.url, isNotEmpty);
++      // P2:虎牙地址带动态 wsSecret 签名,只断言稳定路径与必要查询参数
++      // (均取自既有 resolver 断言的 fixture 真值),不猜固定完整字符串。
++      expect(
++        line.url,
++        startsWith('https://alhls.huya.com/src/9527-2650134-'),
++        reason: '稳定路径前缀(房间号-流名,签名不入断言)',
++      );
++      expect(line.url, contains('.m3u8?wsSecret='));
++      expect(line.url, contains('ctype=huya_webh5'));
++      expect(line.url, matches(RegExp(r'wsSecret=[0-9a-f]{32}')));
++      expect(line.url, endsWith('&ratio='), reason: 'ratio=0 空值参数');
+       expect(line.headers['referer'], 'https://www.huya.com/9527');
+       expect(line.headers['origin'], 'https://www.huya.com');
+       expect(room.playUrl, room.streams.first.preferredLine?.url);
+ 
+       // 6sol 口径:RoomPayload 没有统计字段,详情出口统计为 null。
+       expect(room.audience, isNull);
+       expect(room.followers, isNull);
+       expect(room.vip, isNull);
+       expect(room.svip, isNull);
+     });
+diff --git a/packages/live_parser/test/src/platforms/huya/room_summary_refresh_test.dart b/packages/live_parser/test/src/platforms/huya/room_summary_refresh_test.dart
+index be65088..1c2fb27 100644
+--- a/packages/live_parser/test/src/platforms/huya/room_summary_refresh_test.dart
++++ b/packages/live_parser/test/src/platforms/huya/room_summary_refresh_test.dart
+@@ -161,38 +161,41 @@ void main() {
+       reason: 'iSuperFansNum + iYearSuperFansNum(info 优先,web formatCount 同口径)',
+     );
+     expect(summary.vip, '75');
+     expect(summary.toJson()['diamondFans'], '1300');
+ 
+     final record = RoomRecord.fromSummary(summary);
+     expect(record.vip, '75');
+     expect(record.svip, '1300', reason: 'diamondFans → svip');
+   });
+ 
+-  test('在播但超粉为 0:diamondFans 留空(数据诚实性,不伪造 0)', () async {
++  // 6sol 裁决:Huya WUP 返回的原始 0 被 huya_wup.dart
++  // isPlausibleHuyaSuperFanCount(>0) 判为不可信 —— 协议未保证它是有效
++  // 计数,故留空才是正确行为,禁止改成显示 0。
++  test('在播但超粉原始零不可信，合并仍留空', () async {
+     fake.profileRoomResponse = _profile(liveStatus: 'ON');
+     fake.wupResponseBytes = buildFakeVipResponse(total: 75, totalNum: 75);
+     fake.wupResponseByFunc['getSuperFansInfo'] =
+         buildFakeSuperFansInfoResponse(superFansNum: 0, yearSuperFansNum: 0);
+     fake.wupResponseByFunc['getSuperFansRankPanel'] =
+         buildFakeSuperFansRankPanelResponse(num: 0, plusNum: 0);
+ 
+     final summary = await resolver.refreshRoomSummary(
+       const RoomRequest(site: 'huya', roomIdOrUrl: '9527'),
+     );
+ 
+     expect(summary.diamondFans, '');
+     expect(summary.toJson().containsKey('diamondFans'), isFalse, reason: '空串不写 JSON');
+     expect(
+       RoomRecord.fromSummary(summary).svip,
+       isNull,
+-      reason: '超粉为 0 时统一记录保持 null,不回填 0',
++      reason: '超粉原始零不可信，合并仍留空',
+     );
+   });
+ 
+   test('在播但超粉接口只给 panel 时:diamondFans 回退 rankPanel', () async {
+     fake.profileRoomResponse = _profile(liveStatus: 'ON');
+     fake.wupResponseBytes = buildFakeVipResponse(total: 75, totalNum: 75);
+     fake.wupResponseByFunc['getSuperFansInfo'] =
+         buildFakeSuperFansInfoResponse(superFansNum: 0, yearSuperFansNum: 0);
+     fake.wupResponseByFunc['getSuperFansRankPanel'] =
+         buildFakeSuperFansRankPanelResponse(num: 61, plusNum: 1);

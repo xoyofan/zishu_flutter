@@ -1,0 +1,491 @@
+# Review package: bb77bc5..HEAD
+
+## Commits
+29afd14 UI轨:关注列表档内按观看数倒序并移除排序下拉
+45fdf6f 解析轨:公开 format_online 的 parseOnlineCount 等导出供 UI 排序复用
+
+## Files changed
+ .../features/follow/application/follow_sort.dart   |  49 +++++++++++----
+ lib/src/features/follow/views/follow_view.dart     |  41 +++---------
+ packages/live_parser/lib/live_parser.dart          |   1 +
+ packages/live_parser/test/smoke_online_test.dart   |   1 -
+ test/features/follow/follow_sort_test.dart         |  69 +++++++++++++++++----
+ test/ui/follow_style_card.png                      | Bin 22377 -> 21972 bytes
+ test/ui/follow_style_row.png                       | Bin 29322 -> 28935 bytes
+ test/ui/follow_view_test.dart                      |  13 ++++
+ test/ui/hover_follow_grid.png                      | Bin 51464 -> 51390 bytes
+ test/ui/play_style_follow.png                      | Bin 40525 -> 40561 bytes
+ 10 files changed, 118 insertions(+), 56 deletions(-)
+
+## Diff
+diff --git a/lib/src/features/follow/application/follow_sort.dart b/lib/src/features/follow/application/follow_sort.dart
+index 6b9248f..5280c07 100644
+--- a/lib/src/features/follow/application/follow_sort.dart
++++ b/lib/src/features/follow/application/follow_sort.dart
+@@ -1,78 +1,105 @@
+ /// 关注条目的排序与筛选**单一来源**。
+ ///
+ /// 「我的关注」页(FollowView)与播放页侧栏关注面板(_FollowPanel)共用本文件:
+ /// 同一份关注列表在两个入口必须呈现同一顺序,否则用户会看到两个不同的世界。
+ /// UI 层只负责把结果铺开,不各自实现 sort。
+ library;
+ 
++import 'package:live_parser/live_parser.dart' show parseOnlineCount;
++
+ import 'follow_provider.dart';
+ 
+ /// 列表排序方式。
++///
++/// 「最近关注」选项已按用户口径(2026-09-22)移除,枚举只剩 [FollowSort.liveFirst];
++/// 保留枚举与 [sortFollowEntries] 的参数签名,让「我的关注」页与播放侧栏的
++/// 调用点不变,未来若新增档位必须在 sortFollowEntries 显式接线。
+ enum FollowSort {
+-  liveFirst('开播优先'),
+-  recentlyFollowed('最近关注');
++  liveFirst('开播优先');
+ 
+   const FollowSort(this.label);
+ 
+   final String label;
+ }
+ 
+ /// 排序档位:**超关在播(0) → 普通在播(1) → 轮播(2) → 离线(3)**。
+ ///
+ /// 用户口径(2026-09-19):「超关 关注 轮播 没直播的顺序排」—— 在播段里
+ /// 超关置顶(用户亲手标记的「最在意」),轮播(录播循环,不是实时直播)
+ /// 排在全部在播之后、离线之前,且不分超关(对齐 web `followSortTier` 的
+ /// replay=2 档,SFVideoLive `followDisplay.ts:92`);没直播的沉底。
+ /// 播放页侧栏只显在播([isPlayFollowVisible]),轮播/离线档自然为空 ——
+ /// 两页共用同一 [followSortRank],顺序口径单一来源。
+ int followSortRank(FollowEntry entry) {
+   if (entry.isLive) return entry.isSpecial ? 0 : 1;
+   if (entry.isReplay) return 2;
+   return 3;
+ }
+ 
++/// 单条观看数:解析失败/0 视为**缺失**(null),排序时沉底。
++///
++/// 复用解析核心 `parseOnlineCount`(1.2万/3.4千/1,234 同一尺),不复制解析规则。
++/// 口径依据:`formatOnlineCount` 对 0/非法一律返回空串,所以线上字符串里
++/// 「parseOnlineCount 回 0」等价于「无有效观看数」(缺失或不可解析)。
++int? _onlineCountOrNull(FollowEntry entry) {
++  final count = parseOnlineCount(entry.room.online);
++  return count == 0 ? null : count;
++}
++
++/// 档内次序:观看数倒序(缺失/不可解析沉底) → 平局回退关注时间倒序。
++int _byOnlineThenFollowedAtDesc(FollowEntry a, FollowEntry b) {
++  final onlineA = _onlineCountOrNull(a);
++  final onlineB = _onlineCountOrNull(b);
++  if (onlineA == null || onlineB == null) {
++    if (onlineA == null && onlineB == null) {
++      return b.followedAt.compareTo(a.followedAt);
++    }
++    return onlineA == null ? 1 : -1;
++  }
++  if (onlineA != onlineB) return onlineB.compareTo(onlineA);
++  return b.followedAt.compareTo(a.followedAt);
++}
++
+ /// 按 [sort] 就地排序。
+ ///
+-/// 两个排序方式都以「关注时间倒序」作为档内次序,与参考实现一致:
+-/// 同档内新关注的在前。
++/// 四档(见 [followSortRank])之后,档内按**观看数从高到低**;
++/// 观看数缺失/不可解析排档尾,数值相同或同缺失时按关注时间倒序
++/// (用户口径 2026-09-22,取代原「一律关注时间倒序」)。
+ void sortFollowEntries(List<FollowEntry> items, FollowSort sort) {
+-  int byFollowedDesc(FollowEntry a, FollowEntry b) =>
+-      b.followedAt.compareTo(a.followedAt);
+   switch (sort) {
+-    case FollowSort.recentlyFollowed:
+-      items.sort(byFollowedDesc);
+     case FollowSort.liveFirst:
+       items.sort((a, b) {
+         final rank = followSortRank(a).compareTo(followSortRank(b));
+         if (rank != 0) return rank;
+-        return byFollowedDesc(a, b);
++        return _byOnlineThenFollowedAtDesc(a, b);
+       });
+   }
+ }
+ 
+ /// 播放页侧栏的可见性口径:**只显示在播**。
+ ///
+ /// 用户口径(2026-09-19):「侧边栏只显示直播的而已」—— 轮播与离线都
+ /// 只出现在「我的关注」页(排序共用 [followSortRank] 四档)。这是对 web
+ /// 真源 `isPlayFollowVisible`(`followDisplay.ts:235`,在播 ∨ 重播 ∨
+ /// 离线超关)的**有意偏离**:该口径曾在 2026-09-18 对齐落地(离线超关
+ /// 保留),随后被用户口径覆盖;空态文案同步去掉「离线超关会保留」的半句。
+ ///
+ /// 与 [visibleFollowEntries] 的 `liveOnly` 目前语义相同,但侧栏仍走
+ /// [playSidebarFollowEntries] 专用入口:口径再变时只改一处。
+ bool isPlayFollowVisible(FollowEntry entry) => entry.isLive;
+ 
+ /// 播放页侧栏的关注列表:平台筛选 + 侧栏可见性 + 统一排序。
+ ///
+-/// 排序走 [sortFollowEntries] 同一档位(超关在播 → 普通在播;只显在播后
+-/// 轮播/离线档自然为空),保证侧栏与「我的关注」页在播条目的相对顺序一致。
++/// 排序走 [sortFollowEntries] 同一档位(超关在播 → 普通在播,档内观看数
++/// 倒序;只显在播后轮播/离线档自然为空),保证侧栏与「我的关注」页在播
++/// 条目的相对顺序一致。
+ List<FollowEntry> playSidebarFollowEntries(
+   Iterable<FollowEntry> entries, {
+   String site = 'all',
+ }) {
+   final filtered = <FollowEntry>[
+     for (final entry in entries)
+       if ((site == 'all' || entry.room.site == site) &&
+           isPlayFollowVisible(entry))
+         entry,
+   ];
+diff --git a/lib/src/features/follow/views/follow_view.dart b/lib/src/features/follow/views/follow_view.dart
+index f7e057f..e7c55d5 100644
+--- a/lib/src/features/follow/views/follow_view.dart
++++ b/lib/src/features/follow/views/follow_view.dart
+@@ -20,32 +20,33 @@ import '../widgets/follow_room_list.dart';
+ 
+ class FollowView extends ConsumerStatefulWidget {
+   const FollowView({super.key});
+ 
+   @override
+   ConsumerState<FollowView> createState() => _FollowViewState();
+ }
+ 
+ class _FollowViewState extends ConsumerState<FollowView> {
+   String _siteFilter = 'all';
+-  FollowSort _sort = FollowSort.liveFirst;
+   FollowDensity _density = FollowDensity.card;
+   bool _batchMode = false;
+   bool _refreshing = false;
+   final Set<String> _selectedKeys = {};
+ 
+   /// 平台筛选 + 排序(纯视图计算,不改动 controller 状态)。
+   ///
+-  /// 排序口径见 [visibleFollowEntries]:**超关 → 开播 → 未开播**,档内按关注时间倒序。
+-  /// 抽到 follow_sort.dart 是为了与播放页侧栏关注面板共用同一口径。
++  /// 排序口径见 [visibleFollowEntries]:**超关 → 开播 → 轮播 → 未直播**,
++  /// 档内按观看数倒序、缺失沉底、平局回退关注时间倒序。
++  /// 抽到 follow_sort.dart 是为了与播放页侧栏关注面板共用同一口径;
++  /// 排序方式已固定(无下拉,用户口径 2026-09-22),走默认 liveFirst。
+   List<FollowEntry> _visible(List<FollowEntry> entries) =>
+-      visibleFollowEntries(entries, site: _siteFilter, sort: _sort);
++      visibleFollowEntries(entries, site: _siteFilter);
+ 
+   /// 刷新封面与状态:真实解析源走 [FollowController.refreshStatuses],
+   /// fixture / 未开真实解析保持原「模拟耗时」反馈,不产生任何网络调用。
+   Future<void> _refresh() async {
+     if (_refreshing) return;
+     setState(() => _refreshing = true);
+     final refresher = ref.read(roomRefresherProvider);
+     if (refresher == null) {
+       await Future<void>.delayed(const Duration(milliseconds: 600));
+     } else {
+@@ -269,61 +270,37 @@ class _FollowViewState extends ConsumerState<FollowView> {
+                     ),
+                   ),
+               ],
+             ),
+           ),
+         ],
+       ),
+     );
+   }
+ 
+-  /// 筛选行:平台 chips + 排序下拉 + 视图切换(卡片/列表)。
++  /// 筛选行:平台 chips + 视图切换(卡片/列表)。
++  ///
++  /// 原「排序方式」下拉(开播优先/最近关注)已随口径固定一并移除 ——
++  /// 排序唯一口径见 follow_sort.dart,不再向用户提供选项。
+   Widget _buildToolbar() {
+     final tokens = context.tokens;
+     return Padding(
+       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+       child: Wrap(
+         spacing: AppSpacing.md,
+         runSpacing: AppSpacing.sm,
+         crossAxisAlignment: WrapCrossAlignment.center,
+         children: [
+           FollowPlatformFilter(
+             value: _siteFilter,
+             onChanged: (site) => setState(() => _siteFilter = site),
+           ),
+-          Container(
+-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+-            decoration: BoxDecoration(
+-              color: tokens.surface,
+-              borderRadius: AppRadius.allSm,
+-              border: Border.all(color: tokens.border),
+-            ),
+-            child: DropdownButton<FollowSort>(
+-              value: _sort,
+-              isDense: true,
+-              underline: const SizedBox.shrink(),
+-              dropdownColor: tokens.surfaceRaised,
+-              icon: Icon(
+-                Icons.expand_more_rounded,
+-                size: 16,
+-                color: tokens.textSecondary,
+-              ),
+-              style: context.textBody,
+-              items: [
+-                for (final sort in FollowSort.values)
+-                  DropdownMenuItem(value: sort, child: Text(sort.label)),
+-              ],
+-              onChanged: (sort) {
+-                if (sort != null) setState(() => _sort = sort);
+-              },
+-            ),
+-          ),
+           SegmentedButton<FollowDensity>(
+             segments: [
+               // ButtonSegment 本身无 key 参数,锚点落在各段的 label 上,
+               // 点击 label 与点击整段等价(follow-density-card/row)。
+               for (final density in FollowDensity.values)
+                 ButtonSegment(
+                   value: density,
+                   label: Text(
+                     density.label,
+                     // 测试锚点:密度切换段。
+diff --git a/packages/live_parser/lib/live_parser.dart b/packages/live_parser/lib/live_parser.dart
+index 9437770..cc8ae87 100644
+--- a/packages/live_parser/lib/live_parser.dart
++++ b/packages/live_parser/lib/live_parser.dart
+@@ -41,10 +41,11 @@ export 'src/platforms/youtube/normalize.dart';
+ export 'src/platforms/youtube/room_api.dart';
+ export 'src/platforms/youtube/youtube_site.dart';
+ export 'src/platforms/yy/biz_names.dart';
+ export 'src/platforms/yy/browse.dart';
+ export 'src/platforms/yy/normalize.dart';
+ export 'src/platforms/yy/room_api.dart';
+ export 'src/platforms/yy/search.dart';
+ export 'src/platforms/yy/yy_site.dart';
+ export 'src/registry/site_display.dart';
+ export 'src/registry/site_registry.dart';
++export 'src/utils/format_online.dart';
+diff --git a/packages/live_parser/test/smoke_online_test.dart b/packages/live_parser/test/smoke_online_test.dart
+index e1b4dc2..3a24ee9 100644
+--- a/packages/live_parser/test/smoke_online_test.dart
++++ b/packages/live_parser/test/smoke_online_test.dart
+@@ -1,16 +1,15 @@
+ /// 非 CI 在线 smoke:依赖真实网络,默认跳过。
+ /// 本地手动运行:dart test --run-skipped test/smoke_online_test.dart
+ library;
+ 
+ import 'package:live_parser/live_parser.dart';
+-import 'package:live_parser/src/utils/format_online.dart';
+ import 'package:test/test.dart';
+ 
+ void main() {
+   twitchSmoke();
+   yySmoke();
+   soopSmoke();
+   kuaishouSmoke();
+   douyinSmoke();
+   youtubeSmoke();
+   test(
+diff --git a/test/features/follow/follow_sort_test.dart b/test/features/follow/follow_sort_test.dart
+index 3be3585..e66e191 100644
+--- a/test/features/follow/follow_sort_test.dart
++++ b/test/features/follow/follow_sort_test.dart
+@@ -1,48 +1,53 @@
+ /// 关注排序/筛选单一来源单测(纯 Dart,无 Flutter 运行时依赖)。
+ ///
+ /// 覆盖用户口径(2026-09-19)「超关 关注 轮播 没直播的顺序排」:
+ /// 1. **四档**:超关在播 0 / 普通在播 1 / 轮播 2 / 离线 3 —— 超关只在
+ ///    在播段置顶(用户在意的是人,但「在意」的排序权不越过直播状态);
+ ///    轮播(replay)排在全部在播之后、离线之前,且不分超关;
+-/// 2. 档内按关注时间倒序;
+-/// 3. 「最近关注」排序不受超关/开播/轮播影响;
++/// 2. 档内按观看数倒序(parseOnlineCount 口径:1.2万/3.4千/1,234 同尺),
++///    缺失或不可解析排末尾,数值相同/同缺失按关注时间倒序;
++/// 3. FollowSort 只剩 liveFirst,「最近关注」选项不再暴露;
+ /// 4. 播放页侧栏只显在播(轮播/离线归「我的关注」页),两页共用同一
+ ///    followSortRank。
+ library;
+ 
+ import 'package:flutter_test/flutter_test.dart';
+ import 'package:live_parser/live_parser.dart' show RoomState, RoomSummary;
+ import 'package:zishu_flutter/src/features/follow/application/follow_provider.dart';
+ import 'package:zishu_flutter/src/features/follow/application/follow_sort.dart';
+ 
+-/// 构造一条关注:只关心 site / 状态(live/replay/offline)/ 超关 / 关注时间。
++/// 构造一条关注:只关心 site / 状态(live/replay/offline)/ 超关 /
++/// 观看数 / 关注时间。
+ ///
+ /// [followedDaysAgo] 越大表示关注得越早(时间越旧),便于校验档内倒序。
++/// [online] 覆盖默认观看数(默认在播 1.2万、未开播空串);传不可解析
++/// 文案(如「人气」)可构造「在播但观看数缺失」的边界。
+ FollowEntry _entry({
+   String roomId = '1',
+   String site = 'douyu',
+   bool live = true,
+   bool replay = false,
+   bool special = false,
+   int followedDaysAgo = 1,
++  String? online,
+ }) {
+   return FollowEntry(
+     room: RoomSummary(
+       site: site,
+       roomId: roomId,
+       title: '房间 $roomId',
+       anchorName: '主播 $roomId',
+       cid: 'c-$roomId',
+       category: '分类',
+       // fixture 约定:online 为空即未开播;轮播同样空串、靠 roomState 区分。
+-      online: live ? '1.2万' : '',
++      online: online ?? (live ? '1.2万' : ''),
+       cover: '',
+       roomState: live
+           ? RoomState.live
+           : (replay ? RoomState.replay : RoomState.offline),
+     ),
+     isSpecial: special,
+     remindOn: false,
+     followedAt: DateTime(2026, 1, 1).subtract(Duration(days: followedDaysAgo)),
+   );
+ }
+@@ -107,31 +112,71 @@ void main() {
+       expect(_ids(items), ['a', 'c', 'b']);
+     });
+ 
+     test('空列表不抛异常', () {
+       final items = <FollowEntry>[];
+       sortFollowEntries(items, FollowSort.liveFirst);
+       expect(items, isEmpty);
+     });
+   });
+ 
+-  group('sortFollowEntries / recentlyFollowed', () {
+-    test('纯按关注时间倒序,超关与开播状态都不参与', () {
++  group('档内按观看数倒序', () {
++    test('同档观看数从高到低,跨 万/千/逗号/plain 同一尺(解析复用 parseOnlineCount)', () {
++      // 关注时间刻意与观看数反序:新关注的观看低,必须仍排后面。
++      final items = [
++        _entry(roomId: 'a', online: '3.4千', followedDaysAgo: 1), // 3400
++        _entry(roomId: 'b', online: '1.2万', followedDaysAgo: 5), // 12000
++        _entry(roomId: 'c', online: '1,234', followedDaysAgo: 2), // 1234
++        _entry(roomId: 'd', online: '8921', followedDaysAgo: 3), // 8921
++      ];
++      sortFollowEntries(items, FollowSort.liveFirst);
++      expect(_ids(items), ['b', 'd', 'a', 'c']);
++    });
++
++    test('观看数不可解析的在播条目排末尾;同为不可解析按关注时间倒序', () {
++      final items = [
++        _entry(roomId: 'ok', online: '1.2万', followedDaysAgo: 9),
++        _entry(roomId: 'bad1', online: '人气', followedDaysAgo: 1),
++        _entry(roomId: 'bad2', online: '—', followedDaysAgo: 5),
++      ];
++      sortFollowEntries(items, FollowSort.liveFirst);
++      expect(_ids(items), ['ok', 'bad1', 'bad2']);
++    });
++
++    test('档内观看数相同:按关注时间倒序', () {
++      final items = [
++        _entry(roomId: 'old', online: '5.0万', followedDaysAgo: 9),
++        _entry(roomId: 'new', online: '5.0万', followedDaysAgo: 1),
++        _entry(roomId: 'mid', online: '5.0万', followedDaysAgo: 4),
++      ];
++      sortFollowEntries(items, FollowSort.liveFirst);
++      expect(_ids(items), ['new', 'mid', 'old']);
++    });
++
++    test('未直播档观看数全缺失:按关注时间倒序(与同缺失平局规则一致)', () {
+       final items = [
+-        _entry(roomId: 'n1', followedDaysAgo: 1),
+         _entry(roomId: 'x1', live: false, followedDaysAgo: 2),
+-        _entry(roomId: 'n2', followedDaysAgo: 3),
+-        _entry(roomId: 's1', special: true, followedDaysAgo: 5),
+-        _entry(roomId: 'x2', live: false, special: true, followedDaysAgo: 30),
++        _entry(roomId: 'x2', live: false, followedDaysAgo: 1),
++        _entry(roomId: 'x3', live: false, followedDaysAgo: 3),
+       ];
+-      sortFollowEntries(items, FollowSort.recentlyFollowed);
+-      expect(_ids(items), ['n1', 'x1', 'n2', 's1', 'x2']);
++      sortFollowEntries(items, FollowSort.liveFirst);
++      expect(_ids(items), ['x2', 'x1', 'x3']);
++    });
++  });
++
++  group('FollowSort 枚举口径', () {
++    test('RecentlyFollowed 不再暴露:枚举只剩 liveFirst', () {
++      expect(
++        FollowSort.values.map((sort) => sort.name),
++        isNot(contains('recentlyFollowed')),
++      );
++      expect(FollowSort.values, [FollowSort.liveFirst]);
+     });
+   });
+ 
+   group('playSidebarFollowEntries / isPlayFollowVisible', () {
+     test('侧栏只显在播:轮播与离线(含超关)都过滤掉', () {
+       final entries = [
+         _entry(roomId: 's1', special: true, followedDaysAgo: 5),
+         _entry(roomId: 'n1', followedDaysAgo: 1),
+         _entry(roomId: 'r1', live: false, replay: true, followedDaysAgo: 2),
+         _entry(roomId: 'x1', live: false, followedDaysAgo: 3),
+diff --git a/test/ui/follow_style_card.png b/test/ui/follow_style_card.png
+index a5aea46..c92bb9e 100644
+Binary files a/test/ui/follow_style_card.png and b/test/ui/follow_style_card.png differ
+diff --git a/test/ui/follow_style_row.png b/test/ui/follow_style_row.png
+index 59c375a..4ae808c 100644
+Binary files a/test/ui/follow_style_row.png and b/test/ui/follow_style_row.png differ
+diff --git a/test/ui/follow_view_test.dart b/test/ui/follow_view_test.dart
+index 7577b7d..318e0dc 100644
+--- a/test/ui/follow_view_test.dart
++++ b/test/ui/follow_view_test.dart
+@@ -11,20 +11,21 @@ import 'dart:convert';
+ import 'package:flutter/material.dart';
+ import 'package:flutter_riverpod/flutter_riverpod.dart';
+ import 'package:flutter_test/flutter_test.dart';
+ import 'package:go_router/go_router.dart';
+ import 'package:live_parser/live_parser.dart' show StreamLine;
+ import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
+ import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
+ import 'package:zishu_flutter/src/app/app_router.dart';
+ import 'package:zishu_flutter/src/apps/windows/windows_app.dart';
+ import 'package:zishu_flutter/src/features/follow/application/follow_provider.dart';
++import 'package:zishu_flutter/src/features/follow/application/follow_sort.dart';
+ import 'package:zishu_flutter/src/features/follow/views/follow_view.dart';
+ import 'package:zishu_flutter/src/features/follow/widgets/follow_common.dart';
+ import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_card.dart';
+ import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_row.dart';
+ import 'package:zishu_flutter/src/features/follow/widgets/follow_room_list.dart';
+ import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
+ import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
+ import 'package:zishu_flutter/src/shared/application/fixture_sources.dart';
+ 
+ /// 测试替身:VM 下替代 MediaKitLivePlayer,不触碰任何原生播放内核。
+@@ -345,12 +346,24 @@ void main() {
+       await tester.tap(find.byKey(const Key('follow-density-row')));
+       await tester.pump(const Duration(milliseconds: 50));
+       await tester.tap(find.byKey(const Key('follow-density-card')));
+       await tester.pump(const Duration(milliseconds: 50));
+       final segment = tester.widget<SegmentedButton<FollowDensity>>(
+         find.byType(SegmentedButton<FollowDensity>),
+       );
+       expect(segment.selected, {FollowDensity.card});
+       expect(tester.takeException(), isNull);
+     });
++
++    testWidgets('排序下拉已移除:关注页无 DropdownButton<FollowSort>', (tester) async {
++      suppressRenderFlexOverflow();
++      await pumpFollowApp(tester);
++
++      // 用户口径:排序固定为四档+档内观看数,不再提供 排序方式 下拉。
++      expect(find.byType(DropdownButton<FollowSort>), findsNothing);
++      expect(find.byType(DropdownMenuItem<FollowSort>), findsNothing);
++      // 密度切换仍在(确认删的是排序下拉,不是整个工具行)。
++      expect(find.byKey(const Key('follow-density-card')), findsOneWidget);
++      expect(tester.takeException(), isNull);
++    });
+   });
+ }
+diff --git a/test/ui/hover_follow_grid.png b/test/ui/hover_follow_grid.png
+index bdfd954..327f9e4 100644
+Binary files a/test/ui/hover_follow_grid.png and b/test/ui/hover_follow_grid.png differ
+diff --git a/test/ui/play_style_follow.png b/test/ui/play_style_follow.png
+index 479ebe0..e5b2c2d 100644
+Binary files a/test/ui/play_style_follow.png and b/test/ui/play_style_follow.png differ

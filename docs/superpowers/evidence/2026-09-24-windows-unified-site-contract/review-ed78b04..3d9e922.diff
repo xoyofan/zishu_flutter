@@ -1,0 +1,921 @@
+# Review package: ed78b04..HEAD
+
+## Commits
+3d9e922 解析轨：统一抖音快手和 YY 房间映射
+
+## Files changed
+ .../lib/src/platforms/douyin/douyin_site.dart      |   2 +
+ .../lib/src/platforms/kuaishou/kuaishou_site.dart  |   2 +
+ .../live_parser/lib/src/platforms/yy/yy_site.dart  |   3 +
+ .../test/src/platforms/douyin/browse_test.dart     |  15 +++
+ .../test/src/platforms/douyin/room_api_test.dart   |  80 +++++++++++++++
+ .../douyin/room_summary_refresh_test.dart          |  48 +++++++++
+ .../test/src/platforms/kuaishou/browse_test.dart   |  15 +++
+ .../src/platforms/kuaishou/room_resolver_test.dart |  90 +++++++++++++++++
+ .../kuaishou/room_summary_refresh_test.dart        |  24 +++++
+ .../test/src/platforms/yy/browse_search_test.dart  |  16 +++
+ .../test/src/platforms/yy/room_resolver_test.dart  | 108 +++++++++++++++++++++
+ .../platforms/yy/room_summary_refresh_test.dart    |  34 +++++++
+ 12 files changed, 437 insertions(+)
+
+## Diff
+diff --git a/packages/live_parser/lib/src/platforms/douyin/douyin_site.dart b/packages/live_parser/lib/src/platforms/douyin/douyin_site.dart
+index 4973dc2..6d645d6 100644
+--- a/packages/live_parser/lib/src/platforms/douyin/douyin_site.dart
++++ b/packages/live_parser/lib/src/platforms/douyin/douyin_site.dart
+@@ -55,20 +55,22 @@ class DouyinRoomResolver implements RoomResolver, RoomSummaryRefresher {
+       roomId: webRid,
+       title: title.isNotEmpty ? title : anchor,
+       anchorName: anchor,
+       // 与 resolveRoom 同口径:抖音无二级分类 id,cid 即房间号。
+       cid: webRid,
+       category: douyinCategoryOf(room),
+       online: live ? formatOnlineCount(douyinOnlineRaw(room)) : '',
+       cover: douyinCoverOf(room),
+       // 头像(web 快照同源:owner.avatar_thumb 首项,零额外请求)。
+       avatar: douyinAvatarOf(room),
++      // 状态真源:web 同口径 status==4 未开播,其余在播(不从热度推断)。
++      roomState: live ? RoomState.live : RoomState.offline,
+       followers: formatExactCount(
+         jsonMapOf(owner['follow_info'])['follower_count'],
+       ),
+       diamondFans: diamondFans,
+     );
+   }
+ 
+   @override
+   Future<RoomPayload> resolveRoom(RoomRequest request) async {
+     final webRid = normalizeDouyinRoomId(request.roomIdOrUrl);
+diff --git a/packages/live_parser/lib/src/platforms/kuaishou/kuaishou_site.dart b/packages/live_parser/lib/src/platforms/kuaishou/kuaishou_site.dart
+index ffd2307..a0d1a84 100644
+--- a/packages/live_parser/lib/src/platforms/kuaishou/kuaishou_site.dart
++++ b/packages/live_parser/lib/src/platforms/kuaishou/kuaishou_site.dart
+@@ -94,20 +94,22 @@ class KuaishouRoomResolver implements RoomResolver, RoomSummaryRefresher {
+       title: detail.title.isNotEmpty ? detail.title : detail.anchorName,
+       anchorName: detail.anchorName,
+       // 与 resolveRoom 同口径:快手无二级分类 id,cid 即房间号。
+       cid: roomId,
+       category: detail.category,
+       // 离线(或观看数字段缺失)一律空串,契约以「online 非空」作在播判据。
+       online: detail.isLive ? detail.viewers : '',
+       cover: detail.cover,
+       // 头像:房间页 SSR 的 author.avatar(零额外请求)。
+       avatar: detail.avatar,
++      // 状态真源:web 同口径 isLiving 判在播(不从热度推断)。
++      roomState: detail.isLive ? RoomState.live : RoomState.offline,
+     );
+   }
+ 
+   @override
+   Future<RoomPayload> resolveRoom(RoomRequest request) async {
+     final roomId = normalizeKuaishouRoomId(request.roomIdOrUrl);
+     final sourceUrl = kuaishouSourceUrl(roomId);
+ 
+     final KuaishouRoomDetail detail;
+     try {
+diff --git a/packages/live_parser/lib/src/platforms/yy/yy_site.dart b/packages/live_parser/lib/src/platforms/yy/yy_site.dart
+index 0e88816..8885c80 100644
+--- a/packages/live_parser/lib/src/platforms/yy/yy_site.dart
++++ b/packages/live_parser/lib/src/platforms/yy/yy_site.dart
+@@ -77,20 +77,23 @@ class YyRoomResolver implements RoomResolver, RoomSummaryRefresher {
+           : (detail.desc.isNotEmpty ? detail.desc : detail.name),
+       anchorName: detail?.name ?? '',
+       // 与 resolveRoom 同口径:cid 取 ssid。
+       cid: detail?.ssid ?? roomId,
+       category: detail == null ? '' : (yyBizName(detail.biz) ?? detail.biz),
+       // totalViewer 本就是格式化热度串("145.9万"),原样下发;离线空串。
+       online: totalViewer,
+       cover: detail?.thumb ?? '',
+       avatar: avatar,
+       startedAt: detail?.startedAt,
++      // 状态真源:web 同口径 totalViewer 任一命中即在播,否则离线
++      // (不从热度数字存在与否在调用侧推断)。
++      roomState: totalViewer.isNotEmpty ? RoomState.live : RoomState.offline,
+     );
+   }
+ 
+   @override
+   Future<RoomPayload> resolveRoom(RoomRequest request) async {
+     final roomId = normalizeYyRoomId(request.roomIdOrUrl);
+     final sourceUrl = 'https://www.yy.com/$roomId';
+     final detailResult = await fetchYyRoomDetail(_client.parserHttp, roomId);
+     final detail = detailResult.detail;
+ 
+diff --git a/packages/live_parser/test/src/platforms/douyin/browse_test.dart b/packages/live_parser/test/src/platforms/douyin/browse_test.dart
+index 8934560..8bb9725 100644
+--- a/packages/live_parser/test/src/platforms/douyin/browse_test.dart
++++ b/packages/live_parser/test/src/platforms/douyin/browse_test.dart
+@@ -49,20 +49,35 @@ void main() {
+       final first = result.rooms.first;
+       expect(first.roomId, '123456');
+       expect(first.title, '分区房间');
+       expect(first.anchorName, '分区主播');
+       expect(first.online, '1.2万');
+       expect(first.cover, 'https://p3.douyinpic.com/cover.jpg');
+       expect(result.rooms.last.anchorName, '昵称兜底');
+       expect(result.rooms.last.online, '800');
+       expect(result.hasMore, isTrue);
+ 
++      // 列表来自 RoomSummary:统一记录只映射已提供的统计(audience),
++      // 上游列表没有 followers/vip/svip → 保持 null,不编造数字。
++      final record = RoomRecord.fromSummary(first);
++      expect(record.site, 'douyin');
++      expect(record.roomId, '123456');
++      expect(record.audience, '1.2万');
++      expect(record.followers, isNull);
++      expect(record.vip, isNull);
++      expect(record.svip, isNull);
++      expect(
++        RoomRecord.fromSummary(result.rooms.last).audience,
++        '800',
++        reason: '精确值原样保留',
++      );
++
+       final request = fake.requests.last;
+       expect(
+         request.url.path,
+         '/webcast/web/partition/detail/room/v2/',
+       );
+       expect(request.url.queryParameters['partition'], '0');
+       expect(request.url.queryParameters['partition_type'], '1');
+       expect(request.url.queryParameters['a_bogus'], isNotEmpty);
+     });
+ 
+diff --git a/packages/live_parser/test/src/platforms/douyin/room_api_test.dart b/packages/live_parser/test/src/platforms/douyin/room_api_test.dart
+index 59b73ef..d342eb9 100644
+--- a/packages/live_parser/test/src/platforms/douyin/room_api_test.dart
++++ b/packages/live_parser/test/src/platforms/douyin/room_api_test.dart
+@@ -1,15 +1,23 @@
+ import 'package:live_parser/live_parser.dart';
+ import 'package:test/test.dart';
+ 
+ import '../../../support/fake_douyin_api.dart';
+ 
++/// 统一站点出口:注册项(含 CachedRoomResolver 包装)装配进 [SiteRegistry]
++/// 后,经 `registry.site('douyin')` 验证 LiveSite 适配层的 RoomRecord 映射。
++LiveSite _liveSite(FakeDouyinApi fake) {
++  final registry = SiteRegistry()
++    ..register(buildDouyinRegistration(httpClient: fake));
++  return registry.site('douyin')!;
++}
++
+ void main() {
+   late FakeDouyinApi fake;
+   late SiteRegistration registration;
+ 
+   setUp(() {
+     fake = FakeDouyinApi()
+       ..enterResponse = douyinFixture('enter_live.json')
+       ..roomPageHtml = douyinHtmlFixture('room_page.html');
+     registration = buildDouyinRegistration(httpClient: fake);
+   });
+@@ -68,20 +76,92 @@ void main() {
+       final flvLine = payload.streams.first.lines
+           .firstWhere((line) => line.format == 'flv');
+       expect(
+         flvLine.url,
+         'https://pull-flv.douyin.com/origin.flv?x=1&y=2',
+         reason: '\\u0026 应还原为 &',
+       );
+     });
+   });
+ 
++  group('LiveSite 统一出口:registry.site(douyin).resolveRoom → RoomRecord', () {
++    test('在播:类型/身份/线路稳定段与 headers 透传;统计字段为 null', () async {
++      final fake = FakeDouyinApi()
++        ..enterResponse = douyinFixture('enter_live.json')
++        ..roomPageHtml = douyinHtmlFixture('room_page.html');
++
++      final room = await _liveSite(fake).resolveRoom(
++        const RoomRequest(
++          site: 'douyin',
++          roomIdOrUrl: 'https://live.douyin.com/123456',
++        ),
++      );
++
++      expect(room, isA<RoomRecord>());
++      expect(room.site, 'douyin');
++      expect(room.roomId, '123456');
++      expect(room.sourceUrl, 'https://live.douyin.com/123456');
++      expect(room.roomState, RoomState.live);
++      expect(room.isLive, isTrue);
++      expect(room.title, '测试直播间');
++      expect(room.anchorName, '测试主播');
++      expect(room.category, '王者荣耀');
++      expect(room.cover, 'https://p3.douyinpic.com/cover.jpg');
++      expect(room.avatar, 'https://p3.douyinpic.com/avatar.jpg');
++
++      // 线路与播放请求头经统一记录透传(CDN 防盗链 Referer)。
++      expect(room.streams, isNotEmpty);
++      final origin = room.streams.first;
++      expect(origin.name, '原画');
++      // P2:锁定既有 fixture enter_live.json 真值的稳定 URL,
++      // 防止适配层把线路整体换成别的非空值仍通过。
++      expect(
++        origin.lines.map((line) => (line.format, line.url)).toList(),
++        [
++          ('hls', 'https://pull-hls.douyin.com/origin.m3u8'),
++          ('flv', 'https://pull-flv.douyin.com/origin.flv'),
++        ],
++      );
++      expect(origin.lines.first.headers['Referer'], 'https://live.douyin.com/');
++      expect(room.playUrl, 'https://pull-hls.douyin.com/origin.m3u8');
++      expect(room.playUrl, origin.preferredLine?.url);
++
++      // 6sol 口径:RoomPayload 没有统计字段,详情出口统计必须为
++      // null,不伪造 0/空串。
++      expect(room.audience, isNull);
++      expect(room.followers, isNull);
++      expect(room.vip, isNull);
++      expect(room.svip, isNull);
++    });
++
++    test('未开播:status=4 → offline、无线路、统计 null,资料保留', () async {
++      final fake = FakeDouyinApi()..enterResponse = douyinFixture('enter_offline.json');
++
++      final room = await _liveSite(fake).resolveRoom(
++        const RoomRequest(site: 'douyin', roomIdOrUrl: '123456'),
++      );
++
++      expect(room, isA<RoomRecord>());
++      expect(room.roomState, RoomState.offline);
++      expect(room.isLive, isFalse);
++      expect(room.title, '测试直播间');
++      expect(room.anchorName, '测试主播');
++      expect(room.streams, isEmpty);
++      expect(room.availableQualities, isEmpty);
++      expect(room.playUrl, isEmpty);
++      expect(room.audience, isNull);
++      expect(room.followers, isNull);
++      expect(room.vip, isNull);
++      expect(room.svip, isNull);
++    });
++  });
++
+   test('抖音注册项声明浏览/搜索/弹幕与多线路', () {
+     expect(registration.id, 'douyin');
+     expect(registration.name, '抖音');
+     expect(registration.capabilities.browse, isTrue);
+     expect(registration.capabilities.roomSearch, isTrue);
+     expect(registration.capabilities.danmaku, isTrue);
+     expect(registration.capabilities.multiQuality, isTrue);
+     expect(registration.capabilities.multiLine, isTrue);
+   });
+ 
+diff --git a/packages/live_parser/test/src/platforms/douyin/room_summary_refresh_test.dart b/packages/live_parser/test/src/platforms/douyin/room_summary_refresh_test.dart
+index 3a684d5..fc4214a 100644
+--- a/packages/live_parser/test/src/platforms/douyin/room_summary_refresh_test.dart
++++ b/packages/live_parser/test/src/platforms/douyin/room_summary_refresh_test.dart
+@@ -77,20 +77,32 @@ void main() {
+     expect(summary.followers, '456789');
+     expect(summary.vip, '');
+ 
+     final urls = fake.requests.map((request) => request.url).join('\n');
+     expect(urls, contains('enter'));
+     expect(
+       urls,
+       isNot(contains('partition')),
+       reason: '刷新不得请求分区/列表接口',
+     );
++
++    // 统一记录:fromSummary 映射刷新摘要已提供的统计真值(6sol 口径),
++    // 且状态真源 roomState 必须随真实状态赋值(平台契约:status != 4 即在播)。
++    final record = RoomRecord.fromSummary(summary);
++    expect(record.site, 'douyin');
++    expect(record.roomId, '123456');
++    expect(record.roomState, RoomState.live);
++    expect(record.isLive, isTrue);
++    expect(record.audience, '3.2万');
++    expect(record.followers, '456789');
++    expect(record.vip, isNull, reason: '粉丝团列未取 → null,不伪造 0');
++    expect(record.svip, isNull, reason: '本用例未给资料卡,会员缺值 → null');
+   });
+ 
+   test('会员(diamondFans):在播时走带签名的主播资料卡接口', () async {
+     fake
+       ..enterResponse = _enter(status: 2, online: 32100)
+       ..anchorProfileResponse = {
+         'status_code': 0,
+         'data': {
+           'user_profile': {
+             'subscribe_info': {'member_count': 4567},
+@@ -103,20 +115,45 @@ void main() {
+     );
+ 
+     // web ROOM_STAT_COLUMNS.douyin 第 3 列(tone=svip)field=vip「会员」
+     // (follow/douyin-extras.ts 的 subscribe_info.member_count);
+     // 本包统一由 [RoomSummary.diamondFans] 承载。
+     expect(summary.diamondFans, '4567');
+     final urls = fake.requests.map((request) => request.url).join('\n');
+     expect(urls, contains('/webcast/user/profile/'));
+     expect(urls, contains('a_bogus='), reason: '资料卡接口需 a_bogus 签名');
+     expect(urls, isNot(contains('partition')), reason: '刷新不得请求分区/列表接口');
++
++    // diamondFans → svip:会员列真值经统一记录透传。
++    expect(RoomRecord.fromSummary(summary).svip, '4567');
++  });
++
++  test('会员:资料卡协议原始零按平台契约留空,diamondFans 不伪造 0', () async {
++    fake
++      ..enterResponse = _enter(status: 2, online: 32100)
++      ..anchorProfileResponse = {
++        'status_code': 0,
++        'data': {
++          'user_profile': {
++            'subscribe_info': {'member_count': 0},
++          },
++        },
++      };
++
++    final summary = await resolver.refreshRoomSummary(
++      const RoomRequest(site: 'douyin', roomIdOrUrl: '123456'),
++    );
++
++    expect(summary.diamondFans, '');
++    final record = RoomRecord.fromSummary(summary);
++    expect(record.svip, isNull, reason: '协议原始零不可信,统一记录不落伪造的 0');
++    expect(record.audience, '3.2万', reason: '零值不影响其余统计');
+   });
+ 
+   test('会员:未开播(status=4)不请求资料卡,diamondFans 留空', () async {
+     fake.enterResponse = _enter(status: 4, online: 9999);
+ 
+     final summary = await resolver.refreshRoomSummary(
+       const RoomRequest(site: 'douyin', roomIdOrUrl: '123456'),
+     );
+ 
+     expect(summary.diamondFans, '');
+@@ -128,12 +165,23 @@ void main() {
+   });
+ 
+   test('未开播(status=4):online 为空串', () async {
+     fake.enterResponse = _enter(status: 4, online: 9999);
+ 
+     final summary = await resolver.refreshRoomSummary(
+       const RoomRequest(site: 'douyin', roomIdOrUrl: '123456'),
+     );
+ 
+     expect(summary.online, '');
++
++    // 协议带了热度(status=4)也不能当在播:契约空串 → 统一记录 null。
++    final record = RoomRecord.fromSummary(summary);
++    expect(record.roomState, RoomState.offline);
++    expect(
++      record.audience,
++      isNull,
++      reason: '未开播热度不采纳(协议原值 9999 被契约清空)',
++    );
++    expect(record.followers, isNull);
++    expect(record.svip, isNull);
+   });
+ }
+diff --git a/packages/live_parser/test/src/platforms/kuaishou/browse_test.dart b/packages/live_parser/test/src/platforms/kuaishou/browse_test.dart
+index 2ce0e2e..3336ec4 100644
+--- a/packages/live_parser/test/src/platforms/kuaishou/browse_test.dart
++++ b/packages/live_parser/test/src/platforms/kuaishou/browse_test.dart
+@@ -41,20 +41,30 @@ void main() {
+       expect(result.rooms, hasLength(1));
+       final room = result.rooms.single;
+       expect(room.roomId, 'ks_board_1');
+       expect(room.anchorName, '板上主播');
+       expect(room.title, '游戏板房间');
+       expect(room.category, '英雄联盟');
+       expect(room.online, '1.2千');
+       expect(room.cover, 'https://p1.kuaishou.com/board/1.jpg');
+       expect(fake.requests.last.url.path, '/live_api/gameboard/list');
+       expect(fake.requests.last.url.queryParameters['gameId'], '1001');
++
++      // 列表来自 RoomSummary:统一记录只映射已提供的统计(audience),
++      // 上游列表没有 followers/vip/svip → 保持 null,不编造数字。
++      final record = RoomRecord.fromSummary(room);
++      expect(record.site, 'kuaishou');
++      expect(record.roomId, 'ks_board_1');
++      expect(record.audience, '1.2千');
++      expect(record.followers, isNull);
++      expect(record.vip, isNull);
++      expect(record.svip, isNull);
+     });
+ 
+     test('分类房间:长 cid 走 non-gameboard 接口', () async {
+       await browse.fetchRooms(
+         const RoomListRequest(site: 'kuaishou', cid: '10000001', page: 1, limit: 30),
+       );
+ 
+       expect(fake.requests.last.url.path, '/live_api/non-gameboard/list');
+     });
+ 
+@@ -65,13 +75,18 @@ void main() {
+ 
+       expect(result.rooms, hasLength(1));
+       final room = result.rooms.single;
+       expect(room.roomId, 'ks_home_1');
+       expect(room.anchorName, '首页主播');
+       expect(room.title, '首页推荐 描述');
+       expect(room.category, '王者荣耀');
+       expect(room.online, '10.0千');
+       expect(room.cover, 'https://p1.kuaishou.com/home/1.jpg');
+       expect(result.hasMore, isFalse);
++      expect(
++        RoomRecord.fromSummary(room).audience,
++        '10.0千',
++        reason: '精确格式原样保留',
++      );
+     });
+   });
+ }
+diff --git a/packages/live_parser/test/src/platforms/kuaishou/room_resolver_test.dart b/packages/live_parser/test/src/platforms/kuaishou/room_resolver_test.dart
+index cc47da6..f30d817 100644
+--- a/packages/live_parser/test/src/platforms/kuaishou/room_resolver_test.dart
++++ b/packages/live_parser/test/src/platforms/kuaishou/room_resolver_test.dart
+@@ -1,15 +1,23 @@
+ import 'package:live_parser/live_parser.dart';
+ import 'package:test/test.dart';
+ 
+ import '../../../support/fake_kuaishou_api.dart';
+ 
++/// 统一站点出口:注册项(含 CachedRoomResolver 包装)装配进 [SiteRegistry]
++/// 后,经 `registry.site('kuaishou')` 验证 LiveSite 适配层的 RoomRecord 映射。
++LiveSite _liveSite(FakeKuaishouApi fake) {
++  final registry = SiteRegistry()
++    ..register(buildKuaishouRegistration(httpClient: fake));
++  return registry.site('kuaishou')!;
++}
++
+ void main() {
+   late FakeKuaishouApi fake;
+   late SiteRegistration registration;
+ 
+   setUp(() {
+     fake = FakeKuaishouApi()..roomPage = kuaishouFixture('room_live.html');
+     registration = buildKuaishouRegistration(httpClient: fake);
+   });
+ 
+   group('快手房间解析', () {
+@@ -74,20 +82,102 @@ void main() {
+ 
+       await client.fetchRoom('ks_a');
+       await client.fetchRoom('ks_b');
+ 
+       final second = fake.requests.last;
+       expect(second.headers['Cookie'], contains('did=abc123'));
+       client.close();
+     });
+   });
+ 
++  group('LiveSite 统一出口:registry.site(kuaishou).resolveRoom → RoomRecord', () {
++    test('在播:类型/身份/线路稳定段与 headers 透传;统计字段为 null', () async {
++      final room = await _liveSite(fake).resolveRoom(
++        const RoomRequest(
++          site: 'kuaishou',
++          roomIdOrUrl: 'https://live.kuaishou.com/u/ks_user_1',
++        ),
++      );
++
++      expect(room, isA<RoomRecord>());
++      expect(room.site, 'kuaishou');
++      expect(room.roomId, 'ks_user_1');
++      expect(room.sourceUrl, 'https://live.kuaishou.com/u/ks_user_1');
++      expect(room.roomState, RoomState.live);
++      expect(room.isLive, isTrue);
++      expect(room.title, '今晚八点开播 不见不散');
++      expect(room.anchorName, '快手主播');
++      expect(room.category, '王者荣耀');
++      expect(room.cover, 'https://p1.kuaishou.com/poster.jpg');
++      expect(room.avatar, 'https://p1.kuaishou.com/avatar.png');
++
++      // 线路与播放请求头经统一记录透传(CDN 防盗链 Referer)。
++      expect(room.streams, hasLength(2));
++      final best = room.streams.first;
++      expect(best.name, '原画');
++      // P2:锁定既有 fixture room_live.html 真值的稳定 URL,
++      // 防止适配层把线路整体换成别的非空值仍通过。
++      expect(best.preferredLine?.format, 'hls');
++      expect(best.preferredLine?.url, 'https://live.kuaishou.com/live/play.m3u8');
++      expect(best.preferredLine?.headers['Referer'], 'https://live.kuaishou.com/');
++      expect(room.streams.last.preferredLine?.format, 'flv');
++      expect(
++        room.streams.last.preferredLine?.url,
++        'https://live.kuaishou.com/live/play_hd.flv',
++      );
++      expect(room.playUrl, 'https://live.kuaishou.com/live/play.m3u8');
++
++      // 6sol 口径:RoomPayload 没有统计字段,详情出口统计必须为
++      // null,不伪造 0/空串。
++      expect(room.audience, isNull);
++      expect(room.followers, isNull);
++      expect(room.vip, isNull);
++      expect(room.svip, isNull);
++    });
++
++    test('未开播:offline、无线路、统计 null,资料保留', () async {
++      fake.roomPage = kuaishouFixture('room_offline.html');
++
++      final room = await _liveSite(fake).resolveRoom(
++        const RoomRequest(site: 'kuaishou', roomIdOrUrl: 'ks_user_1'),
++      );
++
++      expect(room, isA<RoomRecord>());
++      expect(room.roomState, RoomState.offline);
++      expect(room.isLive, isFalse);
++      expect(room.anchorName, '快手主播');
++      expect(room.streams, isEmpty);
++      expect(room.availableQualities, isEmpty);
++      expect(room.playUrl, isEmpty);
++      expect(room.audience, isNull);
++      expect(room.followers, isNull);
++      expect(room.vip, isNull);
++      expect(room.svip, isNull);
++    });
++
++    test('房间不存在:notFound 语义,空资料经统一记录归一为 null', () async {
++      fake.roomPage = kuaishouFixture('room_missing.html');
++
++      final room = await _liveSite(fake).resolveRoom(
++        const RoomRequest(site: 'kuaishou', roomIdOrUrl: 'ks_user_1'),
++      );
++
++      expect(room, isA<RoomRecord>());
++      expect(room.roomState, RoomState.notFound);
++      expect(room.error, '快手房间不存在或已下播');
++      expect(room.title, isNull, reason: 'RoomPayload 空串经统一记录归一为 null');
++      expect(room.anchorName, isNull);
++      expect(room.streams, isEmpty);
++      expect(room.audience, isNull);
++    });
++  });
++
+   test('快手注册项:浏览/弹幕能力,搜索返回空而非抛错', () async {
+     expect(registration.id, 'kuaishou');
+     expect(registration.name, '快手');
+     expect(registration.capabilities.browse, isTrue);
+     expect(registration.capabilities.danmaku, isTrue);
+     expect(registration.capabilities.roomSearch, isFalse);
+     expect(registration.search, isNotNull);
+     expect(
+       (await registration.search!.search(
+         const SearchRequest(site: 'kuaishou', query: '主播'),
+diff --git a/packages/live_parser/test/src/platforms/kuaishou/room_summary_refresh_test.dart b/packages/live_parser/test/src/platforms/kuaishou/room_summary_refresh_test.dart
+index cfdbff5..84c064d 100644
+--- a/packages/live_parser/test/src/platforms/kuaishou/room_summary_refresh_test.dart
++++ b/packages/live_parser/test/src/platforms/kuaishou/room_summary_refresh_test.dart
+@@ -27,32 +27,56 @@ void main() {
+     expect(summary.category, '王者荣耀');
+     expect(summary.cid, 'ks_user_1', reason: '快手无二级分类 id,cid 即房间号');
+     expect(summary.online, '2.3万', reason: 'watchingCount=23456 格式化');
+     expect(summary.cover, 'https://p1.kuaishou.com/poster.jpg');
+     // 头像取房间页 SSR 的 author.avatar(零额外请求)。
+     expect(summary.avatar, 'https://p1.kuaishou.com/avatar.png');
+ 
+     expect(fake.requests, hasLength(1), reason: '刷新只拉一次房间页');
+     expect(fake.requests.single.url.host, 'live.kuaishou.com');
+     expect(fake.requests.single.url.path, '/u/ks_user_1');
++
++    // 统一记录:fromSummary 映射刷新摘要已提供的统计真值(6sol 口径),
++    // 且状态真源 roomState 必须随真实状态赋值(平台契约:isLiving 判在播)。
++    final record = RoomRecord.fromSummary(summary);
++    expect(record.site, 'kuaishou');
++    expect(record.roomId, 'ks_user_1');
++    expect(record.roomState, RoomState.live);
++    expect(record.isLive, isTrue);
++    expect(record.audience, '2.3万');
++    expect(
++      record.followers,
++      isNull,
++      reason: '快手上游无免登录粉丝接口 → null,不伪造 0',
++    );
++    expect(record.vip, isNull);
++    expect(record.svip, isNull);
+   });
+ 
+   test('未开播:online 为空串,资料保留', () async {
+     fake.roomPage = kuaishouFixture('room_offline.html');
+ 
+     final summary = await resolver.refreshRoomSummary(
+       const RoomRequest(site: 'kuaishou', roomIdOrUrl: 'ks_user_1'),
+     );
+ 
+     expect(summary.online, '', reason: '契约:online 非空即判在播,离线必须空串');
+     expect(summary.anchorName, '快手主播');
+     expect(summary.avatar, 'https://p1.kuaishou.com/avatar.png', reason: '离线保留头像');
++
++    // 协议 watchingCount 原始 "0" 不采纳:离线契约空串 → 统一记录 null。
++    final record = RoomRecord.fromSummary(summary);
++    expect(record.roomState, RoomState.offline);
++    expect(record.audience, isNull);
++    expect(record.followers, isNull);
++    expect(record.vip, isNull);
++    expect(record.svip, isNull);
+   });
+ 
+   test('房间不存在:抛 ParserHttpException(不得伪造离线摘要)', () async {
+     fake.roomPage = kuaishouFixture('room_missing.html');
+ 
+     await expectLater(
+       resolver.refreshRoomSummary(
+         const RoomRequest(site: 'kuaishou', roomIdOrUrl: 'ks_user_1'),
+       ),
+       throwsA(isA<ParserHttpException>()),
+diff --git a/packages/live_parser/test/src/platforms/yy/browse_search_test.dart b/packages/live_parser/test/src/platforms/yy/browse_search_test.dart
+index 5fc407a..5fddd35 100644
+--- a/packages/live_parser/test/src/platforms/yy/browse_search_test.dart
++++ b/packages/live_parser/test/src/platforms/yy/browse_search_test.dart
+@@ -60,20 +60,31 @@ void main() {
+       expect(result.page, 1);
+       expect(result.rooms, hasLength(2));
+       expect(result.hasMore, isTrue);
+       expect(result.rooms.first.roomId, '1414787909');
+       expect(result.rooms.first.anchorName, '莉莉');
+       expect(result.rooms.first.title, '永远都是小女孩');
+       expect(result.rooms.first.online, '4.1万');
+       expect(result.rooms.first.cover, 'https://img.yy.com/cover.jpg');
+       // 推荐流 biz='other' 无分类语义 → 回退「推荐」。
+       expect(result.rooms.first.category, '推荐');
++
++      // 列表来自 RoomSummary:统一记录只映射已提供的统计(audience),
++      // 上游列表没有 followers/vip/svip → 保持 null,不编造数字。
++      final record = RoomRecord.fromSummary(result.rooms.first);
++      expect(record.site, 'yy');
++      expect(record.roomId, '1414787909');
++      expect(record.audience, '4.1万');
++      expect(record.followers, isNull);
++      expect(record.vip, isNull);
++      expect(record.svip, isNull);
++
+       final request = fake.requests.singleWhere((item) => item.url.path == '/more/page.action');
+       expect(request.url.queryParameters['biz'], 'other');
+       expect(request.url.queryParameters['subBiz'], 'idx');
+       expect(request.url.queryParameters['moduleId'], '-1');
+     });
+ 
+     test('分类列表：使用分类页参数请求 more/page.action 并保留 cid', () async {
+       await browse.fetchCategories('yy');
+       fake.recommendResponse = {
+         'data': {
+@@ -93,20 +104,25 @@ void main() {
+ 
+       final result = await browse.fetchRooms(
+         const RoomListRequest(site: 'yy', cid: '7', page: 2, limit: 30),
+       );
+ 
+       expect(result.page, 2);
+       expect(result.rooms.single.cid, '7');
+       // biz 反查分类中文名(fetchCategories 时登记的 sing→音乐)。
+       expect(result.rooms.single.category, '音乐');
+       expect(result.rooms.single.online, '1.2千');
++      expect(
++        RoomRecord.fromSummary(result.rooms.single).audience,
++        '1.2千',
++        reason: '精确格式原样保留',
++      );
+       final request = fake.requests.last;
+       expect(request.url.queryParameters['moduleId'], '308');
+       expect(request.url.queryParameters['biz'], 'sing');
+       expect(request.url.queryParameters['subBiz'], 'idx');
+     });
+ 
+     test('未知分类无参数时返回空页，不误请求首页', () async {
+       final result = await browse.fetchRooms(
+         const RoomListRequest(site: 'yy', cid: '999'),
+       );
+diff --git a/packages/live_parser/test/src/platforms/yy/room_resolver_test.dart b/packages/live_parser/test/src/platforms/yy/room_resolver_test.dart
+index a340e71..00db372 100644
+--- a/packages/live_parser/test/src/platforms/yy/room_resolver_test.dart
++++ b/packages/live_parser/test/src/platforms/yy/room_resolver_test.dart
+@@ -1,17 +1,25 @@
+ import 'dart:convert';
+ 
+ import 'package:live_parser/live_parser.dart';
+ import 'package:test/test.dart';
+ 
+ import '../../../support/fake_yy_api.dart';
+ 
++/// 统一站点出口:注册项(含 CachedRoomResolver 包装)装配进 [SiteRegistry]
++/// 后,经 `registry.site('yy')` 验证 LiveSite 适配层的 RoomRecord 映射。
++LiveSite _liveSite(FakeYyApi fake) {
++  final registry = SiteRegistry()
++    ..register(buildYyRegistration(httpClient: fake));
++  return registry.site('yy')!;
++}
++
+ void main() {
+   group('YY 房间解析', () {
+     test('在播：详情 + stream-manager 多清晰度/多线路', () async {
+       final fake = FakeYyApi()
+         ..detailResponse = yyFixture('detail_live.json')
+         ..streamResponse = yyFixture('stream_live.json');
+       final registration = buildYyRegistration(httpClient: fake);
+ 
+       final payload = await registration.resolver.resolveRoom(
+         const RoomRequest(site: 'yy', roomIdOrUrl: 'https://www.yy.com/1414787909/'),
+@@ -188,20 +196,120 @@ void main() {
+ 
+       final payload = await registration.resolver.resolveRoom(
+         const RoomRequest(site: 'yy', roomIdOrUrl: '1414787909'),
+       );
+ 
+       expect(payload.roomState, RoomState.offline);
+       expect(payload.streams, isEmpty);
+     });
+   });
+ 
++  group('LiveSite 统一出口:registry.site(yy).resolveRoom → RoomRecord', () {
++    test('在播:类型/身份/线路稳定段与 headers 透传;统计字段为 null', () async {
++      final fake = FakeYyApi()
++        ..detailResponse = yyFixture('detail_live.json')
++        ..streamResponse = yyFixture('stream_live.json');
++
++      final room = await _liveSite(fake).resolveRoom(
++        const RoomRequest(
++          site: 'yy',
++          roomIdOrUrl: 'https://www.yy.com/1414787909/',
++        ),
++      );
++
++      expect(room, isA<RoomRecord>());
++      expect(room.site, 'yy');
++      expect(room.roomId, '1414787909');
++      expect(room.sourceUrl, 'https://www.yy.com/1414787909');
++      expect(room.roomState, RoomState.live);
++      expect(room.isLive, isTrue);
++      expect(room.title, '测试直播间');
++      expect(room.anchorName, 'YY主播');
++      expect(room.category, 'other');
++      expect(room.cid, '1414787909');
++      expect(room.cover, 'https://img.yy.com/cover.jpg');
++      expect(room.avatar, 'https://img.yy.com/avatar.jpg');
++      expect(
++        room.startedAt,
++        DateTime.fromMillisecondsSinceEpoch(1788911253 * 1000),
++        reason: 'detail startTime 真值透传',
++      );
++
++      // 线路与播放请求头经统一记录透传(CDN 防盗链 Referer/Origin)。
++      expect(room.streams, isNotEmpty);
++      final first = room.streams.first;
++      // P2:锁定既有 fixture stream_live.json 真值的稳定线路段,
++      // 防止适配层把线路整体换成别的非空值仍通过。
++      expect(
++        first.lines.map((line) => (line.format, line.url)).toList(),
++        [
++          ('hls', 'https://stream.yy.com/blue.m3u8'),
++          ('flv', 'https://stream.yy.com/blue.flv'),
++        ],
++      );
++      expect(first.lines.first.headers['origin'], 'https://www.yy.com');
++      expect(first.lines.first.headers['referer'], 'https://www.yy.com/');
++      expect(room.playUrl, 'https://stream.yy.com/blue.m3u8');
++      expect(room.playUrl, first.preferredLine?.url);
++
++      // 6sol 口径:RoomPayload 没有统计字段,详情出口统计必须为
++      // null,不伪造 0/空串。
++      expect(room.audience, isNull);
++      expect(room.followers, isNull);
++      expect(room.vip, isNull);
++      expect(room.svip, isNull);
++    });
++
++    test('未开播:detail data=null → offline、无线路、空资料归一为 null', () async {
++      final fake = FakeYyApi()..detailResponse = yyFixture('detail_offline.json');
++
++      final room = await _liveSite(fake).resolveRoom(
++        const RoomRequest(site: 'yy', roomIdOrUrl: '547800'),
++      );
++
++      expect(room, isA<RoomRecord>());
++      expect(room.roomState, RoomState.offline);
++      expect(room.isLive, isFalse);
++      expect(
++        room.title,
++        isNull,
++        reason: 'RoomPayload 空串经统一记录归一为 null',
++      );
++      expect(room.anchorName, isNull);
++      expect(room.streams, isEmpty);
++      expect(room.playUrl, isEmpty);
++      expect(room.startedAt, isNull);
++      expect(room.audience, isNull);
++      expect(room.followers, isNull);
++      expect(room.vip, isNull);
++      expect(room.svip, isNull);
++    });
++
++    test('不存在:resultCode 非零 → notFound 语义,统计 null', () async {
++      final fake = FakeYyApi()..detailResponse = yyFixture('detail_missing.json');
++
++      final room = await _liveSite(fake).resolveRoom(
++        const RoomRequest(site: 'yy', roomIdOrUrl: '999999'),
++      );
++
++      expect(room, isA<RoomRecord>());
++      expect(room.roomState, RoomState.notFound);
++      expect(room.error, '房间不存在');
++      expect(room.title, isNull);
++      expect(room.streams, isEmpty);
++      expect(room.audience, isNull);
++      expect(room.followers, isNull);
++      expect(room.vip, isNull);
++      expect(room.svip, isNull);
++    });
++  });
++
+   test('YY 注册项声明浏览、搜索、多清晰度和多线路，无弹幕', () {
+     final registration = buildYyRegistration(httpClient: FakeYyApi());
+ 
+     expect(registration.id, 'yy');
+     expect(registration.name, 'YY');
+     expect(registration.resolver, isA<RoomResolver>());
+     expect(registration.browse, isA<BrowseRepository>());
+     expect(registration.search, isA<SearchRepository>());
+     expect(registration.capabilities.browse, isTrue);
+     expect(registration.capabilities.roomSearch, isTrue);
+diff --git a/packages/live_parser/test/src/platforms/yy/room_summary_refresh_test.dart b/packages/live_parser/test/src/platforms/yy/room_summary_refresh_test.dart
+index c2f2b1e..cfd5172 100644
+--- a/packages/live_parser/test/src/platforms/yy/room_summary_refresh_test.dart
++++ b/packages/live_parser/test/src/platforms/yy/room_summary_refresh_test.dart
+@@ -25,52 +25,86 @@ void main() {
+     expect(summary.cover, 'https://img.yy.com/cover.jpg');
+     // 头像取 detail.avatar(web 快照 validImgUrl(detail.avatar) 同源)。
+     expect(summary.avatar, 'https://img.yy.com/avatar.jpg');
+ 
+     expect(fake.requests, hasLength(1), reason: 'totalViewer 首次命中无需重试');
+     expect(
+       fake.requests.every((request) => request.url.host == 'www.yy.com'),
+       isTrue,
+       reason: '刷新不得请求 stream-manager/interface 等取流接口',
+     );
++
++    // 统一记录:fromSummary 映射刷新摘要已提供的统计真值(6sol 口径),
++    // 且状态真源 roomState 必须随真实状态赋值(平台契约:totalViewer 命中即在播)。
++    final record = RoomRecord.fromSummary(summary);
++    expect(record.site, 'yy');
++    expect(record.roomId, '1414787909');
++    expect(record.roomState, RoomState.live);
++    expect(record.isLive, isTrue);
++    expect(record.audience, '4.1万');
++    expect(
++      record.followers,
++      isNull,
++      reason: 'YY 上游无免登录粉丝接口 → null,不伪造 0',
++    );
++    expect(record.vip, isNull);
++    expect(record.svip, isNull);
++    expect(
++      record.startedAt,
++      DateTime.fromMillisecondsSinceEpoch(1788911253 * 1000),
++      reason: 'detail startTime 真值透传',
++    );
+   });
+ 
+   test('totalViewer 边缘闪变:首次缺省时重试,第二次命中判在播', () async {
+     final first = Map<String, dynamic>.from(
+       (yyFixture('detail_live.json') as Map)['data'] as Map,
+     )..remove('totalViewer');
+     final fake = FakeYyApi()
+       ..detailResponseQueue.addAll([
+         {'resultCode': 0, 'data': first},
+         yyFixture('detail_live.json'),
+       ]);
+     final resolver = YyRoomResolver(YyClient(httpClient: fake));
+ 
+     final summary = await resolver.refreshRoomSummary(
+       const RoomRequest(site: 'yy', roomIdOrUrl: '1414787909'),
+     );
+ 
+     expect(summary.online, '4.1万');
+     expect(fake.requests, hasLength(2), reason: '口径对齐 web:最多连取 3 次');
+     expect(summary.avatar, 'https://img.yy.com/avatar.jpg', reason: '重试保留头像');
++    expect(
++      RoomRecord.fromSummary(summary).audience,
++      '4.1万',
++      reason: '重试命中后统一记录同样拿到热度',
++    );
+   });
+ 
+   test('未开播:data=null(合法离线响应)不重试,online 为空串', () async {
+     final fake = FakeYyApi()..detailResponse = yyFixture('detail_offline.json');
+     final resolver = YyRoomResolver(YyClient(httpClient: fake));
+ 
+     final summary = await resolver.refreshRoomSummary(
+       const RoomRequest(site: 'yy', roomIdOrUrl: '547800'),
+     );
+ 
+     expect(summary.online, '');
+     expect(fake.requests, hasLength(1), reason: 'data=null 直接按离线,不重试');
++
++    final record = RoomRecord.fromSummary(summary);
++    expect(record.roomState, RoomState.offline);
++    expect(record.audience, isNull, reason: '离线契约空串 → null');
++    expect(record.startedAt, isNull, reason: 'data=null 无开播时间,不伪造');
++    expect(record.followers, isNull);
++    expect(record.vip, isNull);
++    expect(record.svip, isNull);
+   });
+ 
+   test('房间不存在:抛 ParserHttpException(不得伪造离线摘要)', () async {
+     final fake = FakeYyApi()..detailResponse = yyFixture('detail_missing.json');
+     final resolver = YyRoomResolver(YyClient(httpClient: fake));
+ 
+     await expectLater(
+       resolver.refreshRoomSummary(
+         const RoomRequest(site: 'yy', roomIdOrUrl: '999999'),
+       ),
