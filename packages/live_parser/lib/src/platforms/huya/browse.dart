@@ -7,6 +7,7 @@ import '../../http/parser_http.dart';
 import '../../utils/format_online.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
+import '../../models/room_record.dart';
 import '../../registry/category_cache.dart';
 import '../douyu/json_utils.dart';
 import 'promo_tag.dart';
@@ -109,7 +110,11 @@ class HuyaBrowseRepository implements BrowseRepository {
       final room = _normalizeRoom(item);
       if (room.roomId.isNotEmpty) rooms.add(room);
     }
-    return RoomListResult(rooms: rooms, page: page, hasMore: page < totalPage);
+    return RoomListResult(
+      rooms: rooms.map(RoomRecord.fromSummary).toList(growable: false),
+      page: page,
+      hasMore: page < totalPage,
+    );
   }
 
   Future<List<CategoryGroup>> _categoriesFromApi() async {

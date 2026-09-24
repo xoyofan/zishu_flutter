@@ -47,14 +47,14 @@ void main() {
       expect(result.rooms, hasLength(2));
       expect(result.rooms.first.roomId, 'rec_a');
       expect(result.rooms.first.anchorName, '推荐A');
-      expect(result.rooms.first.online, '5.4万');
+      expect(result.rooms.first.audience, '5.4万');
       expect(result.rooms.first.cover, 'https://img.sooplive.co.kr/thumb/rec_a.jpg');
-      expect(result.rooms.last.online, '900');
+      expect(result.rooms.last.audience, '900');
 
       // 统一记录:fromSummary 映射列表 fixture 真值(audience);上游列表
       // 没有 followers/vip/svip → 保持 null,不编造数字。
       // 浏览目录 live-only(6sol 裁决,Task 4a-i):状态真源显式为 live。
-      final record = RoomRecord.fromSummary(result.rooms.first);
+      final record = result.rooms.first;
       expect(record.site, 'soop');
       expect(record.roomId, 'rec_a');
       expect(
@@ -75,12 +75,12 @@ void main() {
 
       expect(result.rooms, hasLength(2));
       expect(result.rooms.first.cid, '100');
-      expect(result.rooms.first.online, '1.2万');
-      expect(result.rooms.last.online, '1.0千');
+      expect(result.rooms.first.audience, '1.2万');
+      expect(result.rooms.last.audience, '1.0千');
 
       // 统一记录:分类列表同口径(6sol 裁决,Task 4a-i):live-only 目录
       // 状态真源显式为 live。
-      final record = RoomRecord.fromSummary(result.rooms.first);
+      final record = result.rooms.first;
       expect(record.site, 'soop');
       expect(record.roomId, 'room_a');
       expect(

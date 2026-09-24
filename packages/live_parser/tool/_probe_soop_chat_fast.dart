@@ -22,7 +22,7 @@ Future<void> main(List<String> args) async {
       stdout.writeln('在播房间: ${[for (final r in rooms.rooms) r.roomId]}');
       final room = rooms.rooms.first;
       roomId = room.roomId;
-      anchor = room.anchorName;
+      anchor = room.anchorName ?? '';
     }
     {
       stdout.writeln('== 连接 $roomId「$anchor」 ==');

@@ -47,7 +47,7 @@ Future<List<String>> _pickLiveRooms(int limit) async {
   );
   for (final room in list.rooms) {
     stdout.writeln(
-      'browse: ${room.roomId}「${room.anchorName}」online=${room.online}',
+      'browse: ${room.roomId}「${room.anchorName}」online=${room.audience}',
     );
   }
   return [for (final room in list.rooms) room.roomId];

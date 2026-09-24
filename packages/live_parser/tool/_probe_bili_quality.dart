@@ -18,7 +18,7 @@ Future<void> main(List<String> args) async {
     roomId = first.roomId;
     // ignore: avoid_print
     print('[browse] first=${first.roomId} category=${first.category} '
-        'online=${first.online}');
+        'online=${first.audience}');
   }
   final payload = await bili.resolver.resolveRoom(
     RoomRequest(site: 'bilibili', roomIdOrUrl: roomId),

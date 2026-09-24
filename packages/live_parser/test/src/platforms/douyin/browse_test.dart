@@ -50,15 +50,15 @@ void main() {
       expect(first.roomId, '123456');
       expect(first.title, '分区房间');
       expect(first.anchorName, '分区主播');
-      expect(first.online, '1.2万');
+      expect(first.audience, '1.2万');
       expect(first.cover, 'https://p3.douyinpic.com/cover.jpg');
       expect(result.rooms.last.anchorName, '昵称兜底');
-      expect(result.rooms.last.online, '800');
+      expect(result.rooms.last.audience, '800');
       expect(result.hasMore, isTrue);
 
       // 列表来自 RoomSummary:统一记录只映射已提供的统计(audience),
       // 上游列表没有 followers/vip/svip → 保持 null,不编造数字。
-      final record = RoomRecord.fromSummary(first);
+      final record = first;
       expect(record.site, 'douyin');
       expect(record.roomId, '123456');
       // 浏览目录 live-only(6sol 裁决,Task 4a-i):状态真源显式为 live。
@@ -72,7 +72,7 @@ void main() {
       expect(record.vip, isNull);
       expect(record.svip, isNull);
       expect(
-        RoomRecord.fromSummary(result.rooms.last).audience,
+        result.rooms.last.audience,
         '800',
         reason: '精确值原样保留',
       );
@@ -109,12 +109,13 @@ void main() {
           reason: '分类页房间 chip 应为当前分区名,不能空');
     });
 
-    test('分类房间:未命中分类缓存时 chip 留空(不额外发请求)', () async {
+    test('分类房间:未命中分类缓存时 chip 无值(不额外发请求)', () async {
       final result = await browse.fetchRooms(
         const RoomListRequest(site: 'douyin', cid: '999999', page: 1, limit: 15),
       );
 
-      expect(result.rooms.first.category, isEmpty);
+      // RoomSummary 空串经 fromSummary 归一为 null(统一契约 4a-ii)。
+      expect(result.rooms.first.category, isNull);
       expect(
         fake.requests.any((r) => r.url.path.contains('category')),
         isFalse,

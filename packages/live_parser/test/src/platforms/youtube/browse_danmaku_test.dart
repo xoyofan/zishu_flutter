@@ -41,7 +41,7 @@ void main() {
     // 展示值("1,234 watching")原样透传,不转数字。上游列表没有
     // followers/vip/svip → 保持 null,不编造数字。
     // 在播证据(viewCountText 含 watching)确认 → live(6sol P1 修复轮 1/5)。
-    final record = RoomRecord.fromSummary(result.rooms.first);
+    final record = result.rooms.first;
     expect(record.site, 'youtube');
     expect(record.roomId, 'AAAAAAAAAAA');
     expect(
@@ -74,17 +74,17 @@ void main() {
       'BADGE000001',
     ]);
     expect(
-      RoomRecord.fromSummary(result.rooms.first).roomState,
+      result.rooms.first.roomState,
       RoomState.live,
       reason: 'viewCountText 含 watching → 可确认在播',
     );
     expect(
-      RoomRecord.fromSummary(result.rooms.last).roomState,
+      result.rooms.last.roomState,
       RoomState.live,
       reason: 'LIVE 徽章可确认在播',
     );
     // 徽章条目缺 viewCountText → online 空串 → audience null,不编造 0。
-    expect(RoomRecord.fromSummary(result.rooms.last).audience, isNull);
+    expect(result.rooms.last.audience, isNull);
   });
 
   test('浏览:无可确认证据的正则兜底结果不进列表(宁可空,不得假 live)', () async {
@@ -124,7 +124,7 @@ var ytInitialData = {"contents":{"richGridRenderer":{"contents":[
 
     expect(result.rooms, hasLength(1),
         reason: '同一 videoId 只保留一条,且不能被首个无证据条目挤掉');
-    final record = RoomRecord.fromSummary(result.rooms.single);
+    final record = result.rooms.single;
     expect(record.roomId, 'DUPE0000001');
     expect(
       record.roomState,

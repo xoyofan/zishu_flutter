@@ -9,6 +9,7 @@ library;
 import '../catalog/cross_catalog.dart';
 import '../contracts/contracts.dart';
 import '../models/models.dart';
+import '../models/room_record.dart';
 import '../utils/format_online.dart';
 
 /// 聚合排序方式。
@@ -153,7 +154,7 @@ class CrossBrowseRepository implements BrowseRepository {
     }
 
     var hasMore = false;
-    final buckets = <List<RoomSummary>>[];
+    final buckets = <List<RoomRecord>>[];
     for (final result in results) {
       if (result.error != null) continue; // 部分失败隔离:失败站本轮空缺。
       if (result.hasMore) hasMore = true;
@@ -203,8 +204,8 @@ class CrossBrowseRepository implements BrowseRepository {
                 .where(
                   (room) => category.matches(
                     site: site,
-                    cid: room.cid,
-                    categoryName: room.category,
+                    cid: room.cid ?? '',
+                    categoryName: room.category ?? '',
                   ),
                 )
                 .toList(growable: false);
@@ -223,16 +224,17 @@ class CrossBrowseRepository implements BrowseRepository {
     return cids.first;
   }
 
-  List<RoomSummary> _merge(List<List<RoomSummary>> buckets) {
+  List<RoomRecord> _merge(List<List<RoomRecord>> buckets) {
     if (mergeMode == CrossMergeMode.byPopularity) {
       final rooms = buckets.expand((bucket) => bucket).toList();
       rooms.sort(
-        (a, b) => parseOnlineCount(b.online).compareTo(parseOnlineCount(a.online)),
+        (a, b) => parseOnlineCount(b.audience ?? '')
+            .compareTo(parseOnlineCount(a.audience ?? '')),
       );
       return rooms;
     }
 
-    final merged = <RoomSummary>[];
+    final merged = <RoomRecord>[];
     final cursors = List<int>.filled(buckets.length, 0);
     var remaining = true;
     while (remaining) {
@@ -279,7 +281,7 @@ class _SiteRooms {
   });
 
   final String site;
-  final List<RoomSummary> rooms;
+  final List<RoomRecord> rooms;
   final bool hasMore;
 
   /// 该站本轮的原始失败原因;非 null 表示请求失败而非空结果。

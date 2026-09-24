@@ -30,7 +30,11 @@ class FakeBrowseRepository implements BrowseRepository {
     lastRequest = request;
     callCount++;
     if (fail) throw const ParserHttpException('fake upstream failure');
-    return RoomListResult(rooms: rooms, page: request.page, hasMore: hasMore);
+    return RoomListResult(
+      rooms: rooms.map(RoomRecord.fromSummary).toList(growable: false),
+      page: request.page,
+      hasMore: hasMore,
+    );
   }
 }
 

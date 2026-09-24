@@ -55,13 +55,13 @@ void main() {
       expect(result.rooms.first.anchorName, '加藤純一');
       expect(result.rooms.first.category, 'Shadowverse: Worlds Beyond');
       expect(result.rooms.first.cover, contains('640x360'));
-      expect(result.rooms.first.online, '2.5万');
+      expect(result.rooms.first.audience, '2.5万');
       expect(result.hasMore, isFalse, reason: '结果不足 limit 即无更多');
 
       // 统一记录:fromSummary 映射列表已提供的统计真值(audience);上游
       // 列表没有 followers/vip/svip → 保持 null,不编造数字。
       // 浏览目录 live-only(6sol 裁决,Task 4a-i):状态真源显式为 live。
-      final record = RoomRecord.fromSummary(result.rooms.first);
+      final record = result.rooms.first;
       expect(record.site, 'twitch');
       expect(record.roomId, 'kato_junichi0817');
       expect(

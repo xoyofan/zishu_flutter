@@ -110,7 +110,7 @@ void main() {
       expect(rooms.rooms, isNotEmpty, reason: '虎牙网游分类应有在播房间');
       final first = rooms.rooms.first;
       // ignore: avoid_print
-      print('虎牙房间: ${first.roomId} ${first.title} (${first.online})');
+      print('虎牙房间: ${first.roomId} ${first.title} (${first.audience})');
 
       // 房间解析:多 CDN 多画质
       final payload = await huya.resolver.resolveRoom(
@@ -183,16 +183,16 @@ void main() {
       expect(rooms.rooms, isNotEmpty, reason: 'B站首页应有在播房间');
       // 弹幕验证选在线人数最高的房间,保证有聊天
       final sorted = [...rooms.rooms]..sort((a, b) {
-          final aWan = double.tryParse(a.online.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0;
-          final bWan = double.tryParse(b.online.replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0;
+          final aWan = double.tryParse((a.audience ?? '').replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0;
+          final bWan = double.tryParse((b.audience ?? '').replaceAll(RegExp(r'[^0-9.]'), '')) ?? 0;
           int unit(String s0) => s0.contains('万') ? 10000 : 1;
-          final aVal = aWan * unit(a.online);
-          final bVal = bWan * unit(b.online);
+          final aVal = aWan * unit(a.audience ?? '');
+          final bVal = bWan * unit(b.audience ?? '');
           return bVal.compareTo(aVal);
         });
       final first = sorted.first;
       // ignore: avoid_print
-      print('B站房间: ${first.roomId} ${first.title} (${first.online})');
+      print('B站房间: ${first.roomId} ${first.title} (${first.audience})');
 
       // 房间解析
       final payload = await bilibili.resolver.resolveRoom(
@@ -273,7 +273,7 @@ void twitchSmoke() {
       );
       expect(rooms.rooms, isNotEmpty, reason: 'Twitch 首页应有在播房间');
       // ignore: avoid_print
-      print('首页示例: ${rooms.rooms.first.roomId} ${rooms.rooms.first.title} (${rooms.rooms.first.online})');
+      print('首页示例: ${rooms.rooms.first.roomId} ${rooms.rooms.first.title} (${rooms.rooms.first.audience})');
 
       // 分类索引 + 分类房间
       final categories = await twitch.browse!.fetchCategories('twitch');
@@ -330,7 +330,7 @@ void yySmoke() {
       expect(rooms.rooms, isNotEmpty, reason: 'YY 首页应有在播房间');
       final first = rooms.rooms.first;
       // ignore: avoid_print
-      print('YY 首页示例: ${first.roomId} ${first.title} (${first.online})');
+      print('YY 首页示例: ${first.roomId} ${first.title} (${first.audience})');
 
       final payload = await yy.resolver.resolveRoom(
         RoomRequest(site: 'yy', roomIdOrUrl: first.roomId),
@@ -378,7 +378,7 @@ void soopSmoke() {
       expect(rooms.rooms, isNotEmpty, reason: 'SOOP 推荐位应有在播房间');
       final first = rooms.rooms.first;
       // ignore: avoid_print
-      print('SOOP 推荐示例: ${first.roomId} ${first.title} (${first.online})');
+      print('SOOP 推荐示例: ${first.roomId} ${first.title} (${first.audience})');
 
       final payload = await soop.resolver.resolveRoom(
         RoomRequest(site: 'soop', roomIdOrUrl: first.roomId),
@@ -450,11 +450,11 @@ void kuaishouSmoke() {
       expect(rooms.rooms, isNotEmpty, reason: '快手首页应有在播房间');
       final sorted = [...rooms.rooms]..sort(
         (a, b) =>
-            parseOnlineCount(b.online).compareTo(parseOnlineCount(a.online)),
+            parseOnlineCount(b.audience ?? '').compareTo(parseOnlineCount(a.audience ?? '')),
       );
       final first = sorted.first;
       // ignore: avoid_print
-      print('快手首页示例: ${first.roomId} ${first.title} (${first.online})');
+      print('快手首页示例: ${first.roomId} ${first.title} (${first.audience})');
 
       final payload = await kuaishou.resolver.resolveRoom(
         RoomRequest(site: 'kuaishou', roomIdOrUrl: first.roomId),
@@ -514,11 +514,11 @@ void douyinSmoke() {
       expect(rooms.rooms, isNotEmpty, reason: '抖音推荐应有在播房间');
       final sorted = [...rooms.rooms]..sort(
         (a, b) =>
-            parseOnlineCount(b.online).compareTo(parseOnlineCount(a.online)),
+            parseOnlineCount(b.audience ?? '').compareTo(parseOnlineCount(a.audience ?? '')),
       );
       final first = sorted.first;
       // ignore: avoid_print
-      print('抖音推荐示例: ${first.roomId} ${first.title} (${first.online})');
+      print('抖音推荐示例: ${first.roomId} ${first.title} (${first.audience})');
 
       final payload = await douyin.resolver.resolveRoom(
         RoomRequest(site: 'douyin', roomIdOrUrl: first.roomId),

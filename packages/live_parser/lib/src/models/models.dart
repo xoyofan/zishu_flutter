@@ -6,6 +6,8 @@ library;
 
 import 'dart:convert';
 
+import 'room_record.dart';
+
 /// 房间在线状态。
 ///
 /// `replay` 为平台「轮播/录播循环」态:B 站 `live_status==2`、斗鱼
@@ -480,6 +482,10 @@ class RoomSummary {
 }
 
 /// 分类房间列表分页结果。
+///
+/// 统一契约 Task 4a-ii:列表出口公开类型是 [RoomRecord](站点 browse 在
+/// 组装出口用 `RoomRecord.fromSummary` 转换);[RoomSummary] 保留给
+/// resolve/refresh 端口。
 class RoomListResult {
   const RoomListResult({
     required this.rooms,
@@ -487,7 +493,7 @@ class RoomListResult {
     required this.hasMore,
   });
 
-  final List<RoomSummary> rooms;
+  final List<RoomRecord> rooms;
   final int page;
   final bool hasMore;
 }

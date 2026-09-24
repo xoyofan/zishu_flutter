@@ -63,7 +63,7 @@ void main() {
     final first = result.rooms[0];
     expect(first.roomId, '111');
     expect(first.title, '房间A标题');
-    expect(first.online, '10.2万');
+    expect(first.audience, '10.2万');
     expect(first.promoTag, '知名游戏UP', reason: 'TS truncatePromoTag 同样按 6 字截断');
     expect(result.rooms[1].promoTag, 'PK中');
     expect(result.rooms[1].cover, 'https://i0.hdslb.com/b.jpg');
@@ -71,7 +71,7 @@ void main() {
     // 浏览目录 live-only(6sol 裁决,Task 4a-i):状态真源显式为 live,
     // 不再回落默认 offline(fixture live_status 全为 1)。
     expect(
-      RoomRecord.fromSummary(first).roomState,
+      first.roomState,
       RoomState.live,
       reason: 'getRoomList 分区目录条目来自直播列表,roomState 应为 live',
     );
@@ -87,7 +87,7 @@ void main() {
 
     // 浏览目录 live-only(6sol 裁决,Task 4a-i):合并推荐位后同为 live。
     expect(
-      RoomRecord.fromSummary(result.rooms.first).roomState,
+      result.rooms.first.roomState,
       RoomState.live,
       reason: 'getRoomList + webMain 推荐合并列表,状态真源为 live',
     );

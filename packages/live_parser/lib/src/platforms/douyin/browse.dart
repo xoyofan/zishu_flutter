@@ -5,6 +5,7 @@ import 'dart:convert';
 
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
+import '../../models/room_record.dart';
 import '../../registry/category_cache.dart';
 import '../../utils/format_online.dart';
 import '../douyu/json_utils.dart';
@@ -341,7 +342,7 @@ Future<RoomListResult> fetchDouyinPartitionRooms(
     if (room != null) rooms.add(room);
   }
   return RoomListResult(
-    rooms: rooms,
+    rooms: rooms.map(RoomRecord.fromSummary).toList(growable: false),
     page: page,
     hasMore: jsonBool(wrapper['has_more']) || entries.length >= effectiveLimit,
   );

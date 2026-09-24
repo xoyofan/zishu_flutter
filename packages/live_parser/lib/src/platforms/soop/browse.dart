@@ -6,6 +6,7 @@ import 'zh_categories.dart';
 import '../../contracts/contracts.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
+import '../../models/room_record.dart';
 import '../../utils/format_online.dart';
 import '../douyu/json_utils.dart';
 import 'normalize.dart';
@@ -180,6 +181,10 @@ class SoopBrowseRepository implements BrowseRepository {
       );
       if (rooms.length >= limit) break;
     }
-    return RoomListResult(rooms: rooms, page: page, hasMore: raw.length >= limit);
+    return RoomListResult(
+      rooms: rooms.map(RoomRecord.fromSummary).toList(growable: false),
+      page: page,
+      hasMore: raw.length >= limit,
+    );
   }
 }

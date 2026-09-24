@@ -6,6 +6,7 @@ import 'dart:convert';
 import '../../contracts/contracts.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
+import '../../models/room_record.dart';
 import '../douyu/json_utils.dart';
 import 'normalize.dart';
 import 'room_api.dart';
@@ -48,7 +49,7 @@ class YoutubeBrowseRepository implements BrowseRepository {
         ? const <RoomSummary>[]
         : rooms.sublist(start, (start + limit).clamp(0, rooms.length));
     return RoomListResult(
-      rooms: sliced,
+      rooms: sliced.map(RoomRecord.fromSummary).toList(growable: false),
       page: page,
       hasMore: start + limit < rooms.length,
     );

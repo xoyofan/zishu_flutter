@@ -4,6 +4,7 @@ library;
 import '../../catalog/category_name_remap.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
+import '../../models/room_record.dart';
 import '../../registry/category_cache.dart';
 import '../../utils/format_online.dart';
 import 'gql.dart';
@@ -94,7 +95,7 @@ query BrowsePage_Popular(\$limit: Int) {
     );
     final nodes = _nodesOf((data as Map?)?['streams']);
     return RoomListResult(
-      rooms: _roomsOf(nodes),
+      rooms: _roomsOf(nodes).map(RoomRecord.fromSummary).toList(growable: false),
       page: page,
       // GQL 首页按热度返回,没有稳定分页游标;单页结果即一屏。
       hasMore: page <= 1 && nodes.length >= limit,
@@ -126,7 +127,7 @@ query DirectoryPage_Game(\$id: ID!, \$limit: Int) {
     }
     final nodes = _nodesOf(game['streams']);
     return RoomListResult(
-      rooms: _roomsOf(nodes),
+      rooms: _roomsOf(nodes).map(RoomRecord.fromSummary).toList(growable: false),
       page: page,
       hasMore: page <= 1 && nodes.length >= limit,
     );

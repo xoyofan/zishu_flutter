@@ -6,6 +6,7 @@ import '../../http/parser_http.dart';
 import '../../utils/format_online.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
+import '../../models/room_record.dart';
 import '../../registry/category_cache.dart';
 import '../douyu/json_utils.dart';
 import 'promo_tag.dart';
@@ -100,7 +101,11 @@ class BilibiliBrowseRepository implements BrowseRepository {
       for (final item in items)
         if (_normalizeRoom(item).roomId.isNotEmpty) _normalizeRoom(item),
     ];
-    return RoomListResult(rooms: rooms, page: page, hasMore: broadItems.length >= request.limit);
+    return RoomListResult(
+      rooms: rooms.map(RoomRecord.fromSummary).toList(growable: false),
+      page: page,
+      hasMore: broadItems.length >= request.limit,
+    );
   }
 
   Future<RoomListResult> _fetchCategoryRooms({
@@ -122,7 +127,11 @@ class BilibiliBrowseRepository implements BrowseRepository {
       for (final item in _roomListFromPayload(data))
         if (_normalizeRoom(item).roomId.isNotEmpty) _normalizeRoom(item),
     ];
-    return RoomListResult(rooms: rooms, page: page, hasMore: rooms.length >= limit);
+    return RoomListResult(
+      rooms: rooms.map(RoomRecord.fromSummary).toList(growable: false),
+      page: page,
+      hasMore: rooms.length >= limit,
+    );
   }
 
   List<Map<String, dynamic>> _roomListFromPayload(Object? data) {

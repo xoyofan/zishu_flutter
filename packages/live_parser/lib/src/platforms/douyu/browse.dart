@@ -7,6 +7,7 @@ import '../../http/parser_http.dart';
 import '../../utils/format_online.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
+import '../../models/room_record.dart';
 import 'json_utils.dart';
 import 'promo_tag.dart';
 import 'room_api.dart';
@@ -115,7 +116,7 @@ class DouyuBrowseRepository implements BrowseRepository {
       if (rooms.length >= limit) break;
     }
     return RoomListResult(
-      rooms: rooms,
+      rooms: rooms.map(RoomRecord.fromSummary).toList(growable: false),
       page: page,
       hasMore: items.isNotEmpty && rooms.length >= limit,
     );
@@ -136,7 +137,11 @@ class DouyuBrowseRepository implements BrowseRepository {
       final room = await _normalizeMobileRoom(item);
       if (room.roomId.isNotEmpty) rooms.add(room);
     }
-    return RoomListResult(rooms: rooms, page: nowPage == 0 ? page : nowPage, hasMore: hasMore);
+    return RoomListResult(
+      rooms: rooms.map(RoomRecord.fromSummary).toList(growable: false),
+      page: nowPage == 0 ? page : nowPage,
+      hasMore: hasMore,
+    );
   }
 
   RoomSummary? _normalizeMixRoom(Map<String, dynamic> item, String? targetCid) {

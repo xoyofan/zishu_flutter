@@ -44,14 +44,14 @@ void main() {
       expect(room.anchorName, '板上主播');
       expect(room.title, '游戏板房间');
       expect(room.category, '英雄联盟');
-      expect(room.online, '1.2千');
+      expect(room.audience, '1.2千');
       expect(room.cover, 'https://p1.kuaishou.com/board/1.jpg');
       expect(fake.requests.last.url.path, '/live_api/gameboard/list');
       expect(fake.requests.last.url.queryParameters['gameId'], '1001');
 
       // 列表来自 RoomSummary:统一记录只映射已提供的统计(audience),
       // 上游列表没有 followers/vip/svip → 保持 null,不编造数字。
-      final record = RoomRecord.fromSummary(room);
+      final record = room;
       expect(record.site, 'kuaishou');
       expect(record.roomId, 'ks_board_1');
       // 浏览目录 live-only(6sol 裁决,Task 4a-i):状态真源显式为 live。
@@ -85,17 +85,17 @@ void main() {
       expect(room.anchorName, '首页主播');
       expect(room.title, '首页推荐 描述');
       expect(room.category, '王者荣耀');
-      expect(room.online, '10.0千');
+      expect(room.audience, '10.0千');
       expect(room.cover, 'https://p1.kuaishou.com/home/1.jpg');
       expect(result.hasMore, isFalse);
       // 浏览目录 live-only(6sol 裁决,Task 4a-i):首页推荐嵌套列表同为 live。
       expect(
-        RoomRecord.fromSummary(room).roomState,
+        room.roomState,
         RoomState.live,
         reason: 'home/list gameLiveInfo/liveInfo 条目状态真源为 live',
       );
       expect(
-        RoomRecord.fromSummary(room).audience,
+        room.audience,
         '10.0千',
         reason: '精确格式原样保留',
       );

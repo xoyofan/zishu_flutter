@@ -68,15 +68,15 @@ void main() {
       expect(first.anchorName, '主播A');
       expect(first.cid, '1');
       expect(first.category, '英雄联盟');
-      expect(first.online, '10.2万');
+      expect(first.audience, '10.2万');
       expect(first.promoTag, '官方赛况');
 
       expect(result.rooms[1].cover, 'https://img.huya.com/b.jpg', reason: '// 补 https');
-      expect(result.rooms[1].online, '999');
+      expect(result.rooms[1].audience, '999');
 
       // 浏览目录 live-only(6sol 裁决,Task 4a-i):状态真源显式为 live。
       expect(
-        RoomRecord.fromSummary(first).roomState,
+        first.roomState,
         RoomState.live,
         reason: 'getLiveList 分类目录条目来自直播列表,roomState 应为 live',
       );

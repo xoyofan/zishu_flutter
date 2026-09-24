@@ -114,7 +114,7 @@ Future<void> _platformLatency(int rooms) async {
     print('\n=== $site 多房间延时 ===');
     final registry = buildSiteRegistry();
     final registration = registry[site]!;
-    List<RoomSummary> list;
+    List<RoomRecord> list;
     try {
       list = (await registration.browse!.fetchRooms(
         RoomListRequest(site: site, page: 1, limit: rooms),
