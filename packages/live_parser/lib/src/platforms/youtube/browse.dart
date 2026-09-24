@@ -106,9 +106,12 @@ List<RoomSummary> _roomsFromInitialData(String html, String categoryName) {
   final rooms = <RoomSummary>[];
   for (final renderer in renderers) {
     final videoId = '${renderer['videoId'] ?? ''}'.trim();
-    if (!isValidYoutubeVideoId(videoId) || !seen.add(videoId)) continue;
+    if (!isValidYoutubeVideoId(videoId)) continue;
     // 6sol P1:无在播证据的条目不进列表(宁可空,不得假 live)。
     if (!_hasLiveEvidence(renderer)) continue;
+    // 6sol P2:去重集合在证据检查通过后才占位,避免首个无证据的重复
+    // 条目挤掉后续带证据的同视频条目。
+    if (!seen.add(videoId)) continue;
     final title = _runsText(renderer['title']) ?? '';
     final cover = _listCoverUrl(videoId);
     rooms.add(

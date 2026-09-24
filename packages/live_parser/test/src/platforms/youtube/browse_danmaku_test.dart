@@ -105,6 +105,35 @@ void main() {
     );
   });
 
+  test('浏览:同 videoId 先无证据、后有 watching 的重复条目仍进列表一次(6sol P2)', () async {
+    // 同一视频出现两次:首个 renderer 无证据、第二个带 watching。
+    // 去重集合必须在证据检查之后才占位,否则首个无证据条目会挤掉
+    // 后面确认在播的同视频条目(6sol P2)。
+    fake.browseHtml = '''
+<html><body><script>
+var ytInitialData = {"contents":{"richGridRenderer":{"contents":[
+{"richItemRenderer":{"content":{"videoRenderer":{"videoId":"DUPE0000001","title":{"runs":[{"text":"首现无证据"}]}}}}},
+{"richItemRenderer":{"content":{"videoRenderer":{"videoId":"DUPE0000001","title":{"runs":[{"text":"再现有证据"}]},"viewCountText":{"simpleText":"1 watching"}}}}}
+]}}};
+</script></body></html>
+''';
+    final browse = YoutubeBrowseRepository(ParserHttp(client: fake));
+    final result = await browse.fetchRooms(
+      const RoomListRequest(site: 'youtube', page: 1, limit: 10),
+    );
+
+    expect(result.rooms, hasLength(1),
+        reason: '同一 videoId 只保留一条,且不能被首个无证据条目挤掉');
+    final record = RoomRecord.fromSummary(result.rooms.single);
+    expect(record.roomId, 'DUPE0000001');
+    expect(
+      record.roomState,
+      RoomState.live,
+      reason: '带 watching 证据的重复条目确认在播',
+    );
+    expect(record.audience, '1 watching', reason: 'viewCountText 原样透传');
+  });
+
   test('弹幕:continuation token + 轮询消息归一', () async {
     final connector = YoutubeDanmakuConnector(
       ParserHttp(client: fake),
