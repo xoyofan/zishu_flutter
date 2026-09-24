@@ -114,6 +114,26 @@ void main() {
       );
     });
 
+    test('仅有新 audience 键、缺 roomState 时不按统计推 live', () {
+      expect(
+        RoomRecord.fromJson({'site': 'douyu', 'roomId': '1', 'audience': '0'})
+            .roomState,
+        RoomState.offline,
+        reason: '历史推断只认旧 online 键;新 audience 即使非空也无推断资格',
+      );
+      expect(
+        RoomRecord.fromJson({'site': 'douyu', 'roomId': '1', 'audience': '9'})
+            .roomState,
+        RoomState.offline,
+      );
+      expect(
+        RoomRecord.fromJson({'site': 'douyu', 'roomId': '1', 'online': '9'})
+            .roomState,
+        RoomState.live,
+        reason: '旧 online 键保持历史推断',
+      );
+    });
+
     test('toJson 迁移期输出兼容键 online/diamondFans', () {
       final room = RoomRecord(
         site: 'huya',

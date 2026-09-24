@@ -270,9 +270,10 @@ class RoomRecord {
     if (extension != null) 'extension': extension!.toJson(),
   };
 
-  /// 读取新旧 JSON:旧键 `online`/`diamondFans`/`nickname` 归一到公共
-  /// 字段;缺 `roomState` 的历史数据按旧 `online` 非空判在播(仅用于
-  /// 读取历史数据,显式 `roomState` 是真源);未知扩展安全回落 null。
+  /// 读取新旧 JSON：旧键 `online`/`diamondFans`/`nickname` 归一到公共
+  /// 字段；缺 `roomState` 的历史数据**仅按旧 `online` 键**非空判在播
+  /// （新 `audience` 键无推断资格，仅用于读取历史数据，显式
+  /// `roomState` 是真源）；未知扩展安全回落 null。
   factory RoomRecord.fromJson(Map<String, dynamic> json) {
     final audience = _blankToNull(
       (json['audience'] ?? json['online'])?.toString(),
@@ -280,7 +281,7 @@ class RoomRecord {
     return RoomRecord(
       site: json['site']?.toString() ?? '',
       roomId: json['roomId']?.toString() ?? '',
-      roomState: _roomStateFromJson(json, audience),
+      roomState: _roomStateFromJson(json),
       title: _blankToNull(json['title']?.toString()),
       anchorName: _blankToNull(
         (json['nickname'] ?? json['anchorName'])?.toString(),
@@ -320,14 +321,14 @@ class RoomRecord {
   static String? _blankToNull(String? value) =>
       (value == null || value.isEmpty) ? null : value;
 
-  static RoomState _roomStateFromJson(
-    Map<String, dynamic> json,
-    String? audience,
-  ) {
+  static RoomState _roomStateFromJson(Map<String, dynamic> json) {
     final raw = json['roomState']?.toString();
     if (raw == null) {
-      // 历史数据缺 roomState:按旧 online 非空判在播,仅用于读取旧数据。
-      return audience != null ? RoomState.live : RoomState.offline;
+      // 历史数据缺 roomState：仅旧 online 键有推断资格（非空→live）；
+      // 新 audience 键即使非空（如 "0"）也不参与在播推断。
+      return _blankToNull(json['online']?.toString()) != null
+          ? RoomState.live
+          : RoomState.offline;
     }
     // 未知值与 RoomSummary.fromJson 同口径回落 offline。
     return RoomState.values.firstWhere(
