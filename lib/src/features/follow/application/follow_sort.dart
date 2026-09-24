@@ -5,7 +5,7 @@
 /// UI 层只负责把结果铺开,不各自实现 sort。
 library;
 
-import 'package:live_parser/live_parser.dart' show parseOnlineCount;
+import 'package:live_parser/live_parser.dart' show tryParseOnlineCount;
 
 import 'follow_provider.dart';
 
@@ -36,15 +36,14 @@ int followSortRank(FollowEntry entry) {
   return 3;
 }
 
-/// 单条观看数:解析失败/0 视为**缺失**(null),排序时沉底。
+/// 单条观看数:**缺失(空串/不可解析)为 null 沉底,合法零是有效值 0**。
 ///
-/// 复用解析核心 `parseOnlineCount`(1.2万/3.4千/1,234 同一尺),不复制解析规则。
-/// 口径依据:`formatOnlineCount` 对 0/非法一律返回空串,所以线上字符串里
-/// 「parseOnlineCount 回 0」等价于「无有效观看数」(缺失或不可解析)。
-int? _onlineCountOrNull(FollowEntry entry) {
-  final count = parseOnlineCount(entry.room.online);
-  return count == 0 ? null : count;
-}
+/// 复用解析核心 `tryParseOnlineCount`(1.2万/3.4千/1,234 同尺),不复制解析规则。
+/// 合法零必须与缺失区分:关注记录可从本地原样恢复 `online: "0"`
+/// (follow_provider 视非空串为在播),它参与数值序排在所有正数之后、
+/// 不可解析/缺失之前(审阅口径 2026-09-24)。
+int? _onlineCountOrNull(FollowEntry entry) =>
+    tryParseOnlineCount(entry.room.online);
 
 /// 档内次序:观看数倒序(缺失/不可解析沉底) → 平局回退关注时间倒序。
 int _byOnlineThenFollowedAtDesc(FollowEntry a, FollowEntry b) {
@@ -63,8 +62,8 @@ int _byOnlineThenFollowedAtDesc(FollowEntry a, FollowEntry b) {
 /// 按 [sort] 就地排序。
 ///
 /// 四档(见 [followSortRank])之后,档内按**观看数从高到低**;
-/// 观看数缺失/不可解析排档尾,数值相同或同缺失时按关注时间倒序
-/// (用户口径 2026-09-22,取代原「一律关注时间倒序」)。
+/// 合法零参与数值序,观看数缺失/不可解析排档尾,数值相同或同缺失时
+/// 按关注时间倒序(用户口径 2026-09-22,审阅 P2 边界 2026-09-24)。
 void sortFollowEntries(List<FollowEntry> items, FollowSort sort) {
   switch (sort) {
     case FollowSort.liveFirst:

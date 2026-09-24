@@ -4,8 +4,9 @@
 /// 1. **四档**:超关在播 0 / 普通在播 1 / 轮播 2 / 离线 3 —— 超关只在
 ///    在播段置顶(用户在意的是人,但「在意」的排序权不越过直播状态);
 ///    轮播(replay)排在全部在播之后、离线之前,且不分超关;
-/// 2. 档内按观看数倒序(parseOnlineCount 口径:1.2万/3.4千/1,234 同尺),
-///    缺失或不可解析排末尾,数值相同/同缺失按关注时间倒序;
+/// 2. 档内按观看数倒序(解析复用 live_parser tryParseOnlineCount:
+///    1.2万/3.4千/1,234 同尺),**合法零(如本地恢复的 "0")参与数值序**、
+///    缺失/不可解析沉底,数值相同/同缺失按关注时间倒序;
 /// 3. FollowSort 只剩 liveFirst,「最近关注」选项不再暴露;
 /// 4. 播放页侧栏只显在播(轮播/离线归「我的关注」页),两页共用同一
 ///    followSortRank。
@@ -161,6 +162,29 @@ void main() {
       sortFollowEntries(items, FollowSort.liveFirst);
       expect(_ids(items), ['x2', 'x1', 'x3']);
     });
+
+    test('合法零不是缺失:排在有数值之后、不可解析/缺失之前', () {
+      // 审阅 P2:本地可原样恢复 online="0"(follow_provider 视其为在播),
+      // 不得与不可解析/空串混成「同缺失」按关注时间排。
+      // zero 关注更早,若被误当缺失会排到 bad 之后 → 当前实现红灯。
+      final items = [
+        _entry(roomId: 'zero', online: '0', followedDaysAgo: 9), // 合法 0
+        _entry(roomId: 'bad', online: '人气', followedDaysAgo: 1), // 不可解析
+        _entry(roomId: 'big', online: '1.2万', followedDaysAgo: 5),
+      ];
+      sortFollowEntries(items, FollowSort.liveFirst);
+      expect(_ids(items), ['big', 'zero', 'bad']);
+    });
+
+    test('多个合法零同数:按关注时间倒序(零参与数值序而非缺失平局)', () {
+      final items = [
+        _entry(roomId: 'z-old', online: '0', followedDaysAgo: 9),
+        _entry(roomId: 'z-new', online: '0', followedDaysAgo: 1),
+        _entry(roomId: 'bad', online: '人气', followedDaysAgo: 5),
+      ];
+      sortFollowEntries(items, FollowSort.liveFirst);
+      expect(_ids(items), ['z-new', 'z-old', 'bad']);
+    });
   });
 
   group('FollowSort 枚举口径', () {
@@ -195,6 +219,21 @@ void main() {
         _entry(roomId: 'n1', followedDaysAgo: 1),
       ];
       expect(_ids(visibleFollowEntries(entries)), ['n1', 'r1', 'x1']);
+    });
+
+    test('侧栏档内按观看数倒序:合法零在数值后、不可解析前(共用同一排序)', () {
+      // 审阅 P2:侧栏与关注页共用 sortFollowEntries,档内次序必须同口径。
+      final entries = [
+        _entry(roomId: 'zero', online: '0', followedDaysAgo: 9),
+        _entry(roomId: 'bad', online: '人气', followedDaysAgo: 1),
+        _entry(roomId: 'big', online: '5.8万', followedDaysAgo: 5),
+        _entry(roomId: 'off', live: false, followedDaysAgo: 1), // 只显在播→滤掉
+        _entry(roomId: 'sp', special: true, online: '1.2万', followedDaysAgo: 7),
+      ];
+      expect(
+        _ids(playSidebarFollowEntries(entries)),
+        ['sp', 'big', 'zero', 'bad'],
+      );
     });
   });
 
