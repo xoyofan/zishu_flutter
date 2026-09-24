@@ -80,6 +80,80 @@ void main() {
     );
   });
 
+  test('三次均缺 totalViewer:状态不确定抛可诊断异常,不伪造离线', () async {
+    // 6sol 裁决:resultCode=0 且 detail/data 非空但连续三次 totalViewer 均空,
+    // 既无在播命中也无 data=null 离线信号 —— 必须抛可诊断异常交上层
+    // 关注刷新保留旧状态,禁止将其伪造成 offline。
+    final noViewer = Map<String, dynamic>.from(
+      (yyFixture('detail_live.json') as Map)['data'] as Map,
+    )..remove('totalViewer');
+    final fake = FakeYyApi()
+      ..detailResponseQueue.addAll([
+        {'resultCode': 0, 'data': Map<String, dynamic>.from(noViewer)},
+        {'resultCode': 0, 'data': Map<String, dynamic>.from(noViewer)},
+        {'resultCode': 0, 'data': Map<String, dynamic>.from(noViewer)},
+      ])
+      // 第 4 次若被误发会命中在播 fixture,requests==3 断言即可暴露。
+      ..detailResponse = yyFixture('detail_live.json');
+    final resolver = YyRoomResolver(YyClient(httpClient: fake));
+
+    await expectLater(
+      resolver.refreshRoomSummary(
+        const RoomRequest(site: 'yy', roomIdOrUrl: '1414787909'),
+      ),
+      throwsA(
+        isA<ParserHttpException>().having(
+          (error) => error.message,
+          'message',
+          allOf(contains('totalViewer'), contains('1414787909')),
+        ),
+      ),
+      reason: '异常需可诊断:带 roomId 与缺失字段名',
+    );
+    expect(fake.requests, hasLength(3), reason: '最多连取 3 次(含首次),不再加发');
+    expect(
+      fake.requests.every(
+        (request) =>
+            request.url.host == 'www.yy.com' &&
+            request.url.path.startsWith('/api/liveInfoDetail/'),
+      ),
+      isTrue,
+      reason: '只打 liveInfoDetail 元信息,不调用取流/签名接口',
+    );
+    expect(
+      fake.requests.any((request) => request.url.host == 'stream-manager.yy.com'),
+      isFalse,
+      reason: '状态不确定不得触发取流',
+    );
+  });
+
+  test('重试中 data=null:明确离线立即返回,不再发起后续请求', () async {
+    // 6sol 裁决第一款:data=null 是明确 offline —— 即使出现在重试响应中
+    // 也按离线返回,不把旧 detail 当作“状态不确定”继续连取或抛错。
+    final noViewer = Map<String, dynamic>.from(
+      (yyFixture('detail_live.json') as Map)['data'] as Map,
+    )..remove('totalViewer');
+    final fake = FakeYyApi()
+      ..detailResponseQueue.addAll([
+        {'resultCode': 0, 'data': Map<String, dynamic>.from(noViewer)},
+        const <String, Object?>{'resultCode': 0, 'data': null},
+      ]);
+    final resolver = YyRoomResolver(YyClient(httpClient: fake));
+
+    final summary = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'yy', roomIdOrUrl: '1414787909'),
+    );
+
+    expect(summary.online, '');
+    expect(summary.roomState, RoomState.offline);
+    expect(fake.requests, hasLength(2), reason: 'data=null 即停,不再发起第三次');
+    expect(
+      RoomRecord.fromSummary(summary).roomState,
+      RoomState.offline,
+      reason: '明确离线信号经统一记录透传',
+    );
+  });
+
   test('未开播:data=null(合法离线响应)不重试,online 为空串', () async {
     final fake = FakeYyApi()..detailResponse = yyFixture('detail_offline.json');
     final resolver = YyRoomResolver(YyClient(httpClient: fake));

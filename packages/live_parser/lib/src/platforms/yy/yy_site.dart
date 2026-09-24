@@ -47,8 +47,14 @@ class YyRoomResolver implements RoomResolver, RoomSummaryRefresher {
   /// 失效,但该接口仍可用**),不打 stream-manager、不取流、不写任何缓存。
   ///
   /// 口径对齐 web `follow/status.ts` 的 yy 快照:`totalViewer` 在边缘节点间
-  /// 闪变(在播房间约半数请求缺省,未开播恒为空),连取最多 3 次任一命中即
-  /// 判开播;`data=null`(合法离线响应)不重试直接按离线。房间不存在抛异常。
+  /// 闪变(在播房间约半数请求缺省,未开播恒为空),非空 detail 缺
+  /// `totalViewer` 时连取最多 3 次(含首次),任一命中即判开播;
+  /// `data=null`(合法离线响应)是明确离线,立即按离线返回不重试。
+  /// 房间不存在抛异常。**状态不确定必须抛错**(6sol 裁决):
+  /// `resultCode=0` 且连续 3 次 detail 非空但 `totalViewer` 均空时,
+  /// 既无在播命中也无离线信号 —— 抛可诊断 [ParserHttpException] 由上层
+  /// 关注刷新保留旧状态,绝不把「热度未返回」伪造成 offline;
+  /// 不为此调用取流/签名接口,也不引入 `RoomState.unknown`。
   @override
   Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
     final roomId = normalizeYyRoomId(request.roomIdOrUrl);
@@ -60,13 +66,26 @@ class YyRoomResolver implements RoomResolver, RoomSummaryRefresher {
     // 头像跨重试保留首个非空值(web `avatar = avatar || validImgUrl(detail.avatar)`
     // 同口径:重试响应可能缺 avatar)。
     var avatar = detail?.avatar ?? '';
-    for (var attempt = 0; attempt < 2 && detail != null && detail.totalViewer.isEmpty; attempt++) {
+    // totalViewer 边缘闪变重试:最多连取 3 次(含首次);
+    // data=null 是明确离线,立即停(不把旧 detail 当作待定状态继续连取)。
+    for (var attempt = 0;
+        attempt < 2 && detail != null && detail.totalViewer.isEmpty;
+        attempt++) {
       result = await fetchYyRoomDetail(_client.parserHttp, roomId);
       if (result.notFound) {
         throw ParserHttpException('YY 房间不存在: $roomId');
       }
-      detail = result.detail ?? detail;
+      detail = result.detail;
+      if (detail == null) break;
       if (avatar.isEmpty) avatar = detail.avatar;
+    }
+    // 6sol 裁决:3 次非空 detail 均缺 totalViewer → 状态不确定,
+    // 抛可诊断异常交上层保留旧状态,不伪造 offline。
+    if (detail != null && detail.totalViewer.isEmpty) {
+      throw ParserHttpException(
+        'YY 刷新无法判定开播状态:连续 3 次 liveInfoDetail 均缺 totalViewer '
+        '(roomId: $roomId)',
+      );
     }
     final totalViewer = detail?.totalViewer ?? '';
     return RoomSummary(
@@ -84,9 +103,9 @@ class YyRoomResolver implements RoomResolver, RoomSummaryRefresher {
       cover: detail?.thumb ?? '',
       avatar: avatar,
       startedAt: detail?.startedAt,
-      // 状态真源:web 同口径 totalViewer 任一命中即在播,否则离线
-      // (不从热度数字存在与否在调用侧推断)。
-      roomState: totalViewer.isNotEmpty ? RoomState.live : RoomState.offline,
+      // 状态真源:totalViewer 命中即在播(web 同口径),data=null 为明确离线;
+      // 两者皆无的情况已在上方抛错,不从统计缺失推断离线。
+      roomState: detail == null ? RoomState.offline : RoomState.live,
     );
   }
 
