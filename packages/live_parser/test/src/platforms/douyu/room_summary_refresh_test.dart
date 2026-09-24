@@ -1,7 +1,7 @@
 /// 斗鱼房间状态轻量刷新:只读 betard + m.douyu 房间信息,不取流/不签名。
 ///
-/// 钉住三件事:在播时热度非空、离线时热度必须为空串(宿主以「online 非空」
-/// 当在播判据)、以及刷新路径**不得**触碰取密钥 / getH5PlayV1 / HLS preview
+/// 钉住三件事:在播时热度非空、离线时 audience 为 null(在播判据是
+/// roomState 真源,不看统计)、以及刷新路径**不得**触碰取密钥 / getH5PlayV1 / HLS preview
 /// 等取流接口(否则关注列表定时刷新会顺带打爆播放接口)。
 library;
 
@@ -60,34 +60,32 @@ void main() {
         },
       };
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'douyu', roomIdOrUrl: '9527'),
     );
 
-    expect(summary.site, 'douyu');
-    expect(summary.roomId, '9527');
-    expect(summary.title, '移动端标题');
-    expect(summary.anchorName, '移动端主播名');
-    expect(summary.cid, '1');
-    expect(summary.category, '英雄联盟');
-    expect(summary.online, '1.2万');
-    expect(summary.cover, contains('douyucdn'));
+    expect(record.site, 'douyu');
+    expect(record.roomId, '9527');
+    expect(record.title, '移动端标题');
+    expect(record.anchorName, '移动端主播名');
+    expect(record.cid, '1');
+    expect(record.category, '英雄联盟');
+    expect(record.audience, '1.2万');
+    expect(record.cover, contains('douyucdn'));
     // 资料卡:粉丝/贵宾(web fetchDouyuAnchorCard 同源,fansNum/giftCard.total)。
-    expect(summary.followers, '123456', reason: 'web formatCount 口径:完整数字');
-    expect(summary.vip, '321', reason: '贵宾取卡片 giftCard.total(WS oni 不复刻)');
+    expect(record.followers, '123456', reason: 'web formatCount 口径:完整数字');
+    expect(record.vip, '321', reason: '贵宾取卡片 giftCard.total(WS oni 不复刻)');
     // 钻粉:web ROOM_STAT_COLUMNS.douyu 第 3 列(tone=svip)field=diamondFans,
     // 取 getAnchorNewCard 的 anchorLevel.dFansInfo.curDfansNum(同一卡片请求,
     // 零额外网络)。
-    expect(summary.diamondFans, '678');
-    expect(summary.roomState, RoomState.live);
+    expect(record.svip, '678');
+    expect(record.roomState, RoomState.live);
 
     final urls = fake.requests.map((request) => request.url).join('\n');
     expect(urls, isNot(contains('getEncryption')), reason: '刷新不得取白名单密钥');
     expect(urls, isNot(contains('getH5PlayV1')), reason: '刷新不得请求取流接口');
     expect(urls, isNot(contains('hlsH5Preview')), reason: '刷新不得请求预览流');
 
-    // 统一记录:fromSummary 映射刷新摘要已提供的统计真值(6sol 口径)。
-    final record = RoomRecord.fromSummary(summary);
     expect(record.site, 'douyu');
     expect(record.roomId, '9527');
     expect(record.roomState, RoomState.live);
@@ -108,17 +106,15 @@ void main() {
       }
       ..anchorCardResponse = null; // 路由 500 + 非 JSON 文本。
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'douyu', roomIdOrUrl: '9527'),
     );
 
-    expect(summary.online, '5千');
-    expect(summary.followers, '', reason: '统计是展示增强,拿不到就留空');
-    expect(summary.vip, '');
-    expect(summary.diamondFans, '');
+    expect(record.audience, '5千');
+    expect(record.followers, isNull, reason: '统计是展示增强,拿不到就留空');
+    expect(record.vip, isNull);
+    expect(record.svip, isNull);
 
-    // 旧口径空串经统一记录归一为 null,不伪造 0。
-    final record = RoomRecord.fromSummary(summary);
     expect(record.audience, '5千');
     expect(record.followers, isNull);
     expect(record.vip, isNull);
@@ -150,12 +146,12 @@ void main() {
       }
       ..anchorCardResponse = {'code': 0, 'data': {}};
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'douyu', roomIdOrUrl: '9527'),
     );
 
-    expect(summary.cid, '181');
-    expect(summary.category, '王者荣耀');
+    expect(record.cid, '181');
+    expect(record.category, '王者荣耀');
 
     // mobile 缺 cate2Name(接口偶发)时回退 betard second_lvl_name。
     fake.roomInfoResponse = {
@@ -170,7 +166,7 @@ void main() {
     expect(fallback.category, '王者荣耀', reason: 'betard second_lvl_name 兜底');
   });
 
-  test('离线:即使上游给了热度,online 也必须为空串', () async {
+  test('离线:即使上游给了热度,audience 也必须为 null', () async {
     fake
       ..betardResponse = _betard(showStatus: 2)
       ..roomInfoResponse = {
@@ -180,20 +176,19 @@ void main() {
         },
       };
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'douyu', roomIdOrUrl: '9528'),
     );
 
-    expect(summary.title, '离线房间');
-    expect(summary.online, '', reason: '契约:空串即未开播,宿主据此判在播');
-    expect(summary.roomState, RoomState.offline);
+    expect(record.title, '离线房间');
+    expect(record.audience, isNull, reason: '契约:空串即未开播,宿主据此判在播');
+    expect(record.roomState, RoomState.offline);
 
-    final record = RoomRecord.fromSummary(summary);
     expect(record.roomState, RoomState.offline);
     expect(record.audience, isNull, reason: '离线热度空串 → null');
   });
 
-  test('轮播(videoLoop=1):roomState=replay,online 契约同离线为空串', () async {
+  test('轮播(videoLoop=1):roomState=replay,audience 同离线为 null', () async {
     // web douyuState(SFVideoLive follow/status.ts:126):show_status==1
     // 且 videoLoop==1 → replay,非实时直播。
     fake
@@ -205,16 +200,15 @@ void main() {
         },
       };
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'douyu', roomIdOrUrl: '9529'),
     );
 
-    expect(summary.title, '轮播房间');
-    expect(summary.roomState, RoomState.replay);
-    expect(summary.isLive, isFalse, reason: 'online 为空,不进侧栏在播判据');
-    expect(summary.online, '', reason: '轮播不是实时直播,热度归空串');
+    expect(record.title, '轮播房间');
+    expect(record.roomState, RoomState.replay);
+    expect(record.isLive, isFalse, reason: 'roomState 非 live,不进侧栏在播判据');
+    expect(record.audience, isNull, reason: '轮播不是实时直播,热度归空串');
 
-    final record = RoomRecord.fromSummary(summary);
     expect(record.roomState, RoomState.replay);
     expect(record.isReplay, isTrue);
     expect(record.audience, isNull);
@@ -225,13 +219,13 @@ void main() {
       ..betardResponse = _betard(showStatus: 1)
       ..roomInfoResponse = null; // 404
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'douyu', roomIdOrUrl: '9527'),
     );
 
-    expect(summary.title, '斗鱼测试房间');
-    expect(summary.anchorName, '测试主播');
-    expect(summary.online, '');
+    expect(record.title, '斗鱼测试房间');
+    expect(record.anchorName, '测试主播');
+    expect(record.audience, isNull);
   });
 
   test('房间不存在:抛异常(由调用方按条目隔离,保留旧数据)', () async {

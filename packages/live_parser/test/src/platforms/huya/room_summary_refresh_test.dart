@@ -63,37 +63,37 @@ void main() {
     resolver = HuyaRoomResolver(HuyaClient(httpClient: fake));
   });
 
-  test('在播:online 取 totalCount 格式化,元信息来自 profileRoom,且不请求播放页', () async {
+  test('在播:audience 取 totalCount 格式化,元信息来自 profileRoom,且不请求播放页', () async {
     fake.profileRoomResponse = _profile(liveStatus: 'ON', activityCount: 98765);
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'huya', roomIdOrUrl: '9527'),
     );
 
-    expect(summary.site, 'huya');
-    expect(summary.roomId, '9527');
-    expect(summary.title, '虎牙测试房间');
-    expect(summary.anchorName, '虎牙主播');
-    expect(summary.category, '英雄联盟');
-    expect(summary.cid, '1');
-    expect(summary.online, '12.3万');
-    expect(summary.cover, 'https://cover.huya.com/cover.jpg');
+    expect(record.site, 'huya');
+    expect(record.roomId, '9527');
+    expect(record.title, '虎牙测试房间');
+    expect(record.anchorName, '虎牙主播');
+    expect(record.category, '英雄联盟');
+    expect(record.cid, '1');
+    expect(record.audience, '12.3万');
+    expect(record.cover, 'https://cover.huya.com/cover.jpg');
     // 头像取 data.profileInfo.avatar180(web avatarFromHuya 同源);
     // 真源探针实证:顶层 data 下没有 avatar180/avatar,只存在于 profileInfo。
-    expect(summary.avatar, 'https://huyaimg.msstatic.com/avatar.jpg');
+    expect(record.avatar, 'https://huyaimg.msstatic.com/avatar.jpg');
     // 粉丝数取同响应 activityCount(web follow/status.ts 的 huya 快照)。
-    expect(summary.followers, '98765', reason: 'web formatCount 口径:完整数字');
+    expect(record.followers, '98765', reason: 'web formatCount 口径:完整数字');
     expect(
-      summary.vip,
-      '',
+      record.vip,
+      isNull,
       reason: 'wup 不可达(fake 未配置响应)时静默留空,不伪造',
     );
     expect(
-      summary.diamondFans,
-      '',
+      record.svip,
+      isNull,
       reason: '超粉同口径:wup 不可达留空,不回填 0',
     );
-    expect(summary.roomState, RoomState.live);
+    expect(record.roomState, RoomState.live);
 
     // 只打 mp.huya.com 元信息与 wup 贵宾网关:没有播放页、没有签名。
     expect(
@@ -106,8 +106,6 @@ void main() {
       reason: '刷新不得请求播放页/签名接口:${fake.requests.map((r) => r.url).toList()}',
     );
 
-    // 统一记录:fromSummary 映射刷新摘要已提供的统计真值(6sol 口径)。
-    final record = RoomRecord.fromSummary(summary);
     expect(record.site, 'huya');
     expect(record.roomId, '9527');
     expect(record.roomState, RoomState.live);
@@ -121,17 +119,17 @@ void main() {
     fake.profileRoomResponse = _profile(liveStatus: 'ON', activityCount: 98765);
     fake.wupResponseBytes = buildFakeVipResponse(total: 75, totalNum: 75);
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'huya', roomIdOrUrl: '9527'),
     );
 
-    expect(summary.vip, '75', reason: 'SideHeader「贵宾」行 = iTotalNum');
+    expect(record.vip, '75', reason: 'SideHeader「贵宾」行 = iTotalNum');
     expect(
       fake.wupFuncNames.where((name) => name == 'getVipBarList'),
       hasLength(1),
       reason: '在播时恰好一次贵宾查询',
     );
-    expect(RoomRecord.fromSummary(summary).vip, '75');
+    expect(record.vip, '75');
     expect(
       fake.wupFuncNames,
       unorderedEquals(<String>[
@@ -151,19 +149,18 @@ void main() {
     fake.wupResponseByFunc['getSuperFansRankPanel'] =
         buildFakeSuperFansRankPanelResponse(num: 999, plusNum: 0);
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'huya', roomIdOrUrl: '9527'),
     );
 
     expect(
-      summary.diamondFans,
+      record.svip,
       '1300',
       reason: 'iSuperFansNum + iYearSuperFansNum(info 优先,web formatCount 同口径)',
     );
-    expect(summary.vip, '75');
-    expect(summary.toJson()['diamondFans'], '1300');
+    expect(record.vip, '75');
+    expect(record.toJson()['diamondFans'], '1300');
 
-    final record = RoomRecord.fromSummary(summary);
     expect(record.vip, '75');
     expect(record.svip, '1300', reason: 'diamondFans → svip');
   });
@@ -179,14 +176,14 @@ void main() {
     fake.wupResponseByFunc['getSuperFansRankPanel'] =
         buildFakeSuperFansRankPanelResponse(num: 0, plusNum: 0);
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'huya', roomIdOrUrl: '9527'),
     );
 
-    expect(summary.diamondFans, '');
-    expect(summary.toJson().containsKey('diamondFans'), isFalse, reason: '空串不写 JSON');
+    expect(record.svip, isNull);
+    expect(record.toJson().containsKey('diamondFans'), isFalse, reason: '空串不写 JSON');
     expect(
-      RoomRecord.fromSummary(summary).svip,
+      record.svip,
       isNull,
       reason: '超粉原始零不可信，合并仍留空',
     );
@@ -200,22 +197,22 @@ void main() {
     fake.wupResponseByFunc['getSuperFansRankPanel'] =
         buildFakeSuperFansRankPanelResponse(num: 61, plusNum: 1);
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'huya', roomIdOrUrl: '9527'),
     );
 
-    expect(summary.diamondFans, '62', reason: 'iNum + iPlusNum');
+    expect(record.svip, '62', reason: 'iNum + iPlusNum');
   });
 
   test('在播但贵宾为 0:vip 留空(web formatCount(0) 同口径)', () async {
     fake.profileRoomResponse = _profile(liveStatus: 'ON');
     fake.wupResponseBytes = buildFakeVipResponse(total: 0, totalNum: 0);
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'huya', roomIdOrUrl: '9527'),
     );
 
-    expect(summary.vip, '');
+    expect(record.vip, isNull);
   });
 
   test('分类/cid:真实形态 gameFullName + gid(gameId=0 不可信)', () async {
@@ -239,24 +236,24 @@ void main() {
     raw['data'] = data;
 
     fake.profileRoomResponse = raw;
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'huya', roomIdOrUrl: '9527'),
     );
 
-    expect(summary.category, '英雄联盟');
-    expect(summary.cid, '1', reason: 'gid 优先,gameId=0 视为缺失');
+    expect(record.category, '英雄联盟');
+    expect(record.cid, '1', reason: 'gid 优先,gameId=0 视为缺失');
   });
 
-  test('离线:online 为空串,且不发起 wup 贵宾查询', () async {
+  test('离线:audience 为 null,且不发起 wup 贵宾查询', () async {
     fake.profileRoomResponse = _profile(liveStatus: 'OFF', withStream: false);
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'huya', roomIdOrUrl: '9528'),
     );
 
-    expect(summary.online, '');
-    expect(summary.vip, '');
-    expect(summary.diamondFans, '');
+    expect(record.audience, isNull);
+    expect(record.vip, isNull);
+    expect(record.svip, isNull);
     expect(
       fake.requests.where((request) => request.url.contains('cdnws.api.huya.com')),
       isEmpty,
@@ -264,37 +261,35 @@ void main() {
     );
     expect(fake.wupFuncNames, isEmpty);
 
-    final record = RoomRecord.fromSummary(summary);
     expect(record.roomState, RoomState.offline);
     expect(record.audience, isNull);
     expect(record.vip, isNull);
     expect(record.svip, isNull);
   });
 
-  test('录播(replay):roomState=replay,online 契约同离线为空串', () async {
+  test('录播(replay):roomState=replay,audience 同离线为 null', () async {
     fake.profileRoomResponse = _profile(liveStatus: 'ON', replay: true);
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'huya', roomIdOrUrl: '9527'),
     );
 
     // 2026-09-19 口径:huyaRoomState 的 replay 不再折进 offline,由
-    // roomState 单独承载;online 仍为空串(在播判据不变)。
-    expect(summary.roomState, RoomState.replay);
-    expect(summary.isLive, isFalse);
+    // roomState 单独承载;audience 空串在转换边界归 null。
+    expect(record.roomState, RoomState.replay);
+    expect(record.isLive, isFalse);
     expect(
-      summary.online,
-      '',
+      record.audience,
+      isNull,
       reason: '轮播不是实时直播,不得当作在播',
     );
     expect(
-      summary.diamondFans,
-      '',
+      record.svip,
+      isNull,
       reason: '轮播同样不查 wup(仅 isLive)',
     );
     expect(fake.wupFuncNames, isEmpty);
 
-    final record = RoomRecord.fromSummary(summary);
     expect(record.roomState, RoomState.replay);
     expect(record.isReplay, isTrue);
     expect(record.audience, isNull);
@@ -303,11 +298,11 @@ void main() {
   test('离线补 roomState:OFF 且无流时 roomState=offline', () async {
     fake.profileRoomResponse = _profile(liveStatus: 'OFF', withStream: false);
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'huya', roomIdOrUrl: '9528'),
     );
 
-    expect(summary.roomState, RoomState.offline);
+    expect(record.roomState, RoomState.offline);
   });
 
   test('房间不存在(profileRoom 无 data):抛异常', () async {

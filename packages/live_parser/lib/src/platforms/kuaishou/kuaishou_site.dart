@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '../../contracts/contracts.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
+import '../../models/room_record.dart';
 import '../../registry/cached_room_resolver.dart';
 import '../../registry/site_display.dart';
 import 'browse.dart';
@@ -80,7 +81,7 @@ class KuaishouRoomResolver implements RoomResolver, RoomSummaryRefresher {
   /// 口径对齐 web 关注快照的 kuaishou 语义:`isLiving` 判在播,热度取
   /// `watchingCount`(detail 构建时已 formatOnlineCount);离线一律空串。
   @override
-  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+  Future<RoomRecord> refreshRoomSummary(RoomRequest request) async {
     final roomId = normalizeKuaishouRoomId(request.roomIdOrUrl);
     final KuaishouRoomDetail detail;
     try {
@@ -88,7 +89,7 @@ class KuaishouRoomResolver implements RoomResolver, RoomSummaryRefresher {
     } on FormatException {
       throw ParserHttpException('快手房间不存在: $roomId');
     }
-    return RoomSummary(
+    return RoomRecord.fromSummary(RoomSummary(
       site: kKuaishouSiteId,
       roomId: detail.roomId.isNotEmpty ? detail.roomId : roomId,
       title: detail.title.isNotEmpty ? detail.title : detail.anchorName,
@@ -96,14 +97,14 @@ class KuaishouRoomResolver implements RoomResolver, RoomSummaryRefresher {
       // 与 resolveRoom 同口径:快手无二级分类 id,cid 即房间号。
       cid: roomId,
       category: detail.category,
-      // 离线(或观看数字段缺失)一律空串,契约以「online 非空」作在播判据。
+      // 离线(或观看数字段缺失)一律空串,出口归 null;在播判据是 roomState。
       online: detail.isLive ? detail.viewers : '',
       cover: detail.cover,
       // 头像:房间页 SSR 的 author.avatar(零额外请求)。
       avatar: detail.avatar,
       // 状态真源:web 同口径 isLiving 判在播(不从热度推断)。
       roomState: detail.isLive ? RoomState.live : RoomState.offline,
-    );
+    ));
   }
 
   @override

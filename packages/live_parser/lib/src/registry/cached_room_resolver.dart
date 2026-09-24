@@ -3,6 +3,7 @@ library;
 
 import '../contracts/contracts.dart';
 import '../models/models.dart';
+import '../models/room_record.dart';
 
 /// 只缓存「带偏好画质 + 在播且有线路」的成功结果:
 /// - 键 = `site + roomIdOrUrl + preferredQuality`,同一入口短时间重复进房
@@ -64,7 +65,7 @@ class CachedRoomResolver
   /// 异步抛出(而非同步 throw):保证调用方统一用 Future 的错误处理捕获
   /// ——与 `UnsupportedRoomResolver` 同一约定。
   @override
-  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+  Future<RoomRecord> refreshRoomSummary(RoomRequest request) async {
     final inner = _inner;
     if (inner is RoomSummaryRefresher) {
       return inner.refreshRoomSummary(request);

@@ -33,18 +33,20 @@ class _StreamCountingRefresher implements RoomResolver, RoomSummaryRefresher {
   }
 
   @override
-  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+  Future<RoomRecord> refreshRoomSummary(RoomRequest request) async {
     refreshCalls++;
-    return RoomSummary(
-      site: request.site,
-      roomId: request.roomIdOrUrl,
-      title: '标题',
-      anchorName: '主播',
-      cid: '1',
-      category: '分类',
-      online: '',
-      cover: '',
-      roomState: RoomState.offline,
+    return RoomRecord.fromSummary(
+      RoomSummary(
+        site: request.site,
+        roomId: request.roomIdOrUrl,
+        title: '标题',
+        anchorName: '主播',
+        cid: '1',
+        category: '分类',
+        online: '',
+        cover: '',
+        roomState: RoomState.offline,
+      ),
     );
   }
 }
@@ -96,7 +98,7 @@ void main() {
     expect(cached, isA<RoomSummaryRefresher>());
 
     const request = RoomRequest(site: 'demo', roomIdOrUrl: '42');
-    final summary = await
+    final record = await
         (cached as RoomSummaryRefresher).refreshRoomSummary(request);
 
     expect(inner.refreshCalls, 1);
@@ -105,7 +107,7 @@ void main() {
       0,
       reason: '刷新只取元信息,不得触发取流/签名等昂贵步骤',
     );
-    expect(summary.roomId, '42');
+    expect(record.roomId, '42');
   });
 
   test('内层未实现刷新能力:抛错(由调用方按条目隔离)', () async {

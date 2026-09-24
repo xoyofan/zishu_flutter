@@ -7,6 +7,7 @@ import '../../contracts/contracts.dart';
 import '../../http/danmaku_transport.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
+import '../../models/room_record.dart';
 import '../../registry/cached_room_resolver.dart';
 import '../../registry/site_display.dart';
 import 'browse.dart';
@@ -87,11 +88,11 @@ class TwitchRoomResolver implements RoomResolver, RoomSummaryRefresher {
   /// (RoomSummaryRefresher 契约:刷新不得出现取流/签名相关调用)。
   ///
   /// 在播(stream 非空)回填标题/分类/封面与观看数文案;离线一律 `online`
-  /// 空串 —— 宿主以「online 非空」为在播判据。主播不存在按上游报错抛
+  /// 空串(出口归 null,在播判据是 [RoomRecord.roomState])。主播不存在按上游报错抛
   /// 异常,不返回伪造资料;离线时元信息字段留空,宿主合并口径是
   /// 「刷新非空才覆盖」,不会冲掉本地已有值。
   @override
-  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+  Future<RoomRecord> refreshRoomSummary(RoomRequest request) async {
     final login = normalizeTwitchLogin(request.roomIdOrUrl);
     if (login.isEmpty) {
       throw const ParserHttpException('无法识别的 Twitch 房间输入');
@@ -101,7 +102,7 @@ class TwitchRoomResolver implements RoomResolver, RoomSummaryRefresher {
       throw ParserHttpException('主播不存在: $login');
     }
     final stream = user.stream;
-    return RoomSummary(
+    return RoomRecord.fromSummary(RoomSummary(
       site: kTwitchSiteId,
       roomId: user.login,
       title: stream?.title ?? '',
@@ -113,7 +114,7 @@ class TwitchRoomResolver implements RoomResolver, RoomSummaryRefresher {
       // 头像:UseLive 查询已带回的 profileImageURL(零额外请求)。
       avatar: user.avatar,
       startedAt: stream?.startedAt,
-    );
+    ));
   }
 
   Future<RoomPayload> _resolve(

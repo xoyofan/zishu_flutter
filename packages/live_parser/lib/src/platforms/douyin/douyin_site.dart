@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '../../contracts/contracts.dart';
 import '../../http/danmaku_transport.dart';
 import '../../models/models.dart';
+import '../../models/room_record.dart';
 import '../../registry/cached_room_resolver.dart';
 import '../../registry/site_display.dart';
 import '../../utils/format_online.dart';
@@ -39,7 +40,7 @@ class DouyinRoomResolver implements RoomResolver, RoomSummaryRefresher {
   /// 注:`status != 4` 但无流的情况只有拿档位后才知,轻量刷新不为此多打请求,
   /// 由播放侧开流时自会纠偏。
   @override
-  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+  Future<RoomRecord> refreshRoomSummary(RoomRequest request) async {
     final webRid = normalizeDouyinRoomId(request.roomIdOrUrl);
     final room = await fetchDouyinWebStreamData(_client, webRid);
     final anchor = jsonText(room['anchor_name']);
@@ -50,7 +51,7 @@ class DouyinRoomResolver implements RoomResolver, RoomSummaryRefresher {
     final diamondFans = jsonInt(room['status']) == 2
         ? await fetchDouyinAnchorMemberCount(_client, room, webRid)
         : '';
-    return RoomSummary(
+    return RoomRecord.fromSummary(RoomSummary(
       site: kDouyinSiteId,
       roomId: webRid,
       title: title.isNotEmpty ? title : anchor,
@@ -68,7 +69,7 @@ class DouyinRoomResolver implements RoomResolver, RoomSummaryRefresher {
         jsonMapOf(owner['follow_info'])['follower_count'],
       ),
       diamondFans: diamondFans,
-    );
+    ));
   }
 
   @override

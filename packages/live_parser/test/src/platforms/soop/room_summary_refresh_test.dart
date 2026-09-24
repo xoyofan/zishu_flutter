@@ -31,27 +31,27 @@ void main() {
   });
 
   test('在播:元信息正确,观看数取自分类列表,且不触发 assign/aid 取流', () async {
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'soop', roomIdOrUrl: 'testbj'),
     );
 
-    expect(summary.site, 'soop');
-    expect(summary.roomId, 'testbj');
-    expect(summary.title, 'SOOP 测试直播间');
-    expect(summary.anchorName, '测试主播');
-    expect(summary.category, '英雄联盟');
-    expect(summary.cid, 'testbj', reason: 'SOOP 无二级分类 id,cid 即房间号');
-    expect(summary.online, '2.3万', reason: '分类列表 view_cnt=23456 格式化');
-    expect(summary.roomState, RoomState.live);
-    expect(summary.cover, startsWith('https://liveimg.sooplive.co.kr/m/12345678'));
+    expect(record.site, 'soop');
+    expect(record.roomId, 'testbj');
+    expect(record.title, 'SOOP 测试直播间');
+    expect(record.anchorName, '测试主播');
+    expect(record.category, '英雄联盟');
+    expect(record.cid, 'testbj', reason: 'SOOP 无二级分类 id,cid 即房间号');
+    expect(record.audience, '2.3万', reason: '分类列表 view_cnt=23456 格式化');
+    expect(record.roomState, RoomState.live);
+    expect(record.cover, startsWith('https://liveimg.sooplive.co.kr/m/12345678'));
     // 头像:station LOGO 确定性 URL(web fetchSoopRoomStats 同源,零额外请求)。
-    expect(summary.avatar, 'https://stimg.sooplive.co.kr/LOGO/te/testbj/testbj.jpg');
+    expect(record.avatar, 'https://stimg.sooplive.co.kr/LOGO/te/testbj/testbj.jpg');
     // dashboard:粉丝 + 订阅(web fetchSoopDashboard 同源,upd.fanCnt /
     // subscription.total;SOOP 的 vip 列在 web 真源是「订阅」;fixture 里
     // total 是字符串形态,一并覆盖数值解析)。
-    expect(summary.followers, '434898');
-    expect(summary.vip, '235');
-    expect(summary.startedAt, DateTime.parse('2026-09-20 18:01:42'));
+    expect(record.followers, '434898');
+    expect(record.vip, '235');
+    expect(record.startedAt, DateTime.parse('2026-09-20 18:01:42'));
 
     final playerApiRequests = fake.requests
         .where((request) => request.url.path == '/afreeca/player_live_api.php')
@@ -72,10 +72,9 @@ void main() {
 
     // 统一记录:fromSummary 映射刷新摘要已提供的 fixture 真值;SOOP 无
     // diamondFans 上游 → svip null,不编造数字。
-    final record = RoomRecord.fromSummary(summary);
     expect(record.site, 'soop');
     expect(record.roomId, 'testbj');
-    expect(record.audience, '2.3万', reason: 'view_cnt=23456 → online 透传');
+    expect(record.audience, '2.3万', reason: 'view_cnt=23456 → audience 透传');
     expect(record.followers, '434898');
     expect(record.vip, '235');
     expect(record.svip, isNull);
@@ -105,20 +104,19 @@ void main() {
       },
     };
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'soop', roomIdOrUrl: 'testbj'),
     );
 
-    expect(summary.roomState, RoomState.live);
+    expect(record.roomState, RoomState.live);
     expect(
-      summary.online,
+      record.audience,
       kSoopLiveOnlineFallback,
-      reason: '宿主以 online 非空为在播判据,空串会把在播房间判成离线',
+      reason: '在播判据是 roomState;占位文案经 fromSummary 透传',
     );
 
     // 关键口径:「直播中」是占位文案不是数字——fromSummary 原样透传该
     // 常量,且绝不等于 '0'(不把占位当有效观看数,交给展示层过滤)。
-    final record = RoomRecord.fromSummary(summary);
     expect(record.audience, kSoopLiveOnlineFallback);
     expect(record.audience, isNot('0'));
     expect(record.followers, '434898');
@@ -139,25 +137,24 @@ void main() {
     expect(liveApiCount, 2, reason: '契约:刷新不读也不写 60s detail 缓存');
   });
 
-  test('未开播(RESULT=0):online 空串 + 离线,不查分类列表观看数', () async {
+  test('未开播(RESULT=0):audience 为 null + 离线,不查分类列表观看数', () async {
     fake.detailResponse = soopFixture('detail_offline.json');
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'soop', roomIdOrUrl: 'testbj'),
     );
 
-    expect(summary.online, '');
-    expect(summary.roomState, RoomState.offline);
+    expect(record.audience, isNull);
+    expect(record.roomState, RoomState.offline);
 
     // 离线协议 total_view_cnt:"0" 按平台契约 online 空串 → audience
     // null(0 不是有效观看数);dashboard 真值照常透传,svip 缺项 null。
-    final record = RoomRecord.fromSummary(summary);
     expect(record.audience, isNull);
     expect(record.followers, '434898');
     expect(record.vip, '235');
     expect(record.svip, isNull);
     expect(
-      summary.avatar,
+      record.avatar,
       'https://stimg.sooplive.co.kr/LOGO/te/testbj/testbj.jpg',
       reason: '离线房间同样有 LOGO 头像',
     );
@@ -172,8 +169,8 @@ void main() {
     );
     // 粉丝/订阅与开播状态无关:离线也照常取 dashboard(2026-09 探针实测
     // 离线房间 dashboard 照常 200 且字段齐全),播放页主播卡离线也展示。
-    expect(summary.followers, '434898');
-    expect(summary.vip, '235');
+    expect(record.followers, '434898');
+    expect(record.vip, '235');
     expect(
       fake.requests.where(
         (request) => request.url.host == 'api-channel.sooplive.co.kr',
@@ -188,12 +185,12 @@ void main() {
       soopFixture('dashboard_live.json'),
     ]);
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'soop', roomIdOrUrl: 'testbj'),
     );
 
-    expect(summary.followers, '434898');
-    expect(summary.vip, '235');
+    expect(record.followers, '434898');
+    expect(record.vip, '235');
     expect(
       fake.requests.where(
         (request) => request.url.host == 'api-channel.sooplive.co.kr',
@@ -209,16 +206,14 @@ void main() {
       http.Response('upstream 429', 429),
     ]);
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'soop', roomIdOrUrl: 'testbj'),
     );
 
-    expect(summary.roomState, RoomState.live);
-    expect(summary.followers, '');
-    expect(summary.vip, '');
+    expect(record.roomState, RoomState.live);
+    expect(record.followers, isNull);
+    expect(record.vip, isNull);
 
-    // dashboard 全失败:空串经 fromSummary 归一为 null,不伪造 0。
-    final record = RoomRecord.fromSummary(summary);
     expect(record.followers, isNull);
     expect(record.vip, isNull);
     expect(record.svip, isNull);

@@ -7,6 +7,7 @@ import '../../http/danmaku_transport.dart';
 import '../../http/parser_http.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
+import '../../models/room_record.dart';
 import '../../registry/cached_room_resolver.dart';
 import '../../registry/site_display.dart';
 import '../../utils/format_online.dart';
@@ -73,7 +74,7 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver, RoomSummar
   /// `fetchHuyaSnapshot` 的 `Promise.all`,不在刷新链路上重复请求);
   /// 失败/为 0/不可信一律留空。
   @override
-  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+  Future<RoomRecord> refreshRoomSummary(RoomRequest request) async {
     final http = _client.parserHttp;
     final url = normalizeHuyaUrl(request.roomIdOrUrl);
     final rid = await resolveHuyaNumericRoomId(http, url);
@@ -149,7 +150,7 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver, RoomSummar
       diamondFans = formatExactCount(superFanCount);
     }
 
-    return RoomSummary(
+    return RoomRecord.fromSummary(RoomSummary(
       site: kHuyaSiteId,
       roomId: rid,
       title: title,
@@ -181,7 +182,7 @@ class HuyaRoomResolver implements RoomResolver, RoomRecoveryResolver, RoomSummar
         HuyaRoomState.replay => RoomState.replay,
         HuyaRoomState.offline => RoomState.offline,
       },
-    );
+    ));
   }
 
   @override

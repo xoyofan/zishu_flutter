@@ -127,10 +127,10 @@ Future<void> _probeRoom(String roomId) async {
       );
       stdout.writeln(
         'refreshRoomSummary: state=${summary.roomState.name} '
-        'online=${summary.online.isEmpty ? '(空)' : summary.online} '
-        'vip=${summary.vip.isEmpty ? '(空)' : summary.vip} '
-        'diamondFans=${summary.diamondFans.isEmpty ? '(空)' : summary.diamondFans} '
-        'followers=${summary.followers.isEmpty ? '(空)' : summary.followers}',
+        'audience=${summary.audience ?? '(空)'} '
+        'vip=${summary.vip ?? '(空)'} '
+        'svip=${summary.svip ?? '(空)'} '
+        'followers=${summary.followers ?? '(空)'}',
       );
     } catch (error) {
       stdout.writeln('refreshRoomSummary 失败: $error');

@@ -7,6 +7,7 @@ import '../../contracts/contracts.dart';
 import '../../http/danmaku_transport.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
+import '../../models/room_record.dart';
 import '../../registry/cached_room_resolver.dart';
 import '../../registry/site_display.dart';
 import '../../utils/format_online.dart';
@@ -60,15 +61,16 @@ class SoopRoomResolver implements RoomResolver, RoomSummaryRefresher {
   ///   语义,空串在播判据);
   /// - 观看数取自分类列表 API(`fetchSoopCategoryViewers`,`player_live_api`
   ///   已不下发观看数字段,CTUSER 是占位值),未命中/失败回退
-  ///   [kSoopLiveOnlineFallback] —— 宿主以「online 非空」为在播判据,
-  ///   空串会把在播房间刷成离线(2026-09 关注页 soop 全离线的根因);
+  ///   [kSoopLiveOnlineFallback] —— 摘要层保持非空占位,出口经
+  ///   fromSummary 归 null,在播判据是 roomState(
+  ///   2026-09 关注页 soop 全离线的根因);
   /// - 粉丝/订阅取 `fetchSoopDashboard`(`upd.fanCnt`/`subscription.total`,
   ///   web formatCount 口径:完整数字);与开播状态无关,离线/受限(-6)
   ///   也补 dashboard(播放页主播卡对离线房间同样展示;dashboard 失败
   ///   静默为空,不伪造)。
   /// 封禁(-2)按「房间不存在」抛异常。
   @override
-  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+  Future<RoomRecord> refreshRoomSummary(RoomRequest request) async {
     final roomId = normalizeSoopRoomId(request.roomIdOrUrl);
     final payload = await fetchSoopPlayerApi(_client.parserHttp, roomId);
     final detail = parseSoopRoomDetail(payload, roomId);
@@ -81,7 +83,7 @@ class SoopRoomResolver implements RoomResolver, RoomSummaryRefresher {
       // 播放页主播卡对离线房间同样要展示;只把 online 留空(在播判据),
       // 也不补分类列表观看数(离线房间无观看数语义)。
       final dashboard = await fetchSoopDashboard(_client.parserHttp, roomId);
-      return RoomSummary(
+      return RoomRecord.fromSummary(RoomSummary(
         site: kSoopSiteId,
         roomId: detail.roomId.isNotEmpty ? detail.roomId : roomId,
         title: detail.title.isNotEmpty ? detail.title : detail.nick,
@@ -98,7 +100,7 @@ class SoopRoomResolver implements RoomResolver, RoomSummaryRefresher {
         vip: formatExactCount(dashboard.subscribers),
         startedAt: dashboard.startedAt,
         roomState: RoomState.offline,
-      );
+      ));
     }
     final results = await Future.wait<Object?>([
       fetchSoopDashboard(_client.parserHttp, roomId),
@@ -107,7 +109,7 @@ class SoopRoomResolver implements RoomResolver, RoomSummaryRefresher {
     final dashboard =
         results[0] as ({int fans, int subscribers, DateTime? startedAt});
     final viewers = results[1] as int;
-    return RoomSummary(
+    return RoomRecord.fromSummary(RoomSummary(
       site: kSoopSiteId,
       roomId: detail.roomId.isNotEmpty ? detail.roomId : roomId,
       title: detail.title.isNotEmpty ? detail.title : detail.nick,
@@ -128,7 +130,7 @@ class SoopRoomResolver implements RoomResolver, RoomSummaryRefresher {
       vip: formatExactCount(dashboard.subscribers),
       startedAt: dashboard.startedAt,
       roomState: RoomState.live,
-    );
+    ));
   }
 
   @override

@@ -16,20 +16,20 @@ void main() {
   });
 
   test('在播:元信息正确,且只请求房间页一次', () async {
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'kuaishou', roomIdOrUrl: 'ks_user_1'),
     );
 
-    expect(summary.site, 'kuaishou');
-    expect(summary.roomId, 'ks_user_1');
-    expect(summary.title, '今晚八点开播 不见不散');
-    expect(summary.anchorName, '快手主播');
-    expect(summary.category, '王者荣耀');
-    expect(summary.cid, 'ks_user_1', reason: '快手无二级分类 id,cid 即房间号');
-    expect(summary.online, '2.3万', reason: 'watchingCount=23456 格式化');
-    expect(summary.cover, 'https://p1.kuaishou.com/poster.jpg');
+    expect(record.site, 'kuaishou');
+    expect(record.roomId, 'ks_user_1');
+    expect(record.title, '今晚八点开播 不见不散');
+    expect(record.anchorName, '快手主播');
+    expect(record.category, '王者荣耀');
+    expect(record.cid, 'ks_user_1', reason: '快手无二级分类 id,cid 即房间号');
+    expect(record.audience, '2.3万', reason: 'watchingCount=23456 格式化');
+    expect(record.cover, 'https://p1.kuaishou.com/poster.jpg');
     // 头像取房间页 SSR 的 author.avatar(零额外请求)。
-    expect(summary.avatar, 'https://p1.kuaishou.com/avatar.png');
+    expect(record.avatar, 'https://p1.kuaishou.com/avatar.png');
 
     expect(fake.requests, hasLength(1), reason: '刷新只拉一次房间页');
     expect(fake.requests.single.url.host, 'live.kuaishou.com');
@@ -37,7 +37,6 @@ void main() {
 
     // 统一记录:fromSummary 映射刷新摘要已提供的统计真值(6sol 口径),
     // 且状态真源 roomState 必须随真实状态赋值(平台契约:isLiving 判在播)。
-    final record = RoomRecord.fromSummary(summary);
     expect(record.site, 'kuaishou');
     expect(record.roomId, 'ks_user_1');
     expect(record.roomState, RoomState.live);
@@ -52,19 +51,17 @@ void main() {
     expect(record.svip, isNull);
   });
 
-  test('未开播:online 为空串,资料保留', () async {
+  test('未开播:audience 为 null,资料保留', () async {
     fake.roomPage = kuaishouFixture('room_offline.html');
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'kuaishou', roomIdOrUrl: 'ks_user_1'),
     );
 
-    expect(summary.online, '', reason: '契约:online 非空即判在播,离线必须空串');
-    expect(summary.anchorName, '快手主播');
-    expect(summary.avatar, 'https://p1.kuaishou.com/avatar.png', reason: '离线保留头像');
+    expect(record.audience, isNull, reason: '契约:离线 audience 为 null,在播判据是 roomState');
+    expect(record.anchorName, '快手主播');
+    expect(record.avatar, 'https://p1.kuaishou.com/avatar.png', reason: '离线保留头像');
 
-    // 协议 watchingCount 原始 "0" 不采纳:离线契约空串 → 统一记录 null。
-    final record = RoomRecord.fromSummary(summary);
     expect(record.roomState, RoomState.offline);
     expect(record.audience, isNull);
     expect(record.followers, isNull);

@@ -7,6 +7,7 @@ import '../../http/danmaku_transport.dart';
 import '../../http/parser_http.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
+import '../../models/room_record.dart';
 import '../../registry/cached_room_resolver.dart';
 import '../../registry/site_display.dart';
 import '../../utils/format_online.dart';
@@ -68,7 +69,7 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
   /// (`fetchBilibiliFansMedalCount`/`fetchBilibiliGuardInfo`),且 vip 列
   /// 本就为空 —— 此处不再加请求,[RoomSummary.vip] 恒空。
   @override
-  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+  Future<RoomRecord> refreshRoomSummary(RoomRequest request) async {
     final http = _client.parserHttp;
     final credentials = _client.credentials;
     final url = normalizeBilibiliUrl(request.roomIdOrUrl);
@@ -123,7 +124,7 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
         : '';
     // 二级分类名优先(web pickText(area_name, parent_area_name) 同口径)。
     final refreshAreaName = jsonText(info['area_name']);
-    return RoomSummary(
+    return RoomRecord.fromSummary(RoomSummary(
       site: kBilibiliSiteId,
       roomId: rid,
       title: jsonText(info['title']).isEmpty
@@ -142,7 +143,7 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
       roomState: isLive
           ? RoomState.live
           : (isReplay ? RoomState.replay : RoomState.offline),
-    );
+    ));
   }
 
   @override

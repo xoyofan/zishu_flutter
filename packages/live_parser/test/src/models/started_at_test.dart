@@ -46,15 +46,15 @@ void main() {
     );
   });
 
-  test('Twitch createdAt 归一为 RoomSummary.startedAt', () async {
+  test('Twitch createdAt 归一为 RoomRecord.startedAt', () async {
     final api = FakeTwitchApi()
       ..useLiveResponse = twitchFixtureData('use_live.json')['user'];
     final resolver = TwitchRoomResolver(TwitchClient(httpClient: api));
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'twitch', roomIdOrUrl: 'fps_shaka'),
     );
 
-    expect(summary.startedAt, DateTime.parse('2026-09-09T06:12:41Z').toLocal());
+    expect(record.startedAt, DateTime.parse('2026-09-09T06:12:41Z').toLocal());
   });
 }

@@ -54,7 +54,7 @@ class _FailingRefresher implements RoomResolver, RoomSummaryRefresher {
       throw UnimplementedError();
 
   @override
-  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+  Future<RoomRecord> refreshRoomSummary(RoomRequest request) async {
     refreshCalls++;
     throw StateError('refresh boom');
   }

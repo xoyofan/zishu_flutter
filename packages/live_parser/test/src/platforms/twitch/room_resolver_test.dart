@@ -336,53 +336,51 @@ https://usher.example/v1/playlist/720p60.m3u8
 
   group('状态刷新(RoomSummaryRefresher)', () {
     test('在播:回填标题/分类/封面与观看数文案,roomId 归一为 login', () async {
-      final summary = await TwitchRoomResolver(clientFor()).refreshRoomSummary(
+      final record = await TwitchRoomResolver(clientFor()).refreshRoomSummary(
         const RoomRequest(
           site: 'twitch',
           roomIdOrUrl: 'https://www.twitch.tv/FPS_Shaka',
         ),
       );
-      expect(summary.site, 'twitch');
-      expect(summary.roomId, 'fps_shaka');
-      expect(summary.anchorName, 'fps_shaka');
-      expect(summary.title, 'SAVOGE RUST Day3');
-      expect(summary.category, '失控进化-RUST');
-      expect(summary.cid, '263490');
-      expect(summary.online, '2.3万', reason: 'viewersCount 22942 过万显示 X.X万');
-      expect(summary.cover, isNotEmpty);
+      expect(record.site, 'twitch');
+      expect(record.roomId, 'fps_shaka');
+      expect(record.anchorName, 'fps_shaka');
+      expect(record.title, 'SAVOGE RUST Day3');
+      expect(record.category, '失控进化-RUST');
+      expect(record.cid, '263490');
+      expect(record.audience, '2.3万', reason: 'viewersCount 22942 过万显示 X.X万');
+      expect(record.cover, isNotEmpty);
       // 头像:UseLive 查询已带回的 profileImageURL(零额外请求)。
       expect(
-        summary.avatar,
+        record.avatar,
         'https://static-cdn.jtvnw.net/jtv_user_pictures/fps-shaka-profile-300x300.png',
       );
 
       // 统一记录:fromSummary 映射刷新摘要已提供的统计真值(6sol 口径);
       // Twitch 刷新不下发 followers/vip/svip → null,不编造数字。
-      final record = RoomRecord.fromSummary(summary);
       expect(record.site, 'twitch');
       expect(record.roomId, 'fps_shaka');
-      expect(record.audience, '2.3万', reason: 'viewersCount 22942 → online 透传');
+      expect(record.audience, '2.3万', reason: 'viewersCount 22942 → audience 透传');
       expect(record.followers, isNull);
       expect(record.vip, isNull);
       expect(record.svip, isNull);
     });
 
-    test('未开播:online 必须为空串(宿主以 online 非空为在播判据)', () async {
+    test('未开播:audience 为 null 且状态真源 roomState 承载离线', () async {
       api.useLiveResponse = twitchFixtureData('use_live_offline.json')['user'];
-      final summary = await TwitchRoomResolver(clientFor()).refreshRoomSummary(
+      final record = await TwitchRoomResolver(clientFor()).refreshRoomSummary(
         const RoomRequest(site: 'twitch', roomIdOrUrl: 'shroud'),
       );
-      expect(summary.online, isEmpty);
-      expect(summary.anchorName, 'shroud');
-      expect(summary.title, isEmpty);
+      expect(record.audience, isNull);
+      expect(record.anchorName, 'shroud');
+      expect(record.title, isNull);
       // 离线仍有主播头像(web 快照离线分支同样带 stats.avatar)。
       expect(
-        summary.avatar,
+        record.avatar,
         'https://static-cdn.jtvnw.net/jtv_user_pictures/shroud-profile-300x300.png',
       );
 
       // 离线 online 空串 → audience null;统计缺项保持 null,不伪造 0。
-      final record = RoomRecord.fromSummary(summary);
       expect(record.audience, isNull);
       expect(record.followers, isNull);
       expect(record.vip, isNull);
@@ -410,11 +408,11 @@ https://usher.example/v1/playlist/720p60.m3u8
     test('能力经 CachedRoomResolver 透传,注册表出口可探测', () async {
       final registration = buildTwitchRegistration(client: clientFor());
       expect(registration.resolver, isA<RoomSummaryRefresher>());
-      final summary = await (registration.resolver as RoomSummaryRefresher)
+      final record = await (registration.resolver as RoomSummaryRefresher)
           .refreshRoomSummary(
             const RoomRequest(site: 'twitch', roomIdOrUrl: 'fps_shaka'),
           );
-      expect(summary.online, '2.3万');
+      expect(record.audience, '2.3万');
     });
   });
 

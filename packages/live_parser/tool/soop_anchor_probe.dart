@@ -105,7 +105,7 @@ Future<void> main(List<String> args) async {
         RoomRequest(site: 'soop', roomIdOrUrl: roomId),
       );
       print('summary: followers="${summary.followers}" vip="${summary.vip}" '
-          'online="${summary.online}"');
+          'audience="${summary.audience ?? ''}"');
     } on Object catch (e) {
       print('refreshRoom EXC: $e');
     }

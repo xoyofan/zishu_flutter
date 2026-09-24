@@ -11,20 +11,20 @@ void main() {
     final fake = FakeYyApi()..detailResponse = yyFixture('detail_live.json');
     final resolver = YyRoomResolver(YyClient(httpClient: fake));
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'yy', roomIdOrUrl: 'https://www.yy.com/1414787909/'),
     );
 
-    expect(summary.site, 'yy');
-    expect(summary.roomId, '1414787909');
-    expect(summary.title, '测试直播间');
-    expect(summary.anchorName, 'YY主播');
-    expect(summary.category, 'other');
-    expect(summary.cid, '1414787909', reason: '与 resolveRoom 同口径:cid 取 ssid');
-    expect(summary.online, '4.1万', reason: 'totalViewer 原样下发(已是格式化串)');
-    expect(summary.cover, 'https://img.yy.com/cover.jpg');
+    expect(record.site, 'yy');
+    expect(record.roomId, '1414787909');
+    expect(record.title, '测试直播间');
+    expect(record.anchorName, 'YY主播');
+    expect(record.category, 'other');
+    expect(record.cid, '1414787909', reason: '与 resolveRoom 同口径:cid 取 ssid');
+    expect(record.audience, '4.1万', reason: 'totalViewer 原样下发(已是格式化串)');
+    expect(record.cover, 'https://img.yy.com/cover.jpg');
     // 头像取 detail.avatar(web 快照 validImgUrl(detail.avatar) 同源)。
-    expect(summary.avatar, 'https://img.yy.com/avatar.jpg');
+    expect(record.avatar, 'https://img.yy.com/avatar.jpg');
 
     expect(fake.requests, hasLength(1), reason: 'totalViewer 首次命中无需重试');
     expect(
@@ -35,7 +35,6 @@ void main() {
 
     // 统一记录:fromSummary 映射刷新摘要已提供的统计真值(6sol 口径),
     // 且状态真源 roomState 必须随真实状态赋值(平台契约:totalViewer 命中即在播)。
-    final record = RoomRecord.fromSummary(summary);
     expect(record.site, 'yy');
     expect(record.roomId, '1414787909');
     expect(record.roomState, RoomState.live);
@@ -66,15 +65,15 @@ void main() {
       ]);
     final resolver = YyRoomResolver(YyClient(httpClient: fake));
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'yy', roomIdOrUrl: '1414787909'),
     );
 
-    expect(summary.online, '4.1万');
+    expect(record.audience, '4.1万');
     expect(fake.requests, hasLength(2), reason: '口径对齐 web:最多连取 3 次');
-    expect(summary.avatar, 'https://img.yy.com/avatar.jpg', reason: '重试保留头像');
+    expect(record.avatar, 'https://img.yy.com/avatar.jpg', reason: '重试保留头像');
     expect(
-      RoomRecord.fromSummary(summary).audience,
+      record.audience,
       '4.1万',
       reason: '重试命中后统一记录同样拿到热度',
     );
@@ -140,32 +139,31 @@ void main() {
       ]);
     final resolver = YyRoomResolver(YyClient(httpClient: fake));
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'yy', roomIdOrUrl: '1414787909'),
     );
 
-    expect(summary.online, '');
-    expect(summary.roomState, RoomState.offline);
+    expect(record.audience, isNull);
+    expect(record.roomState, RoomState.offline);
     expect(fake.requests, hasLength(2), reason: 'data=null 即停,不再发起第三次');
     expect(
-      RoomRecord.fromSummary(summary).roomState,
+      record.roomState,
       RoomState.offline,
       reason: '明确离线信号经统一记录透传',
     );
   });
 
-  test('未开播:data=null(合法离线响应)不重试,online 为空串', () async {
+  test('未开播:data=null(合法离线响应)不重试,audience 为 null', () async {
     final fake = FakeYyApi()..detailResponse = yyFixture('detail_offline.json');
     final resolver = YyRoomResolver(YyClient(httpClient: fake));
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'yy', roomIdOrUrl: '547800'),
     );
 
-    expect(summary.online, '');
+    expect(record.audience, isNull);
     expect(fake.requests, hasLength(1), reason: 'data=null 直接按离线,不重试');
 
-    final record = RoomRecord.fromSummary(summary);
     expect(record.roomState, RoomState.offline);
     expect(record.audience, isNull, reason: '离线契约空串 → null');
     expect(record.startedAt, isNull, reason: 'data=null 无开播时间,不伪造');

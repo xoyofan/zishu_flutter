@@ -86,18 +86,21 @@ abstract interface class RoomRecoveryResolver implements RoomResolver {
 ///
 /// 实现约定(不可协商):
 /// * 只打各站最轻的房间信息接口,请求里不得出现取流 / 签名相关调用;
-/// * 离线(含平台「未开播」)时 [RoomSummary.online] 必须为空串 —— 宿主以
-///   「online 非空」当作在播判据,填占位文案会把离线房间刷成在播;
-///   轮播([RoomState.replay],如 bilibili live_status==2 / douyu
-///   videoLoop==1 / huya 录播循环)同样**必须留空 online**,由
-///   [RoomSummary.roomState] 单独承载 replay 语义;
-/// * 房间不存在或上游报错直接抛异常(不得返回伪造的 RoomSummary);
+/// * 状态真源是 [RoomRecord.roomState]:离线(含平台「未开播」)为
+///   [RoomState.offline],轮播(如 bilibili live_status==2 / douyu
+///   videoLoop==1 / huya 录播循环)为 [RoomState.replay] —— 不靠统计
+///   数字推断在播;统计缺失为空(空串在转换边界归一为 `null`),
+///   有效 `'0'` 保留;
+/// * 房间不存在或上游报错直接抛异常(不得返回伪造的空房间记录);
 /// * 不做结果缓存:刷新本身就是为了拿最新状态。
+///
+/// 出口类型是统一的 [RoomRecord](统一契约 Task 5a):站点实现可以内部
+/// 构造 [RoomSummary],在方法出口用 `RoomRecord.fromSummary` 转换。
 ///
 /// 继承 [RoomResolver]:能力探测 `is` 的类型提升要求子类型关系(与
 /// [RoomRecoveryResolver] 同一约定);实现方通常也具备完整解析能力。
 abstract interface class RoomSummaryRefresher implements RoomResolver {
-  Future<RoomSummary> refreshRoomSummary(RoomRequest request);
+  Future<RoomRecord> refreshRoomSummary(RoomRequest request);
 }
 
 /// 栏目浏览:分类索引 + 分类/首页房间列表。
@@ -172,8 +175,8 @@ abstract interface class RefreshCapabilityProbe
 /// 统一站点抽象:九站与 Windows 消费层只认这一种站点入口。
 ///
 /// 迁移期约定(2026-09-24 Windows 统一契约):
-/// * [resolveRoom] 是唯一强制返回 [RoomRecord] 的出口;可选接口部件
-///   ([browse]/[search]/[danmaku]/[refresher]/[recovery])暂时沿用旧类型,
+/// * [resolveRoom] 与 [refresher] 返回 [RoomRecord];其余可选接口部件
+///   ([browse]/[search]/[danmaku]/[recovery])暂时沿用旧类型,
 ///   由后续任务逐个切换;
 /// * 不支持的能力部件返回 `null`(不是空列表/空连接),支持后请求失败
 ///   必须抛异常 —— [SiteCapabilities] 与部件是否存在保持一致,注册时用

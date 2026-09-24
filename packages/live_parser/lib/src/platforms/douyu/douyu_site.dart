@@ -7,6 +7,7 @@ import '../../http/danmaku_transport.dart';
 import '../../http/parser_http.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
+import '../../models/room_record.dart';
 import '../../registry/cached_room_resolver.dart';
 import '../../registry/site_display.dart';
 import '../../utils/format_online.dart';
@@ -67,7 +68,7 @@ class DouyuRoomResolver implements RoomResolver, RoomSummaryRefresher {
   /// 实时榜走弹幕 WS oni,此处仅取卡片回退值),`anchorLevel.dFansInfo.curDfansNum`
   /// 作第 3 列钻粉([RoomSummary.diamondFans],web `ROOM_STAT_COLUMNS.douyu`)。
   @override
-  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+  Future<RoomRecord> refreshRoomSummary(RoomRequest request) async {
     final parserHttp = _client.parserHttp;
     final url = normalizeDouyuUrl(request.roomIdOrUrl);
     final rid = await resolveRoomId(parserHttp, url);
@@ -102,7 +103,7 @@ class DouyuRoomResolver implements RoomResolver, RoomSummaryRefresher {
     // 分类名:mobile cate2Name 优先(web resolveDouyuFollowCategory 同源),
     // 回退 betard(BetardRoom 已把缺失的 cate_name 兜到 second_lvl_name)。
     final mobileCategory = jsonText(mobile['cate2Name']);
-    return RoomSummary(
+    return RoomRecord.fromSummary(RoomSummary(
       site: kDouyuSiteId,
       roomId: rid,
       title: mobileTitle.isNotEmpty
@@ -125,7 +126,7 @@ class DouyuRoomResolver implements RoomResolver, RoomSummaryRefresher {
       roomState: replay
           ? RoomState.replay
           : (live ? RoomState.live : RoomState.offline),
-    );
+    ));
   }
 
   /// getH5PlayV1 响应短缓存(60s):同房同档同 CDN 的探测/取流复用同一响应,

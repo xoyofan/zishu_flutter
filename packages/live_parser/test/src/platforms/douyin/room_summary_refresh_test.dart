@@ -59,23 +59,23 @@ void main() {
       followerCount: 456789,
     );
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'douyin', roomIdOrUrl: '123456'),
     );
 
-    expect(summary.site, 'douyin');
-    expect(summary.roomId, '123456');
-    expect(summary.title, '抖音测试直播间');
-    expect(summary.anchorName, '抖音主播');
-    expect(summary.category, '王者荣耀');
-    expect(summary.cid, '123456', reason: '抖音无二级分类 id,cid 即房间号');
-    expect(summary.online, '3.2万');
-    expect(summary.cover, contains('douyinpic.com'));
+    expect(record.site, 'douyin');
+    expect(record.roomId, '123456');
+    expect(record.title, '抖音测试直播间');
+    expect(record.anchorName, '抖音主播');
+    expect(record.category, '王者荣耀');
+    expect(record.cid, '123456', reason: '抖音无二级分类 id,cid 即房间号');
+    expect(record.audience, '3.2万');
+    expect(record.cover, contains('douyinpic.com'));
     // 头像取 enter 响应内 owner.avatar_thumb(web 快照同源,零额外请求)。
-    expect(summary.avatar, 'https://p3.douyinpic.com/avatar.jpg');
+    expect(record.avatar, 'https://p3.douyinpic.com/avatar.jpg');
     // 粉丝数取 enter 响应内 owner.follow_info(web 快照首选路径,零额外请求)。
-    expect(summary.followers, '456789');
-    expect(summary.vip, '');
+    expect(record.followers, '456789');
+    expect(record.vip, isNull);
 
     final urls = fake.requests.map((request) => request.url).join('\n');
     expect(urls, contains('enter'));
@@ -87,7 +87,6 @@ void main() {
 
     // 统一记录:fromSummary 映射刷新摘要已提供的统计真值(6sol 口径),
     // 且状态真源 roomState 必须随真实状态赋值(平台契约:status != 4 即在播)。
-    final record = RoomRecord.fromSummary(summary);
     expect(record.site, 'douyin');
     expect(record.roomId, '123456');
     expect(record.roomState, RoomState.live);
@@ -110,21 +109,21 @@ void main() {
         },
       };
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'douyin', roomIdOrUrl: '123456'),
     );
 
     // web ROOM_STAT_COLUMNS.douyin 第 3 列(tone=svip)field=vip「会员」
     // (follow/douyin-extras.ts 的 subscribe_info.member_count);
-    // 本包统一由 [RoomSummary.diamondFans] 承载。
-    expect(summary.diamondFans, '4567');
+    // 摘要由 [RoomSummary.diamondFans] 承载,统一记录出口为 [RoomRecord.svip]。
+    expect(record.svip, '4567');
     final urls = fake.requests.map((request) => request.url).join('\n');
     expect(urls, contains('/webcast/user/profile/'));
     expect(urls, contains('a_bogus='), reason: '资料卡接口需 a_bogus 签名');
     expect(urls, isNot(contains('partition')), reason: '刷新不得请求分区/列表接口');
 
     // diamondFans → svip:会员列真值经统一记录透传。
-    expect(RoomRecord.fromSummary(summary).svip, '4567');
+    expect(record.svip, '4567');
   });
 
   test('会员:资料卡协议原始零按平台契约留空,diamondFans 不伪造 0', () async {
@@ -139,12 +138,11 @@ void main() {
         },
       };
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'douyin', roomIdOrUrl: '123456'),
     );
 
-    expect(summary.diamondFans, '');
-    final record = RoomRecord.fromSummary(summary);
+    expect(record.svip, isNull);
     expect(record.svip, isNull, reason: '协议原始零不可信,统一记录不落伪造的 0');
     expect(record.audience, '3.2万', reason: '零值不影响其余统计');
   });
@@ -152,11 +150,11 @@ void main() {
   test('会员:未开播(status=4)不请求资料卡,diamondFans 留空', () async {
     fake.enterResponse = _enter(status: 4, online: 9999);
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'douyin', roomIdOrUrl: '123456'),
     );
 
-    expect(summary.diamondFans, '');
+    expect(record.svip, isNull);
     expect(
       fake.requests.map((request) => request.url).join('\n'),
       isNot(contains('/webcast/user/profile/')),
@@ -164,17 +162,15 @@ void main() {
     );
   });
 
-  test('未开播(status=4):online 为空串', () async {
+  test('未开播(status=4):audience 为 null', () async {
     fake.enterResponse = _enter(status: 4, online: 9999);
 
-    final summary = await resolver.refreshRoomSummary(
+    final record = await resolver.refreshRoomSummary(
       const RoomRequest(site: 'douyin', roomIdOrUrl: '123456'),
     );
 
-    expect(summary.online, '');
+    expect(record.audience, isNull);
 
-    // 协议带了热度(status=4)也不能当在播:契约空串 → 统一记录 null。
-    final record = RoomRecord.fromSummary(summary);
     expect(record.roomState, RoomState.offline);
     expect(
       record.audience,

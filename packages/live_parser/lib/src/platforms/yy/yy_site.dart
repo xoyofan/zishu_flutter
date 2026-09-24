@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import '../../contracts/contracts.dart';
 import '../../http/parser_http.dart';
 import '../../models/models.dart';
+import '../../models/room_record.dart';
 import '../../registry/cached_room_resolver.dart';
 import '../../registry/site_display.dart';
 import 'biz_names.dart';
@@ -57,7 +58,7 @@ class YyRoomResolver implements RoomResolver, RoomSummaryRefresher {
   /// 关注刷新保留旧状态,绝不把「热度未返回」伪造成 offline;
   /// 不为此调用取流/签名接口,也不引入 `RoomState.unknown`。
   @override
-  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+  Future<RoomRecord> refreshRoomSummary(RoomRequest request) async {
     final roomId = normalizeYyRoomId(request.roomIdOrUrl);
     var result = await fetchYyRoomDetail(_client.parserHttp, roomId);
     if (result.notFound) {
@@ -89,7 +90,7 @@ class YyRoomResolver implements RoomResolver, RoomSummaryRefresher {
       );
     }
     final totalViewer = detail?.totalViewer ?? '';
-    return RoomSummary(
+    return RoomRecord.fromSummary(RoomSummary(
       site: kYySiteId,
       roomId: roomId,
       title: detail == null
@@ -107,7 +108,7 @@ class YyRoomResolver implements RoomResolver, RoomSummaryRefresher {
       // 状态真源:totalViewer 命中即在播(web 同口径),data=null 为明确离线;
       // 两者皆无的情况已在上方抛错,不从统计缺失推断离线。
       roomState: detail == null ? RoomState.offline : RoomState.live,
-    );
+    ));
   }
 
   @override
