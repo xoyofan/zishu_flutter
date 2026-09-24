@@ -22,13 +22,27 @@ String formatExactCount(Object? count) {
 
 /// [formatOnlineCount] 的逆运算:把「1.2万 / 3.4千 / 1234」还原为整数,用于跨站热度排序。
 /// 无法解析或为空一律返回 0,保证排序稳定。
-int parseOnlineCount(Object? count) {
+///
+/// 需要区分「合法的 0」与「缺失/不可解析」时用 [tryParseOnlineCount];
+/// 本函数是其 `?? 0` 的兼容包装,两老共用同一个私有 parser,不会漂移。
+int parseOnlineCount(Object? count) => tryParseOnlineCount(count) ?? 0;
+
+/// [parseOnlineCount] 的可空变体:合法数值(**含 0**)→ int;
+/// 空串 / null / 不可解析 → null。
+///
+/// 排序等调用方需要把「缺失沉底」与「合法零参与数值序」分开时用本函数
+/// (关注列表档内观看数排序,审阅口径 2026-09-24)。解析规则与
+/// [parseOnlineCount] 同一份实现([_parseOnlineCountOrNull])。
+int? tryParseOnlineCount(Object? count) => _parseOnlineCountOrNull(count);
+
+/// 唯一解析实现:返回 null 表示空/不可解析,合法数值(含 0)返回 int。
+int? _parseOnlineCountOrNull(Object? count) {
   final text = '${count ?? ''}'.trim().replaceAll(',', '');
-  if (text.isEmpty) return 0;
+  if (text.isEmpty) return null;
   final match = RegExp(r'^([\d.]+)\s*([万千wk]?)$').firstMatch(text.toLowerCase());
-  if (match == null) return 0;
+  if (match == null) return null;
   final value = double.tryParse(match.group(1)!);
-  if (value == null) return 0;
+  if (value == null) return null;
   return switch (match.group(2)) {
     '万' || 'w' => (value * 10000).round(),
     '千' || 'k' => (value * 1000).round(),
