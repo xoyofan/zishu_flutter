@@ -6,6 +6,14 @@ import 'package:test/test.dart';
 
 import '../../../support/fake_twitch_api.dart';
 
+/// 统一站点出口:注册项(含 CachedRoomResolver 包装)装配进 [SiteRegistry]
+/// 后,经 `registry.site('twitch')` 验证 LiveSite 适配层的 RoomRecord 映射。
+LiveSite _liveSite(FakeTwitchApi fake) {
+  final registry = SiteRegistry()
+    ..register(buildTwitchRegistration(httpClient: fake));
+  return registry.site('twitch')!;
+}
+
 void main() {
   late FakeTwitchApi api;
 
@@ -234,6 +242,98 @@ https://usher.example/v1/playlist/720p60.m3u8
     });
   });
 
+  group('LiveSite 统一出口:registry.site(twitch).resolveRoom → RoomRecord', () {
+    test('在播:类型/身份/线路稳定段与 headers 透传;统计字段为 null', () async {
+      final room = await _liveSite(api).resolveRoom(
+        const RoomRequest(
+          site: 'twitch',
+          roomIdOrUrl: 'https://www.twitch.tv/FPS_Shaka',
+        ),
+      );
+
+      expect(room, isA<RoomRecord>());
+      expect(room.site, 'twitch');
+      expect(room.roomId, 'fps_shaka');
+      expect(room.sourceUrl, 'https://www.twitch.tv/fps_shaka');
+      expect(room.roomState, RoomState.live);
+      expect(room.isLive, isTrue);
+      expect(room.title, 'SAVOGE RUST Day3');
+      expect(room.anchorName, 'fps_shaka');
+      expect(room.category, '失控进化-RUST');
+      expect(room.cid, '263490');
+      expect(room.source, 'live_parser/twitch');
+
+      // 线路:锁定既有 fixture usher_master.m3u8 真值的稳定 URL 段,
+      // 防止适配层把线路换成别的非空值仍通过。
+      expect(room.streams, hasLength(5));
+      expect(room.streams.first.name, '480p');
+      expect(
+        room.streams.first.lines.single.url,
+        'https://usher.example/v1/playlist/480p30.m3u8',
+      );
+      expect(
+        room.streams.skip(1).every((stream) => stream.lines.isNotEmpty),
+        isTrue,
+        reason: '其余档位保留 master m3u8 里已有的 media playlist 地址',
+      );
+      expect(room.streams.first.lines.single.format, 'hls');
+      expect(
+        room.streams.first.lines.single.headers['Referer'],
+        'https://www.twitch.tv/',
+      );
+      expect(room.playUrl, 'https://usher.example/v1/playlist/480p30.m3u8');
+
+      // 6sol 口径:RoomPayload 没有统计字段,详情出口统计必须为
+      // null,不伪造 0/空串。
+      expect(room.audience, isNull);
+      expect(room.followers, isNull);
+      expect(room.vip, isNull);
+      expect(room.svip, isNull);
+    });
+
+    test('未开播:offline、无线路、空资料归一为 null、统计 null', () async {
+      api.useLiveResponse = twitchFixtureData('use_live_offline.json')['user'];
+      final room = await _liveSite(api).resolveRoom(
+        const RoomRequest(site: 'twitch', roomIdOrUrl: 'shroud'),
+      );
+
+      expect(room, isA<RoomRecord>());
+      expect(room.site, 'twitch');
+      expect(room.roomId, 'shroud');
+      expect(room.roomState, RoomState.offline);
+      expect(room.isLive, isFalse);
+      expect(room.anchorName, 'shroud');
+      expect(
+        room.title,
+        isNull,
+        reason: 'RoomPayload 空串经统一记录归一为 null',
+      );
+      expect(room.streams, isEmpty);
+      expect(room.playUrl, isEmpty);
+      expect(room.audience, isNull);
+      expect(room.followers, isNull);
+      expect(room.vip, isNull);
+      expect(room.svip, isNull);
+    });
+
+    test('主播不存在:notFound 语义、统计 null', () async {
+      api.useLiveResponse = twitchFixtureData('use_live_missing.json')['user'];
+      final room = await _liveSite(api).resolveRoom(
+        const RoomRequest(site: 'twitch', roomIdOrUrl: 'nobody_zzz'),
+      );
+
+      expect(room, isA<RoomRecord>());
+      expect(room.roomState, RoomState.notFound);
+      expect(room.error, '主播不存在');
+      expect(room.title, isNull);
+      expect(room.streams, isEmpty);
+      expect(room.audience, isNull);
+      expect(room.followers, isNull);
+      expect(room.vip, isNull);
+      expect(room.svip, isNull);
+    });
+  });
+
   group('状态刷新(RoomSummaryRefresher)', () {
     test('在播:回填标题/分类/封面与观看数文案,roomId 归一为 login', () async {
       final summary = await TwitchRoomResolver(clientFor()).refreshRoomSummary(
@@ -255,6 +355,16 @@ https://usher.example/v1/playlist/720p60.m3u8
         summary.avatar,
         'https://static-cdn.jtvnw.net/jtv_user_pictures/fps-shaka-profile-300x300.png',
       );
+
+      // 统一记录:fromSummary 映射刷新摘要已提供的统计真值(6sol 口径);
+      // Twitch 刷新不下发 followers/vip/svip → null,不编造数字。
+      final record = RoomRecord.fromSummary(summary);
+      expect(record.site, 'twitch');
+      expect(record.roomId, 'fps_shaka');
+      expect(record.audience, '2.3万', reason: 'viewersCount 22942 → online 透传');
+      expect(record.followers, isNull);
+      expect(record.vip, isNull);
+      expect(record.svip, isNull);
     });
 
     test('未开播:online 必须为空串(宿主以 online 非空为在播判据)', () async {
@@ -270,6 +380,13 @@ https://usher.example/v1/playlist/720p60.m3u8
         summary.avatar,
         'https://static-cdn.jtvnw.net/jtv_user_pictures/shroud-profile-300x300.png',
       );
+
+      // 离线 online 空串 → audience null;统计缺项保持 null,不伪造 0。
+      final record = RoomRecord.fromSummary(summary);
+      expect(record.audience, isNull);
+      expect(record.followers, isNull);
+      expect(record.vip, isNull);
+      expect(record.svip, isNull);
     });
 
     test('主播不存在:抛异常,不返回伪造资料', () async {

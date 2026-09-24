@@ -57,6 +57,18 @@ void main() {
       expect(result.rooms.first.cover, contains('640x360'));
       expect(result.rooms.first.online, '2.5万');
       expect(result.hasMore, isFalse, reason: '结果不足 limit 即无更多');
+
+      // 统一记录:fromSummary 映射列表已提供的统计真值(audience);上游
+      // 列表没有 followers/vip/svip → 保持 null,不编造数字。
+      // 注意:roomState 的批量默认 offline 是 Task 4 范围(6sol 裁决),
+      // 本测试不断言。
+      final record = RoomRecord.fromSummary(result.rooms.first);
+      expect(record.site, 'twitch');
+      expect(record.roomId, 'kato_junichi0817');
+      expect(record.audience, '2.5万');
+      expect(record.followers, isNull);
+      expect(record.vip, isNull);
+      expect(record.svip, isNull);
     });
 
     test('分类房间走 game(id:) 并带上 cid', () async {
