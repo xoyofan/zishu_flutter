@@ -31,6 +31,22 @@ class UnsupportedSiteFeature implements Exception {
   String toString() => '站点 $site 不支持 $feature';
 }
 
+/// 聚合浏览本轮所有实际请求的来源都全部失败时抛出。
+///
+/// 用于区分「确实没有房间」的空结果与「请求全挂了」的错误态:
+/// 至少一站成功(即使成功结果为空)时不抛,部分失败继续隔离。
+class CrossBrowseAllSourcesFailed implements Exception {
+  const CrossBrowseAllSourcesFailed(this.failures);
+
+  /// 站点 id -> 该站本轮的原始失败原因,便于逐站诊断。
+  final Map<String, Object> failures;
+
+  @override
+  String toString() =>
+      '全平台浏览失败: ${failures.length} 个来源本轮全部失败; '
+      '${failures.entries.map((e) => '${e.key}: ${e.value}').join('; ')}';
+}
+
 /// 占位 resolver:聚合站点没有自己的房间接口,解析必须落到具体平台。
 class UnsupportedRoomResolver implements RoomResolver {
   const UnsupportedRoomResolver(this.site);
@@ -127,9 +143,19 @@ class CrossBrowseRepository implements BrowseRepository {
       );
     }
 
+    // 本轮所有实际请求的来源都失败时抛聚合错,不能伪装成成功空列表。
+    final failures = <String, Object>{
+      for (final result in results)
+        if (result.error != null) result.site: result.error!,
+    };
+    if (failures.length == targets.length) {
+      throw CrossBrowseAllSourcesFailed(Map.unmodifiable(failures));
+    }
+
     var hasMore = false;
     final buckets = <List<RoomSummary>>[];
     for (final result in results) {
+      if (result.error != null) continue; // 部分失败隔离:失败站本轮空缺。
       if (result.hasMore) hasMore = true;
       if (result.rooms.isNotEmpty) buckets.add(result.rooms);
     }
@@ -183,9 +209,10 @@ class CrossBrowseRepository implements BrowseRepository {
                 )
                 .toList(growable: false);
       return _SiteRooms(site: site, rooms: rooms, hasMore: result.hasMore);
-    } on Object {
-      // 单平台失败隔离:该站本轮空缺,其余平台照常展示。
-      return _SiteRooms(site: site, rooms: const [], hasMore: false);
+    } on Object catch (error) {
+      // 单平台失败隔离:记录原始错误,该站本轮空缺,其余平台照常展示;
+      // 若全部来源都失败,由 fetchRooms 统一抛出。
+      return _SiteRooms(site: site, rooms: const [], hasMore: false, error: error);
     }
   }
 
@@ -244,9 +271,17 @@ SiteRegistration buildCrossRegistration({
 );
 
 class _SiteRooms {
-  const _SiteRooms({required this.site, required this.rooms, required this.hasMore});
+  const _SiteRooms({
+    required this.site,
+    required this.rooms,
+    required this.hasMore,
+    this.error,
+  });
 
   final String site;
   final List<RoomSummary> rooms;
   final bool hasMore;
+
+  /// 该站本轮的原始失败原因;非 null 表示请求失败而非空结果。
+  final Object? error;
 }

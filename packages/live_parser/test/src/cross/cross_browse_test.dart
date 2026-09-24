@@ -129,6 +129,68 @@ void main() {
     });
   });
 
+  group('全平台失败与空结果语义', () {
+    test('全部实际来源失败时抛可诊断聚合异常,不返回成功空列表', () async {
+      final registry = _registryWith(browses: {
+        'douyu': FakeBrowseRepository(site: 'douyu', fail: true),
+        'huya': FakeBrowseRepository(site: 'huya', fail: true),
+        'bilibili': FakeBrowseRepository(site: 'bilibili', fail: true),
+      });
+
+      await expectLater(
+        registry['all']!.browse!.fetchRooms(
+          const RoomListRequest(site: 'all'),
+        ),
+        throwsA(
+          isA<CrossBrowseAllSourcesFailed>()
+              .having((e) => e.failures.keys.toSet(), 'failures.keys',
+                  {'douyu', 'huya', 'bilibili'})
+              .having((e) => e.failures.values,
+                  '每站保留原始失败原因',
+                  everyElement(isA<ParserHttpException>())),
+        ),
+      );
+    });
+
+    test('部分失败仍隔离:至少一站成功即正常返回,不抛错', () async {
+      final registry = _registryWith(browses: {
+        'douyu': FakeBrowseRepository(site: 'douyu', fail: true),
+        'huya': FakeBrowseRepository(site: 'huya', rooms: [fakeRoom('huya', 'h1')]),
+        'bilibili': FakeBrowseRepository(site: 'bilibili', fail: true),
+      });
+
+      final result = await registry['all']!.browse!.fetchRooms(
+        const RoomListRequest(site: 'all'),
+      );
+      expect(result.rooms.map((r) => r.roomId).toList(), ['h1']);
+      expect(result.hasMore, isFalse);
+    });
+
+    test('成功但空是正常空结果,不抛错;hasMore 仍来自成功来源', () async {
+      final registry = _registryWith(browses: {
+        'douyu': FakeBrowseRepository(site: 'douyu', rooms: const []),
+        'huya': FakeBrowseRepository(site: 'huya', rooms: const [], hasMore: true),
+      }, siteIds: ['douyu', 'huya']);
+
+      final result = await registry['all']!.browse!.fetchRooms(
+        const RoomListRequest(site: 'all'),
+      );
+      expect(result.rooms, isEmpty);
+      expect(result.hasMore, isTrue, reason: '成功来源的 hasMore 不被空结果吞掉');
+      expect(result.page, 1);
+    });
+
+    test('0 个可用来源仍返回空,不制造异常', () async {
+      final registry = _registryWith(browses: const {}, siteIds: ['douyu']);
+
+      final result = await registry['all']!.browse!.fetchRooms(
+        const RoomListRequest(site: 'all'),
+      );
+      expect(result.rooms, isEmpty);
+      expect(result.hasMore, isFalse);
+    });
+  });
+
   group('跨平台分类房间', () {
     test('按 cross key 过滤,并用平台原生 cid 拉取', () async {
       final douyu = FakeBrowseRepository(
