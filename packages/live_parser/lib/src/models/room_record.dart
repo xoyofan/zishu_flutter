@@ -32,7 +32,12 @@ sealed class RoomExtension {
 
 /// 统一房间记录:九站与 Windows 消费层共享的同一种房间值对象。
 class RoomRecord {
-  const RoomRecord({
+  /// 不可变记录:构造时在边界深冻结 —— 外部传入的 [streams]、每个
+  /// [StreamQuality.lines] 与 [StreamLine.headers]、[availableQualities]
+  /// 外层均复制为不可变集合,事后改写任何外部持有者不得影响已构造
+  /// 记录的 playUrl 与网络 headers(规格 §3.1)。非 const 构造(const
+  /// 构造器无法在初始化列表中做复制)。
+  RoomRecord({
     required this.site,
     required this.roomId,
     required this.roomState,
@@ -50,13 +55,14 @@ class RoomRecord {
     this.cateNo,
     this.promoTag,
     this.startedAt,
-    this.streams = const [],
-    this.availableQualities = const [],
+    List<StreamQuality> streams = const [],
+    List<QualityOption> availableQualities = const [],
     this.source,
     this.fetchedAt,
     this.error,
     this.extension,
-  });
+  }) : streams = _freezeStreams(streams),
+       availableQualities = List.unmodifiable(availableQualities);
 
   final String site;
   final String roomId;
@@ -320,6 +326,26 @@ class RoomRecord {
   /// 空串视作“未提供”归一为 null;有效 `'0'` 保留。
   static String? _blankToNull(String? value) =>
       (value == null || value.isEmpty) ? null : value;
+
+  /// 构造边界深冻结:外层列表与每个档位的 lines、每条线路的 headers
+  /// 均复制为不可变;QualityOption 为纯值对象仅冻结外层。
+  static List<StreamQuality> _freezeStreams(List<StreamQuality> streams) =>
+      List.unmodifiable([
+        for (final quality in streams)
+          StreamQuality(
+            name: quality.name,
+            rate: quality.rate,
+            lines: List.unmodifiable([
+              for (final line in quality.lines)
+                StreamLine(
+                  name: line.name,
+                  url: line.url,
+                  format: line.format,
+                  headers: Map.unmodifiable(line.headers),
+                ),
+            ]),
+          ),
+      ]);
 
   static RoomState _roomStateFromJson(Map<String, dynamic> json) {
     final raw = json['roomState']?.toString();

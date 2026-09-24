@@ -267,7 +267,11 @@ void main() {
       expect(merged.isLive, isFalse);
       expect(merged.title, '标题');
       expect(merged.audience, '100');
-      expect(merged.streams, const [quality]);
+      expect(
+        merged.streams.single.toJson(),
+        quality.toJson(),
+        reason: '刷新未提供线路时保留旧线路(结构相等;冻结复制不保身份)',
+      );
       expect(merged.fetchedAt, DateTime(2026, 9, 24));
     });
   });
@@ -397,6 +401,47 @@ void main() {
     });
   });
 
+  group('RoomRecord 不可变冻结', () {
+    test('外部改写传入的 streams/lines/headers 不影响已构造记录', () {
+      final headers = <String, String>{'Referer': 'https://r/'};
+      final lines = <StreamLine>[
+        StreamLine(
+          name: '线路1',
+          url: 'https://a/flv',
+          format: 'flv',
+          headers: headers,
+        ),
+      ];
+      final quality = StreamQuality(name: '原画', rate: 10000, lines: lines);
+      final streams = <StreamQuality>[quality];
+      final room = RoomRecord(
+        site: 'douyu',
+        roomId: '1',
+        roomState: RoomState.live,
+        streams: streams,
+      );
+      final before = room.playUrl;
+      expect(before, 'https://a/flv');
+
+      // 模拟外部持有者事后改写三层可变集合。
+      streams.clear();
+      lines.clear();
+      headers['Referer'] = 'https://evil/';
+
+      expect(room.playUrl, before, reason: '外部列表改写不得改变已构造记录的播放地址');
+      expect(
+        room.streams.single.lines.single.headers['Referer'],
+        'https://r/',
+        reason: '外部 headers 改写不得渗入记录的网络请求头',
+      );
+      expect(
+        () => room.streams.add(quality),
+        throwsUnsupportedError,
+        reason: '记录暴露的 streams 列表本身也不可改写',
+      );
+    });
+  });
+
   group('RoomRecord 播放只读行为', () {
     const hd = StreamQuality(
       name: '蓝光10M',
@@ -431,11 +476,15 @@ void main() {
     });
 
     test('qualityByName 与 RoomPayload 同语义:精确、双向包含、回退首选档', () {
-      expect(room.qualityByName('超清'), sd);
-      expect(room.qualityByName('超'), sd);
-      expect(room.qualityByName(null), hd);
-      expect(room.qualityByName(''), hd);
-      expect(room.qualityByName('不存在'), hd);
+      expect(
+        room.qualityByName('超清')?.toJson(),
+        sd.toJson(),
+        reason: '冻结复制后按结构相等检验档位(不保实例身份)',
+      );
+      expect(room.qualityByName('超')?.toJson(), sd.toJson());
+      expect(room.qualityByName(null)?.toJson(), hd.toJson());
+      expect(room.qualityByName('')?.toJson(), hd.toJson());
+      expect(room.qualityByName('不存在')?.toJson(), hd.toJson());
       expect(
         RoomRecord(
           site: 'douyu',
