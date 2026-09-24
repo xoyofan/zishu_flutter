@@ -85,6 +85,16 @@ void main() {
     expect(urls, isNot(contains('getEncryption')), reason: '刷新不得取白名单密钥');
     expect(urls, isNot(contains('getH5PlayV1')), reason: '刷新不得请求取流接口');
     expect(urls, isNot(contains('hlsH5Preview')), reason: '刷新不得请求预览流');
+
+    // 统一记录:fromSummary 映射刷新摘要已提供的统计真值(6sol 口径)。
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.site, 'douyu');
+    expect(record.roomId, '9527');
+    expect(record.roomState, RoomState.live);
+    expect(record.audience, '1.2万');
+    expect(record.followers, '123456');
+    expect(record.vip, '321');
+    expect(record.svip, '678', reason: 'diamondFans → svip');
   });
 
   test('资料卡缺失/非 JSON:followers/vip 留空,刷新本身不失败', () async {
@@ -106,6 +116,13 @@ void main() {
     expect(summary.followers, '', reason: '统计是展示增强,拿不到就留空');
     expect(summary.vip, '');
     expect(summary.diamondFans, '');
+
+    // 旧口径空串经统一记录归一为 null,不伪造 0。
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.audience, '5千');
+    expect(record.followers, isNull);
+    expect(record.vip, isNull);
+    expect(record.svip, isNull);
   });
 
   test('分类:mobile cate2Name 优先;betard 无 cate_name 时兜 second_lvl_name', () async {
@@ -170,6 +187,10 @@ void main() {
     expect(summary.title, '离线房间');
     expect(summary.online, '', reason: '契约:空串即未开播,宿主据此判在播');
     expect(summary.roomState, RoomState.offline);
+
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.roomState, RoomState.offline);
+    expect(record.audience, isNull, reason: '离线热度空串 → null');
   });
 
   test('轮播(videoLoop=1):roomState=replay,online 契约同离线为空串', () async {
@@ -192,6 +213,11 @@ void main() {
     expect(summary.roomState, RoomState.replay);
     expect(summary.isLive, isFalse, reason: 'online 为空,不进侧栏在播判据');
     expect(summary.online, '', reason: '轮播不是实时直播,热度归空串');
+
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.roomState, RoomState.replay);
+    expect(record.isReplay, isTrue);
+    expect(record.audience, isNull);
   });
 
   test('移动端房间信息缺失:title 回退 betard,online 允许为空', () async {

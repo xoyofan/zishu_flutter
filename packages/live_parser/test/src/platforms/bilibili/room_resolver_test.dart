@@ -61,6 +61,13 @@ class BiliHarness {
       BilibiliRoomResolver(BilibiliClient(httpClient: fake));
 }
 
+/// 统一站点出口:把已注入 fake 的注册项装配进 [SiteRegistry],经
+/// `registry.site('bilibili')` 验证 LiveSite 适配层的 RoomRecord 映射。
+LiveSite _liveSite(BiliHarness harness) {
+  final registry = SiteRegistry()..register(harness.registration);
+  return registry.site('bilibili')!;
+}
+
 void main() {
   test('在播:accept_qn 全档列出,实给档真实线路放首位,其余档空线路占位', () async {
     final harness = BiliHarness();
@@ -229,5 +236,81 @@ void main() {
       const RoomRequest(site: 'bilibili', roomIdOrUrl: 'https://live.bilibili.com/blanc/9527'),
     );
     expect(payload.roomId, '9527');
+  });
+
+  group('LiveSite 统一出口:registry.site(bilibili).resolveRoom → RoomRecord', () {
+    test('在播:类型/状态/线路/headers 透传;统计字段为 null', () async {
+      final harness = BiliHarness();
+
+      final room = await _liveSite(harness).resolveRoom(
+        const RoomRequest(site: 'bilibili', roomIdOrUrl: '9527'),
+      );
+
+      expect(room, isA<RoomRecord>());
+      expect(room.site, 'bilibili');
+      expect(room.roomId, '9527');
+      expect(room.roomState, RoomState.live);
+      expect(room.isLive, isTrue);
+      expect(room.title, 'B站测试房间');
+
+      // 线路与播放请求头经统一记录透传(CDN 防盗链 Referer/Origin)。
+      expect(room.streams, isNotEmpty);
+      final line = room.streams.first.lines.first;
+      expect(line.url, isNotEmpty);
+      expect(line.headers['referer'], 'https://live.bilibili.com/');
+      expect(line.headers['origin'], 'https://live.bilibili.com');
+      expect(room.playUrl, room.streams.first.preferredLine?.url);
+
+      // 6sol 口径:RoomPayload 没有统计字段,详情出口统计为 null。
+      expect(room.audience, isNull);
+      expect(room.followers, isNull);
+      expect(room.vip, isNull);
+      expect(room.svip, isNull);
+    });
+
+    test('未开播:offline、不取流、统计 null', () async {
+      final harness = BiliHarness()
+        ..fake.roomInfoResponse = _json('room_info_offline.json');
+
+      final room = await _liveSite(harness).resolveRoom(
+        const RoomRequest(site: 'bilibili', roomIdOrUrl: '9528'),
+      );
+
+      expect(room, isA<RoomRecord>());
+      expect(room.roomState, RoomState.offline);
+      expect(room.isLive, isFalse);
+      expect(room.streams, isEmpty);
+      expect(room.playUrl, isEmpty);
+      expect(room.audience, isNull);
+      expect(room.followers, isNull);
+      expect(room.vip, isNull);
+      expect(room.svip, isNull);
+    });
+
+    test('轮播(live_status=2):replay 状态经统一记录透传、无线路', () async {
+      // 在播 fixture 上只改 live_status → 2:其余字段与真实响应同形。
+      final info = Map<String, Object?>.of(
+        _json('room_info_live.json')! as Map<String, Object?>,
+      );
+      final data = Map<String, Object?>.of(info['data']! as Map<String, Object?>)
+        ..['live_status'] = 2;
+      info['data'] = data;
+      final harness = BiliHarness()..fake.roomInfoResponse = info;
+
+      final room = await _liveSite(harness).resolveRoom(
+        const RoomRequest(site: 'bilibili', roomIdOrUrl: '9527'),
+      );
+
+      expect(room, isA<RoomRecord>());
+      expect(room.roomState, RoomState.replay);
+      expect(room.isReplay, isTrue);
+      expect(room.isLive, isFalse);
+      expect(room.streams, isEmpty);
+      expect(
+        harness.fake.requests.any((r) => r.url.contains('play_info')),
+        isFalse,
+      );
+      expect(room.audience, isNull);
+    });
   });
 }

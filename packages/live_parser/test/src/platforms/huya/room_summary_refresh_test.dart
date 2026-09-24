@@ -105,6 +105,16 @@ void main() {
       isTrue,
       reason: '刷新不得请求播放页/签名接口:${fake.requests.map((r) => r.url).toList()}',
     );
+
+    // 统一记录:fromSummary 映射刷新摘要已提供的统计真值(6sol 口径)。
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.site, 'huya');
+    expect(record.roomId, '9527');
+    expect(record.roomState, RoomState.live);
+    expect(record.audience, '12.3万');
+    expect(record.followers, '98765');
+    expect(record.vip, isNull, reason: 'wup 不可达空串 → null,不伪造 0');
+    expect(record.svip, isNull);
   });
 
   test('在播且 wup 可用:vip 取 getVipBarList 的贵宾总数', () async {
@@ -121,6 +131,7 @@ void main() {
       hasLength(1),
       reason: '在播时恰好一次贵宾查询',
     );
+    expect(RoomRecord.fromSummary(summary).vip, '75');
     expect(
       fake.wupFuncNames,
       unorderedEquals(<String>[
@@ -151,6 +162,10 @@ void main() {
     );
     expect(summary.vip, '75');
     expect(summary.toJson()['diamondFans'], '1300');
+
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.vip, '75');
+    expect(record.svip, '1300', reason: 'diamondFans → svip');
   });
 
   test('在播但超粉为 0:diamondFans 留空(数据诚实性,不伪造 0)', () async {
@@ -167,6 +182,11 @@ void main() {
 
     expect(summary.diamondFans, '');
     expect(summary.toJson().containsKey('diamondFans'), isFalse, reason: '空串不写 JSON');
+    expect(
+      RoomRecord.fromSummary(summary).svip,
+      isNull,
+      reason: '超粉为 0 时统一记录保持 null,不回填 0',
+    );
   });
 
   test('在播但超粉接口只给 panel 时:diamondFans 回退 rankPanel', () async {
@@ -240,6 +260,12 @@ void main() {
       reason: 'web fetchHuyaSnapshot 仅 isLive 时查询贵宾/超粉',
     );
     expect(fake.wupFuncNames, isEmpty);
+
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.roomState, RoomState.offline);
+    expect(record.audience, isNull);
+    expect(record.vip, isNull);
+    expect(record.svip, isNull);
   });
 
   test('录播(replay):roomState=replay,online 契约同离线为空串', () async {
@@ -264,6 +290,11 @@ void main() {
       reason: '轮播同样不查 wup(仅 isLive)',
     );
     expect(fake.wupFuncNames, isEmpty);
+
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.roomState, RoomState.replay);
+    expect(record.isReplay, isTrue);
+    expect(record.audience, isNull);
   });
 
   test('离线补 roomState:OFF 且无流时 roomState=offline', () async {

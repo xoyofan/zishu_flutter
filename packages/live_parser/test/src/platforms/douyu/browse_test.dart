@@ -62,6 +62,22 @@ void main() {
 
     expect(result.rooms[1].promoTag, '贵族', reason: 'vipId>0 兜底角标');
     expect(result.rooms[1].online, '999');
+
+    // 列表来自 RoomSummary:统一记录只映射已提供的统计(audience),
+    // 上游列表没有 followers/vip/svip → 保持 null,不编造数字。
+    final record = RoomRecord.fromSummary(first);
+    expect(record.site, 'douyu');
+    expect(record.roomId, '111');
+    expect(record.audience, '10.2万');
+    expect(record.promoTag, '官方赛况');
+    expect(record.followers, isNull);
+    expect(record.vip, isNull);
+    expect(record.svip, isNull);
+    expect(
+      RoomRecord.fromSummary(result.rooms[1]).audience,
+      '999',
+      reason: '精确值原样保留',
+    );
   });
 
   test('首页列表:0_0 mixList', () async {

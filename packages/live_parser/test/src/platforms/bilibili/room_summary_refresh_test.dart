@@ -78,6 +78,16 @@ void main() {
     final urls = fake.requests.map((request) => request.url).join('\n');
     expect(urls, contains('get_info'));
     expect(urls, isNot(contains('play_info')), reason: '刷新不得请求取流接口');
+
+    // 统一记录:fromSummary 映射刷新摘要已提供的统计真值(6sol 口径)。
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.site, 'bilibili');
+    expect(record.roomId, '9527');
+    expect(record.roomState, RoomState.live);
+    expect(record.audience, '1.2万');
+    expect(record.followers, '654321');
+    expect(record.vip, isNull, reason: 'B 站 vip 列本就为空 → null');
+    expect(record.svip, isNull, reason: '未请求大航海时缺值 → null');
   });
 
   test('头像:get_info 缺 face 时回退 anchor 接口头像(与 resolveRoom 同口径)', () async {
@@ -126,6 +136,11 @@ void main() {
     final urls = fake.requests.map((request) => request.url).join('\n');
     expect(urls, contains('guardTab/topList'));
     expect(urls, isNot(contains('play_info')), reason: '刷新不得请求取流接口');
+    expect(
+      RoomRecord.fromSummary(summary).svip,
+      '128',
+      reason: 'diamondFans → svip',
+    );
   });
 
   test('大航海:离线不请求 guardTab,diamondFans 留空', () async {
@@ -154,6 +169,10 @@ void main() {
 
     expect(summary.diamondFans, '');
     expect(summary.online, '1.2万', reason: '大航海失败不影响其余字段');
+
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.svip, isNull, reason: '大航海失败空串 → null,不伪造');
+    expect(record.audience, '1.2万');
   });
 
   test('离线(live_status=0):online 为空串,roomState=offline', () async {
@@ -165,6 +184,11 @@ void main() {
 
     expect(summary.online, '');
     expect(summary.roomState, RoomState.offline);
+
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.roomState, RoomState.offline);
+    expect(record.audience, isNull, reason: '离线热度空串 → null');
+    expect(record.followers, isNull, reason: '离线未提供 attention → null');
   });
 
   test('轮播(live_status=2):roomState=replay,online 契约同离线为空串', () async {
@@ -179,6 +203,11 @@ void main() {
     expect(summary.roomState, RoomState.replay);
     expect(summary.isLive, isFalse, reason: 'online 为空,不进侧栏在播判据');
     expect(summary.online, '');
+
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.roomState, RoomState.replay);
+    expect(record.isReplay, isTrue);
+    expect(record.audience, isNull);
   });
 
   test('房间不存在(code=1):抛异常', () async {

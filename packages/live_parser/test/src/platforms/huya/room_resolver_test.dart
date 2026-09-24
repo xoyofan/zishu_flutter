@@ -35,6 +35,13 @@ class HuyaHarness {
   }
 }
 
+/// 统一站点出口:把已注入 fake 的注册项装配进 [SiteRegistry],经
+/// `registry.site('huya')` 验证 LiveSite 适配层的 RoomRecord 映射。
+LiveSite _liveSite(HuyaHarness harness) {
+  final registry = SiteRegistry()..register(harness.registration);
+  return registry.site('huya')!;
+}
+
 void main() {
   group('虎牙房间解析', () {
     test('在播:多 CDN 多画质 HLS/FLV 线路', () async {
@@ -159,6 +166,55 @@ void main() {
         harness.resolver.resolveRoom(_request('https://www.douyu.com/9527')),
         throwsA(isA<ParserHttpException>()),
       );
+    });
+  });
+
+  group('LiveSite 统一出口:registry.site(huya).resolveRoom → RoomRecord', () {
+    test('在播:类型/状态/线路/headers 透传;统计字段为 null', () async {
+      final harness = HuyaHarness()..loadLiveRoom();
+
+      final room = await _liveSite(harness).resolveRoom(_request('9527'));
+
+      expect(room, isA<RoomRecord>());
+      expect(room.site, 'huya');
+      expect(room.roomId, '9527');
+      expect(room.roomState, RoomState.live);
+      expect(room.isLive, isTrue);
+      expect(room.title, '虎牙测试房间');
+      expect(room.sourceUrl, 'https://www.huya.com/9527');
+
+      // 线路与播放请求头经统一记录透传(防盗链 Referer/Origin)。
+      expect(room.streams, isNotEmpty);
+      final line = room.streams.first.lines.first;
+      expect(line.url, isNotEmpty);
+      expect(line.headers['referer'], 'https://www.huya.com/9527');
+      expect(line.headers['origin'], 'https://www.huya.com');
+      expect(room.playUrl, room.streams.first.preferredLine?.url);
+
+      // 6sol 口径:RoomPayload 没有统计字段,详情出口统计为 null。
+      expect(room.audience, isNull);
+      expect(room.followers, isNull);
+      expect(room.vip, isNull);
+      expect(room.svip, isNull);
+    });
+
+    test('未开播:offline、无线路、统计 null', () async {
+      final harness = HuyaHarness()
+        ..fake.webRoomHtml = _fixture('room_offline.html')
+        ..fake.profileRoomResponse = _jsonFixture('profile_room_offline.json');
+
+      final room = await _liveSite(harness).resolveRoom(_request('9527'));
+
+      expect(room, isA<RoomRecord>());
+      expect(room.roomState, RoomState.offline);
+      expect(room.isLive, isFalse);
+      expect(room.streams, isEmpty);
+      expect(room.availableQualities, isEmpty);
+      expect(room.playUrl, isEmpty);
+      expect(room.audience, isNull);
+      expect(room.followers, isNull);
+      expect(room.vip, isNull);
+      expect(room.svip, isNull);
     });
   });
 }

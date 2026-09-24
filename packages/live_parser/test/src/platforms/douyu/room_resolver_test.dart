@@ -20,6 +20,14 @@ Future<(DouyuRoomResolver, FakeDouyuApi)> _makeResolver({
   return (DouyuRoomResolver(DouyuClient(httpClient: fake)), fake);
 }
 
+/// 统一站点出口:注册项(含 CachedRoomResolver 包装)装配进 [SiteRegistry]
+/// 后,经 `registry.site('douyu')` 验证 LiveSite 适配层的 RoomRecord 映射。
+LiveSite _liveSite(FakeDouyuApi fake) {
+  final registry = SiteRegistry()
+    ..register(buildDouyuRegistration(httpClient: fake));
+  return registry.site('douyu')!;
+}
+
 void main() {
   group('在播房间解析', () {
     test('数字房间号:多 CDN 多画质 + HLS 线路', () async {
@@ -320,6 +328,83 @@ void main() {
       final (noTime, _) = await _makeResolver(betardResponse: betard());
       final unknown = await noTime.resolveRoom(_request('9527'));
       expect(unknown.startedAt, isNull, reason: '平台未提供时不得伪造');
+    });
+  });
+
+  group('LiveSite 统一出口:registry.site(douyu).resolveRoom → RoomRecord', () {
+    test('在播:类型/状态/线路/headers 透传;统计字段为 null', () async {
+      final fake = FakeDouyuApi()
+        ..betardResponse = {
+          'room': {
+            'room_id': 9527,
+            'nickname': '测试主播',
+            'show_status': 1,
+            'room_name': '斗鱼测试房间',
+          },
+        };
+
+      final room = await _liveSite(fake).resolveRoom(_request('9527'));
+
+      expect(room, isA<RoomRecord>());
+      expect(room.site, 'douyu');
+      expect(room.roomId, '9527');
+      expect(room.roomState, RoomState.live);
+      expect(room.isLive, isTrue);
+      expect(room.title, '斗鱼测试房间');
+      expect(room.sourceUrl, 'https://www.douyu.com/9527');
+
+      // 线路与播放请求头经统一记录透传(边界深冻结不改变可读值)。
+      expect(room.streams, isNotEmpty);
+      final line = room.streams.first.lines.first;
+      expect(line.url, isNotEmpty);
+      expect(line.headers['referer'], 'https://www.douyu.com/9527');
+      expect(line.headers['user-agent'], contains('Chrome/'));
+      expect(room.playUrl, room.streams.first.preferredLine?.url);
+
+      // 6sol 口径:RoomPayload 本身没有 audience/followers/vip/svip,
+      // 详情出口的统计必须为 null,不伪造 0/空串。
+      expect(room.audience, isNull);
+      expect(room.followers, isNull);
+      expect(room.vip, isNull);
+      expect(room.svip, isNull);
+    });
+
+    test('未开播:offline、无线路、统计 null', () async {
+      final fake = FakeDouyuApi()
+        ..betardResponse = {
+          'room': {
+            'room_id': 9528,
+            'nickname': '下播主播',
+            'show_status': 2,
+            'room_name': '下播中的房间',
+          },
+        };
+
+      final room = await _liveSite(fake).resolveRoom(_request('9528'));
+
+      expect(room, isA<RoomRecord>());
+      expect(room.roomState, RoomState.offline);
+      expect(room.isLive, isFalse);
+      expect(room.streams, isEmpty);
+      expect(room.availableQualities, isEmpty);
+      expect(room.playUrl, isEmpty);
+      expect(room.audience, isNull);
+      expect(room.followers, isNull);
+      expect(room.vip, isNull);
+      expect(room.svip, isNull);
+    });
+
+    test('房间不存在:notFound 语义,旧模型空串归一为 null', () async {
+      final fake = FakeDouyuApi()..betardResponse = '404';
+
+      final room = await _liveSite(fake).resolveRoom(_request('999999'));
+
+      expect(room, isA<RoomRecord>());
+      expect(room.roomState, RoomState.notFound);
+      expect(room.error, '房间不存在');
+      expect(room.anchorName, isNull, reason: 'RoomPayload 空串经统一记录归一为 null');
+      expect(room.streams, isEmpty);
+      expect(room.audience, isNull);
     });
   });
 }
