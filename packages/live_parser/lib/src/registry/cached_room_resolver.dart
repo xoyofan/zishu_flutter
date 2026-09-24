@@ -15,7 +15,11 @@ import '../models/models.dart';
 /// 地址可能已过期,复用即等于反复重开失效源。故 `recoverRoom` 先失效键,
 /// 再委托内层重新解析。
 class CachedRoomResolver
-    implements RoomResolver, RoomRecoveryResolver, RoomSummaryRefresher {
+    implements
+        RoomResolver,
+        RoomRecoveryResolver,
+        RoomSummaryRefresher,
+        RefreshCapabilityProbe {
   CachedRoomResolver(
     this._inner, {
     this.ttl = const Duration(seconds: 60),
@@ -25,6 +29,12 @@ class CachedRoomResolver
   final RoomResolver _inner;
   final Duration ttl;
   final int maxEntries;
+
+  /// 注册期能力内省:本类恒 `is RoomSummaryRefresher`(内层缺失时运行期
+  /// 抛 [UnsupportedError]),[LiveSite.refresher] 必须按内层真实能力判
+  /// null,不能被本装饰器误称为支持刷新。
+  @override
+  bool get innerRefreshSupported => _inner is RoomSummaryRefresher;
 
   final Map<String, _CacheEntry> _entries = {};
 

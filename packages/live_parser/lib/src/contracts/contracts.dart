@@ -2,6 +2,7 @@
 library;
 
 import '../models/models.dart';
+import '../models/room_record.dart';
 
 /// 房间解析请求:房间号或完整 URL 二选一,由站点实现归一。
 class RoomRequest {
@@ -156,13 +157,125 @@ class SiteRegistration {
   final SiteDisplaySpec display;
 }
 
+/// 装饰型刷新包装的能力内省(实现者必然同时实现 [RoomSummaryRefresher])。
+///
+/// `CachedRoomResolver` 这类包装恒实现 [RoomSummaryRefresher](内层缺失时
+/// 运行期抛 [UnsupportedError]),单凭 `is` 探测会把「未实现刷新的站点」
+/// 误称为支持。注册 [LiveSite] 时按被包装 resolver 的**真实实现**决定
+/// [LiveSite.refresher] 是否为 `null`,包装类通过本接口如实上报。
+abstract interface class RefreshCapabilityProbe
+    implements RoomSummaryRefresher {
+  /// 被包装的内层 resolver 是否真实实现 [RoomSummaryRefresher]。
+  bool get innerRefreshSupported;
+}
+
+/// 统一站点抽象:九站与 Windows 消费层只认这一种站点入口。
+///
+/// 迁移期约定(2026-09-24 Windows 统一契约):
+/// * [resolveRoom] 是唯一强制返回 [RoomRecord] 的出口;可选接口部件
+///   ([browse]/[search]/[danmaku]/[refresher]/[recovery])暂时沿用旧类型,
+///   由后续任务逐个切换;
+/// * 不支持的能力部件返回 `null`(不是空列表/空连接),支持后请求失败
+///   必须抛异常 —— [SiteCapabilities] 与部件是否存在保持一致,注册时用
+///   契约测试核查;
+/// * [recovery] 绕开短缓存重新获取播放地址;[refresher] 只取元信息、不
+///   做取流/签名 —— 注册时按内层真实实现判定,未实现刷新的站点即使被
+///   装饰成 `RoomSummaryRefresher` 也必须为 `null`。
+abstract interface class LiveSite {
+  String get id;
+  String get name;
+
+  /// UI 能力声明,与下方可空部件保持一致。
+  SiteCapabilities get capabilities;
+
+  /// UI 共享的平台展示语义。
+  SiteDisplaySpec get display;
+
+  /// 统一房间解析:失败抛异常;「房间不存在」返回
+  /// `roomState == notFound` 的记录,不以空房间冒充成功。
+  Future<RoomRecord> resolveRoom(RoomRequest request);
+
+  /// 栏目浏览;不支持为 `null`。
+  BrowseRepository? get browse;
+
+  /// 搜索;不支持为 `null`。
+  SearchRepository? get search;
+
+  /// 弹幕连接;不支持为 `null`(不返回空连接占位)。
+  DanmakuConnector? get danmaku;
+
+  /// 轻量状态刷新(只取元信息、不取流不写缓存);未实现为 `null`。
+  RoomSummaryRefresher? get refresher;
+
+  /// 恢复重解析(绕开短缓存重新获取地址);不支持为 `null`。
+  RoomRecoveryResolver? get recovery;
+}
+
+/// [SiteRegistration] 到 [LiveSite] 的薄适配:不改九站 HTTP 逻辑,
+/// 只在注册边界转换返回类型与部件可见性。
+class _RegistrationLiveSite implements LiveSite {
+  _RegistrationLiveSite(this._registration);
+
+  final SiteRegistration _registration;
+
+  @override
+  String get id => _registration.id;
+
+  @override
+  String get name => _registration.name;
+
+  @override
+  SiteCapabilities get capabilities => _registration.capabilities;
+
+  @override
+  SiteDisplaySpec get display => _registration.display;
+
+  @override
+  Future<RoomRecord> resolveRoom(RoomRequest request) async =>
+      RoomRecord.fromPayload(await _registration.resolver.resolveRoom(request));
+
+  @override
+  BrowseRepository? get browse => _registration.browse;
+
+  @override
+  SearchRepository? get search => _registration.search;
+
+  @override
+  DanmakuConnector? get danmaku => _registration.danmaku;
+
+  @override
+  RoomSummaryRefresher? get refresher {
+    final resolver = _registration.resolver;
+    // 短缓存包装恒 `is RoomSummaryRefresher`,必须再问装饰器内层真实能力,
+    // 否则未实现刷新的站点会被装饰器误称为支持。
+    if (resolver is RefreshCapabilityProbe && !resolver.innerRefreshSupported) {
+      return null;
+    }
+    return resolver is RoomSummaryRefresher ? resolver : null;
+  }
+
+  @override
+  RoomRecoveryResolver? get recovery {
+    final resolver = _registration.resolver;
+    return resolver is RoomRecoveryResolver ? resolver : null;
+  }
+}
+
 /// 站点能力注册表。
 class SiteRegistry {
   final Map<String, SiteRegistration> _sites = {};
+  final Map<String, LiveSite> _liveSites = {};
 
-  void register(SiteRegistration registration) => _sites[registration.id] = registration;
+  void register(SiteRegistration registration) {
+    _sites[registration.id] = registration;
+    _liveSites[registration.id] = _RegistrationLiveSite(registration);
+  }
 
   SiteRegistration? byId(String site) => _sites[site];
+
+  /// 统一站点外观:迁移期新消费方(Windows)走这里;
+  /// 旧 `operator []` 保留到 Windows 切换为止。
+  LiveSite? site(String id) => _liveSites[id];
 
   Set<String> get supportedSites => _sites.keys.toSet();
 

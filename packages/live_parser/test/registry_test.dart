@@ -1,5 +1,81 @@
 import 'package:live_parser/live_parser.dart';
+import 'package:live_parser/src/registry/cached_room_resolver.dart';
 import 'package:test/test.dart';
+
+import 'support/fake_browse.dart';
+
+/// 最小 fake 解析器:按调用序轮换播放 URL,可注入失败。
+class _SequenceResolver implements RoomResolver {
+  int calls = 0;
+  Object? failure;
+
+  @override
+  Future<RoomPayload> resolveRoom(RoomRequest request) async {
+    calls++;
+    final failure = this.failure;
+    if (failure != null) throw failure;
+    return RoomPayload(
+      site: request.site,
+      roomId: request.roomIdOrUrl,
+      sourceUrl: 'https://demo/room/${request.roomIdOrUrl}',
+      anchorName: '主播',
+      title: '房间',
+      cover: '',
+      avatar: '',
+      category: '',
+      cid: '1',
+      roomState: RoomState.live,
+      streams: [
+        StreamQuality(
+          name: '高清',
+          rate: 1,
+          lines: [
+            StreamLine(
+              name: '线路',
+              url: 'https://stream/$calls.m3u8',
+              format: 'hls',
+            ),
+          ],
+        ),
+      ],
+      availableQualities: const [QualityOption(name: '高清', rate: 1)],
+      source: 'test',
+      fetchedAt: DateTime.now(),
+    );
+  }
+}
+
+/// 直接实现刷新的 fake(用于 refresher 部件失败传播)。
+class _FailingRefresher implements RoomResolver, RoomSummaryRefresher {
+  int refreshCalls = 0;
+
+  @override
+  Future<RoomPayload> resolveRoom(RoomRequest request) async =>
+      throw UnimplementedError();
+
+  @override
+  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+    refreshCalls++;
+    throw StateError('refresh boom');
+  }
+}
+
+/// 搜索部件:存在但 Future 失败。
+class _FailingSearch implements SearchRepository {
+  @override
+  Future<SearchResult> search(SearchRequest request) async =>
+      throw StateError('search boom');
+}
+
+/// 弹幕部件:存在但 Future 失败。
+class _FailingDanmaku implements DanmakuConnector {
+  @override
+  SiteCapabilities get capabilities => const SiteCapabilities(danmaku: true);
+
+  @override
+  Future<DanmakuSession> connect(DanmakuSessionRequest request) async =>
+      throw StateError('danmaku boom');
+}
 
 void main() {
   test('buildSiteRegistry 注册斗鱼并声明能力', () {
@@ -117,5 +193,204 @@ void main() {
       isNotNull,
       reason: '聚合持有宿主同一 registry,参与站点可解析',
     );
+  });
+
+  group('LiveSite 统一站点外观', () {
+    const nineSites = [
+      'douyu',
+      'huya',
+      'bilibili',
+      'twitch',
+      'yy',
+      'soop',
+      'kuaishou',
+      'douyin',
+      'youtube',
+    ];
+
+    test('不支持弹幕的站点返回 null,而不是空连接', () {
+      final site = buildSiteRegistry().site('yy')!;
+      expect(site.danmaku, isNull);
+      expect(site.capabilities.danmaku, isFalse);
+    });
+
+    test('九站:LiveSite 与注册项同源,声明的 browse/search/danmaku 与部件一致', () {
+      final registry = buildSiteRegistry();
+      for (final id in nineSites) {
+        final registration = registry[id]!;
+        final site = registry.site(id)!;
+        expect(site.id, registration.id, reason: id);
+        expect(site.name, registration.name, reason: id);
+        expect(site.capabilities, same(registration.capabilities), reason: id);
+        expect(site.display, same(registration.display), reason: id);
+
+        expect(
+          site.capabilities.browse,
+          site.browse != null,
+          reason: '$id browse 能力与部件一致',
+        );
+        expect(
+          site.capabilities.danmaku,
+          site.danmaku != null,
+          reason: '$id danmaku 能力与部件一致',
+        );
+        // 声明房间/主播搜索即注册部件。快手平台不开放搜索:capabilities
+        // 不声明、search 部件是返回空结果的占位 —— 声明侧为假不违反
+        // 「声明即有部件」。
+        if (site.capabilities.roomSearch || site.capabilities.anchorSearch) {
+          expect(site.search, isNotNull, reason: '$id 声明搜索即注册部件');
+        }
+      }
+    });
+
+    test('未声明的能力部件为 null(YouTube 无搜索、聚合站只有浏览)', () {
+      final registry = buildSiteRegistry();
+      final youtube = registry.site('youtube')!;
+      expect(youtube.capabilities.roomSearch, isFalse);
+      expect(youtube.search, isNull);
+
+      final all = registry.site('all')!;
+      expect(all.capabilities.browse, isTrue);
+      expect(all.browse, isNotNull);
+      expect(all.search, isNull);
+      expect(all.danmaku, isNull);
+    });
+
+    test('refresher 按内层真实能力逐站判定:装饰器不可把未实现刷新误称为支持', () {
+      final registry = buildSiteRegistry();
+      const refreshImplemented = {
+        'douyu': true,
+        'huya': true,
+        'bilibili': true,
+        'twitch': true,
+        'yy': true,
+        'soop': true,
+        'kuaishou': true,
+        'douyin': true,
+        // YouTube 内层未实现刷新:短缓存包装恒 `is RoomSummaryRefresher`,
+        // 但注册时必须按内层真实能力判 null。
+        'youtube': false,
+      };
+      refreshImplemented.forEach((id, implemented) {
+        expect(
+          registry.site(id)!.refresher != null,
+          implemented,
+          reason: '$id refresher 应按内层真实实现判定',
+        );
+      });
+      // 聚合站占位 resolver 无刷新能力。
+      expect(registry.site('all')!.refresher, isNull);
+    });
+
+    test('recovery:九站经短缓存包装均可恢复;聚合站为 null', () {
+      final registry = buildSiteRegistry();
+      for (final id in nineSites) {
+        expect(registry.site(id)!.recovery, isNotNull, reason: id);
+      }
+      expect(registry.site('all')!.recovery, isNull);
+    });
+
+    test('resolveRoom 返回 RoomRecord;偏好档第二次命中缓存,recovery 绕开且 URL 更新', () async {
+      final inner = _SequenceResolver();
+      final registry = SiteRegistry()
+        ..register(
+          SiteRegistration(
+            id: 'demo',
+            name: '演示',
+            capabilities: const SiteCapabilities(multiQuality: true),
+            resolver: CachedRoomResolver(inner),
+          ),
+        );
+      final site = registry.site('demo')!;
+      const request = RoomRequest(
+        site: 'demo',
+        roomIdOrUrl: '42',
+        preferredQuality: '高清',
+      );
+
+      final first = await site.resolveRoom(request);
+      final second = await site.resolveRoom(request);
+      expect(first, isA<RoomRecord>());
+      expect(first.roomState, RoomState.live);
+      expect(first.playUrl, 'https://stream/1.m3u8');
+      expect(second.playUrl, 'https://stream/1.m3u8');
+      expect(inner.calls, 1, reason: '带偏好画质的第二次解析走短缓存');
+
+      final recovered = await site.recovery!.recoverRoom(request);
+      expect(inner.calls, 2, reason: '恢复绕开缓存新增一次真实请求');
+      expect(
+        recovered.playUrl,
+        'https://stream/2.m3u8',
+        reason: '恢复必须返回更新后的播放 URL',
+      );
+    });
+
+    test('部件存在但 Future 失败:异常原样传播,不伪装成空值', () async {
+      final inner = _SequenceResolver();
+      final registry = SiteRegistry()
+        ..register(
+          SiteRegistration(
+            id: 'demo',
+            name: '演示',
+            capabilities: const SiteCapabilities(
+              browse: true,
+              roomSearch: true,
+              danmaku: true,
+              multiQuality: true,
+            ),
+            resolver: CachedRoomResolver(inner),
+            browse: FakeBrowseRepository(site: 'demo', fail: true),
+            search: _FailingSearch(),
+            danmaku: _FailingDanmaku(),
+          ),
+        );
+      final site = registry.site('demo')!;
+      const request = RoomRequest(site: 'demo', roomIdOrUrl: '42');
+
+      inner.failure = StateError('resolve boom');
+      await expectLater(
+        site.resolveRoom(request),
+        throwsA(isA<StateError>()),
+      );
+      await expectLater(
+        site.recovery!.recoverRoom(request),
+        throwsA(isA<StateError>()),
+      );
+      await expectLater(
+        site.browse!.fetchRooms(const RoomListRequest(site: 'demo')),
+        throwsA(isA<ParserHttpException>()),
+      );
+      await expectLater(
+        site.search!.search(const SearchRequest(site: 'demo', query: 'q')),
+        throwsA(isA<StateError>()),
+      );
+      await expectLater(
+        site.danmaku!.connect(
+          const DanmakuSessionRequest(site: 'demo', roomId: '42'),
+        ),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test('refresher 部件存在但刷新失败:throwsA 原样传播', () async {
+      final registry = SiteRegistry()
+        ..register(
+          SiteRegistration(
+            id: 'demo',
+            name: '演示',
+            capabilities: const SiteCapabilities(),
+            resolver: CachedRoomResolver(_FailingRefresher()),
+          ),
+        );
+      final site = registry.site('demo')!;
+      expect(site.refresher, isNotNull);
+
+      await expectLater(
+        site.refresher!.refreshRoomSummary(
+          const RoomRequest(site: 'demo', roomIdOrUrl: '42'),
+        ),
+        throwsA(isA<StateError>()),
+      );
+    });
   });
 }

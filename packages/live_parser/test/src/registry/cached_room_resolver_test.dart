@@ -7,7 +7,11 @@ import 'package:live_parser/live_parser.dart';
 import 'package:live_parser/src/registry/cached_room_resolver.dart';
 import 'package:test/test.dart';
 
-RoomPayload _payload(RoomState state, {bool withLines = true}) => RoomPayload(
+RoomPayload _payload(
+  RoomState state, {
+  bool withLines = true,
+  String url = 'https://demo/live.m3u8',
+}) => RoomPayload(
   site: 'demo',
   roomId: '42',
   sourceUrl: 'https://demo/42',
@@ -19,17 +23,11 @@ RoomPayload _payload(RoomState state, {bool withLines = true}) => RoomPayload(
   cid: '42',
   roomState: state,
   streams: withLines
-      ? const [
+      ? [
           StreamQuality(
             name: '高清',
             rate: 1,
-            lines: [
-              StreamLine(
-                name: '线路',
-                url: 'https://demo/live.m3u8',
-                format: 'hls',
-              ),
-            ],
+            lines: [StreamLine(name: '线路', url: url, format: 'hls')],
           ),
         ]
       : const [],
@@ -195,6 +193,29 @@ void main() {
       await cached.resolveRoom(request);
 
       expect(inner.calls, hasLength(3), reason: '恢复失效键后,下一次解析不再命中旧缓存');
+    });
+
+    test('恢复请求次数增加且返回更新后的播放 URL(不复用缓存旧地址)', () async {
+      var sequence = 0;
+      final inner = _FakeResolver((_) async {
+        sequence++;
+        return _payload(RoomState.live, url: 'https://stream/$sequence.m3u8');
+      });
+      final cached = CachedRoomResolver(inner);
+
+      final first = await cached.resolveRoom(request);
+      final second = await cached.resolveRoom(request);
+      expect(inner.calls, hasLength(1), reason: 'TTL 内命中缓存');
+      expect(first.playUrl, 'https://stream/1.m3u8');
+      expect(second.playUrl, 'https://stream/1.m3u8');
+
+      final recovered = await cached.recoverRoom(request);
+      expect(inner.calls, hasLength(2), reason: '恢复必须新增一次真实请求');
+      expect(
+        recovered.playUrl,
+        'https://stream/2.m3u8',
+        reason: '恢复必须返回更新后的播放 URL',
+      );
     });
 
     test('内层具备恢复能力时优先委托 recoverRoom(而非 resolveRoom)', () async {

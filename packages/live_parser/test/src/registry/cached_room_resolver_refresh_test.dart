@@ -20,6 +20,35 @@ class _PlainResolver implements RoomResolver {
       throw UnimplementedError();
 }
 
+/// 同时具备解析与刷新的内层 fake:resolveRoom 视作取流入口,只计数;
+/// refreshRoomSummary 只回元信息,不碰取流。
+class _StreamCountingRefresher implements RoomResolver, RoomSummaryRefresher {
+  int streamCalls = 0;
+  int refreshCalls = 0;
+
+  @override
+  Future<RoomPayload> resolveRoom(RoomRequest request) async {
+    streamCalls++;
+    throw UnimplementedError('刷新路径不得触发取流');
+  }
+
+  @override
+  Future<RoomSummary> refreshRoomSummary(RoomRequest request) async {
+    refreshCalls++;
+    return RoomSummary(
+      site: request.site,
+      roomId: request.roomIdOrUrl,
+      title: '标题',
+      anchorName: '主播',
+      cid: '1',
+      category: '分类',
+      online: '',
+      cover: '',
+      roomState: RoomState.offline,
+    );
+  }
+}
+
 void main() {
   test('包装后仍可被探测到 RoomSummaryRefresher(能力透传)', () {
     final fake = FakeDouyuApi();
@@ -59,6 +88,24 @@ void main() {
       greaterThan(afterFirst),
       reason: '刷新必须重新打上游,不能命中 60s 短缓存',
     );
+  });
+
+  test('refreshRoomSummary 不调用取流接口(resolveRoom)', () async {
+    final inner = _StreamCountingRefresher();
+    final cached = CachedRoomResolver(inner);
+    expect(cached, isA<RoomSummaryRefresher>());
+
+    const request = RoomRequest(site: 'demo', roomIdOrUrl: '42');
+    final summary = await
+        (cached as RoomSummaryRefresher).refreshRoomSummary(request);
+
+    expect(inner.refreshCalls, 1);
+    expect(
+      inner.streamCalls,
+      0,
+      reason: '刷新只取元信息,不得触发取流/签名等昂贵步骤',
+    );
+    expect(summary.roomId, '42');
   });
 
   test('内层未实现刷新能力:抛错(由调用方按条目隔离)', () async {

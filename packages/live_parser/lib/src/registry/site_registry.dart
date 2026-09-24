@@ -14,6 +14,10 @@ import '../platforms/youtube/youtube_site.dart';
 import '../platforms/yy/yy_site.dart';
 
 /// 构建默认注册表。平台实现按 P1-P7 顺序在此 register。
+///
+/// 每个注册项同时以 [LiveSite] 薄适配暴露:`registry.site(id)` 返回统一
+/// 站点外观(resolveRoom → RoomRecord,可空部件按内层真实能力判定),
+/// 旧 `registry[id]` 注册项视图保留到 Windows 切换。
 SiteRegistry buildSiteRegistry() {
   final registry = SiteRegistry();
   registry.register(buildDouyuRegistration());
