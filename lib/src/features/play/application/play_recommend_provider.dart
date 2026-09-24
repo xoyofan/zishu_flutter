@@ -37,6 +37,11 @@ const List<String> kRecommendSiteOrder = <String>[
   'huya',
   'bilibili',
   'douyin',
+  'kuaishou',
+  'yy',
+  'twitch',
+  'soop',
+  'youtube',
 ];
 
 /// 每站每页取几条(web `RECOMMEND_PER_SITE`)。

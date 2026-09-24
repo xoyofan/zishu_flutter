@@ -35,6 +35,10 @@ class FakeSearchSource implements SearchSource {
   final Map<String, List<SearchHit>>? _bySite;
 
   @override
+  List<String> get aggregateSites =>
+      _bySite?.keys.toList(growable: false) ?? const ['douyu'];
+
+  @override
   Future<List<SearchHit>> search({
     required String site,
     required String keyword,
@@ -72,7 +76,7 @@ class _FakeRepo implements SearchRepository {
 SiteRegistration _reg(String id, SearchRepository repo) => SiteRegistration(
   id: id,
   name: id,
-  capabilities: const SiteCapabilities(),
+  capabilities: const SiteCapabilities(roomSearch: true),
   resolver: const _DummyResolver(),
   search: repo,
 );
@@ -108,6 +112,15 @@ void main() {
 
     final hits = await source.search(site: 'douyu', keyword: 'x');
     expect(hits.map((h) => h.id), ['d1']);
+  });
+
+  test('ParserSearchSource:aggregateSites 来自真实 search capability', () {
+    final registry = SiteRegistry()
+      ..register(_reg('douyu', _FakeRepo([makeHit('d1')])))
+      ..register(_reg('yy', _FakeRepo([makeHit('y1')])));
+    final source = ParserSearchSource(registry: registry);
+
+    expect(source.aggregateSites, ['douyu', 'yy']);
   });
 
   test('ParserSearchSource:未注册/不支持搜索的站点抛 StateError', () async {
@@ -221,6 +234,9 @@ void main() {
 /// 可切换成功/失败的 fake 数据源,用于验证失败容错。
 class _ToggleSource implements SearchSource {
   bool fail = false;
+
+  @override
+  List<String> get aggregateSites => const ['douyu'];
 
   @override
   Future<List<SearchHit>> search({

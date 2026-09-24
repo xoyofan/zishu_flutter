@@ -260,7 +260,7 @@ void main() {
           );
       await _pumpFrames(tester, 2);
 
-      expect(_inMetaBar('关注 5403780'), findsOneWidget);
+      expect(_inMetaBar('关注 540万'), findsOneWidget);
       expect(_inMetaBar('人气 341.2万'), findsOneWidget);
       // 弹幕总数上游无字段,保持「—」不冒充。
       expect(_inMetaBar('弹幕 —'), findsOneWidget);

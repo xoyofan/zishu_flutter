@@ -61,14 +61,8 @@ class _SideHeader extends ConsumerWidget {
     final RoomSummary? stats =
         followRoom ??
         ref.watch(roomStatsProvider((site: site, roomId: roomId))).value;
-    final followersText = _formatFollowersText(stats?.followers);
-    final audienceText = _statText(stats?.online);
-    final vipText = _statText(_platformVipStat(site, stats));
-    // Web 的各平台列定义会交换 vip / fanGroup / diamondFans；不能把两个
-    // 固定字段直接当第 2、3 列。SOOP 只有「观看 / 订阅」两列。
-    final showVip = _showsVipStat(site);
-    final showSvip = _showsSvipStat(site);
-    final svipText = _statText(_platformSvipStat(site, stats));
+    final display = displaySpecFor(site);
+    final followersText = formatFollowersValue(stats?.followers);
 
     // 信息头留出稳定的三行排版空间：昵称、分类、统计各占一行，
     // 统一使用紧凑但可读的行高，避免大字体或窄侧栏下互相挤压。
@@ -118,20 +112,21 @@ class _SideHeader extends ConsumerWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(width: AppSpacing.xs),
-                      // 关注数与昵称同行：用直播色和字重区分主播名，关注数保持
-                      // 普通次级文字，不使用胶囊底/描边。
-                      Text(
-                        '关注 $followersText',
-                        key: const Key('play-side-stat-followers'),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: AppFontSize.bodySecondary,
-                          height: 1.2,
-                          color: tokens.textSecondary,
+                      if (display.showFollowers) ...[
+                        const SizedBox(width: AppSpacing.xs),
+                        // 关注数与昵称同行：用普通次级文字，不使用胶囊底/描边。
+                        Text(
+                          '关注 $followersText',
+                          key: const Key('play-side-stat-followers'),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: AppFontSize.bodySecondary,
+                            height: 1.2,
+                            color: tokens.textSecondary,
+                          ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                   // 分类显示在主播名后面那一行(用户口径 2026-09-19)。
@@ -197,34 +192,24 @@ class _SideHeader extends ConsumerWidget {
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          // 人气/观众(web stats[0]「观众」列;online 为空 = 离线或
-                          // 尚未刷新回填,显示「—」)。
-                          _StatValue(
-                            key: const Key('play-side-stat-audience'),
-                            icon: AppIcons.eye,
-                            value: audienceText,
-                            color: context.tokens.statAudience,
-                            tooltip:
-                                '${_audienceStatLabel(site)} $audienceText',
-                          ),
-                          if (showVip) ...[
-                            const SizedBox(width: AppSpacing.xs),
-                            _StatValue(
-                              key: const Key('play-side-stat-vip'),
-                              icon: AppIcons.crown,
-                              value: vipText,
-                              color: context.tokens.statVip,
-                              tooltip: '${_vipStatLabel(site)} $vipText',
-                            ),
-                          ],
-                          if (showSvip) ...[
-                            const SizedBox(width: AppSpacing.xs),
-                            _StatValue(
-                              key: const Key('play-side-stat-svip'),
-                              icon: AppIcons.gem,
-                              value: svipText,
-                              color: context.tokens.statSvip,
-                              tooltip: '${_svipStatLabel(site)} $svipText',
+                          for (final column in display.roomStats) ...[
+                            if (column != display.roomStats.first)
+                              const SizedBox(width: AppSpacing.xs),
+                            Builder(
+                              builder: (context) {
+                                final value = displayStatValue(
+                                  roomStatValue(stats, column.field),
+                                );
+                                return _StatValue(
+                                  key: Key(
+                                    'play-side-stat-${column.field.name}',
+                                  ),
+                                  icon: _statIcon(column.field),
+                                  value: value,
+                                  color: _statColor(context, column.tone),
+                                  tooltip: '${column.label} $value',
+                                );
+                              },
                             ),
                           ],
                         ],
@@ -256,79 +241,17 @@ class _SideHeader extends ConsumerWidget {
   }
 }
 
-/// 统计文本:空串(未关注/上游未提供)显示「—」占位,不伪造。
-String _statText(String? value) {
-  final text = value?.trim() ?? '';
-  return text.isEmpty ? '—' : text;
-}
-
-/// 第 3 统计列(tone=svip)在各平台的列名,逐字对齐 web
-/// `ROOM_STAT_COLUMNS`(SFVideoLive `apps/web/src/config/platformCatalog.ts:29`):
-/// douyu 钻粉 / huya 超粉 / douyin 会员 / bilibili 大航海。
-/// 未登记该列的平台(xhs / youtube / soop / twitch 等)无专属语义,
-/// 回落通用「会员」;这些平台的 [RoomSummary.diamondFans] 恒为空,
-/// 列值显示「—」,不伪造。
-String? _platformVipStat(String site, RoomSummary? stats) => switch (site) {
-  'douyu' || 'huya' || 'soop' => stats?.vip,
-  // 抖音粉丝团、B 站粉丝勋章当前解析核心没有对应计数，保留「—」，
-  // 不拿订阅/大航海数冒充第 2 列。
-  'douyin' || 'bilibili' => null,
-  _ => null,
+IconData _statIcon(RoomStatField field) => switch (field) {
+  RoomStatField.audience => AppIcons.eye,
+  RoomStatField.vip => AppIcons.crown,
+  RoomStatField.svip => AppIcons.gem,
 };
 
-String? _platformSvipStat(String site, RoomSummary? stats) => switch (site) {
-  // 解析核心已按 Web 展示列口径归一：douyin 的 diamondFans 是会员，
-  // bilibili 的 diamondFans 是大航海。
-  'douyu' || 'huya' || 'douyin' || 'bilibili' => stats?.diamondFans,
-  _ => null,
+Color _statColor(BuildContext context, RoomStatTone tone) => switch (tone) {
+  RoomStatTone.audience => context.tokens.statAudience,
+  RoomStatTone.vip => context.tokens.statVip,
+  RoomStatTone.svip => context.tokens.statSvip,
 };
-
-bool _showsVipStat(String site) =>
-    site == 'douyu' ||
-    site == 'huya' ||
-    site == 'douyin' ||
-    site == 'bilibili' ||
-    site == 'soop';
-
-bool _showsSvipStat(String site) =>
-    site == 'douyu' || site == 'huya' || site == 'douyin' || site == 'bilibili';
-
-String _audienceStatLabel(String site) => switch (site) {
-  'soop' || 'youtube' => '观看',
-  _ => '观众',
-};
-
-String _vipStatLabel(String site) => switch (site) {
-  'douyu' || 'huya' => '贵宾',
-  'douyin' => '粉丝团',
-  'bilibili' => '粉丝勋章',
-  'soop' => '订阅',
-  _ => '会员',
-};
-
-String _svipStatLabel(String site) => switch (site) {
-  'douyu' => '钻粉',
-  'huya' => '超粉',
-  'douyin' => '会员',
-  'bilibili' => '大航海',
-  _ => '会员',
-};
-
-/// 关注数显示格式(用户口径 2026-09-20):纯数字 ≥1万 显示「X.X万」
-/// (≥100万 收敛为整数万);已带单位或非数字文本原样返回,不伪造。
-String _formatFollowersText(String? raw) {
-  final text = (raw?.trim() ?? '').replaceAll(',', '');
-  if (text.isEmpty) return '—';
-  final value = int.tryParse(text);
-  if (value == null) return text;
-  if (value >= 10000) {
-    final wan = value / 10000;
-    return wan >= 100
-        ? '${wan.toStringAsFixed(0)}万'
-        : '${wan.toStringAsFixed(1)}万';
-  }
-  return text;
-}
 
 class _SideAvatar extends StatelessWidget {
   const _SideAvatar({

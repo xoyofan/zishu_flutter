@@ -206,7 +206,7 @@ class SearchController extends Notifier<SearchState> {
   ) async {
     if (site == 'all') {
       final results = await Future.wait([
-        for (final s in ParserSearchSource.aggregateSites)
+        for (final s in _source.aggregateSites)
           _searchSiteIsolated(s, keyword, type),
       ]);
       return results.expand((items) => items).toList(growable: false);

@@ -20,9 +20,11 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:live_parser/live_parser.dart' show RoomPayload, RoomSummary;
+import 'package:live_parser/live_parser.dart'
+    show RoomPayload, RoomStatField, RoomStatTone, RoomSummary;
 
 import '../../../shared/presentation/design_tokens.dart';
+import '../../../shared/presentation/platform_display.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../../follow/application/follow_provider.dart';
 import '../application/room_stats_provider.dart';
@@ -78,8 +80,43 @@ class PlayMetaBar extends ConsumerWidget {
     final RoomSummary? summary =
         followedSummary ??
         ref.watch(roomStatsProvider((site: site, roomId: roomId))).value;
-    final followersText = _statText(summary?.followers);
-    final audienceText = _statText(summary?.online);
+    final display = displaySpecFor(site);
+    final followersText = formatFollowersValue(summary?.followers);
+    final startedText = formatStartedAt(payload?.startedAt, isLive: isLive);
+    final statItems = <Widget>[
+      if (display.showFollowers)
+        _MetaStat(
+          key: const Key('play-meta-stat-followers'),
+          icon: Icons.favorite_border_rounded,
+          iconColor: tokens.playFollowText,
+          label: '关注',
+          value: followersText,
+        ),
+      if (display.showStartedAt)
+        _MetaStat(
+          key: const Key('play-meta-stat-started'),
+          icon: Icons.schedule_rounded,
+          iconColor: isLive ? tokens.liveBadge : tokens.textSecondary,
+          label: '开播',
+          value: startedText,
+        ),
+      for (final column in display.roomStats)
+        _MetaStat(
+          key: Key('play-meta-stat-${column.field.name}'),
+          icon: _metaStatIcon(column.field),
+          iconColor: _metaStatColor(context, column.tone),
+          label: column.field == RoomStatField.audience ? '人气' : column.label,
+          value: displayStatValue(roomStatValue(summary, column.field)),
+        ),
+      if (siteSupportsDanmaku(site))
+        _MetaStat(
+          key: const Key('play-meta-stat-danmaku'),
+          icon: Icons.chat_bubble_outline_rounded,
+          iconColor: tokens.textSecondary,
+          label: '弹幕',
+          value: '—',
+        ),
+    ];
     // 高度由内容撑开(web 竖屏堆叠基准 head-h 2.75rem ≈ 44,但 flutter 字体
     // metrics 实测装不下三行文字,固定高会溢出 2-6px;IntrinsicHeight 让头像
     // 与按钮列 stretch 到内容自然高,任何字体缩放档都不溢出)。
@@ -120,48 +157,10 @@ class PlayMetaBar extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      _MetaStat(
-                        key: const Key('play-meta-stat-followers'),
-                        icon: Icons.favorite_border_rounded,
-                        iconColor: context.tokens.playFollowText,
-                        label: '关注',
-                        // 关注条目快照的 followers(关注/人气同源回填)。
-                        value: followersText,
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      _MetaStat(
-                        key: const Key('play-meta-stat-started'),
-                        icon: Icons.schedule_rounded,
-                        iconColor: isLive
-                            ? tokens.liveBadge
-                            : tokens.textSecondary,
-                        label: '开播',
-                        value: _startedText(isLive),
-                      ),
-                    ],
-                  ),
-                  Row(
-                    children: [
-                      _MetaStat(
-                        key: const Key('play-meta-stat-audience'),
-                        icon: Icons.people_alt_outlined,
-                        iconColor: context.tokens.statAudience,
-                        label: '人气',
-                        // 关注条目快照的 online(在线人数文案,回填自真源)。
-                        value: audienceText,
-                      ),
-                      const SizedBox(width: AppSpacing.sm),
-                      _MetaStat(
-                        key: const Key('play-meta-stat-danmaku'),
-                        icon: Icons.chat_bubble_outline_rounded,
-                        iconColor: tokens.textSecondary,
-                        label: '弹幕',
-                        // 解析层暂无弹幕数(会话内已收条数不是平台弹幕总数,不冒充)。
-                        value: '—',
-                      ),
-                    ],
+                  Wrap(
+                    spacing: AppSpacing.sm,
+                    runSpacing: 2,
+                    children: statItems,
                   ),
                 ],
               ),
@@ -182,26 +181,17 @@ class PlayMetaBar extends ConsumerWidget {
     );
   }
 
-  /// 开播时间文案:`MM-DD HH:mm`(参考实现 `formatLastLiveAt` 同格式)。
-  ///
-  /// 拿不到开播时间时,在播显示「开播中」、离线显示「—」——与侧栏信息头一致。
-  String _startedText(bool isLive) {
-    final startedAt = payload?.startedAt;
-    if (startedAt == null) return isLive ? '开播中' : '—';
-    final local = startedAt.toLocal();
-    String pad(int value) => value.toString().padLeft(2, '0');
-    return '${pad(local.month)}-${pad(local.day)} '
-        '${pad(local.hour)}:${pad(local.minute)}';
-  }
-}
+  IconData _metaStatIcon(RoomStatField field) => switch (field) {
+    RoomStatField.audience => Icons.people_alt_outlined,
+    RoomStatField.vip => Icons.workspace_premium_outlined,
+    RoomStatField.svip => Icons.diamond_outlined,
+  };
 
-/// 统计文本:空串(未关注/上游未提供)显示「—」占位,不伪造。
-///
-/// (与 play_side_panel.dart 的 `_statText` 同语义;该文件由桌面信息头维护,
-/// 私有函数跨文件不可复用,故在此等价实现。)
-String _statText(String? value) {
-  final text = value?.trim() ?? '';
-  return text.isEmpty ? '—' : text;
+  Color _metaStatColor(BuildContext context, RoomStatTone tone) => switch (tone) {
+    RoomStatTone.audience => context.tokens.statAudience,
+    RoomStatTone.vip => context.tokens.statVip,
+    RoomStatTone.svip => context.tokens.statSvip,
+  };
 }
 
 /// 圆形头像:无图时以昵称首字兜底(品牌色底 + 主文字色)。
@@ -280,9 +270,11 @@ class _MetaStat extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: AppSpacing.xl * 7),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
         Icon(icon, size: PlayMetaBar._kStatIconSize, color: iconColor),
         const SizedBox(width: 3),
         Flexible(
@@ -297,7 +289,8 @@ class _MetaStat extends StatelessWidget {
             ),
           ),
         ),
-      ],
+        ],
+      ),
     );
   }
 }

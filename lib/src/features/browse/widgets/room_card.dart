@@ -170,7 +170,11 @@ class _Cover extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final live = room.online.trim().isNotEmpty;
+    final hasAudience = room.online.trim().isNotEmpty;
+    final replay = room.isReplay;
+    // 兼容旧 fixture:旧数据 roomState 默认 offline 但 online 非空时仍视为在播;
+    // 新契约明确把 replay 与 live 分开。
+    final live = room.isLive || (room.roomState == RoomState.offline && hasAudience);
     return AspectRatio(
       aspectRatio: 16 / 9,
       child: Stack(
@@ -193,7 +197,7 @@ class _Cover extends StatelessWidget {
           // 判据沿用本组件既有的 `live`(online 非空),不另造第二套离线判定。
           // 注:web 的「上次开播 X」文案由 follow 域数据支撑,网格数据源
           // (RoomSummary)无该字段,离线一律显示「未开播」。
-          if (!live)
+          if (!live && !replay)
             const Positioned.fill(
               key: Key('room-card-offline'),
               child: CoverOfflineOverlay(),
@@ -222,6 +226,23 @@ class _Cover extends StatelessWidget {
                 key: const Key('cover-badge-online'),
                 corner: CoverCorner.bottomRight,
                 online: room.online,
+              ),
+            ),
+          if (replay)
+            Positioned(
+              right: 0,
+              bottom: 0,
+              child: CoverBadge(
+                key: const Key('room-card-replay'),
+                corner: CoverCorner.bottomRight,
+                background: context.tokens.brandBright,
+                child: Text(
+                  '轮播',
+                  style: context.textCaption.copyWith(
+                    color: context.tokens.surfaceSoft,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
             ),
           // 左下:平台 pill(单平台网格可关闭)。

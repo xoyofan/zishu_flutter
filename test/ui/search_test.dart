@@ -9,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 import 'package:zishu_flutter/src/app/app_router.dart';
+import 'package:zishu_flutter/src/app/app_theme.dart';
 import 'package:zishu_flutter/src/apps/windows/windows_app.dart';
 import 'package:zishu_flutter/src/features/search/application/search_provider.dart';
 import 'package:zishu_flutter/src/features/search/application/search_source_provider.dart';
@@ -52,6 +53,40 @@ void main() {
           .widget<SearchResultTile>(find.byKey(const Key('search-result-0')))
           .hit
           .id;
+
+  testWidgets('搜索结果显示平台与真实粉丝数,轮播不误显示未开播', (tester) async {
+    const hit = SearchHit(
+      id: '9527',
+      anchor: '主播',
+      title: '房间',
+      avatar: '',
+      cover: '',
+      state: SearchHitState.replay,
+      category: '网游',
+      online: '',
+      fans: '12345',
+    );
+    await tester.pumpWidget(
+      ProviderScope(
+        child: MaterialApp(
+          theme: ZishuTheme.dark(),
+          home: Scaffold(
+            body: SearchResultTile(
+              site: 'bilibili',
+              hit: hit,
+              onRowTap: () {},
+              onAnchorTap: () {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('哔哩'), findsOneWidget);
+    expect(find.text('粉丝 1.2万'), findsOneWidget);
+    expect(find.text('轮播'), findsOneWidget);
+    expect(find.text('未开播'), findsNothing);
+  });
 
   testWidgets('输入「英雄」:防抖后出现搜索结果行锚点', (tester) async {
     await openSearch(tester);
@@ -183,6 +218,9 @@ void main() {
 /// 验证 UI 双档(主播/房间)真正分流到查询层,而非共用同一批混合结果。
 class _TypeAwareSource implements SearchSource {
   final List<SearchType?> types = [];
+
+  @override
+  List<String> get aggregateSites => const ['douyu'];
 
   SearchHit _hit(String id) => SearchHit(
     id: id,

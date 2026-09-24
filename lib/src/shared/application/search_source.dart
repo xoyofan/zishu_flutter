@@ -16,6 +16,9 @@ import 'fixture_sources.dart';
 /// 房间双身份,故 [FixtureSearchSource] 忽略该参数 —— 与 web 端本地关注
 /// (`matchLocalFollows`)在两档都展示的口径一致。
 abstract interface class SearchSource {
+  /// `site == all` 时应查询的真实站点集合。
+  List<String> get aggregateSites;
+
   Future<List<SearchHit>> search({
     required String site,
     required String keyword,
@@ -34,8 +37,16 @@ class ParserSearchSource implements SearchSource {
 
   final SiteRegistry _registry;
 
-  /// 全平台聚合站点(与 cross 浏览聚合口径一致:斗鱼 / 虎牙 / B 站)。
-  static const List<String> aggregateSites = ['douyu', 'huya', 'bilibili'];
+  /// 全平台聚合站点来自真实注册能力,而不是 UI fixture 目录。
+  @override
+  List<String> get aggregateSites => [
+        for (final site in _registry.supportedSites)
+          if (site != 'iptv' &&
+              _registry[site]?.search != null &&
+              (_registry[site]!.capabilities.roomSearch ||
+                  _registry[site]!.capabilities.anchorSearch))
+            site,
+      ];
 
   @override
   Future<List<SearchHit>> search({
@@ -96,6 +107,15 @@ class ParserSearchSource implements SearchSource {
 /// 卡片、主播/房间双身份(同 web 端本地关注两档都展示)。
 class FixtureSearchSource implements SearchSource {
   const FixtureSearchSource();
+
+  @override
+  List<String> get aggregateSites {
+    final seen = <String>{};
+    return [
+      for (final room in kFixtureRooms)
+        if (seen.add(room.site)) room.site,
+    ];
+  }
 
   @override
   Future<List<SearchHit>> search({

@@ -130,6 +130,7 @@ class FollowController extends Notifier<List<FollowEntry>> {
           online: '',
           cover: source.cover,
           avatar: source.avatar,
+          startedAt: source.startedAt,
         );
 
     return [
@@ -364,6 +365,7 @@ class FollowController extends Notifier<List<FollowEntry>> {
       cover: fresh.cover.trim().isNotEmpty ? fresh.cover : current.cover,
       // 头像:刷新非空则更新(同 cover 口径;上游没给就保留上次拿到的值)。
       avatar: fresh.avatar.trim().isNotEmpty ? fresh.avatar : current.avatar,
+      startedAt: fresh.startedAt ?? current.startedAt,
       // roomState 以刷新为准:在线/轮播/离线互转跟随上游。
       roomState: fresh.roomState,
       followers: fresh.followers.trim().isNotEmpty
@@ -448,6 +450,9 @@ class FollowController extends Notifier<List<FollowEntry>> {
                     roomState: RoomState.values.firstWhere(
                       (state) => state.name == item['roomState'],
                       orElse: () => RoomState.offline,
+                    ),
+                    startedAt: DateTime.tryParse(
+                      item['startedAt']?.toString() ?? '',
                     ),
                     followers: item['followers']?.toString() ?? '',
                     vip: item['vip']?.toString() ?? '',
@@ -561,6 +566,8 @@ class FollowController extends Notifier<List<FollowEntry>> {
             'category': entry.room.category,
             'online': entry.room.online,
             'roomState': entry.room.roomState.name,
+            if (entry.room.startedAt != null)
+              'startedAt': entry.room.startedAt!.toIso8601String(),
             'followers': entry.room.followers,
             'vip': entry.room.vip,
             'diamondFans': entry.room.diamondFans,

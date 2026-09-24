@@ -340,6 +340,7 @@ class _SearchViewState extends ConsumerState<SearchView> {
                 SearchResultTile(
                   // 测试锚点:定位第 index 条搜索结果行。
                   key: Key('search-result-$index'),
+                  site: item.site,
                   hit: item.hit,
                   onRowTap: () => _openRoom(item),
                   onAnchorTap: () => _openAnchor(item),

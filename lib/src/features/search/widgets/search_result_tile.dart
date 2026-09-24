@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:live_parser/live_parser.dart';
 
 import '../../../shared/presentation/design_tokens.dart';
+import '../../../shared/presentation/platform_display.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
+import '../../../shared/presentation/widgets/platform_badge.dart';
 import '../../../shared/presentation/widgets/translated_text.dart';
 
 /// 单条搜索命中:方形头像 + 昵称/状态点 + 标题 + 分类 chip + 在线人数,
@@ -11,11 +13,13 @@ import '../../../shared/presentation/widgets/translated_text.dart';
 class SearchResultTile extends StatelessWidget {
   const SearchResultTile({
     super.key,
+    required this.site,
     required this.hit,
     required this.onRowTap,
     required this.onAnchorTap,
   });
 
+  final String site;
   final SearchHit hit;
 
   /// 行主体点击(进入直播间 / 未开播提示)。
@@ -25,11 +29,17 @@ class SearchResultTile extends StatelessWidget {
   final VoidCallback onAnchorTap;
 
   bool get _isLive => hit.state == SearchHitState.live;
+  bool get _isReplay => hit.state == SearchHitState.replay;
 
   @override
   Widget build(BuildContext context) {
     final tokens = context.tokens;
-    final stateColor = _isLive ? tokens.liveBadge : tokens.textSecondary;
+    final stateColor = _isLive
+        ? tokens.liveBadge
+        : (_isReplay ? tokens.brandBright : tokens.textSecondary);
+    final stateLabel = _isLive
+        ? '直播中'
+        : (_isReplay ? '轮播' : '未开播');
     return InkWell(
       onTap: onRowTap,
       // 状态反馈(全部走 token):hover 抬亮;焦点/按压用 accent 低 alpha。
@@ -55,6 +65,8 @@ class SearchResultTile extends StatelessWidget {
                 children: [
                   Row(
                     children: [
+                      PlatformBadge(site: site),
+                      const SizedBox(width: AppSpacing.sm),
                       Flexible(
                         child: Text(
                           hit.anchor,
@@ -77,7 +89,7 @@ class SearchResultTile extends StatelessWidget {
                       ),
                       const SizedBox(width: AppSpacing.xs),
                       Text(
-                        _isLive ? '直播中' : '未开播',
+                        stateLabel,
                         style: context.textCaption.copyWith(color: stateColor),
                       ),
                     ],
@@ -113,6 +125,21 @@ class SearchResultTile extends StatelessWidget {
                               style: context.textCaption.copyWith(
                                 color: tokens.textSecondary,
                               ),
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.sm),
+                        ],
+                        if (hit.fans?.trim().isNotEmpty == true) ...[
+                          Icon(
+                            Icons.people_alt_outlined,
+                            size: 12,
+                            color: tokens.textSecondary,
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            '粉丝 ${formatFollowersValue(hit.fans)}',
+                            style: context.textCaption.copyWith(
+                              color: tokens.textSecondary,
                             ),
                           ),
                           const SizedBox(width: AppSpacing.sm),

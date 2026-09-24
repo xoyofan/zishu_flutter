@@ -24,7 +24,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:live_parser/live_parser.dart' show RoomSummary, StreamLine;
+import 'package:live_parser/live_parser.dart'
+    show RoomState, RoomSummary, StreamLine;
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:zishu_flutter/src/app/app_router.dart';
@@ -504,6 +505,29 @@ void main() {
 
       expect(find.byKey(const Key('room-card-offline')), findsNothing);
       expect(find.byKey(const Key('cover-badge-category')), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('轮播房:不渲染离线遮罩,显示轮播状态', (tester) async {
+      await tester.pumpWidget(
+        host(
+          const RoomSummary(
+            site: 'douyu',
+            roomId: '9003',
+            title: '轮播房',
+            anchorName: '测试主播',
+            cid: '1',
+            category: '英雄联盟',
+            online: '',
+            cover: '',
+            roomState: RoomState.replay,
+          ),
+        ),
+      );
+      await _pumpFrames(tester, 2);
+
+      expect(find.byKey(const Key('room-card-offline')), findsNothing);
+      expect(find.text('轮播'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });

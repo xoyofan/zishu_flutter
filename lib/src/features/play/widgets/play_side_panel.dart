@@ -29,6 +29,7 @@ import '../../../shared/presentation/app_icons.dart';
 import '../../../shared/domain/category_display.dart';
 import '../../../shared/application/translation/translation_provider.dart';
 import '../../../shared/presentation/design_tokens.dart';
+import '../../../shared/presentation/platform_display.dart';
 import '../../../shared/presentation/widgets/compact_switch.dart';
 import '../../../shared/presentation/widgets/translated_text.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -157,6 +158,7 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
       category: payload?.category ?? '',
       online: payload?.isLive == true ? '直播中' : '',
       cover: payload?.cover ?? '',
+      startedAt: payload?.startedAt,
       // 头像:resolveRoom 已取到(RoomPayload.avatar),必须带进关注条目 ——
       // 否则 hover/顶栏头像堆叠只能回退房间封面,且刷新未回填前一直是错的。
       avatar: payload?.avatar ?? '',
