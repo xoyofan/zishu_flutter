@@ -160,8 +160,9 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
       category: payload?.category ?? '',
       online: payload?.isLive == true ? '直播中' : '',
       cover: payload?.cover ?? '',
-      // 状态真源随 payload:在播写 live、其余写 offline,不从统计推断。
-      roomState: payload?.isLive == true ? RoomState.live : RoomState.offline,
+      // 状态真源随 payload:直接取 payload.roomState(live/offline/replay
+      // 三态忠实,轮播点关注不得丢 replay),payload 缺失才回退 offline。
+      roomState: payload?.roomState ?? RoomState.offline,
       startedAt: payload?.startedAt,
       // 头像:resolveRoom 已取到(RoomPayload.avatar),必须带进关注条目 ——
       // 否则 hover/顶栏头像堆叠只能回退房间封面,且刷新未回填前一直是错的。

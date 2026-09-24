@@ -158,6 +158,47 @@ class _OfflinePayloadRoomSource implements RoomSource {
   }
 }
 
+/// 轮播房间解析替身:roomState=replay(三态忠实来自 payload 真源)。
+class _ReplayPayloadRoomSource implements RoomSource {
+  const _ReplayPayloadRoomSource();
+
+  @override
+  Future<RoomPayload> resolveRoom({
+    required String site,
+    required String roomIdOrUrl,
+    String? preferredQuality,
+  }) async {
+    return RoomPayload(
+      site: 'douyu',
+      roomId: roomIdOrUrl,
+      sourceUrl: 'https://www.douyu.com/$roomIdOrUrl',
+      anchorName: '轮播主播',
+      title: '轮播房间',
+      cover: '',
+      avatar: '',
+      category: '英雄联盟',
+      cid: '1',
+      roomState: RoomState.replay,
+      streams: const [
+        StreamQuality(
+          name: '超清',
+          rate: 2,
+          lines: [
+            StreamLine(
+              name: 'HLS',
+              url: 'https://fixture.zishu.dev/replay/index.m3u8',
+              format: 'hls',
+            ),
+          ],
+        ),
+      ],
+      availableQualities: const [],
+      source: 'fixture',
+      fetchedAt: DateTime.fromMillisecondsSinceEpoch(0),
+    );
+  }
+}
+
 /// 关注条目种子 JSON(与 follow_provider 的持久化字段同名)。
 Map<String, Object> _seedEntry({
   required String roomId,
@@ -1054,6 +1095,40 @@ void main() {
         reason: '离线条目不进只显在播列表',
       );
       expect(_row('douyu', '55555'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('轮播 payload:新建条目 replay、isReplay true,不进 liveOnly 列表', (tester) async {
+      SharedPreferencesAsyncPlatform.instance =
+          InMemorySharedPreferencesAsync.withData(<String, Object>{});
+
+      final play = await _pumpFollowTab(
+        tester,
+        location: '/douyu/play/44444',
+        overrides: [
+          roomSourceProvider.overrideWithValue(const _ReplayPayloadRoomSource()),
+        ],
+      );
+      await _pumpFrames(tester, 3);
+
+      await tester.tap(find.byKey(const Key('play-side-follow-btn')));
+      await _pumpFrames(tester, 4);
+
+      final entries = play.container.read(followProvider);
+      final entry = entries.firstWhere((e) => e.room.roomId == '44444');
+      expect(
+        entry.room.roomState,
+        RoomState.replay,
+        reason: 'replay 状态忠实来自 payload 真源,不得被压成 offline(6sol 复审 P1)',
+      );
+      expect(entry.isReplay, isTrue);
+      expect(entry.isLive, isFalse);
+      expect(
+        visibleFollowEntries(entries, liveOnly: true).map((e) => e.key),
+        isNot(contains('douyu:44444')),
+        reason: '轮播条目与离线一样不进只显在播列表',
+      );
+      expect(_row('douyu', '44444'), findsNothing);
       expect(tester.takeException(), isNull);
     });
   });
