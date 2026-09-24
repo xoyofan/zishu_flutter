@@ -12,6 +12,7 @@ export 'src/http/danmaku_transport.dart';
 export 'src/http/parser_http.dart';
 export 'src/http/upstream_proxy.dart';
 export 'src/models/models.dart';
+export 'src/models/room_record.dart';
 export 'src/platforms/douyin/browse.dart';
 export 'src/platforms/douyin/danmaku.dart';
 export 'src/platforms/douyin/douyin_site.dart';
