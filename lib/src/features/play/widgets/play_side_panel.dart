@@ -142,11 +142,13 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
 
   /// 当前房间 → 关注条目用的 [RoomSummary]。
   ///
-  /// 注意 [RoomSummary.online] 在真实解析场景是**在线人数文案**;而 [RoomPayload]
-  /// 没有携带在线人数(见 live_parser 模型),只有 [RoomPayload.isLive] 状态。
-  /// 这里写入占位文案「直播中」而非空串,是为了让刚加入关注的房间在
-  /// `FollowEntry.isLive`(口径 = online 非空)下立即算作在播,不被误当离线;
-  /// 真实在线人数等下一次状态刷新(`refreshStatuses`)回填。
+  /// 状态真源取 [RoomPayload.roomState](`payload.isLive` 即其投影):
+  /// `FollowEntry.isLive` 只认 roomState,刚关注的在播房必须立即算在播
+  /// (否则要等下一轮 refreshStatuses 才会从 liveOnly 列表里冒出来)。
+  /// [RoomPayload] 不携带在线人数,这里仍写占位文案「直播中」而非空串:
+  /// 展示层的 mergeDisplayStats 会拒收该占位(不是人数),但保留它可维持
+  /// 旧存储口径与「刚关注即在播」的既有回退语义;真实在线人数等下一次
+  /// 状态刷新(`refreshStatuses`)回填。
   RoomSummary _currentRoom(String site, String roomId) {
     final payload = widget.payload;
     return RoomSummary(
@@ -158,6 +160,8 @@ class _PlaySidePanelState extends ConsumerState<PlaySidePanel> {
       category: payload?.category ?? '',
       online: payload?.isLive == true ? '直播中' : '',
       cover: payload?.cover ?? '',
+      // 状态真源随 payload:在播写 live、其余写 offline,不从统计推断。
+      roomState: payload?.isLive == true ? RoomState.live : RoomState.offline,
       startedAt: payload?.startedAt,
       // 头像:resolveRoom 已取到(RoomPayload.avatar),必须带进关注条目 ——
       // 否则 hover/顶栏头像堆叠只能回退房间封面,且刷新未回填前一直是错的。

@@ -20,12 +20,13 @@ import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart'
-    show RoomPayload, RoomRecord, RoomState, RoomSummary, StreamLine;
+    show RoomPayload, RoomRecord, RoomState, RoomSummary, StreamLine, StreamQuality;
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:zishu_flutter/src/app/app_router.dart';
 import 'package:zishu_flutter/src/app/app_theme.dart';
 import 'package:zishu_flutter/src/features/follow/application/follow_provider.dart';
+import 'package:zishu_flutter/src/features/follow/application/follow_sort.dart';
 import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_card.dart';
 import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_row.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
@@ -112,6 +113,47 @@ class _TestApp extends ConsumerWidget {
       routerConfig: ref.watch(routerProvider),
       builder: (context, child) =>
           Material(type: MaterialType.transparency, child: child),
+    );
+  }
+}
+
+/// 离线房间解析替身:roomState=offline(状态真源随 payload,不从统计推断)。
+class _OfflinePayloadRoomSource implements RoomSource {
+  const _OfflinePayloadRoomSource();
+
+  @override
+  Future<RoomPayload> resolveRoom({
+    required String site,
+    required String roomIdOrUrl,
+    String? preferredQuality,
+  }) async {
+    return RoomPayload(
+      site: 'douyu',
+      roomId: roomIdOrUrl,
+      sourceUrl: 'https://www.douyu.com/$roomIdOrUrl',
+      anchorName: '离线主播',
+      title: '离线房间',
+      cover: '',
+      avatar: '',
+      category: '英雄联盟',
+      cid: '1',
+      roomState: RoomState.offline,
+      streams: const [
+        StreamQuality(
+          name: '超清',
+          rate: 2,
+          lines: [
+            StreamLine(
+              name: 'HLS',
+              url: 'https://fixture.zishu.dev/offline/index.m3u8',
+              format: 'hls',
+            ),
+          ],
+        ),
+      ],
+      availableQualities: const [],
+      source: 'fixture',
+      fetchedAt: DateTime.fromMillisecondsSinceEpoch(0),
     );
   }
 }
@@ -948,6 +990,70 @@ void main() {
         play.container.read(followProvider).any((e) => e.key == 'soop:9527'),
         isFalse,
       );
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('播放页点关注:roomState 真源写入关注条目(5a-2 P1 修复)', () {
+    testWidgets('在播 payload:新建条目立即 live,只显在播列表可见', (tester) async {
+      SharedPreferencesAsyncPlatform.instance =
+          InMemorySharedPreferencesAsync.withData(<String, Object>{});
+
+      // 606118 不在 fixture 关注种子里(前 6 条:63136/288016/71415/
+      // 74960/9999/24422);fixture payload roomState=live。
+      final play = await _pumpFollowTab(tester, location: '/douyu/play/606118');
+      await _pumpFrames(tester, 3);
+
+      await tester.tap(find.byKey(const Key('play-side-follow-btn')));
+      await _pumpFrames(tester, 4);
+
+      final entries = play.container.read(followProvider);
+      final entry = entries.firstWhere((e) => e.room.roomId == '606118');
+      expect(
+        entry.room.roomState,
+        RoomState.live,
+        reason: '关注写入取 payload 状态真源(不写统计占位推断)',
+      );
+      expect(entry.isLive, isTrue);
+      expect(
+        visibleFollowEntries(entries, liveOnly: true).map((e) => e.key),
+        contains('douyu:606118'),
+        reason: '刚关注的在播房必须立即进入 liveOnly 列表',
+      );
+      expect(
+        _row('douyu', '606118'),
+        findsOneWidget,
+        reason: '侧栏关注面板(只显在播)立即可见',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('离线 payload:新建条目 offline,不进 liveOnly 列表', (tester) async {
+      SharedPreferencesAsyncPlatform.instance =
+          InMemorySharedPreferencesAsync.withData(<String, Object>{});
+
+      final play = await _pumpFollowTab(
+        tester,
+        location: '/douyu/play/55555',
+        overrides: [
+          roomSourceProvider.overrideWithValue(const _OfflinePayloadRoomSource()),
+        ],
+      );
+      await _pumpFrames(tester, 3);
+
+      await tester.tap(find.byKey(const Key('play-side-follow-btn')));
+      await _pumpFrames(tester, 4);
+
+      final entries = play.container.read(followProvider);
+      final entry = entries.firstWhere((e) => e.room.roomId == '55555');
+      expect(entry.room.roomState, RoomState.offline);
+      expect(entry.isLive, isFalse);
+      expect(
+        visibleFollowEntries(entries, liveOnly: true).map((e) => e.key),
+        isNot(contains('douyu:55555')),
+        reason: '离线条目不进只显在播列表',
+      );
+      expect(_row('douyu', '55555'), findsNothing);
       expect(tester.takeException(), isNull);
     });
   });

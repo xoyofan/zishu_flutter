@@ -84,6 +84,8 @@ lp.RoomSummary _room(int index, {bool live = true}) => lp.RoomSummary(
   category: '英雄联盟',
   online: live ? '$index万' : '',
   cover: '',
+  // 状态真源随在播标志如实赋值:关注链 isLive 只认 roomState。
+  roomState: live ? lp.RoomState.live : lp.RoomState.offline,
 );
 
 /// 指定条数的在播关注:用于验证「列数 = 实际条目数」。

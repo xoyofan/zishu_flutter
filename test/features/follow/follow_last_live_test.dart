@@ -18,7 +18,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:live_parser/live_parser.dart'
-    show RoomPayload, RoomRecord, RoomSummary;
+    show RoomPayload, RoomRecord, RoomState, RoomSummary;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
@@ -75,17 +75,21 @@ Map<String, Object> _seedEntry({
   if (lastLiveAt != 0) 'lastLiveAt': lastLiveAt,
 };
 
-RoomSummary _fresh({required String roomId, required String online}) =>
-    RoomSummary(
-      site: 'douyu',
-      roomId: roomId,
-      title: '标题',
-      anchorName: '主播$roomId',
-      cid: '',
-      category: '网游',
-      online: online,
-      cover: 'https://cdn/cover.jpg',
-    );
+RoomSummary _fresh({
+  required String roomId,
+  required String online,
+  RoomState roomState = RoomState.offline,
+}) => RoomSummary(
+  site: 'douyu',
+  roomId: roomId,
+  title: '标题',
+  anchorName: '主播$roomId',
+  cid: '',
+  category: '网游',
+  online: online,
+  cover: 'https://cdn/cover.jpg',
+  roomState: roomState,
+);
 
 Future<ProviderContainer> _container({
   required List<Map<String, Object>> seed,
@@ -138,8 +142,16 @@ void main() {
     test('刷新观察到「在播 → 离线」时记录上次开播时间;保持在播的条目不动', () async {
       final fake = _FakeRefresher(
         results: {
-          '1001': _fresh(roomId: '1001', online: ''), // 刚离线。
-          '1002': _fresh(roomId: '1002', online: '3.3万'), // 仍在播。
+          '1001': _fresh(
+            roomId: '1001',
+            online: '',
+            roomState: RoomState.offline,
+          ), // 刚离线。
+          '1002': _fresh(
+            roomId: '1002',
+            online: '3.3万',
+            roomState: RoomState.live,
+          ), // 仍在播。
         },
       );
       final container = await _container(
@@ -162,6 +174,61 @@ void main() {
         reason: '刚刚离线的条目应记录上次开播时间(近似当下)',
       );
       expect(live.lastLiveAt, 0, reason: '在播条目不产生上次开播记录');
+    });
+
+    test('刷新状态真源是 roomState:live 但本次缺观看数不算下播(6sol P1)', () async {
+      // 复现审阅 P1:旧条目 online='1万'(历史 JSON 无 roomState 键),
+      // 刷新成功返回 RoomRecord(roomState=live, audience=null) ——
+      // 不得被「统计缺失」推断成离线,也不得错误记录 lastLiveAt。
+      final fake = _FakeRefresher(
+        results: {
+          '2001': _fresh(
+            roomId: '2001',
+            online: '',
+            roomState: RoomState.live,
+          ),
+        },
+      );
+      final container = await _container(
+        seed: [_seedEntry(roomId: '2001', online: '1万')],
+        refresher: fake,
+      );
+
+      await container.read(followProvider.notifier).refreshStatuses();
+
+      final entry = container.read(followProvider).single;
+      expect(entry.isLive, isTrue, reason: '状态真源是 roomState,统计缺失不得推断离线');
+      expect(entry.room.online, '1万', reason: 'live 但 audience null:保留已知观看数');
+      expect(entry.lastLiveAt, 0, reason: '没有离播跃迁,不得记录上次开播');
+    });
+
+    test('刷新返回 offline:变离线、online 置空、记录 lastLiveAt', () async {
+      // 同型条目(在播 1万)只有在明确刷新为 offline 时才离播跃迁。
+      final fake = _FakeRefresher(
+        results: {
+          '2002': _fresh(
+            roomId: '2002',
+            online: '',
+            roomState: RoomState.offline,
+          ),
+        },
+      );
+      final container = await _container(
+        seed: [_seedEntry(roomId: '2002', online: '1万')],
+        refresher: fake,
+      );
+
+      final before = DateTime.now().millisecondsSinceEpoch;
+      await container.read(followProvider.notifier).refreshStatuses();
+
+      final entry = container.read(followProvider).single;
+      expect(entry.isLive, isFalse);
+      expect(entry.room.online, '', reason: '明确下播按契约置空');
+      expect(
+        entry.lastLiveAt,
+        inInclusiveRange(before - 1000, before + 5000),
+        reason: '在播→离线跃迁记录上次开播',
+      );
     });
   });
 

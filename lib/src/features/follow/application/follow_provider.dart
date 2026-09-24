@@ -64,12 +64,16 @@ class FollowEntry {
   /// 稳定键:平台 + 房间号,批量选择/增删都以它定位。
   String get key => '${room.site}:${room.roomId}';
 
-  /// 是否开播:fixture 约定 online 为空即离线。
-  bool get isLive => room.online.trim().isNotEmpty;
+  /// 是否开播:状态真源是契约 [RoomSummary.roomState](规格 §2/§3.1 唯一
+  /// 真源),不再从 online/统计推断 —— 「在播但本次缺观看数(audience null)」
+  /// 必须仍算在播。迁移前的旧 JSON 没有 roomState 键,仅在 `_restore`
+  /// 反序列化边界按「online 非空即在播」的旧口径回退一次。
+  bool get isLive => room.roomState == RoomState.live;
 
   /// 是否轮播(录播循环):来自契约 [RoomSummary.roomState],刷新链路
   /// (bilibili live_status==2 / douyu videoLoop==1 / huya 录播)回填。
-  /// 轮播的 online 同离线一样为空串 —— isLive 与 isReplay 互斥。
+  /// 轮播的 online 同离线一样为空串 —— 与 [isLive] 同读 roomState,
+  /// 三态互斥由枚举本身保证。
   bool get isReplay => room.roomState == RoomState.replay;
 
   FollowEntry copyWith({
@@ -122,12 +126,35 @@ class FollowController extends Notifier<List<FollowEntry>> {
   }
 
   /// fixture 初始 6 条:由 kFixtureRooms 派生,
-  /// 含 2 条特别关注、1 条离线(离线条目把 online 置空,用 online.isEmpty 表达)。
+  /// 含 2 条特别关注、1 条离线(离线条目把 online 置空,
+  /// 状态真源 roomState 随之赋 offline)。
   static List<FollowEntry> _seed() {
-    final rooms = kFixtureRooms.take(6).toList();
     final now = DateTime.now();
 
-    // 复制为离线房间:online 置空,其余字段保持契约形状。
+    // fixture 房间 → 种子条目:浏览 fixture 不携带 roomState(模型默认
+    // offline),这里按 fixture 既有约定「online 非空即在播」在装配边界
+    // 补上状态真源 —— 状态真源切到 roomState 后,不补则种子全部变离线。
+    RoomSummary asLive(RoomSummary source) => RoomSummary(
+      site: source.site,
+      roomId: source.roomId,
+      title: source.title,
+      anchorName: source.anchorName,
+      cid: source.cid,
+      category: source.category,
+      online: source.online,
+      cover: source.cover,
+      avatar: source.avatar,
+      promoTag: source.promoTag,
+      followers: source.followers,
+      vip: source.vip,
+      diamondFans: source.diamondFans,
+      roomState: source.online.trim().isNotEmpty
+          ? RoomState.live
+          : RoomState.offline,
+      startedAt: source.startedAt,
+    );
+
+    // 复制为离线房间:online 置空 + 状态置 offline,其余字段保持契约形状。
     RoomSummary asOffline(RoomSummary source) => RoomSummary(
       site: source.site,
       roomId: source.roomId,
@@ -138,8 +165,13 @@ class FollowController extends Notifier<List<FollowEntry>> {
       online: '',
       cover: source.cover,
       avatar: source.avatar,
+      roomState: RoomState.offline,
       startedAt: source.startedAt,
     );
+
+    final rooms = [
+      for (final room in kFixtureRooms.take(6)) asLive(room),
+    ];
 
     return [
       FollowEntry(
@@ -315,8 +347,11 @@ class FollowController extends Notifier<List<FollowEntry>> {
     return updated.length;
   }
 
-  /// 刷新后该条目的 lastLiveAt:仅在「原本在播 → 刷新后离线」跃迁时记为
-  /// [nowMs](与已有值取 max);其余情况维持原值,不得因刷新回填而清零。
+  /// 刷新后该条目的 lastLiveAt:仅在「原本在播 → 刷新后明确离播
+  /// (roomState 为 offline 或 replay)」跃迁时记为 [nowMs](与已有值取
+  /// max);其余情况(仍在播、刷新失败、notFound 等未确认离播)维持原值,
+  /// 不得因刷新回填而清零。判据只看状态真源 roomState —— 「在播但本次
+  /// 缺观看数(audience null)」不算离播。
   static int _bumpedLastLiveAt(
     FollowEntry entry,
     RoomSummary? fresh,
@@ -324,7 +359,8 @@ class FollowController extends Notifier<List<FollowEntry>> {
   ) {
     if (fresh == null) return entry.lastLiveAt;
     final wasLive = entry.isLive;
-    final nowOffline = fresh.online.trim().isEmpty;
+    final nowOffline = fresh.roomState == RoomState.offline ||
+        fresh.roomState == RoomState.replay;
     if (wasLive && nowOffline) return mergedInt(entry.lastLiveAt, nowMs);
     return entry.lastLiveAt;
   }
@@ -355,7 +391,10 @@ class FollowController extends Notifier<List<FollowEntry>> {
   ///   [displayCategoryName] 归一为中文显示名:解析核心的刷新只带回
   ///   原始名/缩写 + 分区 cid(如 huya 'lol'+gid),不负责归一;
   ///   归一未命中(无跨平台映射)时保持原名;
-  /// - `online`:无条件取刷新值,空串即平台明确未开播(在播判据);
+  /// - `online`:**状态驱动的有界更新** —— 刷新带了可信人数(audience
+  ///   非空 → 转换后非空串)才更新;刷新为 live 但本次缺观看数时
+  ///   **保留本地已知值**(统计缺失不是下播);offline/replay 按契约置空
+  ///   (空串即平台明确未开播);
   /// - `roomState`:无条件取刷新值 —— 在播/轮播/离线三态互转都跟随
   ///   上游(主播停播改轮播、轮播恢复开播都靠它感知);
   /// - `followers`/`vip`:刷新非空则更新,空回退本地(统计展示增强,
@@ -382,8 +421,11 @@ class FollowController extends Notifier<List<FollowEntry>> {
       category: fresh.category.trim().isNotEmpty
           ? displayCategoryName(current.site, fresh.category, mergedCid)
           : current.category,
-      // online 以刷新为准:空串即平台明确未开播。
-      online: fresh.online,
+      // online 状态驱动:live 且刷新带可信人数才更新;live 但本次
+      // audience null 保留已知旧值(统计缺失不是下播);其余状态置空。
+      online: fresh.online.trim().isNotEmpty
+          ? fresh.online
+          : (fresh.roomState == RoomState.live ? current.online : ''),
       cover: fresh.cover.trim().isNotEmpty ? fresh.cover : current.cover,
       // 头像:刷新非空则更新(同 cover 口径;上游没给就保留上次拿到的值)。
       avatar: fresh.avatar.trim().isNotEmpty ? fresh.avatar : current.avatar,
@@ -471,10 +513,7 @@ class FollowController extends Notifier<List<FollowEntry>> {
                     online: item['online']?.toString() ?? '',
                     cover: item['cover']?.toString() ?? '',
                     avatar: item['avatar']?.toString() ?? '',
-                    roomState: RoomState.values.firstWhere(
-                      (state) => state.name == item['roomState'],
-                      orElse: () => RoomState.offline,
-                    ),
+                    roomState: _roomStateFromStored(item),
                     startedAt: DateTime.tryParse(
                       item['startedAt']?.toString() ?? '',
                     ),
@@ -504,6 +543,22 @@ class FollowController extends Notifier<List<FollowEntry>> {
     // 匿名/未就绪时静默跳过,不产生任何网络调用。
     if (!ref.mounted) return;
     await pullRemote();
+  }
+
+  /// 历史条目状态读取(**仅反序列化边界**):迁移前的 JSON 没有 roomState
+  /// 键,按旧口径「online 非空即在播」回退一次(与 RoomRecord.fromJson 同
+  /// 口径);显式存在但无效的值仍回落 offline;新数据不从统计推断状态。
+  static RoomState _roomStateFromStored(Map item) {
+    final raw = item['roomState']?.toString();
+    if (raw == null) {
+      return (item['online']?.toString() ?? '').trim().isNotEmpty
+          ? RoomState.live
+          : RoomState.offline;
+    }
+    return RoomState.values.firstWhere(
+      (state) => state.name == raw,
+      orElse: () => RoomState.offline,
+    );
   }
 
   /// 本地条目 → 远端契约(avatar/cid/category 在远端为扩展字段,zishu 侧置空)。
