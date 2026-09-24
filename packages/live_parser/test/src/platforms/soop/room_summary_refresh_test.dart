@@ -69,6 +69,16 @@ void main() {
     expect(viewerRequests, hasLength(1));
     expect(viewerRequests.single.url.queryParameters['szCateNo'], '00040066');
     expect(viewerRequests.single.url.queryParameters['szOrder'], 'view_cnt_desc');
+
+    // 统一记录:fromSummary 映射刷新摘要已提供的 fixture 真值;SOOP 无
+    // diamondFans 上游 → svip null,不编造数字。
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.site, 'soop');
+    expect(record.roomId, 'testbj');
+    expect(record.audience, '2.3万', reason: 'view_cnt=23456 → online 透传');
+    expect(record.followers, '434898');
+    expect(record.vip, '235');
+    expect(record.svip, isNull);
     expect(
       fake.requests.where(
         (request) => request.url.path.endsWith('/broad_stream_assign.html'),
@@ -105,6 +115,15 @@ void main() {
       kSoopLiveOnlineFallback,
       reason: '宿主以 online 非空为在播判据,空串会把在播房间判成离线',
     );
+
+    // 关键口径:「直播中」是占位文案不是数字——fromSummary 原样透传该
+    // 常量,且绝不等于 '0'(不把占位当有效观看数,交给展示层过滤)。
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.audience, kSoopLiveOnlineFallback);
+    expect(record.audience, isNot('0'));
+    expect(record.followers, '434898');
+    expect(record.vip, '235');
+    expect(record.svip, isNull);
   });
 
   test('不走 resolver 短缓存:连续两次刷新各打一次上游', () async {
@@ -129,6 +148,14 @@ void main() {
 
     expect(summary.online, '');
     expect(summary.roomState, RoomState.offline);
+
+    // 离线协议 total_view_cnt:"0" 按平台契约 online 空串 → audience
+    // null(0 不是有效观看数);dashboard 真值照常透传,svip 缺项 null。
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.audience, isNull);
+    expect(record.followers, '434898');
+    expect(record.vip, '235');
+    expect(record.svip, isNull);
     expect(
       summary.avatar,
       'https://stimg.sooplive.co.kr/LOGO/te/testbj/testbj.jpg',
@@ -189,6 +216,12 @@ void main() {
     expect(summary.roomState, RoomState.live);
     expect(summary.followers, '');
     expect(summary.vip, '');
+
+    // dashboard 全失败:空串经 fromSummary 归一为 null,不伪造 0。
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.followers, isNull);
+    expect(record.vip, isNull);
+    expect(record.svip, isNull);
   });
 
   test('封禁(RESULT=-2):抛 ParserHttpException', () async {

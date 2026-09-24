@@ -50,6 +50,18 @@ void main() {
       expect(result.rooms.first.online, '5.4万');
       expect(result.rooms.first.cover, 'https://img.sooplive.co.kr/thumb/rec_a.jpg');
       expect(result.rooms.last.online, '900');
+
+      // 统一记录:fromSummary 映射列表 fixture 真值(audience);上游列表
+      // 没有 followers/vip/svip → 保持 null,不编造数字。
+      // 注意:roomState 的批量默认 offline 是 Task 4 范围(6sol 裁决),
+      // 本测试不断言。
+      final record = RoomRecord.fromSummary(result.rooms.first);
+      expect(record.site, 'soop');
+      expect(record.roomId, 'rec_a');
+      expect(record.audience, '5.4万', reason: 'view_cnt=54321 → online 透传');
+      expect(record.followers, isNull);
+      expect(record.vip, isNull);
+      expect(record.svip, isNull);
     });
 
     test('分类房间:按 cid 拉取并统计 PC+移动观看数', () async {
@@ -61,6 +73,16 @@ void main() {
       expect(result.rooms.first.cid, '100');
       expect(result.rooms.first.online, '1.2万');
       expect(result.rooms.last.online, '1.0千');
+
+      // 统一记录:分类列表同口径;roomState 批量默认 offline 不断言
+      // (6sol 裁决,Task 4)。
+      final record = RoomRecord.fromSummary(result.rooms.first);
+      expect(record.site, 'soop');
+      expect(record.roomId, 'room_a');
+      expect(record.audience, '1.2万');
+      expect(record.followers, isNull);
+      expect(record.vip, isNull);
+      expect(record.svip, isNull);
       final request = fake.requests.last;
       expect(request.url.queryParameters['m'], 'categoryContentsList');
       expect(request.url.queryParameters['szCateNo'], '100');

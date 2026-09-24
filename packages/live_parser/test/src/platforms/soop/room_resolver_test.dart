@@ -3,6 +3,14 @@ import 'package:test/test.dart';
 
 import '../../../support/fake_soop_api.dart';
 
+/// 统一站点出口:注册项(含 CachedRoomResolver 包装)装配进 [SiteRegistry]
+/// 后,经 `registry.site('soop')` 验证 LiveSite 适配层的 RoomRecord 映射。
+LiveSite _liveSite(FakeSoopApi fake) {
+  final registry = SiteRegistry()
+    ..register(buildSoopRegistration(httpClient: fake));
+  return registry.site('soop')!;
+}
+
 void main() {
   late FakeSoopApi fake;
   late SiteRegistration registration;
@@ -13,6 +21,88 @@ void main() {
       ..aidResponse = soopFixture('aid_live.json')
       ..assignResponse = soopFixture('assign_live.json');
     registration = buildSoopRegistration(httpClient: fake);
+  });
+
+  group('LiveSite 统一出口:registry.site(soop).resolveRoom → RoomRecord', () {
+    test('在播:类型/身份/线路稳定段与 headers 透传;统计四项 null', () async {
+      final room = await _liveSite(fake).resolveRoom(
+        const RoomRequest(
+          site: 'soop',
+          roomIdOrUrl: 'https://play.sooplive.co.kr/testbj',
+        ),
+      );
+
+      expect(room, isA<RoomRecord>());
+      expect(room.site, 'soop');
+      expect(room.roomId, 'testbj');
+      expect(room.sourceUrl, 'https://play.sooplive.co.kr/testbj');
+      expect(room.roomState, RoomState.live);
+      expect(room.isLive, isTrue);
+      expect(room.title, 'SOOP 测试直播间');
+      expect(room.anchorName, '测试主播');
+      expect(room.category, '英雄联盟');
+      expect(room.cid, 'testbj', reason: 'SOOP 无二级分类 id,cid 即房间号');
+      expect(room.source, 'live_parser/soop');
+
+      // 线路:锁定 fixture assign+aid 真值的稳定 URL 段,防止适配层把
+      // 线路换成别的非空值仍通过。
+      expect(room.streams, hasLength(3));
+      expect(
+        room.playUrl,
+        'https://live.sooplive.co.kr/hls/test/playlist.m3u8?aid=test-aid-001',
+      );
+      expect(room.streams.first.preferredLine?.format, 'hls');
+      final headers = room.streams.first.preferredLine?.headers ?? {};
+      expect(headers['origin'], 'https://www.sooplive.co.kr');
+      expect(headers['referer'], 'https://www.sooplive.co.kr/');
+
+      // 6sol 口径:RoomPayload 没有统计字段,详情出口统计必须为
+      // null,不伪造 0/空串。
+      expect(room.audience, isNull);
+      expect(room.followers, isNull);
+      expect(room.vip, isNull);
+      expect(room.svip, isNull);
+    });
+
+    test('未开播:offline、无线路、统计 null(协议 total_view_cnt:"0" 非有效观看数)', () async {
+      fake.detailResponse = soopFixture('detail_offline.json');
+
+      final room = await _liveSite(fake).resolveRoom(
+        const RoomRequest(site: 'soop', roomIdOrUrl: 'testbj'),
+      );
+
+      expect(room, isA<RoomRecord>());
+      expect(room.site, 'soop');
+      expect(room.roomId, 'testbj');
+      expect(room.roomState, RoomState.offline);
+      expect(room.isLive, isFalse);
+      expect(room.error, isNull);
+      expect(room.streams, isEmpty);
+      expect(room.playUrl, isEmpty);
+      // 离线协议 total_view_cnt:"0" 不进详情出口:平台契约 online 空串
+      // → fromPayload 无统计 → audience null,不把协议 0 当有效观看数。
+      expect(room.audience, isNull);
+      expect(room.followers, isNull);
+      expect(room.vip, isNull);
+      expect(room.svip, isNull);
+    });
+
+    test('封禁:notFound 语义、统计 null', () async {
+      fake.detailResponse = soopFixture('detail_banned.json');
+
+      final room = await _liveSite(fake).resolveRoom(
+        const RoomRequest(site: 'soop', roomIdOrUrl: 'testbj'),
+      );
+
+      expect(room, isA<RoomRecord>());
+      expect(room.roomState, RoomState.notFound);
+      expect(room.error, '房间已被封禁');
+      expect(room.streams, isEmpty);
+      expect(room.audience, isNull);
+      expect(room.followers, isNull);
+      expect(room.vip, isNull);
+      expect(room.svip, isNull);
+    });
   });
 
   group('SOOP 房间解析', () {
