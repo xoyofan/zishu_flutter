@@ -3,12 +3,10 @@
 library;
 
 import 'package:live_parser/live_parser.dart';
-import 'package:live_parser/src/platforms/iptv/iptv_site.dart';
 import 'package:live_parser/src/utils/format_online.dart';
 import 'package:test/test.dart';
 
 void main() {
-  iptvSmoke();
   twitchSmoke();
   yySmoke();
   soopSmoke();
@@ -633,54 +631,5 @@ void youtubeSmoke() {
     },
     timeout: const Timeout(Duration(minutes: 3)),
     skip: '需真实网络;本地运行: dart test --run-skipped --plain-name YouTube test/smoke_online_test.dart',
-  );
-}
-
-void iptvSmoke() {
-  test(
-    'IPTV 真实链路:公网 M3U 源 → 分类 → 频道解析 → 搜索',
-    () async {
-      const sources = [
-        IptvSource(
-          id: 'cn',
-          name: '国内源',
-          url: 'https://live.fanmingming.com/tv/m3u/global.m3u',
-        ),
-      ];
-      final iptv = buildIptvRegistration(sources: sources);
-
-      final categories = await iptv.browse!.fetchCategories('iptv');
-      // ignore: avoid_print
-      print('IPTV 分组: ${categories.groups.first.name} '
-          '${categories.groups.first.items.take(6).map((i) => i.name).toList()}');
-      expect(categories.groups, isNotEmpty);
-
-      final rooms = await iptv.browse!.fetchRooms(
-        const RoomListRequest(site: 'iptv', cid: null, page: 1, limit: 5),
-      );
-      // ignore: avoid_print
-      print('IPTV 频道: ${rooms.rooms.map((r) => r.roomId).toList()}');
-      expect(rooms.rooms, isNotEmpty);
-
-      final payload = await iptv.resolver.resolveRoom(
-        RoomRequest(site: 'iptv', roomIdOrUrl: rooms.rooms.first.roomId),
-      );
-      // ignore: avoid_print
-      print(
-        '解析: id=${payload.roomId} state=${payload.roomState.name} '
-        'url=${payload.playUrl}',
-      );
-      expect(payload.roomState, RoomState.live);
-      expect(payload.playUrl, isNotEmpty);
-
-      final search = await iptv.search!.search(
-        const SearchRequest(site: 'iptv', query: 'cctv', limit: 5),
-      );
-      // ignore: avoid_print
-      print('搜索 CCTV 命中: ${search.hits.length} 条');
-      expect(search.hits, isNotEmpty);
-    },
-    timeout: const Timeout(Duration(minutes: 2)),
-    skip: '需真实网络;本地运行: dart test --run-skipped --plain-name IPTV test/smoke_online_test.dart',
   );
 }

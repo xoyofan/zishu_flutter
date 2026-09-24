@@ -43,7 +43,7 @@ class SearchRequest {
   /// 不传该参数时路径与结果完全不变(向后兼容)。站点实现按 web 真源
   /// (`SFVideoLive services/streaming-server/src/search/*`)对齐:
   /// 双接口站(douyu/bilibili/douyin/yy)按档位只打对应上游接口,
-  /// huya 房间档走 `v=4` 仅房间分区;单一语义站(twitch/soop/iptv 等
+  /// huya 房间档走 `v=4` 仅房间分区;单一语义站(twitch/soop 等
   /// web 端本就只有一个搜索实现)忽略该字段。
   final SearchType? type;
 }

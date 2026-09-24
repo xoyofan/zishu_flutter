@@ -118,29 +118,4 @@ void main() {
       reason: '聚合持有宿主同一 registry,参与站点可解析',
     );
   });
-
-  test('buildSiteRegistry 注册 IPTV 占位(空源,能力受限)', () {
-    final registry = buildSiteRegistry();
-
-    expect(registry.supportedSites, contains('iptv'));
-    final iptv = registry['iptv']!;
-    expect(iptv.id, 'iptv');
-    expect(iptv.name, 'IPTV');
-    expect(iptv.browse, isA<BrowseRepository>());
-    expect(iptv.search, isA<SearchRepository>());
-
-    expect(iptv.capabilities.browse, isTrue);
-    expect(iptv.capabilities.roomSearch, isTrue);
-    expect(iptv.capabilities.danmaku, isFalse, reason: 'IPTV 无弹幕');
-    expect(iptv.danmaku, isNull);
-    expect(iptv.capabilities.requiresCookie, isFalse);
-
-    // 空源占位:频道不存在
-    expect(
-      iptv.browse!.fetchRooms(const RoomListRequest(site: 'iptv', cid: null)),
-      completion(
-        isA<RoomListResult>().having((r) => r.rooms, 'rooms', isEmpty),
-      ),
-    );
-  });
 }

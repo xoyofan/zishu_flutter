@@ -26,7 +26,6 @@ void main() {
       ['观看', '订阅'],
     );
     expect(registry['twitch']!.display.roomStats.single.label, '观众');
-    expect(registry['iptv']!.display.roomStats, isEmpty);
   });
 
   test('平台声明的公共开关与统计列一致', () {
@@ -40,7 +39,6 @@ void main() {
     expect(registry['douyin']!.display.showFollowers, isTrue);
     expect(registry['soop']!.display.showStartedAt, isTrue);
     expect(registry['twitch']!.display.showStartedAt, isTrue);
-    expect(registry['iptv']!.display.showFollowers, isFalse);
   });
 
   test('SiteRegistration 未传 display 时使用空展示能力', () {

@@ -2,7 +2,7 @@ import 'package:live_parser/live_parser.dart';
 import 'package:test/test.dart';
 
 void main() {
-  test('all 浏览默认纳入所有现有可浏览直播站,排除 all/iptv', () {
+  test('all 浏览默认纳入所有现有可浏览直播站,排除 all', () {
     final all = buildSiteRegistry()['all']!.browse! as CrossBrowseRepository;
 
     expect(all.siteIds, [
@@ -17,6 +17,5 @@ void main() {
       'youtube',
     ]);
     expect(all.siteIds, isNot(contains('all')));
-    expect(all.siteIds, isNot(contains('iptv')));
   });
 }

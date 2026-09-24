@@ -111,5 +111,3 @@ const SiteDisplaySpec kYyDisplay = SiteDisplaySpec(
   showStartedAt: true,
   roomStats: [kAudienceColumn],
 );
-
-const SiteDisplaySpec kIptvDisplay = SiteDisplaySpec();

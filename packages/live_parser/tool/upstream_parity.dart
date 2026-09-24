@@ -38,9 +38,7 @@ const String _defaultOursRoot =
 const int _defaultSinceDays = 60;
 
 /// 平台目录别名:上游目录名 → 我方目录名(目前同名,留作未来改名缓冲)。
-const Map<String, String> _aliases = {
-  'cc': 'cc', // 我方暂无,报告里标「上游独有」
-};
+const Map<String, String> _aliases = {};
 
 void main(List<String> args) {
   var sinceDays = _defaultSinceDays;

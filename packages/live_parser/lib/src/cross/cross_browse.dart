@@ -58,7 +58,7 @@ const List<String> _canonicalCrossSiteOrder = [
 
 List<String> eligibleCrossBrowseSites(SiteRegistry registry) {
   bool eligible(String site) {
-    if (site == kCrossSiteId || site == 'iptv') return false;
+    if (site == kCrossSiteId) return false;
     final registration = registry[site];
     return registration?.capabilities.browse == true &&
         registration?.browse != null;

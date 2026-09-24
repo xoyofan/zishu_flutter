@@ -7,7 +7,6 @@ import '../platforms/bilibili/bilibili_site.dart';
 import '../platforms/douyin/douyin_site.dart';
 import '../platforms/douyu/douyu_site.dart';
 import '../platforms/huya/huya_site.dart';
-import '../platforms/iptv/iptv_site.dart';
 import '../platforms/kuaishou/kuaishou_site.dart';
 import '../platforms/soop/soop_site.dart';
 import '../platforms/twitch/twitch_site.dart';
@@ -20,9 +19,6 @@ SiteRegistry buildSiteRegistry() {
   registry.register(buildDouyuRegistration());
   registry.register(buildHuyaRegistration());
   registry.register(buildBilibiliRegistration());
-  // IPTV:播放列表源由宿主注入(远程 URL 或内联 M3U);此处注册空源占位,
-  // 宿主构建注册表时使用 buildIptvRegistration(sources: [...]) 替换。
-  registry.register(buildIptvRegistration(sources: const []));
   registry.register(buildTwitchRegistration());
   registry.register(buildYyRegistration());
   registry.register(buildSoopRegistration());
