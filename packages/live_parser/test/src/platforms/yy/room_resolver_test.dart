@@ -5,6 +5,14 @@ import 'package:test/test.dart';
 
 import '../../../support/fake_yy_api.dart';
 
+/// 统一站点出口:注册项(含 CachedRoomResolver 包装)装配进 [SiteRegistry]
+/// 后,经 `registry.site('yy')` 验证 LiveSite 适配层的 RoomRecord 映射。
+LiveSite _liveSite(FakeYyApi fake) {
+  final registry = SiteRegistry()
+    ..register(buildYyRegistration(httpClient: fake));
+  return registry.site('yy')!;
+}
+
 void main() {
   group('YY 房间解析', () {
     test('在播：详情 + stream-manager 多清晰度/多线路', () async {
@@ -192,6 +200,106 @@ void main() {
 
       expect(payload.roomState, RoomState.offline);
       expect(payload.streams, isEmpty);
+    });
+  });
+
+  group('LiveSite 统一出口:registry.site(yy).resolveRoom → RoomRecord', () {
+    test('在播:类型/身份/线路稳定段与 headers 透传;统计字段为 null', () async {
+      final fake = FakeYyApi()
+        ..detailResponse = yyFixture('detail_live.json')
+        ..streamResponse = yyFixture('stream_live.json');
+
+      final room = await _liveSite(fake).resolveRoom(
+        const RoomRequest(
+          site: 'yy',
+          roomIdOrUrl: 'https://www.yy.com/1414787909/',
+        ),
+      );
+
+      expect(room, isA<RoomRecord>());
+      expect(room.site, 'yy');
+      expect(room.roomId, '1414787909');
+      expect(room.sourceUrl, 'https://www.yy.com/1414787909');
+      expect(room.roomState, RoomState.live);
+      expect(room.isLive, isTrue);
+      expect(room.title, '测试直播间');
+      expect(room.anchorName, 'YY主播');
+      expect(room.category, 'other');
+      expect(room.cid, '1414787909');
+      expect(room.cover, 'https://img.yy.com/cover.jpg');
+      expect(room.avatar, 'https://img.yy.com/avatar.jpg');
+      expect(
+        room.startedAt,
+        DateTime.fromMillisecondsSinceEpoch(1788911253 * 1000),
+        reason: 'detail startTime 真值透传',
+      );
+
+      // 线路与播放请求头经统一记录透传(CDN 防盗链 Referer/Origin)。
+      expect(room.streams, isNotEmpty);
+      final first = room.streams.first;
+      // P2:锁定既有 fixture stream_live.json 真值的稳定线路段,
+      // 防止适配层把线路整体换成别的非空值仍通过。
+      expect(
+        first.lines.map((line) => (line.format, line.url)).toList(),
+        [
+          ('hls', 'https://stream.yy.com/blue.m3u8'),
+          ('flv', 'https://stream.yy.com/blue.flv'),
+        ],
+      );
+      expect(first.lines.first.headers['origin'], 'https://www.yy.com');
+      expect(first.lines.first.headers['referer'], 'https://www.yy.com/');
+      expect(room.playUrl, 'https://stream.yy.com/blue.m3u8');
+      expect(room.playUrl, first.preferredLine?.url);
+
+      // 6sol 口径:RoomPayload 没有统计字段,详情出口统计必须为
+      // null,不伪造 0/空串。
+      expect(room.audience, isNull);
+      expect(room.followers, isNull);
+      expect(room.vip, isNull);
+      expect(room.svip, isNull);
+    });
+
+    test('未开播:detail data=null → offline、无线路、空资料归一为 null', () async {
+      final fake = FakeYyApi()..detailResponse = yyFixture('detail_offline.json');
+
+      final room = await _liveSite(fake).resolveRoom(
+        const RoomRequest(site: 'yy', roomIdOrUrl: '547800'),
+      );
+
+      expect(room, isA<RoomRecord>());
+      expect(room.roomState, RoomState.offline);
+      expect(room.isLive, isFalse);
+      expect(
+        room.title,
+        isNull,
+        reason: 'RoomPayload 空串经统一记录归一为 null',
+      );
+      expect(room.anchorName, isNull);
+      expect(room.streams, isEmpty);
+      expect(room.playUrl, isEmpty);
+      expect(room.startedAt, isNull);
+      expect(room.audience, isNull);
+      expect(room.followers, isNull);
+      expect(room.vip, isNull);
+      expect(room.svip, isNull);
+    });
+
+    test('不存在:resultCode 非零 → notFound 语义,统计 null', () async {
+      final fake = FakeYyApi()..detailResponse = yyFixture('detail_missing.json');
+
+      final room = await _liveSite(fake).resolveRoom(
+        const RoomRequest(site: 'yy', roomIdOrUrl: '999999'),
+      );
+
+      expect(room, isA<RoomRecord>());
+      expect(room.roomState, RoomState.notFound);
+      expect(room.error, '房间不存在');
+      expect(room.title, isNull);
+      expect(room.streams, isEmpty);
+      expect(room.audience, isNull);
+      expect(room.followers, isNull);
+      expect(room.vip, isNull);
+      expect(room.svip, isNull);
     });
   });
 

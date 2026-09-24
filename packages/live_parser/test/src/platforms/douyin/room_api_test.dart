@@ -3,6 +3,14 @@ import 'package:test/test.dart';
 
 import '../../../support/fake_douyin_api.dart';
 
+/// 统一站点出口:注册项(含 CachedRoomResolver 包装)装配进 [SiteRegistry]
+/// 后,经 `registry.site('douyin')` 验证 LiveSite 适配层的 RoomRecord 映射。
+LiveSite _liveSite(FakeDouyinApi fake) {
+  final registry = SiteRegistry()
+    ..register(buildDouyinRegistration(httpClient: fake));
+  return registry.site('douyin')!;
+}
+
 void main() {
   late FakeDouyinApi fake;
   late SiteRegistration registration;
@@ -72,6 +80,78 @@ void main() {
         'https://pull-flv.douyin.com/origin.flv?x=1&y=2',
         reason: '\\u0026 应还原为 &',
       );
+    });
+  });
+
+  group('LiveSite 统一出口:registry.site(douyin).resolveRoom → RoomRecord', () {
+    test('在播:类型/身份/线路稳定段与 headers 透传;统计字段为 null', () async {
+      final fake = FakeDouyinApi()
+        ..enterResponse = douyinFixture('enter_live.json')
+        ..roomPageHtml = douyinHtmlFixture('room_page.html');
+
+      final room = await _liveSite(fake).resolveRoom(
+        const RoomRequest(
+          site: 'douyin',
+          roomIdOrUrl: 'https://live.douyin.com/123456',
+        ),
+      );
+
+      expect(room, isA<RoomRecord>());
+      expect(room.site, 'douyin');
+      expect(room.roomId, '123456');
+      expect(room.sourceUrl, 'https://live.douyin.com/123456');
+      expect(room.roomState, RoomState.live);
+      expect(room.isLive, isTrue);
+      expect(room.title, '测试直播间');
+      expect(room.anchorName, '测试主播');
+      expect(room.category, '王者荣耀');
+      expect(room.cover, 'https://p3.douyinpic.com/cover.jpg');
+      expect(room.avatar, 'https://p3.douyinpic.com/avatar.jpg');
+
+      // 线路与播放请求头经统一记录透传(CDN 防盗链 Referer)。
+      expect(room.streams, isNotEmpty);
+      final origin = room.streams.first;
+      expect(origin.name, '原画');
+      // P2:锁定既有 fixture enter_live.json 真值的稳定 URL,
+      // 防止适配层把线路整体换成别的非空值仍通过。
+      expect(
+        origin.lines.map((line) => (line.format, line.url)).toList(),
+        [
+          ('hls', 'https://pull-hls.douyin.com/origin.m3u8'),
+          ('flv', 'https://pull-flv.douyin.com/origin.flv'),
+        ],
+      );
+      expect(origin.lines.first.headers['Referer'], 'https://live.douyin.com/');
+      expect(room.playUrl, 'https://pull-hls.douyin.com/origin.m3u8');
+      expect(room.playUrl, origin.preferredLine?.url);
+
+      // 6sol 口径:RoomPayload 没有统计字段,详情出口统计必须为
+      // null,不伪造 0/空串。
+      expect(room.audience, isNull);
+      expect(room.followers, isNull);
+      expect(room.vip, isNull);
+      expect(room.svip, isNull);
+    });
+
+    test('未开播:status=4 → offline、无线路、统计 null,资料保留', () async {
+      final fake = FakeDouyinApi()..enterResponse = douyinFixture('enter_offline.json');
+
+      final room = await _liveSite(fake).resolveRoom(
+        const RoomRequest(site: 'douyin', roomIdOrUrl: '123456'),
+      );
+
+      expect(room, isA<RoomRecord>());
+      expect(room.roomState, RoomState.offline);
+      expect(room.isLive, isFalse);
+      expect(room.title, '测试直播间');
+      expect(room.anchorName, '测试主播');
+      expect(room.streams, isEmpty);
+      expect(room.availableQualities, isEmpty);
+      expect(room.playUrl, isEmpty);
+      expect(room.audience, isNull);
+      expect(room.followers, isNull);
+      expect(room.vip, isNull);
+      expect(room.svip, isNull);
     });
   });
 

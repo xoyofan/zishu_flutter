@@ -84,6 +84,9 @@ class YyRoomResolver implements RoomResolver, RoomSummaryRefresher {
       cover: detail?.thumb ?? '',
       avatar: avatar,
       startedAt: detail?.startedAt,
+      // 状态真源:web 同口径 totalViewer 任一命中即在播,否则离线
+      // (不从热度数字存在与否在调用侧推断)。
+      roomState: totalViewer.isNotEmpty ? RoomState.live : RoomState.offline,
     );
   }
 

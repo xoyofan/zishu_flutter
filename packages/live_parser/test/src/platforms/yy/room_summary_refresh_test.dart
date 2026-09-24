@@ -32,6 +32,27 @@ void main() {
       isTrue,
       reason: '刷新不得请求 stream-manager/interface 等取流接口',
     );
+
+    // 统一记录:fromSummary 映射刷新摘要已提供的统计真值(6sol 口径),
+    // 且状态真源 roomState 必须随真实状态赋值(平台契约:totalViewer 命中即在播)。
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.site, 'yy');
+    expect(record.roomId, '1414787909');
+    expect(record.roomState, RoomState.live);
+    expect(record.isLive, isTrue);
+    expect(record.audience, '4.1万');
+    expect(
+      record.followers,
+      isNull,
+      reason: 'YY 上游无免登录粉丝接口 → null,不伪造 0',
+    );
+    expect(record.vip, isNull);
+    expect(record.svip, isNull);
+    expect(
+      record.startedAt,
+      DateTime.fromMillisecondsSinceEpoch(1788911253 * 1000),
+      reason: 'detail startTime 真值透传',
+    );
   });
 
   test('totalViewer 边缘闪变:首次缺省时重试,第二次命中判在播', () async {
@@ -52,6 +73,11 @@ void main() {
     expect(summary.online, '4.1万');
     expect(fake.requests, hasLength(2), reason: '口径对齐 web:最多连取 3 次');
     expect(summary.avatar, 'https://img.yy.com/avatar.jpg', reason: '重试保留头像');
+    expect(
+      RoomRecord.fromSummary(summary).audience,
+      '4.1万',
+      reason: '重试命中后统一记录同样拿到热度',
+    );
   });
 
   test('未开播:data=null(合法离线响应)不重试,online 为空串', () async {
@@ -64,6 +90,14 @@ void main() {
 
     expect(summary.online, '');
     expect(fake.requests, hasLength(1), reason: 'data=null 直接按离线,不重试');
+
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.roomState, RoomState.offline);
+    expect(record.audience, isNull, reason: '离线契约空串 → null');
+    expect(record.startedAt, isNull, reason: 'data=null 无开播时间,不伪造');
+    expect(record.followers, isNull);
+    expect(record.vip, isNull);
+    expect(record.svip, isNull);
   });
 
   test('房间不存在:抛 ParserHttpException(不得伪造离线摘要)', () async {

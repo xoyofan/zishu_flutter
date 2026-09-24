@@ -84,6 +84,18 @@ void main() {
       isNot(contains('partition')),
       reason: '刷新不得请求分区/列表接口',
     );
+
+    // 统一记录:fromSummary 映射刷新摘要已提供的统计真值(6sol 口径),
+    // 且状态真源 roomState 必须随真实状态赋值(平台契约:status != 4 即在播)。
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.site, 'douyin');
+    expect(record.roomId, '123456');
+    expect(record.roomState, RoomState.live);
+    expect(record.isLive, isTrue);
+    expect(record.audience, '3.2万');
+    expect(record.followers, '456789');
+    expect(record.vip, isNull, reason: '粉丝团列未取 → null,不伪造 0');
+    expect(record.svip, isNull, reason: '本用例未给资料卡,会员缺值 → null');
   });
 
   test('会员(diamondFans):在播时走带签名的主播资料卡接口', () async {
@@ -110,6 +122,31 @@ void main() {
     expect(urls, contains('/webcast/user/profile/'));
     expect(urls, contains('a_bogus='), reason: '资料卡接口需 a_bogus 签名');
     expect(urls, isNot(contains('partition')), reason: '刷新不得请求分区/列表接口');
+
+    // diamondFans → svip:会员列真值经统一记录透传。
+    expect(RoomRecord.fromSummary(summary).svip, '4567');
+  });
+
+  test('会员:资料卡协议原始零按平台契约留空,diamondFans 不伪造 0', () async {
+    fake
+      ..enterResponse = _enter(status: 2, online: 32100)
+      ..anchorProfileResponse = {
+        'status_code': 0,
+        'data': {
+          'user_profile': {
+            'subscribe_info': {'member_count': 0},
+          },
+        },
+      };
+
+    final summary = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'douyin', roomIdOrUrl: '123456'),
+    );
+
+    expect(summary.diamondFans, '');
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.svip, isNull, reason: '协议原始零不可信,统一记录不落伪造的 0');
+    expect(record.audience, '3.2万', reason: '零值不影响其余统计');
   });
 
   test('会员:未开播(status=4)不请求资料卡,diamondFans 留空', () async {
@@ -135,5 +172,16 @@ void main() {
     );
 
     expect(summary.online, '');
+
+    // 协议带了热度(status=4)也不能当在播:契约空串 → 统一记录 null。
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.roomState, RoomState.offline);
+    expect(
+      record.audience,
+      isNull,
+      reason: '未开播热度不采纳(协议原值 9999 被契约清空)',
+    );
+    expect(record.followers, isNull);
+    expect(record.svip, isNull);
   });
 }

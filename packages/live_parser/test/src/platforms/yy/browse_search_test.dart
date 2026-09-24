@@ -67,6 +67,17 @@ void main() {
       expect(result.rooms.first.cover, 'https://img.yy.com/cover.jpg');
       // 推荐流 biz='other' 无分类语义 → 回退「推荐」。
       expect(result.rooms.first.category, '推荐');
+
+      // 列表来自 RoomSummary:统一记录只映射已提供的统计(audience),
+      // 上游列表没有 followers/vip/svip → 保持 null,不编造数字。
+      final record = RoomRecord.fromSummary(result.rooms.first);
+      expect(record.site, 'yy');
+      expect(record.roomId, '1414787909');
+      expect(record.audience, '4.1万');
+      expect(record.followers, isNull);
+      expect(record.vip, isNull);
+      expect(record.svip, isNull);
+
       final request = fake.requests.singleWhere((item) => item.url.path == '/more/page.action');
       expect(request.url.queryParameters['biz'], 'other');
       expect(request.url.queryParameters['subBiz'], 'idx');
@@ -100,6 +111,11 @@ void main() {
       // biz 反查分类中文名(fetchCategories 时登记的 sing→音乐)。
       expect(result.rooms.single.category, '音乐');
       expect(result.rooms.single.online, '1.2千');
+      expect(
+        RoomRecord.fromSummary(result.rooms.single).audience,
+        '1.2千',
+        reason: '精确格式原样保留',
+      );
       final request = fake.requests.last;
       expect(request.url.queryParameters['moduleId'], '308');
       expect(request.url.queryParameters['biz'], 'sing');

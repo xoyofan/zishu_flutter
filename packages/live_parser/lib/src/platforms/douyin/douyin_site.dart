@@ -62,6 +62,8 @@ class DouyinRoomResolver implements RoomResolver, RoomSummaryRefresher {
       cover: douyinCoverOf(room),
       // 头像(web 快照同源:owner.avatar_thumb 首项,零额外请求)。
       avatar: douyinAvatarOf(room),
+      // 状态真源:web 同口径 status==4 未开播,其余在播(不从热度推断)。
+      roomState: live ? RoomState.live : RoomState.offline,
       followers: formatExactCount(
         jsonMapOf(owner['follow_info'])['follower_count'],
       ),

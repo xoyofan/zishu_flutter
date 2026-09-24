@@ -56,6 +56,21 @@ void main() {
       expect(result.rooms.last.online, '800');
       expect(result.hasMore, isTrue);
 
+      // 列表来自 RoomSummary:统一记录只映射已提供的统计(audience),
+      // 上游列表没有 followers/vip/svip → 保持 null,不编造数字。
+      final record = RoomRecord.fromSummary(first);
+      expect(record.site, 'douyin');
+      expect(record.roomId, '123456');
+      expect(record.audience, '1.2万');
+      expect(record.followers, isNull);
+      expect(record.vip, isNull);
+      expect(record.svip, isNull);
+      expect(
+        RoomRecord.fromSummary(result.rooms.last).audience,
+        '800',
+        reason: '精确值原样保留',
+      );
+
       final request = fake.requests.last;
       expect(
         request.url.path,

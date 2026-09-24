@@ -48,6 +48,16 @@ void main() {
       expect(room.cover, 'https://p1.kuaishou.com/board/1.jpg');
       expect(fake.requests.last.url.path, '/live_api/gameboard/list');
       expect(fake.requests.last.url.queryParameters['gameId'], '1001');
+
+      // 列表来自 RoomSummary:统一记录只映射已提供的统计(audience),
+      // 上游列表没有 followers/vip/svip → 保持 null,不编造数字。
+      final record = RoomRecord.fromSummary(room);
+      expect(record.site, 'kuaishou');
+      expect(record.roomId, 'ks_board_1');
+      expect(record.audience, '1.2千');
+      expect(record.followers, isNull);
+      expect(record.vip, isNull);
+      expect(record.svip, isNull);
     });
 
     test('分类房间:长 cid 走 non-gameboard 接口', () async {
@@ -72,6 +82,11 @@ void main() {
       expect(room.online, '10.0千');
       expect(room.cover, 'https://p1.kuaishou.com/home/1.jpg');
       expect(result.hasMore, isFalse);
+      expect(
+        RoomRecord.fromSummary(room).audience,
+        '10.0千',
+        reason: '精确格式原样保留',
+      );
     });
   });
 }

@@ -34,6 +34,22 @@ void main() {
     expect(fake.requests, hasLength(1), reason: '刷新只拉一次房间页');
     expect(fake.requests.single.url.host, 'live.kuaishou.com');
     expect(fake.requests.single.url.path, '/u/ks_user_1');
+
+    // 统一记录:fromSummary 映射刷新摘要已提供的统计真值(6sol 口径),
+    // 且状态真源 roomState 必须随真实状态赋值(平台契约:isLiving 判在播)。
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.site, 'kuaishou');
+    expect(record.roomId, 'ks_user_1');
+    expect(record.roomState, RoomState.live);
+    expect(record.isLive, isTrue);
+    expect(record.audience, '2.3万');
+    expect(
+      record.followers,
+      isNull,
+      reason: '快手上游无免登录粉丝接口 → null,不伪造 0',
+    );
+    expect(record.vip, isNull);
+    expect(record.svip, isNull);
   });
 
   test('未开播:online 为空串,资料保留', () async {
@@ -46,6 +62,14 @@ void main() {
     expect(summary.online, '', reason: '契约:online 非空即判在播,离线必须空串');
     expect(summary.anchorName, '快手主播');
     expect(summary.avatar, 'https://p1.kuaishou.com/avatar.png', reason: '离线保留头像');
+
+    // 协议 watchingCount 原始 "0" 不采纳:离线契约空串 → 统一记录 null。
+    final record = RoomRecord.fromSummary(summary);
+    expect(record.roomState, RoomState.offline);
+    expect(record.audience, isNull);
+    expect(record.followers, isNull);
+    expect(record.vip, isNull);
+    expect(record.svip, isNull);
   });
 
   test('房间不存在:抛 ParserHttpException(不得伪造离线摘要)', () async {

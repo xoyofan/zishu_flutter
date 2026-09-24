@@ -101,6 +101,8 @@ class KuaishouRoomResolver implements RoomResolver, RoomSummaryRefresher {
       cover: detail.cover,
       // 头像:房间页 SSR 的 author.avatar(零额外请求)。
       avatar: detail.avatar,
+      // 状态真源:web 同口径 isLiving 判在播(不从热度推断)。
+      roomState: detail.isLive ? RoomState.live : RoomState.offline,
     );
   }
 
