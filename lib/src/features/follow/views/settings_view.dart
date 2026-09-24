@@ -128,7 +128,7 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                   // 既有用例的 `find.byType(DropdownButton<String>)` 仍只命中
                   // 「全平台默认画质」一个控件(见 settings_test)。
                   if (_platformQualityExpanded)
-                    for (final brand in PlatformBrandCatalog.navPlatforms)
+                    for (final brand in PlatformBrandCatalog.navigationPlatforms)
                       if (brand.id != 'all')
                         _SettingsRow(
                           label: brand.name,

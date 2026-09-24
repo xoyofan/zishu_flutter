@@ -74,7 +74,7 @@ class FollowPlatformFilter extends StatelessWidget {
       runSpacing: compact ? AppSpacing.xs : AppSpacing.sm,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        for (final brand in PlatformBrandCatalog.navPlatforms)
+        for (final brand in PlatformBrandCatalog.navigationPlatforms)
           if (cellWidth != null && cellHeight != null)
             SizedBox(
               width: cellWidth,

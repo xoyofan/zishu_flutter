@@ -113,7 +113,7 @@
 | A8 | 侧栏关注落库:关注/超关接 follow provider 并持久化(现为页内 `setState`,切页即丢;`PlayView` 未传回调) | A0 | [ ] | 用例 |
 | A9 | 侧栏设置接线:线路格式/聊天开关/透明度/字号接 `settingsProvider` 并真正生效(现全是 `value` 写死 + `onChanged: (_) {}` 死控件) | A0 | [ ] | 用例 |
 | A10 | 推荐 Tab:用 `browse.fetchRooms(cid)` 拉同分类直播间(现为空态提示) | A0 | [ ] | 用例 |
-| A11 | 导航能力过滤:按 `buildSiteRegistry().supportedSites` 过滤 `navPlatforms`,避免真实解析下点抖音/快手/SOOP/小红书/YouTube 抛 `StateError('站点 X 不支持分类浏览')` | A0 | [ ] | 用例 |
+| A11 | 导航能力过滤:按 `buildSiteRegistry().supportedSites` 过滤 `navPlatforms`,避免真实解析下点抖音/快手/SOOP/小红书/YouTube 抛 `StateError('站点 X 不支持分类浏览')` | A0 | [x] `filterPlatforms` 纯函数 + 4 例契约测试(`platform_navigation_filter_test.dart`);settings 画质列表/关注筛选 chips 改用 `navigationPlatforms`;凭证页(带未接入标注)与 icon 色值遍历有意保留全量 | 用例 + analyze 0 + 全量 758 + build ✓ |
 | A12 | 集成收口:装配层接线(把 A1-A11 挂回 `play_view`/`play_side_panel`/`providers`)+ 全量门禁 + 打开 define 的 Windows 真实验收 | A1-A11 | [ ] | analyze + test 全量 + build windows + 真机观感 |
 | A13(P) ✅ | 解析侧配合(已完成,提交 `2f3709d`):① **死键修复**——`availableQualities` 改为从真实 `streams` 反推(此前按 `multirates` 全量生成;某档全部线路取流失败时该档仍留在列表里,但 `streams` 已无同名项 → UI 点该 chip 静默无反应);② `RoomPayload` 增补可空 `startedAt`,斗鱼取 betard `show_time`——**人气/关注数无单房间接口(`ol` 只在分类列表接口),故不提供;拿不到即 null,不伪造**;③ 附带修复**搜索恒 0 条**:斗鱼 japi 搜索缺设备标识 cookie `dy_did` 时返回 `{error:9,"搜索过于频繁"}` 且 `data` 为空,现自动补随机 32 位十六进制 did,并让上游 `error != 0` 抛 `ParserHttpException` 而非静默返回空结果(**搜索聚合层必须按平台 try/catch**) | A0 | [x] | `dart analyze` 0 issue + `dart test` 187 passed + 斗鱼在线 smoke 全绿 |
 
@@ -134,7 +134,8 @@
 | A9 侧栏设置接线 | [x] | R3:聊天开关(`chatEnabled`)/线路格式(`preferredLineFormat`)接真并持久化,死控件清除 |
 | A10 推荐 Tab | [x] | R3:`browseRoomsProvider` 拉同分类 fixture 房间,条目 `go` 跳转(见收口裁决 3) |
 | A0 装配拆分 | [ ] **推迟** | R2/R3/R4 已把 A0 的三个目标文件改写(侧栏 1500+ 行),拆分必须在收口后的树上重排清单后进行,避免与并行轨互踩 |
-| A11 导航能力过滤 / A12 真机验收 | [ ] | 未开始(下一轮) |
+| A11 导航能力过滤 | [x] | `filterPlatforms` 纯函数 + `test/shared/platform_navigation_filter_test.dart` 4 例(2026-09-24) |
+| A12 真机验收 | [ ] | 未开始(下一轮) |
 | **A14 轨道调度对齐 SFVideo 参考** | [ ] | 见下方卡片。来源:feat/A2-danmaku 审计(分支已删,代码在 commit `a568579`) |
 
 ### A14 轨道调度对齐 SFVideo 参考(2026-09-11 立)
@@ -326,6 +327,7 @@ A1 分支合并(master,零冲突)+ 真实解析版真机模拟中发现的三个
 | 2026-09-20 | 播放页分类星标跨平台点亮(`1c0ee63`):analyze 0 issue;收藏相关 12 例 + 回归 13 例全过;release 重建 | 根因:收藏判定按 (site,cid) 逐平台,而 web 真源按 crossKey(useMyCrossCategories)——收藏虎牙的英雄联盟,斗鱼/twitch LoL 房星标不亮。对齐后真机验证:斗鱼 LoL 房星标点亮(huya:1 收藏数据) |
 | 2026-09-20 | Twitch 中插广告过滤(`9ab4196` 解析轨 + `d232889` UI 轨):parser dart test 378 过(analyze 0);app analyze 0 issue(余 1 条 master 既有 prefer_is_empty)、build windows --debug(真实解析开关)OK、真机 zackrawrr 经代理稳定播放(playback.log:`ad_filter_wrap lines=1`,40s+ 无重连) | 根因:Twitch SSAI 把中插广告段(Commercial break in progress 板)直接拼进 usher media playlist,mpv 不识别 DATERANGE 广告标记照常播出。修复:live_parser 新增纯函数过滤(streamlink 口径:stitched-ad DATERANGE 窗口 + Amazon 标题,MS 重写防漂移/回滚)+ 平台层 127.0.0.1 playlist 代理(段流量仍直连 CDN)+ 看门狗广告期豁免(3min 预算封顶)。广告判定 fixtures 用真实抓取样本(rubius 频道 MIDROLL)。注意:app 全量 flutter test 余 2 失败为音量轨在途 WIP 既有问题(已对照验证,与本修复无关) |
 | 2026-09-24 | 显示补齐计划 Task 8 收口 + IPTV/CC 移除(解析轨 85b0471 / UI 轨 deb5096):parser analyze 0 + dart test 420 过/9 skip;app analyze 0;token guard OK(28→28);flutter test 754 全过;golden 7 张按入口移除逐张核对后更新;build windows --debug ✓ | Task 8 产物 `docs/ui-parity/platform-display-matrix.md`(9站能力/展示契约/startedAt/空值语义/non-fixes)入库;windows-public-function-matrix 去 iptv;本机 VS 环境修复(新实例 D:\VS2022 17.14.41)恢复构建链 |
+| 2026-09-24 | A11 导航能力过滤(TDD):`filterPlatforms` 纯函数 + 4 例契约测试;settings/follow 筛选入口切 `navigationPlatforms`;flutter analyze 0;全量 flutter test 758 全过;build windows --debug 27.6s ✓ | 真实解析下入口列表只含注册表可浏览站点,xhs/iptv/cc 不渲染,分类点击不再有 StateError 路径 |
 | 2026-09-11 | 修复后门禁:`flutter analyze` + `flutter test` 全量 | **No issues / 229 passed / 0 failed**(较上轮 +7 转发器单测) |
 | 2026-09-11 | `flutter build windows --debug`(真实解析开关) | OK(18.0s) |
 | 2026-09-11 | 对齐服务器:reset --hard origin/master(f1397e4)+release 重建 | exe OK(39.3s),纯远端代码 |

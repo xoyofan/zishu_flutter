@@ -156,9 +156,26 @@ abstract final class PlatformBrandCatalog {
 
   static List<PlatformBrand> _platformsWith(
     bool Function(SiteRegistration registration) supported,
-  ) {
-    if (!realParserEnabled) return navPlatforms;
-    final registry = buildSiteRegistry();
+  ) => filterPlatforms(
+    registry: buildSiteRegistry(),
+    realParser: realParserEnabled,
+    supported: supported,
+  );
+
+  /// 纯过滤逻辑(A11,可测):
+  ///
+  /// - `realParser: false`(fixture 构建)原样返回 [navPlatforms] 全量目录;
+  /// - `realParser: true` 只保留「品牌支持栏目浏览 && 注册表有该站 &&
+  ///   [supported] 能力为真」的站点 —— 保证入口列表里的每一站
+  ///   `registration.browse != null`,点击分类不会在
+  ///   `ParserBrowseSource.fetchCategories` 抛 `StateError('站点 X 不支持分类浏览')`。
+  @visibleForTesting
+  static List<PlatformBrand> filterPlatforms({
+    required SiteRegistry registry,
+    required bool realParser,
+    required bool Function(SiteRegistration registration) supported,
+  }) {
+    if (!realParser) return navPlatforms;
     final result = <PlatformBrand>[all];
     for (final brand in navPlatforms.skip(1)) {
       final registration = registry[brand.id];
