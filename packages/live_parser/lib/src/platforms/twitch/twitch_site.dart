@@ -112,6 +112,7 @@ class TwitchRoomResolver implements RoomResolver, RoomSummaryRefresher {
       cover: stream?.preview ?? '',
       // 头像:UseLive 查询已带回的 profileImageURL(零额外请求)。
       avatar: user.avatar,
+      startedAt: stream?.startedAt,
     );
   }
 
@@ -184,6 +185,7 @@ class TwitchRoomResolver implements RoomResolver, RoomSummaryRefresher {
       title: stream.title,
       cover: stream.preview,
       avatar: user.avatar,
+      startedAt: stream.startedAt,
       category: stream.gameName,
       cid: stream.gameId,
       roomState: RoomState.live,
@@ -246,6 +248,7 @@ class TwitchRoomResolver implements RoomResolver, RoomSummaryRefresher {
     String avatar = '',
     String category = '',
     String cid = '',
+    DateTime? startedAt,
     List<StreamQuality> streams = const [],
     List<QualityOption>? availableQualities,
     String? error,
@@ -267,6 +270,7 @@ class TwitchRoomResolver implements RoomResolver, RoomSummaryRefresher {
           for (final stream in streams)
             QualityOption(name: stream.name, rate: stream.rate),
         ],
+    startedAt: startedAt,
     source: kTwitchSource,
     fetchedAt: DateTime.now(),
     error: error,

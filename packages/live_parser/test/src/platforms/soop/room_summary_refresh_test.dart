@@ -51,6 +51,7 @@ void main() {
     // total 是字符串形态,一并覆盖数值解析)。
     expect(summary.followers, '434898');
     expect(summary.vip, '235');
+    expect(summary.startedAt, DateTime.parse('2026-09-20 18:01:42'));
 
     final playerApiRequests = fake.requests
         .where((request) => request.url.path == '/afreeca/player_live_api.php')

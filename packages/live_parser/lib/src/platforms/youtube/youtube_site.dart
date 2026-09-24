@@ -62,9 +62,12 @@ class YoutubeRoomResolver implements RoomResolver {
     final sourceUrl = youtubeSourceUrl(videoId);
     // watch 页与 dlp 提取互不依赖,并行;dlp 内部含首档预校验。
     final ctxFuture = fetchYoutubeWatchPage(_client, videoId);
-    final dlpFuture = _tryDlpTiers(videoId);
+    final dlpFuture = _tryDlpExtract(videoId);
     final ctx = await ctxFuture;
-    final dlpTiers = await dlpFuture;
+    final dlpExtract = await dlpFuture;
+    final dlpTiers = dlpExtract == null
+        ? const <StreamQuality>[]
+        : youtubeDlpQualities(dlpExtract.tiers);
 
     if (!ctx.hasPlayer) {
       return _buildPayload(
@@ -103,7 +106,7 @@ class YoutubeRoomResolver implements RoomResolver {
 
     // dlp 主路线:数据中心 IP 的分片强制 PO Token,页面链地址会 403,
     // yt-dlp(+Deno/EJS)签出的地址才可播;不可用时回退页面链。
-    if (dlpTiers != null && dlpTiers.isNotEmpty) {
+    if (dlpTiers.isNotEmpty) {
       final payload = _buildPayload(
         roomId: videoId,
         sourceUrl: sourceUrl,
@@ -112,6 +115,7 @@ class YoutubeRoomResolver implements RoomResolver {
         anchorName: author,
         cover: cover,
         streams: dlpTiers,
+        startedAt: _youtubeStartedAt(dlpExtract),
       );
       _cache[videoId] = (at: DateTime.now(), payload: payload);
       // 首档地址链校验放到**后台**:它是纯前置检查,实测经代理要 ~9s
@@ -217,7 +221,7 @@ class YoutubeRoomResolver implements RoomResolver {
   /// dlp 提取 + 首档预校验;任一步失败返回 null 交由页面链兜底。
   ///
   /// 注:首档链校验不再在此阻塞 —— 见 [resolveRoom] 中的后台校验。
-  Future<List<StreamQuality>?> _tryDlpTiers(String videoId) async {
+  Future<YoutubeDlpExtract?> _tryDlpExtract(String videoId) async {
     try {
       // 后台校验刚判过不可用:本轮直接放弃 dlp,走页面链。
       final rejectedAt = _dlpRejectedUntil[videoId];
@@ -229,7 +233,7 @@ class YoutubeRoomResolver implements RoomResolver {
       if (!available) return null;
       final extract = await (dlpExtractor ?? _defaultDlpExtract)(videoId);
       if (extract == null || extract.tiers.isEmpty) return null;
-      return youtubeDlpQualities(extract.tiers);
+      return extract;
     } on Object {
       return null;
     }
@@ -255,6 +259,7 @@ class YoutubeRoomResolver implements RoomResolver {
     String anchorName = '',
     String cover = '',
     List<StreamQuality> streams = const [],
+    DateTime? startedAt,
     String? error,
   }) => RoomPayload(
     site: kYoutubeSiteId,
@@ -272,10 +277,18 @@ class YoutubeRoomResolver implements RoomResolver {
       for (final stream in streams)
         QualityOption(name: stream.name, rate: stream.rate),
     ],
+    startedAt: startedAt,
     source: kYoutubeSource,
     fetchedAt: DateTime.now(),
     error: error,
   );
+}
+
+DateTime? _youtubeStartedAt(YoutubeDlpExtract? extract) {
+  final seconds = extract?.liveStartAtSec ?? 0;
+  return seconds > 0
+      ? DateTime.fromMillisecondsSinceEpoch(seconds * 1000)
+      : null;
 }
 
 String _thumbnailOf(Map<String, dynamic> videoDetails) {

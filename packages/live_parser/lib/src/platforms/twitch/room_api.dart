@@ -27,6 +27,7 @@ class TwitchStreamInfo {
     required this.gameId,
     required this.gameName,
     required this.preview,
+    this.startedAt,
   });
 
   final String id;
@@ -35,6 +36,7 @@ class TwitchStreamInfo {
   final String gameId;
   final String gameName;
   final String preview;
+  final DateTime? startedAt;
 }
 
 /// Twitch 用户(主播)。[stream] 为空表示未开播。
@@ -110,6 +112,7 @@ TwitchStreamInfo? _streamInfo(Object? value) {
       }(),
     ),
     preview: fillTwitchImageTemplate(_text(record['previewImageURL'])),
+    startedAt: DateTime.tryParse(_text(record['createdAt']))?.toLocal(),
   );
 }
 

@@ -52,6 +52,10 @@ class YyRoomDetail {
   /// 在播判据)。
   final String totalViewer;
   final int startTime;
+
+  DateTime? get startedAt => startTime > 0
+      ? DateTime.fromMillisecondsSinceEpoch(startTime * 1000)
+      : null;
 }
 
 class YyRoomDetailResult {

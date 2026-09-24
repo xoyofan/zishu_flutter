@@ -96,6 +96,7 @@ class SoopRoomResolver implements RoomResolver, RoomSummaryRefresher {
         followers: formatExactCount(dashboard.fans),
         // SOOP 的 vip 列在 web 真源是「订阅」(ROOM_STAT_COLUMNS.soop)。
         vip: formatExactCount(dashboard.subscribers),
+        startedAt: dashboard.startedAt,
         roomState: RoomState.offline,
       );
     }
@@ -103,7 +104,8 @@ class SoopRoomResolver implements RoomResolver, RoomSummaryRefresher {
       fetchSoopDashboard(_client.parserHttp, roomId),
       fetchSoopCategoryViewers(_client.parserHttp, roomId, detail.cateNo),
     ]);
-    final dashboard = results[0] as ({int fans, int subscribers});
+    final dashboard =
+        results[0] as ({int fans, int subscribers, DateTime? startedAt});
     final viewers = results[1] as int;
     return RoomSummary(
       site: kSoopSiteId,
@@ -124,6 +126,7 @@ class SoopRoomResolver implements RoomResolver, RoomSummaryRefresher {
       followers: formatExactCount(dashboard.fans),
       // SOOP 的 vip 列在 web 真源是「订阅」(ROOM_STAT_COLUMNS.soop)。
       vip: formatExactCount(dashboard.subscribers),
+      startedAt: dashboard.startedAt,
       roomState: RoomState.live,
     );
   }

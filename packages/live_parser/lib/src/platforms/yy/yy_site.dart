@@ -83,6 +83,7 @@ class YyRoomResolver implements RoomResolver, RoomSummaryRefresher {
       online: totalViewer,
       cover: detail?.thumb ?? '',
       avatar: avatar,
+      startedAt: detail?.startedAt,
     );
   }
 
@@ -223,6 +224,7 @@ class YyRoomResolver implements RoomResolver, RoomSummaryRefresher {
         title: detail.desc.isNotEmpty ? detail.desc : detail.name,
         cover: detail.thumb,
         avatar: detail.avatar,
+        startedAt: detail.startedAt,
         category: yyBizName(detail.biz) ?? detail.biz,
         cid: detail.ssid,
         roomState: roomState,

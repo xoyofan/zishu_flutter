@@ -9,9 +9,6 @@ library;
 import '../catalog/cross_catalog.dart';
 import '../contracts/contracts.dart';
 import '../models/models.dart';
-import '../platforms/bilibili/room_api.dart' show kBilibiliSiteId;
-import '../platforms/douyu/browse.dart' show kDouyuSiteId;
-import '../platforms/huya/room_api.dart' show kHuyaSiteId;
 import '../utils/format_online.dart';
 
 /// 聚合排序方式。
@@ -47,13 +44,43 @@ class UnsupportedRoomResolver implements RoomResolver {
 }
 
 /// 全平台浏览仓库。
+const List<String> _canonicalCrossSiteOrder = [
+  'douyu',
+  'huya',
+  'bilibili',
+  'douyin',
+  'kuaishou',
+  'yy',
+  'twitch',
+  'soop',
+  'youtube',
+];
+
+List<String> eligibleCrossBrowseSites(SiteRegistry registry) {
+  bool eligible(String site) {
+    if (site == kCrossSiteId || site == 'iptv') return false;
+    final registration = registry[site];
+    return registration?.capabilities.browse == true &&
+        registration?.browse != null;
+  }
+
+  final result = <String>[
+    for (final site in _canonicalCrossSiteOrder)
+      if (eligible(site)) site,
+  ];
+  for (final site in registry.supportedSites) {
+    if (eligible(site) && !result.contains(site)) result.add(site);
+  }
+  return List.unmodifiable(result);
+}
+
 class CrossBrowseRepository implements BrowseRepository {
   CrossBrowseRepository({
     required this.registry,
-    this.siteIds = const [kDouyuSiteId, kHuyaSiteId, kBilibiliSiteId],
+    List<String>? siteIds,
     this.catalog = const CrossCatalog(),
     this.mergeMode = CrossMergeMode.interleaved,
-  });
+  }) : siteIds = siteIds ?? eligibleCrossBrowseSites(registry);
 
   /// 聚合来源注册表;与宿主使用的实例一致时新注册站点会自动纳入。
   final SiteRegistry registry;
@@ -83,15 +110,22 @@ class CrossBrowseRepository implements BrowseRepository {
         ? request.limit
         : (request.limit * 2).clamp(request.limit, 60);
 
-    final results = await Future.wait([
-      for (final site in targets)
-        _fetchSite(
-          site: site,
-          category: category,
-          page: request.page,
-          limit: perSite,
-        ),
-    ]);
+    final results = <_SiteRooms>[];
+    // 控制跨平台请求并发,避免 all 首页同时打出全部平台请求。
+    for (var offset = 0; offset < targets.length; offset += 4) {
+      final chunk = targets.skip(offset).take(4);
+      results.addAll(
+        await Future.wait([
+          for (final site in chunk)
+            _fetchSite(
+              site: site,
+              category: category,
+              page: request.page,
+              limit: perSite,
+            ),
+        ]),
+      );
+    }
 
     var hasMore = false;
     final buckets = <List<RoomSummary>>[];
@@ -193,7 +227,7 @@ class CrossBrowseRepository implements BrowseRepository {
 /// 只要 id 在 [siteIds] 中就会自动纳入聚合。
 SiteRegistration buildCrossRegistration({
   required SiteRegistry registry,
-  List<String> siteIds = const [kDouyuSiteId, kHuyaSiteId, kBilibiliSiteId],
+  List<String>? siteIds,
   CrossCatalog catalog = const CrossCatalog(),
   CrossMergeMode mergeMode = CrossMergeMode.interleaved,
 }) => SiteRegistration(

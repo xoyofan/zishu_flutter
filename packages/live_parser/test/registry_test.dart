@@ -81,7 +81,7 @@ void main() {
     expect(yy.danmaku, isNull);
   });
 
-  test('buildSiteRegistry 注册全平台聚合(斗鱼+虎牙+B站)', () async {
+  test('buildSiteRegistry 注册全平台聚合(现有可浏览直播站)', () async {
     final registry = buildSiteRegistry();
 
     expect(registry.supportedSites, contains('all'));
@@ -101,7 +101,17 @@ void main() {
     expect(categories.groups.single.items.map((e) => e.cid), contains('lol'));
 
     final cross = all.browse! as CrossBrowseRepository;
-    expect(cross.siteIds, ['douyu', 'huya', 'bilibili']);
+    expect(cross.siteIds, [
+      'douyu',
+      'huya',
+      'bilibili',
+      'douyin',
+      'kuaishou',
+      'yy',
+      'twitch',
+      'soop',
+      'youtube',
+    ]);
     expect(
       cross.registry['douyu']?.browse,
       isNotNull,

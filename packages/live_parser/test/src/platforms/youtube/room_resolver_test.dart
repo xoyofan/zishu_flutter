@@ -153,6 +153,7 @@ void main() {
               fps: 60,
             ),
           ],
+          liveStartAtSec: 1788911253,
         ),
       );
 
@@ -166,6 +167,10 @@ void main() {
       expect(payload.roomState, RoomState.live);
       expect(payload.availableQualities.map((q) => q.name).toList(), ['720p60']);
       expect(payload.playUrl, contains('dlp-720.m3u8'));
+      expect(
+        payload.startedAt,
+        DateTime.fromMillisecondsSinceEpoch(1788911253 * 1000),
+      );
     });
 
     test('无 player/非直播返回 offline', () async {

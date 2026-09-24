@@ -183,17 +183,18 @@ Future<int> fetchSoopCategoryViewers(
   }
 }
 
-/// 频道 dashboard(`api-channel.sooplive.co.kr`):粉丝数 + 订阅数。
+/// 频道 dashboard(`api-channel.sooplive.co.kr`):粉丝数 + 订阅数 + 本场开播时间。
 ///
 /// 口径对齐 web `resolve/soop/index.ts` 的 `fetchSoopDashboard`:
 /// `upd.fanCnt` → 粉丝、`subscription.total` → 订阅(展示为 vip 列
-/// 「订阅」)。失败/字段缺失返回 (0, 0):统计是展示增强,不得让刷新失败。
+/// 「订阅」)、`station.broadStart` → 本场开播时间。失败/字段缺失返回
+/// (0, 0, null):统计是展示增强,不得让刷新失败。
 ///
 /// 上游偶发瞬时失败(传输错误/非 2xx;2026-09 探针实测:同一房间单独
 /// 连打全 200,但紧跟 player_live_api 的高频请求序列下会偶发失败,一次
 /// 失败就把播放页主播卡刷成空粉丝/空订阅),因此对幂等 GET 做两次尝试的
 /// 轻量重试;两次都失败仍按展示增强口径静默为 0(UI 显示「—」,不伪造)。
-Future<({int fans, int subscribers})> fetchSoopDashboard(
+Future<({int fans, int subscribers, DateTime? startedAt})> fetchSoopDashboard(
   ParserHttp http,
   String roomId,
 ) async {
@@ -214,13 +215,15 @@ Future<({int fans, int subscribers})> fetchSoopDashboard(
       final data = http.jsonMap(response);
       final upd = jsonMapOf(data['upd']);
       final subscription = jsonMapOf(data['subscription']);
+      final station = jsonMapOf(data['station']);
       return (
         fans: _soopIntOf(upd['fanCnt']),
         subscribers: _soopIntOf(subscription['total']),
+        startedAt: DateTime.tryParse(jsonText(station['broadStart'])),
       );
     }, attempts: 2);
   } on Object {
-    return (fans: 0, subscribers: 0);
+    return (fans: 0, subscribers: 0, startedAt: null);
   }
 }
 

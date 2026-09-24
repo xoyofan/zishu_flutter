@@ -342,6 +342,7 @@ class RoomSummary {
     this.vip = '',
     this.diamondFans = '',
     this.roomState = RoomState.offline,
+    this.startedAt,
   });
 
   final String site;
@@ -428,6 +429,9 @@ class RoomSummary {
   ///   replay 判定的站点自然回落,行为不变。
   final RoomState roomState;
 
+  /// 本场开播时间;平台没有提供或旧数据缺失时为 null。
+  final DateTime? startedAt;
+
   /// 在播(与 [online] 非空一致;轮播/离线均为 false)。
   bool get isLive => roomState == RoomState.live;
 
@@ -449,6 +453,7 @@ class RoomSummary {
     if (followers.isNotEmpty) 'followers': followers,
     if (vip.isNotEmpty) 'vip': vip,
     if (diamondFans.isNotEmpty) 'diamondFans': diamondFans,
+    if (startedAt != null) 'startedAt': startedAt!.toIso8601String(),
   };
 
   factory RoomSummary.fromJson(Map<String, dynamic> json) => RoomSummary(
@@ -466,6 +471,7 @@ class RoomSummary {
       (state) => state.name == json['roomState'],
       orElse: () => RoomState.offline,
     ),
+    startedAt: DateTime.tryParse(json['startedAt']?.toString() ?? ''),
     promoTag: json['promoTag']?.toString(),
     followers: json['followers']?.toString() ?? '',
     vip: json['vip']?.toString() ?? '',
