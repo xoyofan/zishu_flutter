@@ -2,6 +2,29 @@
 
 > 状态标记:[x] 完成 / [ ] 待办 / [~] 进行中。每轮任务完成后追加结论与工作项。
 
+## 2026-09-24 平台显示补齐收口 + IPTV/CC 移除(完成)
+
+**结论**:2026-09-24 显示补齐计划 Task 1-7 此前已合入,本轮完成 Task 8 收口;按用户口径移除 IPTV/CC 两平台全部代码,Twitch/虎牙上游代理为正常功能保留;虎牙确认直连(测试钉住)。本机 VS 基础设施被清理工具逐层破坏,经 COM/实例存储/channel manifest/MSI 四层手工修复后以新路径重装 D:\VS2022 恢复构建链。
+
+### 本轮完成项
+- [x] 拉取 master 56 提交;laya 调用约定写入全局 `~/.pi/agent/AGENTS.md`(score=数组/choice=对象/noul=对象,低置信度不作排序)。
+- [x] 移除 IPTV 平台全部代码(解析轨 85b0471,-1088 行)与 CC 残留(parity 映射/legacy 能力表/品牌注释)。
+- [x] UI 轨清理应用侧引用并刷新 golden(deb5096,diff 逐张核对仅位移无崩坏)。
+- [x] Task 8:新建 `docs/ui-parity/platform-display-matrix.md`(9站能力/展示契约/startedAt 来源/空值语义/non-fixes);`docs/testing/windows-public-function-matrix.md` 去 iptv;看板回写。
+- [x] VS 环境修复:真实 CLSID {177F0C4A-...} regsvr32、ProgramData 实例 state.json 重建、channel manifest updateUri 根级、vs_communitymsi 重注册;最终 `vs_community.exe --install --installPath D:\VS2022 --add NativeDesktop`(443 包/5.4G/exit 0),flutter doctor VS ✓。
+
+### 验证
+- parser: `dart analyze` 0 / `dart test` 420 过 + 9 skip。
+- 根: `flutter analyze` 0;`dart run tool/check_design_tokens.dart` OK(28→28);`flutter test` 754 全过。
+- `flutter build windows --debug -t lib/main.dart` ✓(`Built build\windows\x64\runner\Debug\zishu_flutter.exe`,135.5s)。
+
+### 待办(下轮候选,缺口优先级见 laya 分析)
+- [ ] A11 导航能力过滤:按注册表能力裁剪 navPlatforms,防未实现平台点击抛 StateError。
+- [ ] YY 弹幕 connector(纯增量,fixture 可测)。
+- [ ] 快手搜索能力(纯增量)。
+- [ ] 协议级另立任务:虎牙零消息、Twitch 弹幕连接、快手表情图片 URL、YouTube 个别频道源、飘屏重叠。
+- [ ] 环境清理:旧残破实例 `D:\Microsoft Visual Studio\2022\Community`、ghost 副本 `D:\Program Files\Microsoft Visual Studio\2022\Community`、`%TEMP%\vs_community.exe`。
+
 ## 2026-09-12 data-server 登录 / 关注云同步接入(完成)
 
 **结论**:本机为瘦客户端(不部署 data-server 服务端),仅「接收(GET /api/me/follows)+ 提交(POST 整表替换)」;账号 xoyofan 默认缓存登录,启动自动登录链 + 手动登录框齐备,关注云同步双向打通。

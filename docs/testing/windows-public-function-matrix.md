@@ -4,7 +4,7 @@
 >
 > 状态枚举：`PASS` / `FAIL` / `BLOCKED` / `N/A` / `NOT_RUN`。
 >
-> 当前阶段：阶段 5（收口门禁）。阶段 4 的 Windows release 真实 smoke 已于 2026-09-20 执行完毕（release 构建 `--dart-define=ZISHU_REAL_PARSER=true`，commit 725a1a2，证据目录 `tool/windows-public-smoke/rel-smoke-20260920/`，已 gitignore）。IPTV 平台按用户口径（2026-09-20）跳过真实播放验证。
+> 当前阶段：阶段 5（收口门禁）。阶段 4 的 Windows release 真实 smoke 已于 2026-09-20 执行完毕（release 构建 `--dart-define=ZISHU_REAL_PARSER=true`，commit 725a1a2，证据目录 `tool/windows-public-smoke/rel-smoke-20260920/`，已 gitignore）。IPTV 平台已于 2026-09-24 整平台移除（解析轨 `85b0471` / UI 轨 `deb5096`），CC 已停运无实现，均不再列入矩阵。
 
 ## 1. 平台能力基线
 
@@ -19,7 +19,6 @@
 | `twitch` | PASS | PASS | PASS | PASS | PASS | PASS | NOT_RUN | PASS | BLOCKED |
 | `soop` | PASS | PASS | PASS | PASS | PASS | NOT_RUN | NOT_RUN | PASS | PASS |
 | `youtube` | PASS | N/A | PASS | PASS | PASS | N/A | NOT_RUN | PASS | PASS |
-| `iptv` | N/A | N/A | N/A | N/A | N/A | N/A | PASS | NOT_RUN | N/A |
 
 > 上表中的 `PASS` 表示能力已在当前代码/解析测试记录中存在，不表示本轮 Windows 真实 smoke 已通过。真实验证必须在阶段 4 逐平台填入证据。
 >
@@ -33,7 +32,6 @@
 > - `twitch` BLOCKED：播放/画质(720p60→480p)/单线路 HLS/静音/全屏/PiP 全通过；弹幕连接失败且刷新无效（BUG-WIN-DANMAKU-004，出口抖动+connector 层真机复验遗留）。
 > - `soop` PASS：韩文房播放、24+ 条韩文聊天弹幕与多条韩文飘屏（裸 socket+CONNECT 隧道真机确认）。
 > - `youtube` PASS：browse(27,490/120,219 watching)、换房后播放+多语言弹幕刷屏；个别频道(HOY)流拉不动见 OBS-WIN-PLAY-001。
-> - `iptv` N/A：browse 空态证据已留（`iptv-categories.png` 前身 `soop-browse.png`）；播放验证按用户口径（2026-09-20「IPTV不用管」）跳过。
 
 ## 2. 公共功能 ID
 
