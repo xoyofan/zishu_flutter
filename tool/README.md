@@ -59,6 +59,23 @@ Select-String -Path $log -Pattern 'resolve_|give_up|stall' | Select-Object -Last
 | `caption_fail` / `caption_unsupported` | 失败原因(下载/引擎/平台不支持) |
 | `prefetch_start/ok/empty/fail ms` | 其他画质线路后台预取结果与耗时 |
 
+### 切房资源诊断
+
+播放页离开旧房间时，`playback.log` 会记录：
+
+- `resource_sample phase=room_release_start`：调用 `player.stop()` 前的 RSS；
+- `resource_sample phase=room_release_end`：旧源卸载完成后的 RSS，并带 `elapsed_ms`。
+
+GPU、Private Bytes、线程和句柄不属于 Flutter/Dart 稳定 API，使用外部采样器：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tool/sample_runtime.ps1 `
+  -DurationSeconds 300 -IntervalSeconds 5 `
+  -OutputPath tool/screenshots/zishu/runtime.csv
+```
+
+切房前后重点比较 `PrivateMb`、`GpuDedicatedMb`、`Threads` 是否在数秒内回落；RSS 不立即下降不一定是泄漏，应结合多次切房的趋势判断。
+
 ## 裸值守卫(check_design_tokens.dart)
 
 阻止 `lib/src/**` 里继续出现裸色值/裸阴影/裸字号/裸圆角。纯 Dart（只依赖 `dart:io`、
