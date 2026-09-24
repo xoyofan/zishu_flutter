@@ -198,7 +198,8 @@ abstract interface class LiveSite {
   /// 栏目浏览;不支持为 `null`。
   BrowseRepository? get browse;
 
-  /// 搜索;不支持为 `null`。
+  /// 搜索;不声明能力(`roomSearch` 与 `anchorSearch` 均为 false)时
+  /// 为 `null`,即使旧注册项带占位部件(不把空结果占位伪装成支持)。
   SearchRepository? get search;
 
   /// 弹幕连接;不支持为 `null`(不返回空连接占位)。
@@ -238,7 +239,16 @@ class _RegistrationLiveSite implements LiveSite {
   BrowseRepository? get browse => _registration.browse;
 
   @override
-  SearchRepository? get search => _registration.search;
+  SearchRepository? get search {
+    // 未声明搜索能力的站点即使旧注册项带占位部件(固定返回空结果)也
+    // 必须暴露为 null —— 调用方看到 N/A,而不是「支持但无结果」的
+    // 能力假阳性;旧 `SiteRegistration.search` 视图不变,迁移期兼容。
+    if (!_registration.capabilities.roomSearch &&
+        !_registration.capabilities.anchorSearch) {
+      return null;
+    }
+    return _registration.search;
+  }
 
   @override
   DanmakuConnector? get danmaku => _registration.danmaku;

@@ -214,7 +214,7 @@ void main() {
       expect(site.capabilities.danmaku, isFalse);
     });
 
-    test('九站:LiveSite 与注册项同源,声明的 browse/search/danmaku 与部件一致', () {
+    test('九站:LiveSite 与注册项同源,声明的 browse/search/danmaku 与部件双向一致', () {
       final registry = buildSiteRegistry();
       for (final id in nineSites) {
         final registration = registry[id]!;
@@ -234,20 +234,27 @@ void main() {
           site.danmaku != null,
           reason: '$id danmaku 能力与部件一致',
         );
-        // 声明房间/主播搜索即注册部件。快手平台不开放搜索:capabilities
-        // 不声明、search 部件是返回空结果的占位 —— 声明侧为假不违反
-        // 「声明即有部件」。
-        if (site.capabilities.roomSearch || site.capabilities.anchorSearch) {
-          expect(site.search, isNotNull, reason: '$id 声明搜索即注册部件');
-        }
+        // 搜索能力与部件双向一致:声明即有部件;未声明(快手/YouTube)
+        // 即使旧注册项带返回空结果的占位部件,新外观也必须暴露为 null ——
+        // 否则调用方看到「支持但无结果」而非 N/A(能力假阳性)。
+        expect(
+          site.capabilities.roomSearch || site.capabilities.anchorSearch,
+          site.search != null,
+          reason: '$id 搜索能力与部件双向一致',
+        );
       }
     });
 
-    test('未声明的能力部件为 null(YouTube 无搜索、聚合站只有浏览)', () {
+    test('未声明的能力部件为 null(YouTube/快手无搜索、聚合站只有浏览)', () {
       final registry = buildSiteRegistry();
       final youtube = registry.site('youtube')!;
       expect(youtube.capabilities.roomSearch, isFalse);
       expect(youtube.search, isNull);
+      // 快手旧注册项带占位搜索部件,新外观按能力过滤为 null(N/A)。
+      final kuaishou = registry.site('kuaishou')!;
+      expect(kuaishou.capabilities.roomSearch, isFalse);
+      expect(kuaishou.capabilities.anchorSearch, isFalse);
+      expect(kuaishou.search, isNull);
 
       final all = registry.site('all')!;
       expect(all.capabilities.browse, isTrue);
