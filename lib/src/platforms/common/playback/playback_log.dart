@@ -59,6 +59,19 @@ class PlaybackLog {
     }
   }
 
+  /// 记录一条低频资源样本。RSS 只作为趋势观测,不做阈值判断或告警。
+  static void writeResourceSample(
+    String phase, [
+    Map<String, Object?> fields = const {},
+  ]) {
+    final rssMb = ProcessInfo.currentRss / 1024 / 1024;
+    write('resource_sample', {
+      ...fields,
+      'phase': phase,
+      'rss_mb': rssMb.toStringAsFixed(1),
+    });
+  }
+
   /// 记录一条事件。[fields] 值会被 `toString`,键值对以空格连接。
   static void write(String event, [Map<String, Object?> fields = const {}]) {
     final file = _target;

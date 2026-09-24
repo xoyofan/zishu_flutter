@@ -34,6 +34,20 @@ void main() {
     expect(text, matches(RegExp(r'^\d{2}:\d{2}:\d{2}\.\d{3} ', multiLine: true)));
   });
 
+  test('资源样本记录阶段、RSS 与业务字段', () {
+    PlaybackLog.writeResourceSample('room_enter_start', {
+      'site': 'douyu',
+      'room': '63136',
+    });
+
+    final text = File('${tempDir.path}\\playback.log').readAsStringSync();
+    expect(text, contains('resource_sample'));
+    expect(text, contains('phase=room_enter_start'));
+    expect(text, contains('site=douyu'));
+    expect(text, contains('room=63136'));
+    expect(text, matches(RegExp(r'rss_mb=\d+\.\d+')));
+  });
+
   test('无字段事件与多事件按序追加', () {
     PlaybackLog.write('stop');
     PlaybackLog.write('reopen', {'attempt': 2, 'limit': 6});

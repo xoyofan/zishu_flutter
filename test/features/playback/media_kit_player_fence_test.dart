@@ -15,6 +15,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/media_kit_live_player.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/playback_log.dart';
+import 'package:zishu_flutter/src/platforms/common/playback/playback_retry.dart';
 
 /// [PlatformPlayer] 替身:记录命令调用顺序,并允许测试放行/挂起 open、
 /// 手动推送 mpv 事件。所有流控制器都是 `@protected`,子类可直接写入。
@@ -256,6 +257,30 @@ void main() {
         ),
         isTrue,
         reason: 'open 末尾应以 backoffFor(0)=8s 主动重挂看门狗',
+      );
+    });
+
+    test('计时到期前底层已恢复 playing 时不得重开', () async {
+      final fastPolicy = PlaybackRetryPolicy(
+        baseDelay: const Duration(milliseconds: 20),
+        stepDelay: Duration.zero,
+        maxDelay: const Duration(milliseconds: 20),
+      );
+      final fastPlayer = MediaKitLivePlayer(
+        player: Player(platformPlayer: fake),
+        policy: fastPolicy,
+      );
+      addTearDown(fastPlayer.dispose);
+      await fastPlayer.open(lineA);
+
+      // 模拟恢复事件在 open 围栏内丢失,但底层真实状态已经恢复。
+      fake.setStateValues(playing: true, buffering: false);
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+
+      expect(
+        fake.calls,
+        ['open:a.example.com'],
+        reason: '计时器到期时必须复核底层状态,已恢复时不得重开视频管线',
       );
     });
 

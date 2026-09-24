@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -10,6 +11,7 @@ import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/shared/application/browse_source.dart';
 import 'package:zishu_flutter/src/shared/application/providers.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
+import 'package:zishu_flutter/src/platforms/common/playback/playback_log.dart';
 
 import '../../support/scripted_live_player.dart';
 
@@ -134,6 +136,54 @@ Future<void> _startRoom(
 }
 
 void main() {
+  test('离开房间记录旧播放器停止前后的 RSS 样本', () async {
+    final tempDir = Directory.systemTemp.createTempSync('play_resource_test');
+    final logPath = '${tempDir.path}${Platform.pathSeparator}playback.log';
+    PlaybackLog.initForTest(logPath);
+    addTearDown(() {
+      PlaybackLog.resetForTest();
+      tempDir.deleteSync(recursive: true);
+    });
+    final player = ScriptedLivePlayer();
+    final container = await _makeContainer(
+      roomVolumes: const {},
+      player: player,
+    );
+    const params = (site: 'douyu', roomId: 'A');
+    final keepAlive = container.listen(
+      playControllerProvider(params),
+      (_, _) {},
+      fireImmediately: true,
+    );
+    await container.read(playControllerProvider(params).future);
+
+    keepAlive.close();
+    for (var i = 0; i < 20 && player.stopCalls == 0; i++) {
+      await Future<void>.delayed(Duration.zero);
+    }
+    await Future<void>.delayed(Duration.zero);
+
+    final lines = File(logPath).readAsLinesSync();
+    expect(
+      lines.any(
+        (line) =>
+            line.contains('resource_sample') &&
+            line.contains('phase=room_release_start') &&
+            line.contains('room=A'),
+      ),
+      isTrue,
+    );
+    expect(
+      lines.any(
+        (line) =>
+            line.contains('resource_sample') &&
+            line.contains('phase=room_release_end') &&
+            line.contains('room=A'),
+      ),
+      isTrue,
+    );
+  });
+
   test(
     're-parsing after a disconnect keeps the room volume and mute state',
     () async {

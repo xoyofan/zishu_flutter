@@ -132,7 +132,10 @@ class PlayController extends AsyncNotifier<PlayState> {
       if (player case LineRecoveryAware aware) {
         aware.setLineRecovery(null);
       }
-      unawaited(player.stop());
+      final stopWatch = Stopwatch()..start();
+      final fields = <String, Object?>{'site': params.site, 'room': params.roomId};
+      PlaybackLog.writeResourceSample('room_release_start', fields);
+      unawaited(_stopAndSampleRelease(player, stopWatch, fields));
     });
     // 数据源端口变化(G1 换真实解析)时自动重建,Widget 无感。
     final source = ref.watch(roomSourceProvider);
@@ -189,6 +192,28 @@ class PlayController extends AsyncNotifier<PlayState> {
       unawaited(_prefetchAfterFirstFrame(payload, source, prefetchToken));
     }
     return next;
+  }
+
+  /// 离房后等全局播放器真正卸载旧源,再落一条释放后 RSS 样本。
+  Future<void> _stopAndSampleRelease(
+    LivePlayer player,
+    Stopwatch stopWatch,
+    Map<String, Object?> fields,
+  ) async {
+    try {
+      await player.stop();
+    } catch (error) {
+      PlaybackLog.writeResourceSample('room_release_error', {
+        ...fields,
+        'error': error,
+      });
+    } finally {
+      stopWatch.stop();
+      PlaybackLog.writeResourceSample('room_release_end', {
+        ...fields,
+        'elapsed_ms': stopWatch.elapsedMilliseconds,
+      });
+    }
   }
 
   /// 等首个出帧事件后再启动画质预取。

@@ -447,6 +447,13 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   void _reopenIfStalled() {
     if (_disposedOrEmpty || _givenUp) return;
     _stallTimer = null;
+    // buffering 事件可能在 open 围栏内丢失；计时到期必须复核底层状态，
+    // 已恢复播放时只补发快照，不能机械重开视频管线。
+    final state = _player.state;
+    if (state.playing && !state.buffering) {
+      _resyncAfterOpen();
+      return;
+    }
     // 广告剔除造成的"无新段"是预期内的合法等待:按住看门狗,不计失败、
     // 不重开(广告期 playlist 全被剔除,重开只会烧掉重连预算,且恢复
     // 重解析拿到的还是同一批广告地址)。预算封顶见 [AdStallHoldPolicy]。
