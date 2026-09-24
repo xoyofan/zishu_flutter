@@ -2,8 +2,10 @@
 /// UI(follow_view / widgets)只负责渲染,业务状态全部收敛在此。
 ///
 /// 云同步策略(整表替换,后写赢):
-/// - 启动/登录后:拉取远端关注;远端非空则**替换**本地(服务端为准),
-///   远端为空(首次使用)则把本地整表推上去;
+/// - 启动/登录后:拉取远端关注;远端非空则**替换**本地条目集合与
+///   isSpecial/remindOn 等关注标记(服务端为准;同 key 条目已知的统计/
+///   房间元信息保留至下一轮刷新,远端删除的条目不复活),远端为空(首次
+///   使用)则把本地整表推上去;
 /// - 本地任何增删改:落盘后把当前整表推给服务端
 ///   (服务端 `POST /api/me/follows` = 全量替换 + clientUpdatedAt 逐条合并,
 ///   删除随之同步)。
@@ -96,8 +98,14 @@ class FollowEntry {
 int mergedInt(int a, int b) => a > b ? a : b;
 
 /// 关注列表控制器:单条增删、特别关注/提醒开关、批量操作与云端同步。
+///
+/// [api] 可选注入 data-server 客户端(缺省生产实例);测试经
+/// `followProvider.overrideWith(() => FollowController(api: …))` 注入
+/// 脚本化 API,保持零真实网络。
 class FollowController extends Notifier<List<FollowEntry>> {
-  final DataServerApi _api = DataServerApi();
+  FollowController({DataServerApi? api}) : _api = api ?? DataServerApi();
+
+  final DataServerApi _api;
 
   /// 云同步进行中标记(防 pull/push 重入)。
   bool _syncing = false;
@@ -121,17 +129,17 @@ class FollowController extends Notifier<List<FollowEntry>> {
 
     // 复制为离线房间:online 置空,其余字段保持契约形状。
     RoomSummary asOffline(RoomSummary source) => RoomSummary(
-          site: source.site,
-          roomId: source.roomId,
-          title: source.title,
-          anchorName: source.anchorName,
-          cid: source.cid,
-          category: source.category,
-          online: '',
-          cover: source.cover,
-          avatar: source.avatar,
-          startedAt: source.startedAt,
-        );
+      site: source.site,
+      roomId: source.roomId,
+      title: source.title,
+      anchorName: source.anchorName,
+      cid: source.cid,
+      category: source.category,
+      online: '',
+      cover: source.cover,
+      avatar: source.avatar,
+      startedAt: source.startedAt,
+    );
 
     return [
       FollowEntry(
@@ -177,7 +185,10 @@ class FollowController extends Notifier<List<FollowEntry>> {
   void toggleSpecial(String key) {
     state = [
       for (final entry in state)
-        if (entry.key == key) entry.copyWith(isSpecial: !entry.isSpecial) else entry,
+        if (entry.key == key)
+          entry.copyWith(isSpecial: !entry.isSpecial)
+        else
+          entry,
     ];
     _persist();
   }
@@ -186,21 +197,30 @@ class FollowController extends Notifier<List<FollowEntry>> {
   void toggleRemind(String key) {
     state = [
       for (final entry in state)
-        if (entry.key == key) entry.copyWith(remindOn: !entry.remindOn) else entry,
+        if (entry.key == key)
+          entry.copyWith(remindOn: !entry.remindOn)
+        else
+          entry,
     ];
     _persist();
   }
 
   /// 移除单条关注。
   void remove(String key) {
-    state = [for (final entry in state) if (entry.key != key) entry];
+    state = [
+      for (final entry in state)
+        if (entry.key != key) entry,
+    ];
     _persist();
   }
 
   /// 批量移除(删除所选)。
   void removeMany(Iterable<String> keys) {
     final targets = keys.toSet();
-    state = [for (final entry in state) if (!targets.contains(entry.key)) entry];
+    state = [
+      for (final entry in state)
+        if (!targets.contains(entry.key)) entry,
+    ];
     _persist();
   }
 
@@ -383,8 +403,7 @@ class FollowController extends Notifier<List<FollowEntry>> {
   /// 登录 token:登录态 provider 尚未构建时返回 null,不强制构建
   /// authProvider——播放页等非壳场景不触发其启动登录链(测试零网络)。
   /// 容器已销毁时同样返回 null:异步恢复任务可能在 dispose 后到达此处。
-  String? get _authToken =>
-      ref.mounted && ref.exists(authProvider)
+  String? get _authToken => ref.mounted && ref.exists(authProvider)
       ? ref.read(authProvider).token
       : null;
 
@@ -406,10 +425,11 @@ class FollowController extends Notifier<List<FollowEntry>> {
             _fromRemote(item, localByKey['${item.site}:${item.id}']),
         ];
         await _persist(syncRemote: false);
-        // 云端契约不带分类/在播/统计元信息(见 [_fromRemote] 的置空),整表
-        // 替换后立即补一轮刷新回填,不等 60s 轮询 —— 否则关注行分类条与
-        // 侧栏头统计要空一个轮询周期。无 refresher(fixture/单测)时该调用
-        // 零网络直接返回 0。
+        // 云端契约不带分类/在播/统计元信息:同 key 条目已在 [_mergeLocalRoom]
+        // 保留本地已知值,但远端新增条目这些字段仍为空 —— 整表替换后立即
+        // 补一轮刷新回填,不等 60s 轮询 —— 否则关注行分类条与侧栏头统计
+        // 要空一个轮询周期。无 refresher(fixture/单测)时该调用零网络
+        // 直接返回 0。
         unawaited(refreshStatuses());
       } else {
         await _pushRemote(token);
@@ -441,7 +461,9 @@ class FollowController extends Notifier<List<FollowEntry>> {
                     roomId: item['roomId']?.toString() ?? '',
                     title: item['title']?.toString() ?? '',
                     anchorName:
-                        item['uname']?.toString() ?? item['anchorName']?.toString() ?? '',
+                        item['uname']?.toString() ??
+                        item['anchorName']?.toString() ??
+                        '',
                     cid: item['cid']?.toString() ?? '',
                     category: item['category']?.toString() ?? '',
                     online: item['online']?.toString() ?? '',
@@ -461,7 +483,8 @@ class FollowController extends Notifier<List<FollowEntry>> {
                   isSpecial: item['isSpecial'] == true,
                   remindOn: item['remindOn'] == true,
                   followedAt: item['followedAt'] is String
-                      ? DateTime.tryParse(item['followedAt'] as String) ?? DateTime.now()
+                      ? DateTime.tryParse(item['followedAt'] as String) ??
+                            DateTime.now()
                       : DateTime.now(),
                   lastLiveAt: (item['lastLiveAt'] as num?)?.toInt() ?? 0,
                   liveStartAt: (item['liveStartAt'] as num?)?.toInt() ?? 0,
@@ -499,10 +522,19 @@ class FollowController extends Notifier<List<FollowEntry>> {
     );
   }
 
-  /// 远端契约 → 本地条目(开播状态远端不回传,先按离线呈现,待真实解析链路回填)。
+  /// 远端契约 → 本地条目。
   ///
-  /// [previous] 为本地已有条目(按同 key 匹配):「上次开播」类时间戳与本地
-  /// 取 max —— 云端可能是旧值/0 值,不得把本地刚记录的跃迁抹掉。
+  /// [previous] 为本地已有条目(按同 key 匹配):
+  /// - 关注维度(`isSpecial`/`remindOn`/`followedAt`)以远端为准;
+  /// - 房间记录按 [RoomSummary] 字段本地已知值优先(_mergeLocalRoom):
+  ///   云端契约不含统计/分类/在播/roomState/avatar/startedAt 等房间元信息,
+  ///   全量替换不得把已知本地值抹成空,保留至紧接着的 `refreshStatuses`
+  ///   刷新回填;
+  /// - 「上次开播」类时间戳与本地取 max —— 云端可能是旧值/0 值,不得把
+  ///   本地刚记录的跃迁抹掉。
+  ///
+  /// 本地无记录(远端新增)时统计/开播状态保持空串,待真实解析链路回填,
+  /// 展示层显示「—」,不伪造 0。
   FollowEntry _fromRemote(RemoteFollow item, [FollowEntry? previous]) {
     final entry = FollowEntry(
       room: RoomSummary(
@@ -525,8 +557,34 @@ class FollowController extends Notifier<List<FollowEntry>> {
     );
     if (previous == null) return entry;
     return entry.copyWith(
+      room: _mergeLocalRoom(entry.room, previous.room),
       lastLiveAt: mergedInt(entry.lastLiveAt, previous.lastLiveAt),
       liveStartAt: mergedInt(entry.liveStartAt, previous.liveStartAt),
+    );
+  }
+
+  /// 同 key 回拉时的房间记录合并:本地已知值优先 —— 统计与房间元信息
+  /// 保留至下一轮刷新(远端契约根本不携带这些字段,取远端只会得到空);
+  /// 本地为空的字段(标题/封面等远端自带字段)用远端补齐。
+  static RoomSummary _mergeLocalRoom(RoomSummary remote, RoomSummary local) {
+    String known(String localValue, String remoteValue) =>
+        localValue.trim().isNotEmpty ? localValue : remoteValue;
+    return RoomSummary(
+      site: local.site,
+      roomId: local.roomId,
+      title: known(local.title, remote.title),
+      anchorName: known(local.anchorName, remote.anchorName),
+      cid: local.cid,
+      category: local.category,
+      online: known(local.online, remote.online),
+      cover: known(local.cover, remote.cover),
+      avatar: known(local.avatar, remote.avatar),
+      promoTag: local.promoTag ?? remote.promoTag,
+      followers: local.followers,
+      vip: local.vip,
+      diamondFans: local.diamondFans,
+      roomState: local.roomState,
+      startedAt: local.startedAt ?? remote.startedAt,
     );
   }
 
@@ -578,7 +636,10 @@ class FollowController extends Notifier<List<FollowEntry>> {
             'liveStartAt': entry.liveStartAt,
           },
       ];
-      await SharedPreferencesAsync().setString(_kFollowList, jsonEncode(payload));
+      await SharedPreferencesAsync().setString(
+        _kFollowList,
+        jsonEncode(payload),
+      );
     } catch (_) {
       // 写盘失败:内存态仍生效,下次启动回退旧值。
     }
@@ -592,5 +653,6 @@ class FollowController extends Notifier<List<FollowEntry>> {
 }
 
 /// 关注列表 provider(应用级,不随页面销毁)。
-final followProvider =
-    NotifierProvider<FollowController, List<FollowEntry>>(FollowController.new);
+final followProvider = NotifierProvider<FollowController, List<FollowEntry>>(
+  FollowController.new,
+);

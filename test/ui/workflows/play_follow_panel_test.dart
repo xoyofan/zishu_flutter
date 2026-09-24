@@ -16,9 +16,11 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/misc.dart' show Override;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
-import 'package:live_parser/live_parser.dart' show StreamLine;
+import 'package:live_parser/live_parser.dart'
+    show RoomPayload, RoomState, RoomSummary, StreamLine;
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:zishu_flutter/src/app/app_router.dart';
@@ -29,6 +31,8 @@ import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_row.dart'
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/features/play/views/play_view.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
+import 'package:zishu_flutter/src/shared/application/browse_source.dart';
+import 'package:zishu_flutter/src/shared/application/providers.dart';
 
 /// 深链播放页:关注种子里的样例房间(douyu/63136)。
 const String _playLocation = '/douyu/play/63136';
@@ -166,6 +170,7 @@ Future<({GoRouter router, ProviderContainer container})> _pumpFollowTab(
   String location = _playLocation,
   double width = 1600,
   double height = 1200,
+  List<Override> overrides = const [],
 }) async {
   tester.view.devicePixelRatio = 1.0;
   tester.view.physicalSize = Size(width, height);
@@ -174,7 +179,10 @@ Future<({GoRouter router, ProviderContainer container})> _pumpFollowTab(
 
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [playerProvider.overrideWithValue(FakeLivePlayer())],
+      overrides: [
+        playerProvider.overrideWithValue(FakeLivePlayer()),
+        ...overrides,
+      ],
       child: const _TestApp(),
     ),
   );
@@ -192,8 +200,56 @@ Future<({GoRouter router, ProviderContainer container})> _pumpFollowTab(
   return (router: router, container: container);
 }
 
+/// 按脚本返回房间统计的假解析刷新源:命中 roomId 返回快照,其余抛错
+/// (与 follow_status_refresh_test 的 FakeRefresher 同构,零网络)。
+class _ScriptedRefresher implements RoomRefresher {
+  _ScriptedRefresher(this.results);
+
+  final Map<String, RoomSummary> results;
+
+  @override
+  Future<RoomSummary> refreshRoom({
+    required String site,
+    required String roomId,
+  }) async {
+    final room = results[roomId];
+    if (room == null) throw StateError('no scripted result: $roomId');
+    return room;
+  }
+
+  @override
+  Future<RoomPayload> resolveRoom({
+    required String site,
+    required String roomIdOrUrl,
+    String? preferredQuality,
+  }) async {
+    throw UnimplementedError('本轨不校验解析路径');
+  }
+}
+
+/// 解析统计快照(只承载展示统计字段,其余按契约形状置空)。
+RoomSummary _statsRoom({
+  required String roomId,
+  String online = '',
+  String followers = '',
+  String vip = '',
+  String diamondFans = '',
+}) => RoomSummary(
+  site: 'douyu',
+  roomId: roomId,
+  title: '',
+  anchorName: '',
+  cid: '',
+  category: '',
+  online: online,
+  cover: '',
+  followers: followers,
+  vip: vip,
+  diamondFans: diamondFans,
+  roomState: RoomState.live,
+);
+
 /// 关注面板内的房间卡锚点(网格视图,共享组件 `FollowEntryCard`)。
-/// 卡片/单行同用 `follow-entry-{site}-{roomId}` key,故按外层组件类型定位。
 Finder _card(String site, String roomId) => find.ancestor(
   of: find.byKey(Key('follow-entry-$site-$roomId')),
   matching: find.byType(FollowEntryCard),
@@ -207,12 +263,14 @@ Finder _row(String site, String roomId) => find.ancestor(
 
 /// 面板内的**垂直**关注列表。列表档是垂直 GridView(300–400px 自适应
 /// 多列,窄侧栏单列),卡片档是垂直 ListView —— 都按 ScrollView 读。
-Finder _followList() => find.descendant(
-  of: find.byKey(const Key('play-side-follow-panel')),
-  matching: find.byWidgetPredicate(
-    (w) => w is ScrollView && w.scrollDirection == Axis.vertical,
-  ),
-).first;
+Finder _followList() => find
+    .descendant(
+      of: find.byKey(const Key('play-side-follow-panel')),
+      matching: find.byWidgetPredicate(
+        (w) => w is ScrollView && w.scrollDirection == Axis.vertical,
+      ),
+    )
+    .first;
 
 /// 列表当前**窗口**条目数:读 builder delegate 声明的 childCount
 /// (行自带底边框;GridView/ListView 的 builder delegate 都是精确 childCount,
@@ -289,9 +347,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('轮播(replay)不进侧栏,归「我的关注」页(用户口径 2026-09-19)', (
-      tester,
-    ) async {
+    testWidgets('轮播(replay)不进侧栏,归「我的关注」页(用户口径 2026-09-19)', (tester) async {
       SharedPreferencesAsyncPlatform.instance =
           InMemorySharedPreferencesAsync.withData(<String, Object>{
             'zishu.follow.list': jsonEncode([
@@ -449,11 +505,7 @@ void main() {
       await tester.tap(find.byKey(const Key('play-side-follow-view-toggle')));
       await _pumpFrames(tester, 3);
       expect(_card('douyu', '6001'), findsOneWidget, reason: '切换后是封面网格');
-      expect(
-        _row('douyu', '6001'),
-        findsNothing,
-        reason: '网格视图下不应残留列表行',
-      );
+      expect(_row('douyu', '6001'), findsNothing, reason: '网格视图下不应残留列表行');
 
       await tester.tap(find.byKey(const Key('play-side-follow-view-toggle')));
       await _pumpFrames(tester, 3);
@@ -461,9 +513,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('列表行四列:分类 / 主播名 / 标题 / 观看人数(对齐 web RowView)', (
-      tester,
-    ) async {
+    testWidgets('列表行四列:分类 / 主播名 / 标题 / 观看人数(对齐 web RowView)', (tester) async {
       SharedPreferencesAsyncPlatform.instance =
           InMemorySharedPreferencesAsync.withData(<String, Object>{
             'zishu.follow.list': jsonEncode([
@@ -490,16 +540,12 @@ void main() {
       // 单行:主播名与标题在同一行内(y 重叠),行高紧凑(<30)。
       final anchorRect = tester.getRect(find.text('四列主播'));
       final titleRect = tester.getRect(find.text('四列样式的标题'));
-      expect(titleRect.top, closeTo(anchorRect.top, 8),
-          reason: '四列应水平排布在同一行');
-      expect(rowRect.height, lessThan(30),
-          reason: '对齐 web 行高 1.4rem 的紧凑观感');
+      expect(titleRect.top, closeTo(anchorRect.top, 8), reason: '四列应水平排布在同一行');
+      expect(rowRect.height, lessThan(30), reason: '对齐 web 行高 1.4rem 的紧凑观感');
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('切房后右侧仍停在关注 tab(会话级偏好,顶部/左侧/右侧解耦)', (
-      tester,
-    ) async {
+    testWidgets('切房后右侧仍停在关注 tab(会话级偏好,顶部/左侧/右侧解耦)', (tester) async {
       SharedPreferencesAsyncPlatform.instance =
           InMemorySharedPreferencesAsync.withData(<String, Object>{
             'zishu.follow.list': jsonEncode([
@@ -541,10 +587,7 @@ void main() {
       SharedPreferencesAsyncPlatform.instance =
           InMemorySharedPreferencesAsync.withData(<String, Object>{
             'zishu.follow.list': jsonEncode([
-              _seedEntry(
-                roomId: '63136',
-                online: '8.9万',
-              )
+              _seedEntry(roomId: '63136', online: '8.9万')
                 ..['followers'] = '123456'
                 ..['vip'] = '321'
                 ..['diamondFans'] = '1300',
@@ -595,10 +638,7 @@ void main() {
         'play-side-stat-svip',
       ]) {
         expect(
-          find.descendant(
-            of: find.byKey(Key(key)),
-            matching: find.text('—'),
-          ),
+          find.descendant(of: find.byKey(Key(key)), matching: find.text('—')),
           findsOneWidget,
           reason: '$key 无数据必须显示「—」,不伪造 0',
         );
@@ -660,6 +700,132 @@ void main() {
 
       expect(find.byKey(const Key('play-side-header')), findsOneWidget);
       expect(tester.takeException(), isNull, reason: '四段统计不得溢出');
+    });
+
+    testWidgets('未关注有解析统计:点关注后数值不消失(取数不随关注态切换)', (tester) async {
+      SharedPreferencesAsyncPlatform.instance =
+          InMemorySharedPreferencesAsync.withData(<String, Object>{});
+
+      // 88888 不在 fixture 种子里:未关注,统计只能来自解析快照
+      // (roomStatsProvider,任意房间可查)。
+      final play = await _pumpFollowTab(
+        tester,
+        location: '/douyu/play/88888',
+        overrides: [
+          roomRefresherProvider.overrideWithValue(
+            _ScriptedRefresher({
+              '88888': _statsRoom(
+                roomId: '88888',
+                online: '1.2万',
+                followers: '123456',
+                vip: '321',
+                diamondFans: '1300',
+              ),
+            }),
+          ),
+        ],
+      );
+      await _pumpFrames(tester, 3);
+
+      expect(find.byKey(const Key('play-side-header')), findsOneWidget);
+      // 未关注:三列 + 关注数均来自解析快照。
+      expect(headerTextOf('关注 12.3万'), findsOneWidget);
+      for (final (key, value) in const [
+        ('play-side-stat-audience', '1.2万'),
+        ('play-side-stat-vip', '321'),
+        ('play-side-stat-svip', '1300'),
+      ]) {
+        expect(
+          find.descendant(of: find.byKey(Key(key)), matching: find.text(value)),
+          findsOneWidget,
+          reason: '未关注时 $key 应显示解析快照值',
+        );
+      }
+
+      await tester.tap(find.byKey(const Key('play-side-follow-btn')));
+      await _pumpFrames(tester, 3);
+
+      expect(
+        play.container.read(followProvider).any((e) => e.key == 'douyu:88888'),
+        isTrue,
+        reason: '前置:点关注已落库',
+      );
+      // 回归点:关注状态与统计取数必须分离 —— 刚关注的条目统计未回填,
+      // 不得盖掉已知的解析快照值(否则点关注瞬间数值全部消失)。
+      expect(
+        headerTextOf('关注 12.3万'),
+        findsOneWidget,
+        reason: '点关注后关注数不得变回「—」',
+      );
+      for (final (key, value) in const [
+        ('play-side-stat-audience', '1.2万'),
+        ('play-side-stat-vip', '321'),
+        ('play-side-stat-svip', '1300'),
+      ]) {
+        expect(
+          find.descendant(of: find.byKey(Key(key)), matching: find.text(value)),
+          findsOneWidget,
+          reason: '点关注后 $key 数值不得消失',
+        );
+      }
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('parser 某字段缺时逐字段回退:缺的字段取本地快照,有的字段取新鲜解析值', (tester) async {
+      // 本地已关注条目:已知 followers/diamondFans/online(旧值 2.3万),缺 vip。
+      SharedPreferencesAsyncPlatform.instance =
+          InMemorySharedPreferencesAsync.withData(<String, Object>{
+            'zishu.follow.list': jsonEncode([
+              _seedEntry(roomId: '63136', online: '2.3万')
+                ..['followers'] = '123456'
+                ..['diamondFans'] = '1300',
+            ]),
+          });
+
+      // 解析快照:fresh 但上游缺 followers/diamondFans 字段。
+      final play = await _pumpFollowTab(
+        tester,
+        overrides: [
+          roomRefresherProvider.overrideWithValue(
+            _ScriptedRefresher({
+              '63136': _statsRoom(roomId: '63136', online: '8.9万', vip: '321'),
+            }),
+          ),
+        ],
+      );
+      await _awaitFollowRestored(tester, play.container, 1);
+      await _pumpFrames(tester, 3);
+
+      expect(
+        headerTextOf('关注 12.3万'),
+        findsOneWidget,
+        reason: 'parser 缺 followers → 逐字段回退本地已有统计快照',
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('play-side-stat-audience')),
+          matching: find.text('8.9万'),
+        ),
+        findsOneWidget,
+        reason: '新鲜解析值(8.9万)优先于本地旧值(2.3万)',
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('play-side-stat-vip')),
+          matching: find.text('321'),
+        ),
+        findsOneWidget,
+        reason: '本地缺 vip → 取解析新鲜值',
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('play-side-stat-svip')),
+          matching: find.text('1300'),
+        ),
+        findsOneWidget,
+        reason: 'parser 缺 diamondFans → 回退本地已有值',
+      );
+      expect(tester.takeException(), isNull);
     });
   });
 }

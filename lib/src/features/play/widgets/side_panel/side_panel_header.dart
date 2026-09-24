@@ -23,11 +23,11 @@ class _SideHeader extends ConsumerWidget {
 
   /// 当前房间的关注条目(null = 未关注)。
   ///
-  /// 统计区数据源对齐 web `SideHeader.vue` + `useRoomStats.ts`:粉丝/贵宾/
-  /// 人气等统计来自关注状态快照(本仓等价物 = 关注条目随
-  /// `FollowController.refreshStatuses` 回填的 [RoomSummary]);[RoomPayload]
-  /// 不携带统计字段,故未关注(或尚未刷新回填)时该项显示「—」,
-  /// 不伪造数据。
+  /// 仅作为统计区的**本地回退快照**参与逐字段合并(见 build 内
+  /// [mergeDisplayStats]):统计独立来自 roomStatsProvider 的新鲜解析值,
+  /// 与关注状态解耦 —— 关注与否都不改变取数来源,刚关注条目里的空统计
+  /// 不得盖掉已知解析值;本地已知值只在解析缺字段/出错时逐字段回退,
+  /// 未知保持「—」,不伪造数据。
   final RoomSummary? followRoom;
 
   final bool followed;
@@ -53,14 +53,16 @@ class _SideHeader extends ConsumerWidget {
     final title = payload?.title.trim() ?? '';
     final category = payload?.category.trim() ?? '';
     final isLive = payload?.isLive ?? false;
-    // 统计区(对齐 web SideHeader「关注：N」行 + stats 列):已关注房间
-    // 取关注条目回填;未关注/未回填时兜底调 roomStatsProvider(同一条解析
-    // 真源,任意房间可查 —— 用户口径 2026-09-20 huya 等平台统计不能只服务
-    // 已关注房间)。上游未提供 → '—' 占位,不伪造(数据诚实性)。
+    // 统计区(对齐 web SideHeader「关注：N」行 + stats 列):先取
+    // roomStatsProvider 的新鲜解析快照(同一条解析真源,任意房间可查 ——
+    // 用户口径 2026-09-20),再逐字段回退关注条目维护的本地统计快照
+    // (mergeDisplayStats)。取数与关注状态解耦;上游未提供 → '—' 占位,
+    // 不伪造(数据诚实性)。
     final followRoom = this.followRoom;
-    final RoomSummary? stats =
-        followRoom ??
-        ref.watch(roomStatsProvider((site: site, roomId: roomId))).value;
+    final RoomSummary? stats = mergeDisplayStats(
+      parsed: ref.watch(roomStatsProvider((site: site, roomId: roomId))).value,
+      local: followRoom,
+    );
     final display = displaySpecFor(site);
     final followersText = formatFollowersValue(stats?.followers);
 

@@ -10,11 +10,13 @@
 /// 本组件只在窄屏由侧栏以 compact 形态渲染 —— 信息条与侧栏信息头共用同一份
 /// 关注状态与切换回调,不重复实现关注语义。
 ///
-/// **数据诚实性**:统计格取自与桌面侧栏信息头**同一份**数据源 ——
-/// [followProvider] 中当前房间关注条目的 [RoomSummary](`followers`/`online`
-/// 由 `FollowController.refreshStatuses` 按各站真源回填,commit 6d920cf)。
-/// 未关注、或解析层没给的项一律显示「—」,不伪造;纯复用已回填的关注快照,
-/// 不另发网络请求。开播时间取 [RoomPayload].`startedAt`(斗鱼等平台真实返回);
+/// **数据诚实性**:统计格与关注状态解耦 —— 先取 [roomStatsProvider] 的新鲜
+/// 解析快照(与桌面侧栏信息头同一条解析真源,任意房间可查),再经
+/// [mergeDisplayStats] 逐字段回退 [followProvider] 中当前房间关注条目的
+/// [RoomSummary](`followers`/`online` 由 `FollowController.refreshStatuses`
+/// 维护的本地统计快照)。点关注引入的空统计不会盖掉已知解析值;
+/// 两侧都没有的项一律显示「—」,不伪造;解析出错也只回退本地或「—」,
+/// 不冒充有效零。开播时间取 [RoomPayload].`startedAt`(斗鱼等平台真实返回);
 /// 弹幕总数上游无字段,恒为「—」(会话内已收条数不是平台弹幕总数,不冒充)。
 library;
 
@@ -65,10 +67,10 @@ class PlayMetaBar extends ConsumerWidget {
         ? payload!.anchorName.trim()
         : '主播信息';
     final isLive = payload?.isLive ?? false;
-    // 统计区数据源(用户口径 2026-09-20 huya 等平台统计不能只服务已关注
-    // 房间):已关注房间取关注条目的 [RoomSummary](refreshStatuses 按真源
-    // 回填);未关注/未回填时兜底调 [roomStatsProvider](同一条解析真源,
-    // 对任意房间可查)。上游未提供的字段仍显示「—」,不伪造。
+    // 统计区数据源(用户口径 2026-09-20:统计不能只服务已关注房间;
+    // 2026-09-24 回归口径:取数与关注状态解耦)——先取 [roomStatsProvider]
+    // 的新鲜解析快照,再经 [mergeDisplayStats] 逐字段回退关注条目维护的
+    // 本地统计快照。上游未提供的字段仍显示「—」,不伪造。
     final site = payload?.site ?? '';
     final roomId = payload?.roomId ?? '';
     final matched = ref
@@ -77,9 +79,10 @@ class PlayMetaBar extends ConsumerWidget {
     final RoomSummary? followedSummary = matched.isNotEmpty
         ? matched.first.room
         : null;
-    final RoomSummary? summary =
-        followedSummary ??
-        ref.watch(roomStatsProvider((site: site, roomId: roomId))).value;
+    final RoomSummary? summary = mergeDisplayStats(
+      parsed: ref.watch(roomStatsProvider((site: site, roomId: roomId))).value,
+      local: followedSummary,
+    );
     final display = displaySpecFor(site);
     final followersText = formatFollowersValue(summary?.followers);
     final startedText = formatStartedAt(payload?.startedAt, isLive: isLive);
@@ -187,11 +190,12 @@ class PlayMetaBar extends ConsumerWidget {
     RoomStatField.svip => Icons.diamond_outlined,
   };
 
-  Color _metaStatColor(BuildContext context, RoomStatTone tone) => switch (tone) {
-    RoomStatTone.audience => context.tokens.statAudience,
-    RoomStatTone.vip => context.tokens.statVip,
-    RoomStatTone.svip => context.tokens.statSvip,
-  };
+  Color _metaStatColor(BuildContext context, RoomStatTone tone) =>
+      switch (tone) {
+        RoomStatTone.audience => context.tokens.statAudience,
+        RoomStatTone.vip => context.tokens.statVip,
+        RoomStatTone.svip => context.tokens.statSvip,
+      };
 }
 
 /// 圆形头像:无图时以昵称首字兜底(品牌色底 + 主文字色)。
@@ -275,20 +279,20 @@ class _MetaStat extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-        Icon(icon, size: PlayMetaBar._kStatIconSize, color: iconColor),
-        const SizedBox(width: 3),
-        Flexible(
-          child: Text(
-            '$label $value',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: AppFontSize.caption,
-              height: 1.05,
-              color: tokens.textSecondary,
+          Icon(icon, size: PlayMetaBar._kStatIconSize, color: iconColor),
+          const SizedBox(width: 3),
+          Flexible(
+            child: Text(
+              '$label $value',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: AppFontSize.caption,
+                height: 1.05,
+                color: tokens.textSecondary,
+              ),
             ),
           ),
-        ),
         ],
       ),
     );

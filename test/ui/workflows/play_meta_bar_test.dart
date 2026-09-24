@@ -39,9 +39,11 @@ class _FakeLivePlayer implements LivePlayer {
       const SizedBox.expand();
 
   @override
-  Future<void> open(StreamLine line,
-          [List<StreamLine> fallbacks = const [], bool resetRetries = true]) async =>
-      calls.add('open:${line.url}');
+  Future<void> open(
+    StreamLine line, [
+    List<StreamLine> fallbacks = const [],
+    bool resetRetries = true,
+  ]) async => calls.add('open:${line.url}');
 
   @override
   Future<void> play() async => calls.add('play');
@@ -129,11 +131,61 @@ Future<void> _pumpFrames(WidgetTester tester, [int times = 4]) async {
   }
 }
 
+/// 按脚本返回房间统计的假解析刷新源:命中 roomId 返回快照,其余抛错
+/// (零网络;与 play_follow_panel_test 的同名替身同构)。
+class _ScriptedRefresher implements RoomRefresher {
+  _ScriptedRefresher(this.results);
+
+  final Map<String, RoomSummary> results;
+
+  @override
+  Future<RoomSummary> refreshRoom({
+    required String site,
+    required String roomId,
+  }) async {
+    final room = results[roomId];
+    if (room == null) throw StateError('no scripted result: $roomId');
+    return room;
+  }
+
+  @override
+  Future<RoomPayload> resolveRoom({
+    required String site,
+    required String roomIdOrUrl,
+    String? preferredQuality,
+  }) async {
+    throw UnimplementedError('本轨不校验解析路径');
+  }
+}
+
+/// 解析统计快照(只承载展示统计字段,其余按契约形状置空)。
+RoomSummary _statsRoom({
+  required String roomId,
+  String online = '',
+  String followers = '',
+  String vip = '',
+  String diamondFans = '',
+}) => RoomSummary(
+  site: 'douyu',
+  roomId: roomId,
+  title: '',
+  anchorName: '',
+  cid: '',
+  category: '',
+  online: online,
+  cover: '',
+  followers: followers,
+  vip: vip,
+  diamondFans: diamondFans,
+  roomState: RoomState.live,
+);
+
 /// pump 播放页:注入 FakeLivePlayer(可选覆盖 roomSourceProvider),设定视口。
 Future<ProviderContainer> _pumpPlay(
   WidgetTester tester, {
   required Size size,
   RoomSource? roomSource,
+  RoomRefresher? refresher,
 }) async {
   tester.view.devicePixelRatio = 1.0;
   tester.view.physicalSize = size;
@@ -143,7 +195,10 @@ Future<ProviderContainer> _pumpPlay(
     ProviderScope(
       overrides: [
         playerProvider.overrideWithValue(_FakeLivePlayer()),
-        if (roomSource != null) roomSourceProvider.overrideWithValue(roomSource),
+        if (roomSource != null)
+          roomSourceProvider.overrideWithValue(roomSource),
+        if (refresher != null)
+          roomRefresherProvider.overrideWithValue(refresher),
       ],
       child: MaterialApp(
         theme: ZishuTheme.dark(),
@@ -160,9 +215,9 @@ Future<ProviderContainer> _pumpPlay(
 
 /// 信息条子树内的文本查找(避免与画质 chip 等处的同名字样混淆)。
 Finder _inMetaBar(String text) => find.descendant(
-      of: find.byKey(const Key('play-meta-bar')),
-      matching: find.text(text),
-    );
+  of: find.byKey(const Key('play-meta-bar')),
+  matching: find.text(text),
+);
 
 void main() {
   setUp(() {
@@ -197,8 +252,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('点关注/超关:状态落库并回显(复用侧栏同一份 followProvider 语义)',
-        (tester) async {
+    testWidgets('点关注/超关:状态落库并回显(复用侧栏同一份 followProvider 语义)', (tester) async {
       final container = await _pumpPlay(tester, size: const Size(375, 812));
       const roomKey = 'douyu:63136';
       // fixture 关注种子可能已含该房;先清空再验证从「关注」开始。
@@ -217,9 +271,9 @@ void main() {
 
       await tester.tap(find.byKey(const Key('play-side-super-follow')));
       await _pumpFrames(tester, 2);
-      final entry = container.read(followProvider).firstWhere(
-            (e) => e.key == roomKey,
-          );
+      final entry = container
+          .read(followProvider)
+          .firstWhere((e) => e.key == roomKey);
       expect(entry.isSpecial, isTrue, reason: '超关应把该房标记为特别关注');
       expect(_inMetaBar('已超关'), findsOneWidget);
       expect(tester.takeException(), isNull);
@@ -236,8 +290,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('统计格回填:关注条目 summary 有值时显示数值(PARSER-GAP-001)',
-        (tester) async {
+    testWidgets('统计格回填:关注条目 summary 有值时显示数值(PARSER-GAP-001)', (tester) async {
       final container = await _pumpPlay(tester, size: const Size(375, 812));
       // fixture 种子可能已含该房;替换为带真源回填统计的关注条目
       // (followers/online 同桌面侧栏信息头共用 followProvider 快照)。
@@ -267,8 +320,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('统计格:已关注但上游未提供 followers/online 时仍显示「—」',
-        (tester) async {
+    testWidgets('统计格:已关注但上游未提供 followers/online 时仍显示「—」', (tester) async {
       final container = await _pumpPlay(tester, size: const Size(375, 812));
       container.read(followProvider.notifier).remove('douyu:63136');
       // yy/kuaishou 等上游无免登录统计接口,回填值为空 → 占位不伪造。
@@ -293,8 +345,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('360x640:缺开播时间显示「开播中」,解析层缺字段一律占位不伪造',
-        (tester) async {
+    testWidgets('360x640:缺开播时间显示「开播中」,解析层缺字段一律占位不伪造', (tester) async {
       await _pumpPlay(tester, size: const Size(360, 640));
 
       // fixture 种子首条即本房(douyu:63136):online='42.1万' 已回填 → 人气
@@ -303,6 +354,62 @@ void main() {
       expect(_inMetaBar('关注 —'), findsOneWidget);
       expect(_inMetaBar('人气 42.1万'), findsOneWidget);
       expect(_inMetaBar('弹幕 —'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('未关注有解析统计:点关注后信息条数值不消失(375x812)', (tester) async {
+      final container = await _pumpPlay(
+        tester,
+        size: const Size(375, 812),
+        refresher: _ScriptedRefresher({
+          '63136': _statsRoom(
+            roomId: '63136',
+            online: '1.2万',
+            followers: '123456',
+            vip: '321',
+            diamondFans: '1300',
+          ),
+        }),
+      );
+      // fixture 种子首条即本房:先移除,构造「未关注但有解析统计」的场景。
+      container.read(followProvider.notifier).remove('douyu:63136');
+      await _pumpFrames(tester, 3);
+
+      // 未关注:统计来自解析快照(任意房间可查)。
+      expect(_inMetaBar('关注 12.3万'), findsOneWidget);
+      expect(_inMetaBar('人气 1.2万'), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('play-side-follow-btn')));
+      await _pumpFrames(tester, 3);
+
+      expect(
+        container.read(followProvider).any((e) => e.key == 'douyu:63136'),
+        isTrue,
+        reason: '前置:点关注已落库',
+      );
+      // 回归点:关注状态与统计取数分离,刚关注的空统计不得盖掉解析值。
+      expect(_inMetaBar('关注 12.3万'), findsOneWidget, reason: '点关注后关注数不得变回「—」');
+      expect(
+        _inMetaBar('人气 1.2万'),
+        findsOneWidget,
+        reason: '点关注后人气不得被占位文案/空值替代',
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('play-meta-stat-vip')),
+          matching: find.textContaining('321'),
+        ),
+        findsOneWidget,
+        reason: '点关注后 VIP 数值不得消失',
+      );
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('play-meta-stat-svip')),
+          matching: find.textContaining('1300'),
+        ),
+        findsOneWidget,
+        reason: '点关注后 SVIP 数值不得消失',
+      );
       expect(tester.takeException(), isNull);
     });
   });
