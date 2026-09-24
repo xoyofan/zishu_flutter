@@ -39,7 +39,7 @@ class PlayRoomGrid extends StatelessWidget {
     this.onTap,
   });
 
-  final List<RoomSummary> rooms;
+  final List<RoomRecord> rooms;
 
   /// 列数;侧栏宽度下 2 列对齐参考实现的紧凑预览网格。
   final int columns;
@@ -51,7 +51,7 @@ class PlayRoomGrid extends StatelessWidget {
   /// 关注 tab 用 `play-follow-room-`。
   final String keyPrefix;
 
-  final void Function(RoomSummary room)? onTap;
+  final void Function(RoomRecord room)? onTap;
 
   /// 卡片元信息区(封面下两行文本)的高度预算。
   static const double _cardMetaHeight = 36;
@@ -106,12 +106,12 @@ class PlayRoomCard extends StatelessWidget {
     this.onTap,
   });
 
-  final RoomSummary room;
+  final RoomRecord room;
   final bool isSpecial;
   final VoidCallback? onTap;
 
-  /// 是否开播:沿用全站约定 online 非空即开播。
-  bool get _live => room.online.trim().isNotEmpty;
+  /// 是否开播:状态真源 roomState(不再用 online 是否非空推断)。
+  bool get _live => room.roomState == RoomState.live;
 
   @override
   Widget build(BuildContext context) {
@@ -137,8 +137,8 @@ class PlayRoomCard extends StatelessWidget {
                 fit: StackFit.expand,
                 children: [
                   FollowCoverImage(
-                    cover: room.cover,
-                    fallbackLabel: room.category.isEmpty
+                    cover: room.cover ?? '',
+                    fallbackLabel: (room.category ?? '').isEmpty
                         ? room.site
                         : displayCategoryName(
                             room.site,
@@ -164,9 +164,9 @@ class PlayRoomCard extends StatelessWidget {
                     child: CoverCategoryBadge(
                       key: const Key('cover-badge-category'),
                       corner: CoverCorner.topRight,
-                      category: room.category,
+                      category: room.category ?? '',
                       site: room.site,
-                      cid: room.cid,
+                      cid: room.cid ?? '',
                     ),
                   ),
                   // 右下:热度。
@@ -177,7 +177,9 @@ class PlayRoomCard extends StatelessWidget {
                       child: CoverOnlineBadge(
                         key: const Key('cover-badge-online'),
                         corner: CoverCorner.bottomRight,
-                        online: room.online,
+                        // 观众数取 audience;未知为 null → 空串,角标隐藏
+                        // (不伪造 0,不把状态文案当人数)。
+                        online: room.audience ?? '',
                       ),
                     ),
                   // 左下:特别关注 ★(本仓特有能力,占唯一空置的左下角)。
@@ -227,13 +229,13 @@ class PlayRoomCard extends StatelessWidget {
                   children: [
                     FollowAnchorName(
                       site: room.site,
-                      name: room.anchorName,
+                      name: room.anchorName ?? '',
                       live: _live,
                       fontSize: AppFontSize.caption,
                     ),
                     const SizedBox(height: 1),
                     TranslatedText(
-                      room.title,
+                      room.title ?? '',
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: context.textSecondary.copyWith(

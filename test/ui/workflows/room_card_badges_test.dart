@@ -25,7 +25,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart'
-    show RoomState, RoomSummary, StreamLine;
+    show RoomRecord, RoomState, StreamLine;
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:zishu_flutter/src/app/app_router.dart';
@@ -324,15 +324,15 @@ void main() {
             body: SizedBox(
               width: 320,
               child: PlayRoomGrid(
-                rooms: const [
-                  RoomSummary(
+                rooms: [
+                  RoomRecord(
                     site: 'douyu',
                     roomId: '9002',
+                    roomState: RoomState.offline,
                     title: '离线超关',
                     anchorName: '测试主播',
                     cid: '1',
                     category: '英雄联盟',
-                    online: '',
                     cover: '',
                   ),
                 ],
@@ -432,7 +432,7 @@ void main() {
   group('首页网格卡离线遮罩(对齐 web .room-card__offline)', () {
     /// 组件级宿主:不走全 app(首页 fixture 全是在播房,塞离线房会改变
     /// 网格内容波及大量布局/hover 用例)。深浅主题各验一遍遮罩可读性。
-    Widget host(RoomSummary room) => ProviderScope(
+    Widget host(RoomRecord room) => ProviderScope(
       child: MaterialApp(
         theme: ZishuTheme.dark(),
         home: Scaffold(
@@ -444,14 +444,14 @@ void main() {
     testWidgets('离线房:整封面遮罩 + 「未开播」,不渲染热度角标', (tester) async {
       await tester.pumpWidget(
         host(
-          const RoomSummary(
+          RoomRecord(
             site: 'douyu',
             roomId: '9001',
+            roomState: RoomState.offline,
             title: '离线房',
             anchorName: '测试主播',
             cid: '1',
             category: '英雄联盟',
-            online: '',
             cover: '',
           ),
         ),
@@ -489,14 +489,15 @@ void main() {
     testWidgets('在播房:不渲染离线遮罩,分类角标照常', (tester) async {
       await tester.pumpWidget(
         host(
-          const RoomSummary(
+          RoomRecord(
             site: 'douyu',
             roomId: '9002',
+            roomState: RoomState.live,
             title: '在播房',
             anchorName: '测试主播',
             cid: '1',
             category: '英雄联盟',
-            online: '1.2万',
+            audience: '1.2万',
             cover: '',
           ),
         ),
@@ -511,16 +512,15 @@ void main() {
     testWidgets('轮播房:不渲染离线遮罩,显示轮播状态', (tester) async {
       await tester.pumpWidget(
         host(
-          const RoomSummary(
+          RoomRecord(
             site: 'douyu',
             roomId: '9003',
+            roomState: RoomState.replay,
             title: '轮播房',
             anchorName: '测试主播',
             cid: '1',
             category: '英雄联盟',
-            online: '',
             cover: '',
-            roomState: RoomState.replay,
           ),
         ),
       );

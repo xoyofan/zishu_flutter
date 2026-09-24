@@ -26,7 +26,7 @@ class RoomCard extends StatelessWidget {
     this.showPlatformBadge = true,
   });
 
-  final RoomSummary room;
+  final RoomRecord room;
   final VoidCallback? onTap;
 
   /// 是否显示平台角标;单平台网格(参考 Vue:仅跨站聚合显示)可关闭。
@@ -75,7 +75,7 @@ class RoomCard extends StatelessWidget {
 class _RoomCardMeta extends StatelessWidget {
   const _RoomCardMeta({required this.room, required this.showPlatformBadge});
 
-  final RoomSummary room;
+  final RoomRecord room;
   final bool showPlatformBadge;
 
   /// 元信息行高:12px 字号 × 1.35 行高(与参考实现 `min-height: 1.35em` 同口径)。
@@ -83,10 +83,12 @@ class _RoomCardMeta extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = room.title.trim().isNotEmpty
-        ? room.title
-        : (room.anchorName.trim().isNotEmpty ? room.anchorName : ' ');
-    final anchor = room.anchorName.trim();
+    final title = (room.title ?? '').trim().isNotEmpty
+        ? room.title!
+        : ((room.anchorName ?? '').trim().isNotEmpty
+              ? room.anchorName!
+              : ' ');
+    final anchor = (room.anchorName ?? '').trim();
     final chips = <String>[
       if (room.promoTag != null && room.promoTag!.trim().isNotEmpty)
         room.promoTag!.trim(),
@@ -117,7 +119,7 @@ class _RoomCardMeta extends StatelessWidget {
                     child: FollowAnchorName(
                       site: room.site,
                       name: anchor,
-                      live: room.online.trim().isNotEmpty,
+                      live: room.isLive,
                       fontSize: AppFontSize.bodySecondary,
                       fontWeight: FontWeight.w500,
                     ),
@@ -165,16 +167,15 @@ class _MetaChip extends StatelessWidget {
 class _Cover extends StatelessWidget {
   const _Cover({required this.room, required this.showPlatformBadge});
 
-  final RoomSummary room;
+  final RoomRecord room;
   final bool showPlatformBadge;
 
   @override
   Widget build(BuildContext context) {
-    final hasAudience = room.online.trim().isNotEmpty;
     final replay = room.isReplay;
-    // 兼容旧 fixture:旧数据 roomState 默认 offline 但 online 非空时仍视为在播;
-    // 新契约明确把 replay 与 live 分开。
-    final live = room.isLive || (room.roomState == RoomState.offline && hasAudience);
+    // 在播判据只看状态真源 roomState(浏览目录按 4a-i 已赋 live),
+    // 不再用统计数字是否存在推断在线。
+    final live = room.isLive;
     return AspectRatio(
       aspectRatio: 16 / 9,
       child: Stack(
@@ -182,10 +183,10 @@ class _Cover extends StatelessWidget {
         children: [
           Container(
             color: context.tokens.surfaceSoft,
-            child: room.cover.isEmpty
+            child: (room.cover ?? '').isEmpty
                 ? _CoverPlaceholder(room: room)
                 : CachedNetworkImage(
-                    imageUrl: room.cover,
+                    imageUrl: room.cover!,
                     fit: BoxFit.cover,
                     placeholder: (_, _) =>
                         ColoredBox(color: context.tokens.surfaceRaised),
@@ -194,9 +195,9 @@ class _Cover extends StatelessWidget {
           ),
           // 离线:整封面遮罩 + 「未开播」(web `.room-card__offline`,z-index 2)。
           // 放在角标之前复刻 web 的层级(遮罩 z2 低于角标 z3,角标浮于其上);
-          // 判据沿用本组件既有的 `live`(online 非空),不另造第二套离线判定。
+          // 判据沿用本组件的 `live`(roomState 真源),不另造第二套离线判定。
           // 注:web 的「上次开播 X」文案由 follow 域数据支撑,网格数据源
-          // (RoomSummary)无该字段,离线一律显示「未开播」。
+          // 无该字段,离线一律显示「未开播」。
           if (!live && !replay)
             const Positioned.fill(
               key: Key('room-card-offline'),
@@ -210,9 +211,9 @@ class _Cover extends StatelessWidget {
               // 测试锚点:按角位断言用(卡片各自子树内唯一,不与同页其它卡冲突)。
               key: const Key('cover-badge-category'),
               corner: CoverCorner.topLeft,
-              category: room.category,
+              category: room.category ?? '',
               site: room.site,
-              cid: room.cid,
+              cid: room.cid ?? '',
             ),
           ),
           // 右上:促销/画质标签已移到封面下方的特色 chip 行(用户口径:
@@ -225,7 +226,9 @@ class _Cover extends StatelessWidget {
               child: CoverOnlineBadge(
                 key: const Key('cover-badge-online'),
                 corner: CoverCorner.bottomRight,
-                online: room.online,
+                // 观众数取统一记录的 audience;未知为 null → 空串,角标按
+                // 既有契约隐藏(不伪造 0,不把状态文案当人数)。
+                online: room.audience ?? '',
               ),
             ),
           if (replay)
@@ -265,15 +268,16 @@ class _Cover extends StatelessWidget {
 class _CoverPlaceholder extends StatelessWidget {
   const _CoverPlaceholder({required this.room});
 
-  final RoomSummary room;
+  final RoomRecord room;
 
   @override
   Widget build(BuildContext context) {
+    final category = room.category ?? '';
     return ColoredBox(
       color: context.tokens.surfaceRaised,
       child: Center(
         child: Text(
-          room.category.isEmpty ? room.site : room.category,
+          category.isEmpty ? room.site : category,
           style: context.textSecondary,
         ),
       ),

@@ -21,8 +21,8 @@ class RoomGrid extends StatefulWidget {
     this.showPlatformBadge = true,
   });
 
-  final List<RoomSummary> rooms;
-  final void Function(RoomSummary room)? onRoomTap;
+  final List<RoomRecord> rooms;
+  final void Function(RoomRecord room)? onRoomTap;
   final EdgeInsetsGeometry padding;
 
   /// 是否还有下一页;true 时网格末尾显示加载 footer。
@@ -108,7 +108,7 @@ class _RoomGridState extends State<RoomGrid> {
             if (index >= rooms.length) return const _LoadingMoreFooter();
             final room = rooms[index];
             return RoomCard(
-              // 平台切换时按网格槽位复用卡片元素,只替换 RoomSummary;
+              // 平台切换时按网格槽位复用卡片元素,只替换 RoomRecord;
               // 不用 roomId 做外层 key,否则新平台会整批销毁/重建卡片。
               key: ValueKey('room-slot-$index'),
               room: room,

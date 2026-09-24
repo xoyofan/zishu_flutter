@@ -8,26 +8,27 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:live_parser/live_parser.dart' show RoomSummary;
+import 'package:live_parser/live_parser.dart' show RoomRecord, RoomState;
 import 'package:zishu_flutter/src/app/app_theme.dart';
 import 'package:zishu_flutter/src/features/browse/widgets/room_card.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-RoomSummary _room({
+RoomRecord _room({
   required String id,
   String title = '房间标题',
   String anchor = '主播名',
   String? promoTag,
   String online = '1.2万',
   String category = '英雄联盟',
-}) => RoomSummary(
+}) => RoomRecord(
   site: 'douyu',
   roomId: id,
+  roomState: online.isEmpty ? RoomState.offline : RoomState.live,
   title: title,
   anchorName: anchor,
   cid: '1',
   category: category,
-  online: online,
+  audience: online.isEmpty ? null : online,
   cover: '',
   promoTag: promoTag,
 );

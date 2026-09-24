@@ -208,9 +208,37 @@ class FixtureBrowseSource implements BrowseSource {
     final rooms = cid == null || cid.isEmpty
         ? kFixtureRooms
         : kFixtureRooms.where((room) => room.cid == cid).toList();
-    return RoomListResult(rooms: rooms, page: page, hasMore: false);
+    return RoomListResult(
+      rooms: [for (final room in rooms) _fixtureBrowseRecord(room)],
+      page: page,
+      hasMore: false,
+    );
   }
 }
+
+/// fixture 浏览出口把样例 [RoomSummary] 映射为统一 [RoomRecord]。
+///
+/// 浏览目录取样例即在播(对齐真实 browse 端口按 4a-i 赋 live 的口径),
+/// roomState 显式置 [RoomState.live] 而不继承 kFixtureRooms 的默认
+/// offline;观众数空串归一为 null,不伪造 0。kFixtureRooms 原列表仍供
+/// follow/anchor/search 以 [RoomSummary] 消费,语义不变。
+RoomRecord _fixtureBrowseRecord(RoomSummary summary) => RoomRecord(
+  site: summary.site,
+  roomId: summary.roomId,
+  roomState: RoomState.live,
+  title: summary.title,
+  anchorName: summary.anchorName,
+  cid: summary.cid,
+  category: summary.category,
+  audience: summary.online.isEmpty ? null : summary.online,
+  cover: summary.cover,
+  avatar: summary.avatar,
+  promoTag: summary.promoTag,
+  followers: summary.followers,
+  vip: summary.vip,
+  svip: summary.diamondFans,
+  startedAt: summary.startedAt,
+);
 
 class FixtureRoomSource implements RoomSource {
   const FixtureRoomSource();

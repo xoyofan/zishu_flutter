@@ -9,7 +9,7 @@
 /// 网格几何与 `play_room_grid.dart::PlayRoomGrid` 保持一致(2 列、间距
 /// `AppSpacing.sm`、卡片高 = 16:9 封面 + 36dp 元信息区),卡片本体直接复用
 /// 公开的 [PlayRoomCard];这里自建 Sliver 网格的原因只有一个——骨架占位卡
-/// 不是 [RoomSummary],`PlayRoomGrid` 表达不了。
+/// 不是 [RoomRecord],`PlayRoomGrid` 表达不了。
 library;
 
 import 'dart:math' as math;
@@ -47,7 +47,7 @@ class PlayRecommendPanel extends ConsumerStatefulWidget {
   final String category;
 
   /// 点推荐房:切房回调由播放页提供(保持它既有的 pushReplacement 语义)。
-  final void Function(RoomSummary room) onTap;
+  final void Function(RoomRecord room) onTap;
 
   @override
   ConsumerState<PlayRecommendPanel> createState() => _PlayRecommendPanelState();

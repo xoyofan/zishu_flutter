@@ -114,17 +114,19 @@ String? mapRecommendCid({
   return null;
 }
 
-/// 能否推荐给用户:沿用全站约定「online 非空即开播」。
-bool isRecommendableRoom(RoomSummary room) => room.online.trim().isNotEmpty;
+/// 能否推荐给用户:在播判据是状态真源 `roomState == live`(浏览目按
+/// 4a-i 赋值),不再用 online/统计数字推断在线。
+bool isRecommendableRoom(RoomRecord room) =>
+    room.roomState == RoomState.live;
 
 /// 按站点桶交错合并出展示列表。
 ///
 /// 逐轮(i=0,1,2…)遍历站点顺序各取第 i 条:多平台混合、且每站内部保持解析
 /// 侧的相关度排序。合并时顺手做三件事 —— 跳过未开播、剔除当前房间、按
 /// `site:roomId` 去重(跨站同号房间也算不同房间)。
-List<RoomSummary> interleaveRecommendBuckets({
+List<RoomRecord> interleaveRecommendBuckets({
   required List<String> sites,
-  required Map<String, List<RoomSummary>> buckets,
+  required Map<String, List<RoomRecord>> buckets,
   required int perSite,
   required String currentSite,
   required String currentRoomId,
@@ -135,7 +137,7 @@ List<RoomSummary> interleaveRecommendBuckets({
     if (length > maxLen) maxLen = length;
   }
   final seen = <String>{};
-  final result = <RoomSummary>[];
+  final result = <RoomRecord>[];
   for (var index = 0; index < maxLen; index++) {
     for (final site in sites) {
       final bucket = buckets[site];
@@ -193,7 +195,7 @@ class PlayRecommendArgs {
 @immutable
 class PlayRecommendState {
   const PlayRecommendState({
-    this.rooms = const <RoomSummary>[],
+    this.rooms = const <RoomRecord>[],
     this.placeholderCount = 0,
     this.loading = false,
     this.loadingMore = false,
@@ -203,7 +205,7 @@ class PlayRecommendState {
   });
 
   /// 已合并好的展示列表(跨站交错、已过滤)。
-  final List<RoomSummary> rooms;
+  final List<RoomRecord> rooms;
 
   /// 首屏骨架占位卡数量(>0 时面板渲染灰底占位)。
   final int placeholderCount;
@@ -224,7 +226,7 @@ class PlayRecommendState {
   final String error;
 
   PlayRecommendState copyWith({
-    List<RoomSummary>? rooms,
+    List<RoomRecord>? rooms,
     int? placeholderCount,
     bool? loading,
     bool? loadingMore,
@@ -261,7 +263,7 @@ class _SiteFetch {
     this.usedHotOnly = false,
   });
 
-  final List<RoomSummary> rooms;
+  final List<RoomRecord> rooms;
   final bool hasMore;
 
   /// 分类线路取数为空 → 改用该站热门(分类兜底)。
@@ -279,7 +281,7 @@ class PlayRecommendController extends Notifier<PlayRecommendState> {
   final PlayRecommendArgs args;
 
   /// 站点桶(原始取数结果,未过滤;展示时统一交错 + 过滤)。
-  final Map<String, List<RoomSummary>> _buckets = <String, List<RoomSummary>>{};
+  final Map<String, List<RoomRecord>> _buckets = <String, List<RoomRecord>>{};
 
   /// 各站是否还有下一页。
   final Map<String, bool> _siteHasMore = <String, bool>{};
@@ -396,7 +398,7 @@ class PlayRecommendController extends Notifier<PlayRecommendState> {
     _forcedMixed = false;
     _page = 1;
     for (final site in sites) {
-      _buckets[site] = <RoomSummary>[];
+      _buckets[site] = <RoomRecord>[];
       _siteHasMore[site] = true;
     }
   }
@@ -423,7 +425,7 @@ class PlayRecommendController extends Notifier<PlayRecommendState> {
     for (var index = 0; index < sites.length; index++) {
       final site = sites[index];
       final result = fetched[index];
-      final bucket = _buckets.putIfAbsent(site, () => <RoomSummary>[]);
+      final bucket = _buckets.putIfAbsent(site, () => <RoomRecord>[]);
       final seen = <String>{
         for (final room in bucket) '${room.site}:${room.roomId}',
       };
@@ -534,11 +536,11 @@ class PlayRecommendController extends Notifier<PlayRecommendState> {
       );
     } catch (_) {
       // 单站失败不影响其它站:本站留空、无更多。
-      return const _SiteFetch(rooms: <RoomSummary>[], hasMore: false);
+      return const _SiteFetch(rooms: <RoomRecord>[], hasMore: false);
     }
   }
 
-  List<RoomSummary> _display(List<String> sites) => interleaveRecommendBuckets(
+  List<RoomRecord> _display(List<String> sites) => interleaveRecommendBuckets(
     sites: sites,
     buckets: _buckets,
     perSite: kRecommendPerSite,

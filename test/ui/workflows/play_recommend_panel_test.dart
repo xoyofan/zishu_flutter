@@ -30,7 +30,7 @@ class _FakeBrowseSource implements BrowseSource {
   _FakeBrowseSource();
 
   /// 键:`'$site|${cid ?? ''}|$page'`(cid 空串代表热门/推荐流)。
-  final Map<String, List<RoomSummary>> rooms = {};
+  final Map<String, List<RoomRecord>> rooms = {};
 
   /// 各站分类索引(名字 → cid 映射用)。
   final Map<String, CategoryResult> categories = {};
@@ -40,7 +40,7 @@ class _FakeBrowseSource implements BrowseSource {
   /// 设置某站某页的房间(热门流:`cid` 传 null)。
   void setRooms(
     String site,
-    List<RoomSummary> list, {
+    List<RoomRecord> list, {
     String? cid,
     int page = 1,
   }) {
@@ -79,7 +79,7 @@ class _FakeBrowseSource implements BrowseSource {
     int page = 1,
   }) async {
     calls.add((site: site, cid: cid, page: page));
-    final list = rooms['$site|${cid ?? ''}|$page'] ?? const <RoomSummary>[];
+    final list = rooms['$site|${cid ?? ''}|$page'] ?? const <RoomRecord>[];
     return RoomListResult(
       rooms: list,
       page: page,
@@ -89,21 +89,22 @@ class _FakeBrowseSource implements BrowseSource {
   }
 }
 
-/// 造一个房间;`online` 传空串即「未开播」。
-RoomSummary _room(
+/// 造一个房间;`online` 传空串即「未开播」(roomState=offline、audience=null)。
+RoomRecord _room(
   String site,
   String id, {
   String cid = '1',
   String category = '英雄联盟',
   String online = '1.2万',
-}) => RoomSummary(
+}) => RoomRecord(
   site: site,
   roomId: id,
+  roomState: online.isEmpty ? RoomState.offline : RoomState.live,
   title: '$site-$id',
   anchorName: '主播$id',
   cid: cid,
   category: category,
-  online: online,
+  audience: online.isEmpty ? null : online,
   cover: '',
 );
 
@@ -118,7 +119,7 @@ Future<void> _pumpPanel(
   String roomId = _kCurrentRoom,
   String cid = '1',
   String category = '英雄联盟',
-  void Function(RoomSummary room)? onTap,
+  void Function(RoomRecord room)? onTap,
 }) async {
   tester.view.devicePixelRatio = 1.0;
   tester.view.physicalSize = const Size(1200, 900);
@@ -279,7 +280,7 @@ void main() {
       ..setRooms('douyu', [_room('douyu', '1001')], cid: '1')
       ..setCategories('huya', [('HY-LOL', '英雄联盟')])
       // 分类线路整页为空 → 应回落该站热门。
-      ..setRooms('huya', const <RoomSummary>[], cid: 'HY-LOL')
+      ..setRooms('huya', const <RoomRecord>[], cid: 'HY-LOL')
       ..setRooms('huya', [_room('huya', '2009')]);
 
     await _pumpPanel(tester, source);
@@ -372,7 +373,7 @@ void main() {
   testWidgets('点推荐房:回调把房间上抛给播放页(切房)', (tester) async {
     final source = _FakeBrowseSource()
       ..setRooms('douyu', [_room('douyu', '1001')], cid: '1');
-    RoomSummary? tapped;
+    RoomRecord? tapped;
     await _pumpPanel(tester, source, onTap: (room) => tapped = room);
 
     await tester.tap(find.byKey(const ValueKey('play-recommend-room-douyu-1001')));

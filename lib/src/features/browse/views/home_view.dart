@@ -66,7 +66,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
     final tokens = context.tokens;
 
     // 房间网格主体(下拉刷新 + 滚动加载 + 空态/错误)。切平台时新 provider
-    // 先进入 loading,继续显示旧网格;新数据到达后只替换 RoomSummary。
+    // 先进入 loading,继续显示旧网格;新数据到达后只替换 RoomRecord。
     final body = switch (roomsAsync) {
       AsyncValue(:final value?) => _rememberAndBuild(
         context,
@@ -116,7 +116,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
   /// 有数据(含刷新中)时的网格主体:下拉刷新 + 滚动加载 + 空态。
   Widget _body(
     BuildContext context, {
-    required List<RoomSummary> rooms,
+    required List<RoomRecord> rooms,
     required bool hasMore,
   }) {
     final query = BrowseRoomQuery(site: widget.site);
