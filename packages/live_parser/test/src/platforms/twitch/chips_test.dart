@@ -141,7 +141,11 @@ void main() {
       expect(first[0].id, '33333333-3333-4333-8333-333333333333');
       expect(first[0].name, '第一人称射击游戏');
       expect(first[0].kind, SiteChipKind.tag);
-      expect(first[0].filterCid, first[0].id, reason: '游戏 tag 可点');
+      expect(
+        first[0].filterCid,
+        'tag:${first[0].id}',
+        reason: '卡片 tag chip 的 filterCid 必须可直接喂 fetchRooms（带 tag: 前缀）',
+      );
       expect(first[0].navigable, isTrue);
       expect(first[1].kind, SiteChipKind.tag);
       expect(first[1].name, 'LCK');

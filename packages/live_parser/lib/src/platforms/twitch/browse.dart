@@ -249,8 +249,15 @@ query DirectoryPage_Game(\$id: ID!, \$limit: Int) {
         final id = _text(tag?['id']);
         final name = _text(tag?['localizedName']);
         if (id.isEmpty || name.isEmpty) continue;
+        // filterCid 必须是可直接传给 fetchRooms 的 cid：标签分支以
+        // `tag:` 前缀分流（见 fetchRooms），UI 不应知道平台前缀规则。
         chips.add(
-          SiteChip(id: id, name: name, kind: SiteChipKind.tag, filterCid: id),
+          SiteChip(
+            id: id,
+            name: name,
+            kind: SiteChipKind.tag,
+            filterCid: 'tag:$id',
+          ),
         );
       }
     }
