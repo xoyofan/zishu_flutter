@@ -471,7 +471,8 @@ List<StreamQuality> buildDouyinTiers(Map<String, dynamic> room) {
 Object? douyinOnlineRaw(Map<String, dynamic> room) {
   final viewStats = jsonMapOf(room['room_view_stats']);
   final display = viewStats['display_value'];
-  if (display is num && display > 0) return display;
+  final displayCount = parseOnlineCount(display);
+  if (displayCount > 0) return displayCount;
   final stats = jsonMapOf(room['stats']);
   final countStr = jsonText(stats['user_count_str']);
   if (countStr.isNotEmpty && countStr != '0') return countStr;

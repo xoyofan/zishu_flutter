@@ -12,13 +12,26 @@ class FakeDouyinApi extends http.BaseClient {
 
   /// 主播资料卡(/webcast/user/profile/,签名请求)。
   Object? anchorProfileResponse;
+
+  /// 用户信息(/webcast/user/?target_uid=,签名请求;关注数回退路径)。
+  Object? userProfileResponse;
   Object? partitionResponse;
+  Object? feedResponse;
+  Object? feedNextResponse;
+  Object? followLiveResponse;
+  Object? followLiveNextResponse;
+  Object? selfProfileResponse;
+  Object? followingResponse;
+  Object? followingNextResponse;
   Object? discoverResponse;
   Object? roomSearchResponse;
   String? homeHtml;
   String? roomPageHtml;
   String? setCookie;
   final List<http.Request> requests = [];
+  int _feedCalls = 0;
+  int _followLiveCalls = 0;
+  int _followingCalls = 0;
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest baseRequest) async {
@@ -46,6 +59,17 @@ class FakeDouyinApi extends http.BaseClient {
       if (url.path.startsWith('/webcast/user/profile/')) {
         return _json(anchorProfileResponse);
       }
+      if (url.path == '/webcast/user/') {
+        return _json(userProfileResponse);
+      }
+      if (url.path == '/webcast/feed/') {
+        return _json(_feedCalls++ == 0 ? feedResponse : feedNextResponse);
+      }
+      if (url.path == '/webcast/feed/follow_top/') {
+        return _json(
+          _followLiveCalls++ == 0 ? followLiveResponse : followLiveNextResponse,
+        );
+      }
       if (url.path.startsWith('/webcast/web/partition/detail/room/v2/')) {
         return _json(partitionResponse);
       }
@@ -53,7 +77,17 @@ class FakeDouyinApi extends http.BaseClient {
     }
     if (url.host == 'www.douyin.com') {
       if (url.path == '/') return _html('<html></html>');
-      if (url.path.contains('/discover/search/')) return _json(discoverResponse);
+      if (url.path == '/aweme/v1/web/user/profile/self/') {
+        return _json(selfProfileResponse);
+      }
+      if (url.path == '/aweme/v1/web/user/following/list/') {
+        return _json(
+          _followingCalls++ == 0 ? followingResponse : followingNextResponse,
+        );
+      }
+      if (url.path.contains('/discover/search/')) {
+        return _json(discoverResponse);
+      }
       return _json(roomSearchResponse);
     }
     return http.Response('fake route missing: $url', 500);

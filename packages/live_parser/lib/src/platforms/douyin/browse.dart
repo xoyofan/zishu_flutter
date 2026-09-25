@@ -15,7 +15,6 @@ import 'room_api.dart';
 /// 分区列表单页条数(SFVideoLive 同款)。
 const int kDouyinPageSize = 15;
 
-const String _kRecommendPartition = '0';
 const String _kDefaultGamePartition = '1010045';
 const String _kDefaultPartitionType = '1';
 const String _kEntertainmentPartitionType = '4';
@@ -96,6 +95,7 @@ class DouyinBrowseRepository implements BrowseRepository {
 
   final DouyinClient _client;
   List<CategoryGroup>? _categoryCache;
+  final Set<String> _feedSeenRoomIds = <String>{};
 
   @override
   Future<CategoryResult> fetchCategories(String site) async {
@@ -150,23 +150,13 @@ class DouyinBrowseRepository implements BrowseRepository {
   Future<RoomListResult> fetchRooms(RoomListRequest request) async {
     final cid = request.cid;
     if (cid == null || cid.isEmpty || cid == '0') {
-      try {
-        return await fetchDouyinPartitionRooms(
-          _client,
-          partition: _kRecommendPartition,
-          page: request.page,
-          limit: request.limit,
-          partitionName: '推荐',
-        );
-      } on Object {
-        return fetchDouyinPartitionRooms(
-          _client,
-          partition: _kDefaultGamePartition,
-          page: request.page,
-          limit: request.limit,
-          partitionName: '王者荣耀',
-        );
-      }
+      if (request.page <= 1) _feedSeenRoomIds.clear();
+      final page = await _fetchDouyinFeedPage(
+        _client,
+        page: request.page,
+        seenRoomIds: _feedSeenRoomIds,
+      );
+      return page.result;
     }
     return fetchDouyinPartitionRooms(
       _client,
@@ -287,7 +277,281 @@ class DouyinBrowseRepository implements BrowseRepository {
   }
 }
 
-/// 分区房间列表(推荐与分类共用同一接口)。
+/// 抖音首页推荐流。
+///
+/// Purelive 当前使用 `/webcast/feed/`，响应是 envelope 列表；旧版响应仍
+/// 可能把房间放在 `data.data`。这里集中兼容两种形状，避免首页再次退化为
+/// `partition=0` 的分类目录。
+Future<RoomListResult> fetchDouyinRecommendRooms(DouyinClient client) async {
+  final page = await _fetchDouyinFeedPage(
+    client,
+    page: 1,
+    seenRoomIds: <String>{},
+  );
+  return page.result;
+}
+
+class DouyinFollowLiveResult {
+  const DouyinFollowLiveResult({required this.rooms, required this.complete});
+
+  final List<RoomRecord> rooms;
+
+  /// 是否已经完整读取到 `extra.has_more == false`。
+  final bool complete;
+}
+
+/// 批量读取当前登录账号关注且正在直播的房间。
+///
+/// 抖音网页使用 `/webcast/feed/follow_top/`；它不是逐房间 enter 查询，
+/// 而是直接返回关注直播流。接口通过 follow_session_id/max_time 翻页。
+Future<DouyinFollowLiveResult> fetchDouyinFollowLiveRooms(
+  DouyinClient client,
+) async {
+  final rooms = <RoomRecord>[];
+  final seenRoomIds = <String>{};
+  var followSessionId = '0';
+  var maxTime = '0';
+  var complete = false;
+
+  for (var page = 0; page < 200; page++) {
+    final root = await signedDouyinGet(
+      client,
+      '/webcast/feed/follow_top/',
+      <String, String>{
+        'aid': '6383',
+        'app_name': 'douyin_web',
+        'live_id': '1',
+        'device_platform': 'web',
+        'language': 'zh-CN',
+        'enter_from': 'link_share',
+        'cookie_enabled': 'true',
+        'screen_width': '1920',
+        'screen_height': '1080',
+        'browser_language': 'zh-CN',
+        'browser_platform': 'Win32',
+        'browser_name': 'Chrome',
+        'browser_version': '141.0.0.0',
+        'os_name': 'Windows',
+        'os_version': '10',
+        'enter_source': 'homepage_pc_followtop',
+        'need_pinned_info': '0',
+        'source_key': 'web_homepage_follow_top',
+        'webcast_version_code': '170400',
+        'version_code': '170400',
+        'need_map': '1',
+        'follow_session_id': followSessionId,
+        'maxtime': maxTime,
+        'msToken': randomDouyinMsToken(),
+      },
+    );
+    if (jsonInt(root['status_code']) != 0) {
+      throw StateError('抖音关注直播流获取失败');
+    }
+
+    final rawData = root['data'];
+    final entries = rawData is Map
+        ? jsonListOf(rawData['data'])
+        : jsonListOf(rawData);
+    for (final raw in entries) {
+      final summary = _normalizeDouyinFeedRoom(raw);
+      if (summary == null || !seenRoomIds.add(summary.roomId)) continue;
+      rooms.add(RoomRecord.fromSummary(summary));
+    }
+
+    final extra = jsonMapOf(root['extra']);
+    if (!jsonBool(extra['has_more'])) {
+      complete = true;
+      break;
+    }
+    final nextSessionId = jsonText(extra['follow_session_id']).trim();
+    final nextMaxTime = jsonText(extra['max_time']).trim();
+    if (nextSessionId.isEmpty || nextMaxTime.isEmpty) break;
+    if (nextSessionId == followSessionId && nextMaxTime == maxTime) break;
+    followSessionId = nextSessionId;
+    maxTime = nextMaxTime;
+  }
+
+  return DouyinFollowLiveResult(
+    rooms: List.unmodifiable(rooms),
+    complete: complete,
+  );
+}
+
+class _DouyinFeedPage {
+  const _DouyinFeedPage({required this.result});
+
+  final RoomListResult result;
+}
+
+Future<_DouyinFeedPage> _fetchDouyinFeedPage(
+  DouyinClient client, {
+  required int page,
+  required Set<String> seenRoomIds,
+}) async {
+  final isFirstPage = page <= 1;
+  final root = await signedDouyinGet(
+    client,
+    '/webcast/feed/',
+    <String, String>{
+      'aid': '6383',
+      'app_name': 'douyin_web',
+      'live_id': '1',
+      'device_platform': 'web',
+      'language': 'zh-CN',
+      'enter_from': 'link_share',
+      'cookie_enabled': 'true',
+      'screen_width': '1920',
+      'screen_height': '1080',
+      'browser_language': 'zh-CN',
+      'browser_platform': 'Win32',
+      'browser_name': 'Chrome',
+      'browser_version': '141.0.0.0',
+      'os_name': 'Windows',
+      'os_version': '10',
+      'channel': 'channel_pc_web',
+      'request_tag_from': 'web',
+      'need_map': '1',
+      'liveid': '1',
+      'is_draw': '1',
+      'inner_from_drawer': '0',
+      'custom_count': isFirstPage ? '50' : '8',
+      'action': 'load_more',
+      'action_type': 'loadmore',
+      'enter_source': 'web_homepage_hot_web_live_card',
+      'source_key': 'web_homepage_hot_web_live_card',
+      if (isFirstPage) ...<String, String>{
+        'is_ssr': 'true',
+        'maxtime': '0',
+      },
+    },
+  );
+  if (jsonInt(root['status_code']) != 0) {
+    throw StateError('抖音首页推荐获取失败');
+  }
+
+  final rawData = root['data'];
+  final entries = rawData is Map
+      ? jsonListOf(rawData['data'])
+      : jsonListOf(rawData);
+  final rooms = <RoomSummary>[];
+  for (final raw in entries) {
+    final room = _normalizeDouyinFeedRoom(raw);
+    if (room == null || !seenRoomIds.add(room.roomId)) continue;
+    rooms.add(room);
+  }
+  final extra = jsonMapOf(root['extra']);
+  return _DouyinFeedPage(
+    result: RoomListResult(
+      rooms: rooms.map(RoomRecord.fromSummary).toList(growable: false),
+      page: page,
+      hasMore: jsonBool(extra['has_more']),
+    ),
+  );
+}
+
+Map<String, dynamic> _decodeDouyinEmbeddedMap(Object? value) {
+  final direct = jsonMapOf(value);
+  if (direct.isNotEmpty) return direct;
+  final text = jsonText(value).trim();
+  if (!text.startsWith('{')) return const {};
+  try {
+    final decoded = jsonDecode(text);
+    return decoded is Map ? Map<String, dynamic>.from(decoded) : const {};
+  } on FormatException {
+    return const {};
+  }
+}
+
+bool _looksLikeDouyinFeedRoom(Map<String, dynamic> value) =>
+    value['owner'] is Map ||
+    value['title'] != null ||
+    value['id_str'] != null ||
+    value['stream_url'] is Map;
+
+String _douyinFeedImage(Object? value) {
+  final list = jsonListOf(jsonMapOf(value)['url_list']);
+  return list.isEmpty ? '' : httpsDouyinUrl(list.first);
+}
+
+String _douyinFeedCategory(
+  Map<String, dynamic> envelope,
+  Map<String, dynamic> room,
+) {
+  final direct = _firstNonEmpty([
+    jsonText(room['tag_name']),
+    jsonText(envelope['tag_name']),
+  ]);
+  if (direct.isNotEmpty) return direct;
+  for (final source in [room['partition_road_map'], envelope['tags']]) {
+    for (final rawTag in jsonListOf(source)) {
+      final tag = jsonMapOf(rawTag);
+      final text = _firstNonEmpty([
+        jsonText(tag['title']),
+        jsonText(tag['name']),
+        jsonText(tag['tag_name']),
+      ]);
+      if (text.isNotEmpty) return text;
+    }
+  }
+  return '热门推荐';
+}
+
+RoomSummary? _normalizeDouyinFeedRoom(Object? raw) {
+  final envelope = jsonMapOf(raw);
+  final embedded = _decodeDouyinEmbeddedMap(envelope['data']);
+  final candidates = <Map<String, dynamic>>[
+    embedded,
+    jsonMapOf(envelope['room']),
+    envelope,
+  ];
+  final room = candidates.firstWhere(
+    _looksLikeDouyinFeedRoom,
+    orElse: () => const <String, dynamic>{},
+  );
+  if (room.isEmpty) return null;
+
+  final owner = room['owner'] is Map
+      ? jsonMapOf(room['owner'])
+      : jsonMapOf(envelope['owner']);
+  final roomId = _firstNonEmpty([
+    jsonText(envelope['web_rid']),
+    jsonText(owner['web_rid']),
+    jsonText(room['web_rid']),
+    jsonText(room['id_str']),
+    jsonText(room['id']),
+  ]);
+  if (roomId.isEmpty) return null;
+
+  final nickname = _firstNonEmpty([
+    jsonText(owner['nickname']),
+    jsonText(envelope['nickname']),
+  ]);
+  final title = _firstNonEmpty([
+    jsonText(room['title']),
+    jsonText(envelope['title']),
+    nickname,
+  ]);
+  final cover = _douyinFeedImage(room['cover']);
+  final avatar = _firstNonEmpty([
+    _douyinFeedImage(owner['avatar_thumb']),
+    _douyinFeedImage(owner['avatar_large']),
+    _douyinFeedImage(envelope['avatar_thumb']),
+  ]);
+  return RoomSummary(
+    site: kDouyinSiteId,
+    roomId: roomId,
+    title: title,
+    anchorName: nickname,
+    cid: '',
+    category: _douyinFeedCategory(envelope, room),
+    online: formatOnlineCount(douyinOnlineRaw(room)),
+    cover: cover.isEmpty ? _douyinFeedImage(envelope['cover']) : cover,
+    avatar: avatar,
+    roomState: RoomState.live,
+  );
+}
+
+/// 分区房间列表(分类专用)。
 Future<RoomListResult> fetchDouyinPartitionRooms(
   DouyinClient client, {
   required String partition,

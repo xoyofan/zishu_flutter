@@ -1,0 +1,31 @@
+{
+  "status_code": 0,
+  "extra": {
+    "has_more": true,
+    "max_time": 1790338899728
+  },
+  "data": [
+    {
+      "web_rid": "123456",
+      "data": {
+        "id_str": "7382735338101328680",
+        "title": "当前推荐直播",
+        "owner": {
+          "nickname": "推荐主播",
+          "web_rid": "123456",
+          "avatar_thumb": {
+            "url_list": ["//p3.douyinpic.com/recommend-avatar.jpg"]
+          }
+        },
+        "cover": {
+          "url_list": ["//p3.douyinpic.com/recommend-cover.jpg"]
+        },
+        "room_view_stats": {
+          "display_value": "1.2万",
+          "user_count": 321
+        },
+        "tag_name": "游戏推荐"
+      }
+    }
+  ]
+}

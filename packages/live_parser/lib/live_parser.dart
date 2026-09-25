@@ -15,6 +15,7 @@ export 'src/models/models.dart';
 export 'src/models/room_record.dart';
 export 'src/platforms/douyin/browse.dart';
 export 'src/platforms/douyin/danmaku.dart';
+export 'src/platforms/douyin/follow_import.dart';
 export 'src/platforms/douyin/douyin_site.dart';
 export 'src/platforms/douyin/normalize.dart';
 export 'src/platforms/douyin/room_api.dart';

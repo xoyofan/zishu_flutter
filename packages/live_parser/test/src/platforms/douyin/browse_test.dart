@@ -40,51 +40,114 @@ void main() {
       expect(fake.requests.length, calls, reason: '分类索引应命中缓存');
     });
 
-    test('推荐:partition=0,字段映射与人数格式化', () async {
-      final result = await browse.fetchRooms(
+    test('推荐:使用 live feed 并透传登录 Cookie', () async {
+      fake.feedResponse = douyinFixture('feed_rooms.json');
+      final loggedInBrowse = DouyinBrowseRepository(
+        DouyinClient(
+          httpClient: fake,
+          cookieOverride: 'UIFID=test-user; passport_csrf_token=test-token',
+        ),
+      );
+
+      final result = await loggedInBrowse.fetchRooms(
         const RoomListRequest(site: 'douyin', page: 1, limit: 15),
       );
 
-      expect(result.rooms, hasLength(2));
-      final first = result.rooms.first;
-      expect(first.roomId, '123456');
-      expect(first.title, '分区房间');
-      expect(first.anchorName, '分区主播');
-      expect(first.audience, '1.2万');
-      expect(first.cover, 'https://p3.douyinpic.com/cover.jpg');
-      expect(result.rooms.last.anchorName, '昵称兜底');
-      expect(result.rooms.last.audience, '800');
+      expect(result.rooms, hasLength(1));
+      final room = result.rooms.single;
+      expect(room.roomId, '123456');
+      expect(room.title, '当前推荐直播');
+      expect(room.anchorName, '推荐主播');
+      expect(room.audience, '1.2万');
+      expect(room.cover, 'https://p3.douyinpic.com/recommend-cover.jpg');
+      expect(room.avatar, 'https://p3.douyinpic.com/recommend-avatar.jpg');
+      expect(room.category, '游戏推荐');
+      expect(room.roomState, RoomState.live);
       expect(result.hasMore, isTrue);
 
-      // 列表来自 RoomSummary:统一记录只映射已提供的统计(audience),
-      // 上游列表没有 followers/vip/svip → 保持 null,不编造数字。
-      final record = first;
-      expect(record.site, 'douyin');
-      expect(record.roomId, '123456');
-      // 浏览目录 live-only(6sol 裁决,Task 4a-i):状态真源显式为 live。
+      final request = fake.requests.last;
+      expect(request.url.path, '/webcast/feed/');
+      expect(request.url.queryParameters['aid'], '6383');
+      expect(request.url.queryParameters['live_id'], '1');
+      expect(request.url.queryParameters['enter_from'], 'link_share');
+      expect(request.url.queryParameters['custom_count'], '50');
+      expect(request.url.queryParameters['action'], 'load_more');
+      expect(request.url.queryParameters['action_type'], 'loadmore');
+      expect(request.url.queryParameters['is_ssr'], 'true');
+      expect(request.url.queryParameters['maxtime'], '0');
       expect(
-        record.roomState,
-        RoomState.live,
-        reason: 'partition/detail/room/v2 是直播分区目录,roomState 应为 live',
+        request.url.queryParameters['source_key'],
+        'web_homepage_hot_web_live_card',
       );
-      expect(record.audience, '1.2万');
-      expect(record.followers, isNull);
-      expect(record.vip, isNull);
-      expect(record.svip, isNull);
+      expect(request.url.queryParameters['a_bogus'], isNotEmpty);
       expect(
-        result.rooms.last.audience,
-        '800',
-        reason: '精确值原样保留',
+        request.headers['Cookie'],
+        'UIFID=test-user; passport_csrf_token=test-token',
+      );
+    });
+
+    test('推荐:按 extra.has_more 加载下一页', () async {
+      fake.feedResponse = douyinFixture('feed_rooms.json');
+      fake.feedNextResponse = douyinFixture('feed_rooms_page2.json');
+      final first = await browse.fetchRooms(
+        const RoomListRequest(site: 'douyin', page: 1, limit: 15),
+      );
+      final second = await browse.fetchRooms(
+        const RoomListRequest(site: 'douyin', page: 2, limit: 15),
       );
 
-      final request = fake.requests.last;
-      expect(
-        request.url.path,
-        '/webcast/web/partition/detail/room/v2/',
+      expect(first.hasMore, isTrue);
+      expect(second.page, 2);
+      expect(second.rooms.single.roomId, '654321');
+      expect(second.hasMore, isFalse);
+      expect(fake.requests.last.url.queryParameters['custom_count'], '8');
+      expect(fake.requests.last.url.queryParameters['maxtime'], isNull);
+    });
+
+    test('关注直播:一次接口返回当前直播中的关注房间', () async {
+      fake.followLiveResponse = douyinFixture('follow_live_rooms.json');
+      final result = await fetchDouyinFollowLiveRooms(
+        DouyinClient(
+          httpClient: fake,
+          cookieOverride: 'UIFID=follow-user; sessionid=follow-session',
+        ),
       );
-      expect(request.url.queryParameters['partition'], '0');
-      expect(request.url.queryParameters['partition_type'], '1');
+
+      expect(result.complete, isTrue);
+      expect(result.rooms, hasLength(1));
+      expect(result.rooms.single.roomId, 'follow-live-1');
+      expect(result.rooms.single.roomState, RoomState.live);
+      expect(result.rooms.single.audience, '2.3万');
+
+      final request = fake.requests.last;
+      expect(request.url.path, '/webcast/feed/follow_top/');
+      expect(request.url.queryParameters['enter_source'], 'homepage_pc_followtop');
+      expect(request.url.queryParameters['source_key'], 'web_homepage_follow_top');
+      expect(request.url.queryParameters['follow_session_id'], '0');
+      expect(request.url.queryParameters['maxtime'], '0');
       expect(request.url.queryParameters['a_bogus'], isNotEmpty);
+      expect(
+        request.headers['Cookie'],
+        'UIFID=follow-user; sessionid=follow-session',
+      );
+    });
+
+    test('注册表:抖音 Cookie 注入首页真实请求', () async {
+      final fake = FakeDouyinApi()
+        ..feedResponse = douyinFixture('feed_rooms.json');
+      final registry = buildSiteRegistry(
+        douyinCookie: 'UIFID=registry-user; passport_csrf_token=registry-token',
+        douyinHttpClient: fake,
+      );
+
+      await registry['douyin']!.browse!.fetchRooms(
+        const RoomListRequest(site: 'douyin', page: 1, limit: 15),
+      );
+
+      expect(
+        fake.requests.last.headers['Cookie'],
+        'UIFID=registry-user; passport_csrf_token=registry-token',
+      );
     });
 
     test('分类房间:娱乐 cid 走 partition_type=4', () async {

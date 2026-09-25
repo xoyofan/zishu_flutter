@@ -1,0 +1,26 @@
+{
+  "status_code": 0,
+  "has_more": false,
+  "followings": [
+    {
+      "user": {
+        "web_rid": "follow-import-1",
+        "unique_id": "follow-import-1",
+        "nickname": "导入主播一",
+        "avatar_thumb": {
+          "url_list": ["//p3.douyinpic.com/import-avatar-1.jpg"]
+        }
+      }
+    },
+    {
+      "user": {
+        "web_rid": "follow-import-2",
+        "unique_id": "follow-import-2",
+        "nickname": "导入主播二",
+        "avatar_thumb": {
+          "url_list": ["//p3.douyinpic.com/import-avatar-2.jpg"]
+        }
+      }
+    }
+  ]
+}

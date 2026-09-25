@@ -1,0 +1,21 @@
+{
+  "status_code": 0,
+  "has_more": true,
+  "max_time": 0,
+  "offset": 20,
+  "total": 793,
+  "followings": [
+    {
+      "room_id_str": "room-1",
+      "unique_id": "user-1",
+      "nickname": "导入主播一",
+      "avatar_thumb": {"url_list": ["//p3.douyinpic.com/import-avatar-1.jpg"]}
+    },
+    {
+      "room_id_str": "room-2",
+      "unique_id": "user-2",
+      "nickname": "导入主播二",
+      "avatar_thumb": {"url_list": ["//p3.douyinpic.com/import-avatar-2.jpg"]}
+    }
+  ]
+}
