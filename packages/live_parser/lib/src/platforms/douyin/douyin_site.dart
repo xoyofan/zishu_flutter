@@ -30,13 +30,18 @@ class DouyinRoomResolver implements RoomResolver, RoomSummaryRefresher {
   /// 口径对齐 web `follow/status.ts` 的 douyin 快照:`status == 4` 为未开播,
   /// 其余视为在播;热度取 `douyinOnlineRaw`(user_count_str/stats 口径);
   /// 粉丝数取 enter 响应内 `owner.follow_info.follower_count`(web
-  /// `fetchDouyinSnapshot` 的首选路径,零额外请求;缺失时 web 会再打
-  /// 用户 follow_info 接口,此处不再追加 —— 拿不到就留空)。
-  /// 「会员」计数在 web 真源走带签名的主播资料卡接口
-  /// (`follow/douyin-extras.ts` 的 `/webcast/user/profile/`),仅播时取
-  /// `subscribe_info.member_count` 回填 [RoomSummary.diamondFans]
-  /// (web `ROOM_STAT_COLUMNS.douyin` 第 3 列 tone=svip field=vip「会员」,
-  /// 本包统一由 diamondFans 承载);未开播/拿不到一律留空。
+  /// `fetchDouyinSnapshot` 的首选路径,零额外请求);**实连中该字段常常
+  /// 缺失**(owner.follow_info 只带 follow_status),此时回退 web 同款
+  /// 用户信息接口 `/webcast/user/?target_uid=`(见
+  /// [fetchDouyinFollowerCount])——此前无回退,关注数恒「—」。
+  /// 「粉丝团」「会员」两列在 web 真源同走带签名的主播资料卡接口
+  /// (`follow/douyin-extras.ts` 的 `/webcast/user/profile/`),**一次请求**
+  /// 同时取两列:粉丝团 = `fans_club.total_fans_count`(web
+  /// `ROOM_STAT_COLUMNS.douyin` 第 2 列 field=fanGroup)→ 回填
+  /// [RoomSummary.vip];会员 = `subscribe_info.member_count`(第 3 列
+  /// tone=svip field=vip「会员」)→ 回填 [RoomSummary.diamondFans]
+  /// (本包统一由 diamondFans 承载);未开播/拿不到一律留空。
+  /// 回归:此前只取会员,粉丝团列恒空 → 播放页「粉丝团」永远显示「—」。
   /// 注:`status != 4` 但无流的情况只有拿档位后才知,轻量刷新不为此多打请求,
   /// 由播放侧开流时自会纠偏。
   @override
@@ -48,9 +53,15 @@ class DouyinRoomResolver implements RoomResolver, RoomSummaryRefresher {
     final live = jsonInt(room['status']) != 4;
     final owner = jsonMapOf(room['owner']);
     // web 真源 `fetchDouyinAudienceExtras` 的 `status == 2` 门槛(在播)。
-    final diamondFans = jsonInt(room['status']) == 2
-        ? await fetchDouyinAnchorMemberCount(_client, room, webRid)
-        : '';
+    final counts = jsonInt(room['status']) == 2
+        ? await fetchDouyinAnchorProfileCounts(_client, room, webRid)
+        : (fanGroup: '', vip: '');
+    // 粉丝数:enter 响应内 owner.follow_info.follower_count 零额外请求;
+    // 实连中该子对象常常只带 follow_status,缺失时回退用户信息接口
+    // (web `fetchDouyinSnapshot` 同款,见 fetchDouyinFollowerCount)。
+    final followers = formatExactCount(
+      jsonMapOf(owner['follow_info'])['follower_count'],
+    );
     return RoomRecord.fromSummary(RoomSummary(
       site: kDouyinSiteId,
       roomId: webRid,
@@ -65,10 +76,17 @@ class DouyinRoomResolver implements RoomResolver, RoomSummaryRefresher {
       avatar: douyinAvatarOf(room),
       // 状态真源:web 同口径 status==4 未开播,其余在播(不从热度推断)。
       roomState: live ? RoomState.live : RoomState.offline,
-      followers: formatExactCount(
-        jsonMapOf(owner['follow_info'])['follower_count'],
-      ),
-      diamondFans: diamondFans,
+      followers: followers.isNotEmpty
+          ? followers
+          : formatExactCount(
+              await fetchDouyinFollowerCount(
+                _client,
+                jsonText(owner['id_str']).trim(),
+                webRid,
+              ),
+            ),
+      vip: counts.fanGroup,
+      diamondFans: counts.vip,
     ));
   }
 

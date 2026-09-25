@@ -15,6 +15,8 @@ import '../../contracts/contracts.dart';
 import '../../models/models.dart';
 import '../../utils/chat_dedup.dart';
 import '../douyu/json_utils.dart';
+import 'huya_fans_badge_resource.dart';
+import 'huya_wup.dart';
 import 'room_api.dart';
 import 'tars_codec.dart';
 import 'tars_exception.dart';
@@ -53,13 +55,18 @@ class HuyaDanmakuConnector implements DanmakuConnector {
   HuyaDanmakuConnector({
     required ParserHttp parserHttp,
     DanmakuTransport? transport,
+    // 房间级粉丝牌资源通道(wupui/getResourceInfo);null = 不拉(测试/降级)。
+    this.wup,
     this.heartbeatInterval = kHuyaDanmakuHeartbeat,
     this.url = kHuyaDanmakuUrl,
-  }) : _http = parserHttp,
-       _transport = transport ?? const IoDanmakuTransport();
+  })  : _http = parserHttp,
+        _transport = transport ?? const IoDanmakuTransport();
 
   final ParserHttp _http;
   final DanmakuTransport _transport;
+
+  /// 房间级粉丝牌资源通道;null 时不拉房间资源(UI 沿用自绘胶囊)。
+  final HuyaWupClient? wup;
   final Duration heartbeatInterval;
   final String url;
 
@@ -69,12 +76,19 @@ class HuyaDanmakuConnector implements DanmakuConnector {
   @override
   Future<DanmakuSession> connect(DanmakuSessionRequest request) async {
     final topSid = await fetchHuyaDanmakuTopSid(_http, request.roomId);
+    // 房间级粉丝牌底图模板:fire-and-forget,早于 socket 建连发起(实测为
+    // 全局资源包,只需一次),**失败/超时一律降级**,不影响弹幕连接。
+    final resource = wup?.fetchFansBadgeResource().then(
+      (value) => value,
+      onError: (Object _) => null,
+    );
     final socket = await _transport.connect(Uri.parse(url));
     return HuyaDanmakuSession(
       request.roomId,
       topSid,
       socket,
       heartbeatInterval: heartbeatInterval,
+      fansBadgeResource: resource,
     );
   }
 }
@@ -110,9 +124,13 @@ class HuyaDanmakuSession implements DanmakuSession {
     this.topSid,
     this._socket, {
     required Duration heartbeatInterval,
+    Future<HuyaFansBadgeResource?>? fansBadgeResource,
   }) {
     _messages = _messagesController.stream;
     _states = _statesController.stream;
+    // 资源到达后回填缓存;在资源就绪前到的弹幕按无底图降级(不阻塞正文)。
+    _fansBadgeResource = null;
+    fansBadgeResource?.then((resource) => _fansBadgeResource = resource);
     _statesController.add(DanmakuSessionState.connecting);
     _subscription = _socket.data.listen(
       _onData,
@@ -139,6 +157,9 @@ class HuyaDanmakuSession implements DanmakuSession {
 
   final _messagesController = StreamController<DanmakuMessage>.broadcast();
   final _statesController = StreamController<DanmakuSessionState>.broadcast();
+
+  /// 房间级粉丝牌资源(已到达的缓存;null = 未取到,UI 降级自绘胶囊)。
+  HuyaFansBadgeResource? _fansBadgeResource;
 
   bool _closed = false;
 
@@ -255,6 +276,21 @@ class HuyaDanmakuSession implements DanmakuSession {
     var userLevel = 0;
     var userLevelStyle = 0;
     var userLevelPolished = 0;
+    // BadgeInfo tag 17/19/22/25/26(字段号逐条核对自官网 Tars 生成代码
+    // `assets/modules/taf/structs/FansServant.js` 的 `SimpleBadgeInfo`,
+    // 与 `MessageNotice` 弹幕装饰用的是同一结构):
+    // - 17 iBadgeType:非 0 = 「信仰」牌(`E_BADGE_TYPE_FAITH`),也是
+    //   `<identity>` 占位符的回落值;
+    // - 18 tFaithInfo / 19 tSuperFansInfo:19 内 **iSFFlag@1**(超粉标识);
+    // - 22 iCustomBadgeFlag:1 = 房间定制粉丝牌(走 CustomFansBadgeResource);
+    // - 25 tExternal: **iFansIdentity@1**、**iBadgeSize@2**;
+    // - 26 iExtinguished:1 = 熄灭态(官网 floorUrl 的 `<dark>`)。
+    var badgeType = 0;
+    var badgeSuperFans = 0;
+    var badgeCustom = 0;
+    var badgeIdentity = 0;
+    var badgeSize = 0;
+    var badgeExtinguished = 0;
     try {
       for (final tag in _decorationTags) {
         final decorations = reader.readStructList(
@@ -267,20 +303,42 @@ class HuyaDanmakuSession implements DanmakuSession {
           switch (deco.appId) {
             case _decoAppIdFans:
               final badge = TarsReader(deco.data);
-              // Tars 字段按 tag 升序排布,必须先读 tag 3 再读 tag 4(与
-              // web parseOfficialBadgeInfo 的读取顺序一致)。
+              // Tars 字段按 tag 升序排布,必须按序读(与官网
+              // `SimpleBadgeInfo.readFrom` 同序);tag 18/19/25 是 struct,
+              // 必须读到才能继续定位后面的 tag。
               final name = badge.readString(3);
               final level = badge.readInt(4);
               final vFlag = badge.readInt(12);
               final vLogo = badge.readString(13);
-              // tag 17 是 badgeType;当前契约不单独存它,读取以保持字段
-              // 顺序与 Web JCE parser 一致,缺省值不影响展示。
-              badge.readInt(17);
+              badgeType = badge.readInt(17);
+              // tFaithInfo(18):协议不消费,读掉以保持偏移。
+              badge.readStruct(18, (_) {});
+              var superFans = 0;
+              badge.readStruct(19, (sf) {
+                // SuperFansInfo{0 lSFExpiredTS, 1 iSFFlag, 2 lSFAnnualTS,
+                // 3 iSFVariety, 4 lOpenTS, 5 lMemoryDay}(官网生成代码)。
+                superFans = sf.readInt(1);
+              });
+              final custom = badge.readInt(22);
+              var identity = 0;
+              var size = 0;
+              badge.readStruct(25, (external) {
+                // CustomBadgeDynamicExternal{0 sFloorExter, 1 iFansIdentity,
+                // 2 iBadgeSize}。
+                identity = external.readInt(1);
+                size = external.readInt(2);
+              });
+              final extinguished = badge.readInt(26);
               if (level > 0) {
                 badgeLevel = level;
                 badgeName = name;
                 badgeVFlag = vFlag;
                 badgeVLogo = vLogo;
+                badgeSuperFans = superFans;
+                badgeCustom = custom;
+                badgeIdentity = identity;
+                badgeSize = size;
+                badgeExtinguished = extinguished;
               }
             case _decoAppIdConsumeLevel:
               final levelReader = TarsReader(deco.data);
@@ -308,12 +366,37 @@ class HuyaDanmakuSession implements DanmakuSession {
       // 无 id 不影响正文。
     }
 
+    // 官方底图:房间级资源(CommonFansBadgeSplit.tCommonBadge.sFloorUrl)
+    // 拼出,放在 `DanmakuBadge.url`(UI 粉丝牌胶囊的官方底图位);拿不到
+    // 资源时留空串,UI 沿用自绘渐变胶囊。`<identity>` 取官网
+    // `sfid || type`:优先 `tExternal.iFansIdentity`,否则 `iBadgeType`。
+    final resource = _fansBadgeResource;
+    final floorUrl = resource == null
+        ? ''
+        : huyaFansBadgeFloorUrl(
+            template: resource.floorUrlTemplate,
+            level: badgeLevel,
+            identity: badgeIdentity > 0 ? badgeIdentity : badgeType,
+            size: badgeSize <= 0 ? kHuyaFansBadgeDefaultSize : badgeSize,
+            dark: badgeExtinguished,
+          );
+
     final badge = badgeName.isNotEmpty && badgeLevel > 0
         ? DanmakuBadge(
             name: badgeName,
             level: badgeLevel,
             vFlag: badgeVFlag,
             vLogo: badgeVLogo,
+            // 虎牙 `DanmakuBadge.url` = 官方粉丝牌**底图**(非图标);
+            // 与其它平台的 `url` 语义不同,只由虎牙分支消费。
+            url: floorUrl,
+            identity: badgeIdentity,
+            badgeSize: badgeSize > 0
+                ? badgeSize
+                : kHuyaFansBadgeDefaultSize,
+            floorUrlTemplate: resource?.floorUrlTemplate ?? '',
+            extinguished: badgeExtinguished,
+            custom: badgeCustom == 1,
           )
         : null;
     return DanmakuMessage(
@@ -329,6 +412,12 @@ class HuyaDanmakuSession implements DanmakuSession {
       userLevel: userLevel,
       userLevelBadgeStyle: userLevelStyle,
       userLevelIsPolished: userLevelPolished,
+      // 贵族(虎牙 iNobleLevel)只在 **OnTVBarrageNotice**(uri 1450 的
+      // OnTV 系消息)里,`MessageNotice` 的装饰结构不含该字段 → 恒 0,
+      // 宁可留空也不编数据。
+      nobleLevel: 0,
+      // 超粉:`BadgeInfo.tSuperFansInfo.iSFFlag@1` > 0。
+      superFan: badgeSuperFans > 0,
       id: sMessageId,
       rawType: 'huya:1400',
     );

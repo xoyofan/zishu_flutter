@@ -48,6 +48,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 
+import 'huya_fans_badge_resource.dart';
 import 'tars_codec.dart';
 import 'tars_exception.dart';
 
@@ -181,6 +182,32 @@ Uint8List buildSuperFansRankPanelRequest({
   return buildTupPacket(
     servant: 'wupui',
     func: 'getSuperFansRankPanel',
+    requestId: requestId,
+    sBuffer: sBuffer.takeBytes(),
+  );
+}
+
+/// wupui/getResourceInfo 请求体(含 4 字节包长)。
+///
+/// `GetResourceInfoReq` 字段号**逐条核对自官网 Tars 生成代码**
+/// (`assets/modules/taf/structs/ResourceManagerServant.js`,见
+/// [HuyaFansBadgeResource] 文件头):tag0 tUserId{tag3 sHuyaUserId}、
+/// tag1 sScene、tag2 sVersion、tag3 lPid。
+///
+/// **只发 tag0 + tag1**:`lPid` 字段号虽已从官网代码取到(tag3),但
+/// 2026-09-26 实测表明 `CommonFansBadgeSplit` 的底图模板与房间无关
+/// (房间 333003 / 9999 响应字节完全一致,加/不加 lPid 也一致),
+/// 故不发无用的 lPid;`sVersion` 官网也不填。
+Uint8List buildResourceInfoRequest({int requestId = 1}) {
+  final req = TarsWriter()
+    ..writeStruct((writer) {
+      writer.writeStruct((userId) => userId.writeString(_kUserToken, 3), 0);
+      writer.writeString('web', 1);
+    }, 0);
+  final sBuffer = TarsWriter()..writeBytesMap({'tReq': req.takeBytes()}, 0);
+  return buildTupPacket(
+    servant: 'wupui',
+    func: 'getResourceInfo',
     requestId: requestId,
     sBuffer: sBuffer.takeBytes(),
   );
@@ -406,6 +433,25 @@ class HuyaWupClient {
     } on Exception {
       return null;
     }
+  }
+
+  /// wupui/getResourceInfo → 房间级粉丝牌底图模板;失败返回 null
+  /// (不伪造,调用方沿用自绘胶囊降级)。
+  ///
+  /// 房间级资源实为全局资源包(实测),故不需 presenterUid;单次会话在
+  /// `connect()` 时 fire-and-forget 拉一次即可。
+  Future<HuyaFansBadgeResource?> fetchFansBadgeResource() async {
+    final bytes = await _exchange(
+      buildResourceInfoRequest(requestId: _nextRequestId()),
+    );
+    if (bytes == null) return null;
+    final Uint8List tRsp;
+    try {
+      tRsp = _readResponseStruct(bytes);
+    } on TarsDecodeException {
+      return null;
+    }
+    return parseHuyaResourceInfoResponse(tRsp);
   }
 
   /// POST 一次 wup 请求并返回原始报文;非 200/超时/网络异常统一 null。

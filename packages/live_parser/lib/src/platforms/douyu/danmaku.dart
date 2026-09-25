@@ -110,6 +110,9 @@ int _packedRgbColor(Object? raw) {
   return value > 0 ? value & 0xffffff : 0;
 }
 
+/// STT 整数取值(缺字段/非数字 → 0)。
+int _sttInt(Object? raw) => int.tryParse(raw?.toString().trim() ?? '') ?? 0;
+
 class DouyuDanmakuConnector implements DanmakuConnector {
   DouyuDanmakuConnector({DanmakuTransport? transport, this.heartbeatInterval = kDouyuDanmakuHeartbeat})
     : transport = transport ?? const IoDanmakuTransport();
@@ -211,20 +214,40 @@ class DouyuDanmakuSession implements DanmakuSession {
           );
     final badgeName =
         (stt['bnn'] ?? stt['bn'] ?? '').toString().trim();
-    final badgeLevel = int.tryParse(
-          (stt['bl'] ?? stt['bnnl'] ?? '').toString(),
-        ) ??
-        0;
+    // 粉丝牌等级:`bl` 与 `fl` 在真实抓包里同值(房间 252140 样本 25/25、26/26),
+    // `fl` 只在 `bl` 缺失或为 0 时兜底,不改已有语义。
+    final blLevel = _sttInt(stt['bl'] ?? stt['bnnl']);
+    final badgeLevel = blLevel > 0 ? blLevel : _sttInt(stt['fl']);
     final badgeUrl = _firstBadgeUrl(stt);
     final badgeColor = _packedRgbColor(stt['bc']);
+    // 粉丝牌资源字段:`brid` = 粉丝牌所属房间号，`hc` = 徽章校验码(32 位 hex)。
+    // **只入库、不做显隐闸门**：「跨房粉丝团牌不显示」尚无官网证据，属产品
+    // 口径待定；启用前保持零行为变化。
+    final badgeRoomId = int.tryParse(stt['brid']?.toString().trim() ?? '') ?? 0;
+    final badgeCheckCode = stt['hc']?.toString().trim() ?? '';
     final badge = badgeName.isNotEmpty && badgeLevel > 0
         ? DanmakuBadge(
             name: badgeName,
             level: badgeLevel,
             color: badgeColor,
             url: badgeUrl,
+            badgeRoomId: badgeRoomId,
+            badgeCheckCode: badgeCheckCode,
           )
         : null;
+    // 官网聊天行的 4 类徽章:LV / 粉丝牌 / 至尊大钻石 / 贵族(+超粉、钻粉两个
+    // 身份标记)。字段名取自官网 `live-next-player-aside` 的用户归一函数:
+    //   ne→nobleLevel、sl+sid→supremeLevel/supremeSid、sahf→superFan、
+    //   diaf/cdiaf→diamondFan、diafid→diamondIconId。
+    // 顺序 = 官网聊天行从左到右(粉丝牌 → 至尊 → 贵族 → 超粉 → 钻粉),
+    // 展示层按 kind 分档渲染(见 side_panel/chat_badges.dart 斗鱼分支)。
+    final nobleLevel = _sttInt(stt['ne']);
+    final supremeLevel = _sttInt(stt['sl']);
+    final supremeSid = _sttInt(stt['sid']);
+    final superFan = _sttInt(stt['sahf']) > 0;
+    // `cdiaf` 是 `diaf` 的同义冗余字段(样本里同时下发同值),任一为 1 即可。
+    final diamondFan = _sttInt(stt['diaf']) > 0 || _sttInt(stt['cdiaf']) > 0;
+    final diamondIconId = _sttInt(stt['diafid']);
     return DanmakuMessage(
       type: DanmakuMessageType.chat,
       roomId: roomId,
@@ -235,11 +258,28 @@ class DouyuDanmakuSession implements DanmakuSession {
       badgeName: badgeName,
       badgeLevel: badgeLevel,
       badgeUrl: badgeUrl,
-      badges: badge == null ? const [] : [badge],
+      badges: [
+        ?badge,
+        if (supremeLevel > 0)
+          DanmakuBadge(name: '至尊大钻石', level: supremeLevel, kind: 'supreme'),
+        if (nobleLevel > 0)
+          DanmakuBadge(name: '贵族', level: nobleLevel, kind: 'noble'),
+        // 超粉/钻粉是**身份标记**而非等级，level 恒 0（UI 只看 kind 分档）。
+        if (superFan)
+          const DanmakuBadge(name: '超粉', level: 0, kind: 'superfan'),
+        if (diamondFan)
+          const DanmakuBadge(name: '钻粉', level: 0, kind: 'diamondfan'),
+      ],
       userLevel: int.tryParse(
             (stt['level'] ?? stt['lv'] ?? '').toString(),
           ) ??
           0,
+      nobleLevel: nobleLevel,
+      supremeLevel: supremeLevel,
+      supremeSid: supremeSid,
+      superFan: superFan,
+      diamondFan: diamondFan,
+      diamondIconId: diamondIconId,
       sentAt: sentAt,
       rawType: stt['type']?.toString() ?? '',
     );

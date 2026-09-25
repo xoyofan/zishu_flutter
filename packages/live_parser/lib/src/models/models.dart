@@ -701,11 +701,50 @@ class DanmakuBadge {
     this.iconUrl = '',
     this.vFlag = 0,
     this.vLogo = '',
+    this.identity = 0,
+    this.badgeSize = 2,
+    this.floorUrlTemplate = '',
+    this.extinguished = 0,
+    this.custom = false,
+    this.badgeRoomId = 0,
+    this.badgeCheckCode = '',
   });
 
   final String name;
   final int level;
   final int color;
+
+  /// 身份图标档位（虎牙 `BadgeInfo.tExternal.iFansIdentity`，
+  /// 取值域 1/2/3/4/11/12/13）。官方图 URL 为
+  /// `diy-assets.msstatic.com/webui/fansBadge/3/v2/{identity}.png`。
+  final int identity;
+
+  /// 徽章尺寸档（虎牙 `BadgeInfo.tExternal.iBadgeSize`，官网钳制为 `max(size,2)`）。
+  final int badgeSize;
+
+  /// 虎牙粉丝牌**底图模板**（房间级 `wupui/getResourceInfo` 下发的
+  /// `CommonFansBadgeSplitResource.tCommonBadge.sFloorUrl`），含
+  /// `<identity>/<dark>/<level>/<size>/<ua>` 与 `.name` 占位符。
+  /// 空串 = 未取到该房间资源，UI 不得自造底图。
+  final String floorUrlTemplate;
+
+  /// 虎牙 `BadgeInfo.iExtinguished`（徽章熄灭/ greyscale 态，1 = 熄灭）。
+  final int extinguished;
+
+  /// 虎牙 `BadgeInfo.iCustomBadgeFlag == 1`：房间定制粉丝牌，走
+  /// `CustomFansBadgeResource` 的 `sIcon/sLevelUrl/sFloorUrl` 三图结构。
+  final bool custom;
+
+  /// 粉丝牌所属房间/粉丝团 id（斗鱼 chatmsg `brid`）。
+  ///
+  /// **仅作记录**，当前不用于显隐闸门：官网是否隐藏跨房粉丝团牌尚无确证口径，
+  /// 在拿到证据前不得用它改变现有渲染行为。
+  final int badgeRoomId;
+
+  /// 徽章校验码（斗鱼 chatmsg `hc`，32 位 hex）。
+  ///
+  /// 官方用于校验徽章图与粉丝团的一致性；本项目暂只透传，不参与渲染判定。
+  final String badgeCheckCode;
   final String kind;
 
   /// 徽章主体/图标 URL。SOOP 订阅等平台可同时使用 [url] 与 [iconUrl]。
@@ -802,6 +841,12 @@ class DanmakuMessage {
     this.userLevelBadgeStyle = 0,
     this.userLevelIsPolished = 0,
     this.userLevelColor = 0,
+    this.nobleLevel = 0,
+    this.supremeLevel = 0,
+    this.supremeSid = 0,
+    this.superFan = false,
+    this.diamondFan = false,
+    this.diamondIconId = 0,
     this.id = '',
     this.sentAt,
     this.rawType = '',
@@ -850,6 +895,26 @@ class DanmakuMessage {
   final int userLevelBadgeStyle;
   final int userLevelIsPolished;
   final int userLevelColor;
+
+  /// 贵族等级（斗鱼 chatmsg `ne`；虎牙 `OnTVBarrageNotice.iNobleLevel`）。
+  /// 0 = 非贵族。斗鱼图标取 `resource/noble/global/web.json` 的
+  /// `all_level_list[level].icons.web_symbol_picN`。
+  final int nobleLevel;
+
+  /// 至尊大钻石等级（斗鱼 `dy-supreme-medal`，chatmsg `sl`）。0 = 无。
+  final int supremeLevel;
+
+  /// 至尊大钻石体系 id（斗鱼 `sl` 配套的 `sid`），决定用哪套至尊图。
+  final int supremeSid;
+
+  /// 超粉标识（斗鱼 `sahf`；虎牙 `BadgeInfo.tSuperFansInfo.iSFFlag`）。
+  final bool superFan;
+
+  /// 钻石粉丝（钻粉）标识（斗鱼 `diaf`）。
+  final bool diamondFan;
+
+  /// 钻粉图标 id（斗鱼 `diafid`），配合 `getDiamondIconExt({diafid})`。
+  final int diamondIconId;
 
   /// 协议消息 id(空 = 未提供)。用于弹幕去重(协议重推同一条时按 id 判重),
   /// 消除「用户+正文」兜底 key 对同名同文的误杀。

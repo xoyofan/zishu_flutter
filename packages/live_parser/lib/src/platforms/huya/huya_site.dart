@@ -482,6 +482,9 @@ SiteRegistration buildHuyaRegistration({
     danmaku: HuyaDanmakuConnector(
       parserHttp: effectiveClient.parserHttp,
       transport: danmakuTransport,
+      // 房间级粉丝牌底图模板(wupui/getResourceInfo),与 SideHeader
+      // 贵宾/超粉查询复用同一个 wup 通道与注入的 httpClient。
+      wup: effectiveClient.wup,
     ),
   );
 }

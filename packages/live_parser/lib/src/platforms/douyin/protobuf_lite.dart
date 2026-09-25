@@ -214,9 +214,22 @@ String _parseUserName(Uint8List? userBuf) {
 
 /// User badge 项(#21/#61 repeated)里的粉丝团信息:
 /// 项结构 #1 = 官方 CDN 图,#8 = 描述子消息(#3 = 等级,#4 = 名称)。
+///
+/// **只有 `fansclub` 官方图才算粉丝牌**(web 真源 douyinTextFallback 同款
+/// 判定)。实连 WS dump 2026-09-25:#61 反复项的**第一项常是荣誉等级**
+/// (`new_user_grade_level_v1_N.png` + 描述子「荣誉等级N级勋章」),粉丝团牌
+/// 只在其后。若按「描述子有 level>0 就当粉丝牌」,荣誉项会占掉粉丝牌槽
+/// (等级/图/名全取到荣誉的)→ 聊天行同时渲染平台等级 + 粉丝牌,两处画的是
+/// 同一张荣誉图,即用户报的「显示重了成 2 个平台等级」。荣誉等级的真源是
+/// `User.payGrade`(field 6),由 [_parseUserPayGradeLevel] 单独取。
+///
+/// 无描述子时回落 URL 正则 `badge_(\d+)`(2026-09 实测字段)。
 ({int level, String url, String name}) _parseFansBadge(Uint8List badgeBuf) {
   final fields = decodePbFields(badgeBuf);
   final url = pbFieldString(fields, 1);
+  if (!url.toLowerCase().contains('fansclub')) {
+    return (level: 0, url: '', name: '');
+  }
   final desc = pbFieldBytes(fields, 8);
   var level = 0;
   var name = '';
@@ -225,11 +238,11 @@ String _parseUserName(Uint8List? userBuf) {
     level = pbFieldUint(descFields, 3);
     name = pbFieldString(descFields, 4).trim();
   }
-  if (level <= 0 && url.toLowerCase().contains('fansclub')) {
+  if (level <= 0) {
     final match = RegExp(r'badge_(\d+)').firstMatch(url);
     level = match != null ? int.tryParse(match.group(1)!) ?? 0 : 0;
   }
-  if (level <= 0 && name.isEmpty && !url.toLowerCase().contains('fansclub')) {
+  if (level <= 0 && name.isEmpty) {
     return (level: 0, url: '', name: '');
   }
   return (level: level, url: url, name: name);

@@ -556,16 +556,24 @@ Future<Map<String, dynamic>> signedDouyinGet(
   throw StateError(lastError?.toString() ?? '抖音接口触发风控');
 }
 
-/// 直播会员人数(web `follow/douyin-extras.ts`
-/// `fetchDouyinAnchorProfileCounts` 的 vip 分支)。
+/// 直播粉丝团人数 + 会员人数(web `follow/douyin-extras.ts`
+/// `fetchDouyinAnchorProfileCounts`,同一次签名请求的两个分支)。
 ///
-/// 走带 a_bogus 签名的 `/webcast/user/profile/`,取
-/// `data.user_profile.subscribe_info.member_count`(缺失回退 `member_count_str`,
-/// 万/千级字符串一并还原,口径同 web `pickProfileCount`)。失败、字段缺失、
-/// 业务码非 0、或 owner/房间内部号缺失时**一律返回空串**
-/// (数据诚实性:不伪造)。web 真源同响应另有粉丝团人数(fanGroup),
-/// 本包 [RoomSummary] 无该列,不取。
-Future<String> fetchDouyinAnchorMemberCount(
+/// 走带 a_bogus 签名的 `/webcast/user/profile/`,同响应取两列:
+/// - 粉丝团(vip 列,web `ROOM_STAT_COLUMNS.douyin` 第 2 列
+///   field=fanGroup):`data.user_profile.fans_club.total_fans_count`
+///   (缺失回退 `total_fans_count_str`,万/千级字符串一并还原);
+/// - 会员(第 3 列,web field=vip「会员」):
+///   `data.user_profile.subscribe_info.member_count`
+///   (缺失回退 `member_count_str`)。
+///
+/// 口径同 web `pickProfileCount`(数值优先,文本兜底)。失败、字段缺失、
+/// 业务码非 0、或 owner/房间内部号缺失时**两列一律返回空串**
+/// (数据诚实性:不伪造)。列零值同样留空(不落伪造的 0)。
+///
+/// 拆成两个字段是为了不重复打签名请求:此前只取会员,粉丝团列恒空 →
+/// 播放页「粉丝团」永远显示「—」。
+Future<({String fanGroup, String vip})> fetchDouyinAnchorProfileCounts(
   DouyinClient client,
   Map<String, dynamic> room,
   String webRid,
@@ -574,7 +582,9 @@ Future<String> fetchDouyinAnchorMemberCount(
   final anchorId = jsonText(owner['id_str']).trim();
   final secUid = jsonText(owner['sec_uid']).trim();
   final internalRoomId = jsonText(room['id_str'] ?? room['id']).trim();
-  if (anchorId.isEmpty || internalRoomId.isEmpty) return '';
+  if (anchorId.isEmpty || internalRoomId.isEmpty) {
+    return (fanGroup: '', vip: '');
+  }
   try {
     final json = await signedDouyinGet(
       client,
@@ -594,15 +604,72 @@ Future<String> fetchDouyinAnchorMemberCount(
       },
       referer: 'https://live.douyin.com/$webRid',
     );
-    if (jsonInt(json['status_code']) != 0) return '';
+    if (jsonInt(json['status_code']) != 0) {
+      return (fanGroup: '', vip: '');
+    }
     final profile = jsonMapOf(jsonMapOf(json['data'])['user_profile']);
+    final fansClub = jsonMapOf(profile['fans_club']);
     final subscribe = jsonMapOf(profile['subscribe_info']);
-    return _douyinProfileCount(
-      subscribe['member_count'],
-      subscribe['member_count_str'],
+    return (
+      fanGroup: _douyinProfileCount(
+        fansClub['total_fans_count'],
+        fansClub['total_fans_count_str'],
+      ),
+      vip: _douyinProfileCount(
+        subscribe['member_count'],
+        subscribe['member_count_str'],
+      ),
     );
   } on Object {
-    return '';
+    return (fanGroup: '', vip: '');
+  }
+}
+
+/// 用户关注数(web `follow/status.ts` `fetchDouyinSnapshot` 的回退分支)。
+///
+/// enter 响应的 `owner.follow_info` **常常只有 `follow_status`、没有
+/// `follower_count`**(实连 dump 2026-09-25:字段为
+/// `{"follow_status":0,"follow_status_str":"0"}`),直接读会得到空。
+/// web 真源的做法:`owner.follow_info.follower_count` 缺失时用
+/// `owner.id_str` 打 `/webcast/user/?target_uid=`,取
+/// `data.follow_info.follower_count`(该响应里还有 `data.user.follow_info`,
+/// 实连为空对象,故只认 `data.follow_info`)。
+///
+/// 失败/字段缺失一律返回空串(数据诚实性:不伪造)。
+Future<int> fetchDouyinFollowerCount(
+  DouyinClient client,
+  String anchorId,
+  String webRid,
+) async {
+  if (anchorId.isEmpty) return 0;
+  try {
+    final json = await signedDouyinGet(
+      client,
+      '/webcast/user/',
+      {
+        'aid': '6383',
+        'app_name': 'douyin_web',
+        'live_id': '1',
+        'device_platform': 'web',
+        'language': 'zh-CN',
+        'cookie_enabled': 'true',
+        'screen_width': '1920',
+        'screen_height': '1080',
+        'browser_language': 'zh-CN',
+        'browser_platform': 'Win32',
+        'browser_name': 'Chrome',
+        'browser_version': '141.0.0.0',
+        'target_uid': anchorId,
+        'packed': 'false',
+        'msToken': randomDouyinMsToken(),
+      },
+      referer: 'https://live.douyin.com/$webRid',
+    );
+    if (jsonInt(json['status_code']) != 0) return 0;
+    final followInfo = jsonMapOf(jsonMapOf(json['data'])['follow_info']);
+    return jsonInt(followInfo['follower_count']);
+  } on Object {
+    return 0;
   }
 }
 
@@ -616,7 +683,6 @@ String _douyinProfileCount(Object? raw, Object? text) {
   final fromText = parseOnlineCount(cleaned);
   return fromText > 0 ? formatExactCount(fromText) : '';
 }
-
 /// 解析直播内部房间号(弹幕 WS 需要):id_str/id,兜底房间页正则。
 Future<String> resolveDouyinInternalRoomId(
   DouyinClient client,

@@ -155,6 +155,129 @@ void main() {
       await session.close();
     });
 
+    test('真实抓包样本(房间 252140):粉丝牌 bl/fl + diaf/cdiaf 钻粉', () async {
+      // 2026-09-26 浏览器直连 wss://danmuproxy.douyu.com:8501 抓到的三条
+      // 真实 chatmsg(字段按抓包原样保留):
+      //   bl/fl 同值(26/26、25/25);无粉丝牌那条 bl=0 fl 空 brid=0;
+      //   diaf=1 与 cdiaf=1 同时下发 → 钻粉。
+      final session = await connector.connect(
+        const DanmakuSessionRequest(site: 'douyu', roomId: '252140'),
+      );
+      final socket = transport.sockets.single;
+      final received = <DanmakuMessage>[];
+      final msgSub = session.messages.listen(received.add);
+
+      socket.pushPacket(
+        'type@=chatmsg/rid@=252140/uid@=1/nn@=有牌无钻粉/txt@=A/dms@=4/'
+        'level@=41/sahf@=0/bnn@=金咕咕/bl@=26/brid@=252140/'
+        'hc@=a076681f25802f44186cd03eef12333c/fl@=26/',
+      );
+      socket.pushPacket(
+        'type@=chatmsg/rid@=252140/uid@=2/nn@=有牌有钻粉/txt@=B/dms@=4/'
+        'level@=39/sahf@=0/bnn@=金咕咕/bl@=25/brid@=252140/'
+        'hc@=a076681f25802f44186cd03eef12333c/fl@=25/'
+        'diaf@=1/cdiaf@=1/dfgm@=24/ds@=1025/ail@=6065@S4144@S/tfid@=723/',
+      );
+      socket.pushPacket(
+        'type@=chatmsg/rid@=252140/uid@=3/nn@=无牌/txt@=C/dms@=4/'
+        'level@=13/sahf@=0/bnn@=/bl@=0/brid@=0/hc@=/fl@=/',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(received, hasLength(3));
+      // 样本 1：粉丝牌，钻粉/超粉都没有
+      expect(received[0].badgeName, '金咕咕');
+      expect(received[0].badgeLevel, 26);
+      expect(received[0].badges.map((b) => b.kind), ['']);
+      expect(received[0].badges.single.name, '金咕咕');
+      // 粉丝牌资源字段：brid = 所属房间，hc = 徽章校验码（只入库，不做显隐闸门）
+      expect(received[0].badges.single.badgeRoomId, 252140);
+      expect(
+        received[0].badges.single.badgeCheckCode,
+        'a076681f25802f44186cd03eef12333c',
+      );
+      expect(received[0].superFan, isFalse);
+      expect(received[0].diamondFan, isFalse);
+      expect(received[0].nobleLevel, 0);
+      expect(received[0].supremeLevel, 0);
+
+      // 样本 2：粉丝牌 + 钻粉(diaf/cdiaf 任一为 1)
+      expect(received[1].badges.map((b) => b.kind), ['', 'diamondfan']);
+      expect(received[1].badges.last.name, '钻粉');
+      expect(received[1].diamondFan, isTrue);
+
+      // 样本 3：无团名/无等级 → 不出粉丝牌徽章（brid/hc 随之不落库）
+      expect(received[2].badges, isEmpty);
+      expect(received[2].badgeLevel, 0);
+
+      await msgSub.cancel();
+      await session.close();
+    });
+
+    test('fl 兜底:bl 缺失/为 0 时用同值字段 fl 当粉丝牌等级', () async {
+      // 抓包里 bl 与 fl 同值，故 fl 只做兜底；bl 有值时以 bl 为准。
+      final session = await connector.connect(
+        const DanmakuSessionRequest(site: 'douyu', roomId: '252140'),
+      );
+      final socket = transport.sockets.single;
+      final received = <DanmakuMessage>[];
+      final msgSub = session.messages.listen(received.add);
+
+      socket.pushPacket(
+        'type@=chatmsg/rid@=252140/nn@=只有fl/txt@=A/dms@=1/'
+        'bnn@=金咕咕/bl@=0/fl@=26/brid@=252140/',
+      );
+      socket.pushPacket(
+        'type@=chatmsg/rid@=252140/nn@=bl 优先/txt@=B/dms@=1/'
+        'bnn@=金咕咕/bl@=25/fl@=26/brid@=252140/',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(received.map((m) => m.badgeLevel), [26, 25]);
+
+      await msgSub.cancel();
+      await session.close();
+    });
+
+    test('身份字段接线:ne/sl/sid/sahf/diafid 归一到 DanmakuMessage', () async {
+      // 字段名来自官网 `live-next-player-aside` 的用户归一函数
+      // (nobleLevel=e.ne、supremeLevel=+e.sl、supremeSid=e.sid、
+      //  isShowSuperIcon=getIsShowSuperIcon(e.sahf))。
+      // **取值未确证**：抓包那批弹幕里没有贵族/至尊用户，本例用构造包
+      // 验证“字段名 → 模型字段”的接线，不代表官方取值域。
+      final session = await connector.connect(
+        const DanmakuSessionRequest(site: 'douyu', roomId: '252140'),
+      );
+      final socket = transport.sockets.single;
+      final received = <DanmakuMessage>[];
+      final msgSub = session.messages.listen(received.add);
+
+      socket.pushPacket(
+        'type@=chatmsg/rid@=252140/nn@=全身份/txt@=A/dms@=1/'
+        'ne@=6/sl@=3/sid@=12/sahf@=1/diaf@=1/cdiaf@=1/diafid@=7/'
+        'bnn@=金咕咕/bl@=26/fl@=26/',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      final message = received.single;
+      expect(message.nobleLevel, 6);
+      expect(message.supremeLevel, 3);
+      expect(message.supremeSid, 12);
+      expect(message.superFan, isTrue);
+      expect(message.diamondFan, isTrue);
+      expect(message.diamondIconId, 7);
+      // 官网聊天行从左到右：粉丝牌 → 至尊 → 贵族 → 超粉 → 钻粉
+      expect(
+        message.badges.map((b) => b.kind),
+        ['', 'supreme', 'noble', 'superfan', 'diamondfan'],
+      );
+      expect(message.badges[1].level, 3);
+      expect(message.badges[2].level, 6);
+
+      await msgSub.cancel();
+      await session.close();
+    });
+
     test('pingreq 回 pingresp;dms/if 过滤与 rid 防串房', () async {
       final session = await connector.connect(
         const DanmakuSessionRequest(site: 'douyu', roomId: '9527'),

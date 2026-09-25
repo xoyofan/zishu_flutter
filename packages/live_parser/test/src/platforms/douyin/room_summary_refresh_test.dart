@@ -97,6 +97,105 @@ void main() {
     expect(record.svip, isNull, reason: '本用例未给资料卡,会员缺值 → null');
   });
 
+  test('关注数:enter 的 owner.follow_info 缺 follower_count 时回退用户资料接口', () async {
+    // 实连 dump 2026-09-25:抖音 enter 响应的 owner.follow_info **只有
+    // follow_status**,没有 follower_count → 此前关注数恒「—」。
+    // web 真源 fetchDouyinSnapshot 的回退路径:owner.id_str 存在时打
+    // /webcast/user/?target_uid=,取 data.follow_info.follower_count。
+    fake
+      ..enterResponse = _enter(status: 2, online: 32100)
+      ..userProfileResponse = {
+        'status_code': 0,
+        'data': {
+          'follow_info': {
+            'following_count': 3575,
+            'follower_count': 4911564,
+            'follower_count_str': '0',
+          },
+        },
+      };
+
+    final record = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'douyin', roomIdOrUrl: '123456'),
+    );
+
+    expect(record.followers, '4911564');
+    final urls = fake.requests.map((request) => request.url).join('\n');
+    expect(urls, contains('/webcast/user/'), reason: '必须走 web 同款回退接口');
+    expect(urls, contains('a_bogus='), reason: '回退接口同样需签名');
+  });
+
+  test('关注数:enter 已有 follower_count 时不额外请求用户资料接口', () async {
+    fake
+      ..enterResponse = _enter(status: 2, online: 32100, followerCount: 456789)
+      ..userProfileResponse = null;
+
+    final record = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'douyin', roomIdOrUrl: '123456'),
+    );
+
+    expect(record.followers, '456789');
+    final urls = fake.requests.map((request) => request.url).join('\n');
+    expect(
+      urls,
+      isNot(contains('/webcast/user/?')),
+      reason: 'enter 已带 follower_count 时零额外请求',
+    );
+  });
+
+  test('粉丝团(vip 列):在播时取资料卡 fans_club.total_fans_count', () async {
+    // web 真源 ROOM_STAT_COLUMNS.douyin 第 2 列 field=fanGroup「粉丝团」,
+    // 取自同一份 /webcast/user/profile/ 响应的 fans_club.total_fans_count
+    // (SFVideoLive fetchDouyinAnchorProfileCounts 的 fanGroup 分支)。
+    // 回归:此前只取 subscribe_info.member_count 填第 3 列,
+    // 第 2 列恒空 → 播放页「粉丝团」永远显示「—」。
+    fake
+      ..enterResponse = _enter(status: 2, online: 32100)
+      ..anchorProfileResponse = {
+        'status_code': 0,
+        'data': {
+          'user_profile': {
+            'fans_club': {
+              'total_fans_count': 718512,
+              'total_fans_count_str': '71.9',
+              'total_fans_count_substr': '万',
+            },
+            'subscribe_info': {'member_count': 3259},
+          },
+        },
+      };
+
+    final record = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'douyin', roomIdOrUrl: '123456'),
+    );
+
+    expect(
+      record.vip,
+      '718512',
+      reason: '粉丝团列取 fans_club.total_fans_count(web formatPlainCount 整数口径)',
+    );
+    expect(record.svip, '3259', reason: '第 3 列会员仍取 member_count');
+  });
+
+  test('粉丝团:资料卡原始零留空,不伪造 0', () async {
+    fake
+      ..enterResponse = _enter(status: 2, online: 32100)
+      ..anchorProfileResponse = {
+        'status_code': 0,
+        'data': {
+          'user_profile': {
+            'fans_club': {'total_fans_count': 0, 'total_fans_count_str': ''},
+          },
+        },
+      };
+
+    final record = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'douyin', roomIdOrUrl: '123456'),
+    );
+
+    expect(record.vip, isNull, reason: '协议原始零不可信,不落伪造的 0');
+  });
+
   test('会员(diamondFans):在播时走带签名的主播资料卡接口', () async {
     fake
       ..enterResponse = _enter(status: 2, online: 32100)

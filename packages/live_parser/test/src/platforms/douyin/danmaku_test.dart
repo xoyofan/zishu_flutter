@@ -178,6 +178,89 @@ void main() {
       await session.close();
     });
 
+    test('徽章回归:#61 首项为荣誉等级徽章时不得当作粉丝牌(不得渲染两个平台等级)', () async {
+      final fake = FakeDouyinApi()
+        ..enterResponse = douyinFixture('enter_live.json');
+      final transport = _FakeTransport();
+      final connector = DouyinDanmakuConnector(
+        DouyinClient(httpClient: fake),
+        transport: transport,
+        heartbeatInterval: const Duration(seconds: 30),
+      );
+      final session = await connector.connect(
+        const DanmakuSessionRequest(site: 'douyin', roomId: '123456'),
+      );
+      final socket = transport.sockets.single;
+      final received = <DanmakuMessage>[];
+      final subscription = session.messages.listen(received.add);
+
+      // 场景 A(实连 dump 形态):只有荣誉项,无粉丝团牌 → 粉丝牌必须为空,
+      // 否则 UI 会在平台等级旁再画一个同图 → 看上去是两个平台等级。
+      socket.push(
+        _pushFrame(
+          _response(
+            message: _message(
+              'WebcastChatMessage',
+              _chatPayload(
+                text: '只有荣誉',
+                nick: '荣誉哥',
+                userId: 51,
+                payGradeLevel: 29,
+                honorIconUrl:
+                    'https://p3-webcast.douyinpic.com/img/webcast/'
+                    'new_user_grade_level_v1_29.png~tplv-obj.image',
+                honorBadgeInBadgeList: true,
+              ),
+            ),
+          ),
+          logId: 21,
+        ),
+      );
+      // 场景 B:#61 = [荣誉项, 粉丝团牌] → 必须取到粉丝团牌那一项。
+      socket.push(
+        _pushFrame(
+          _response(
+            message: _message(
+              'WebcastChatMessage',
+              _chatPayload(
+                text: '荣誉加粉丝团',
+                nick: '双牌哥',
+                userId: 52,
+                payGradeLevel: 18,
+                fansBadgeLevel: 10,
+                honorBadgeInBadgeList: true,
+              ),
+            ),
+          ),
+          logId: 22,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(received, hasLength(2));
+      expect(received[0].userLevel, 29, reason: '平台等级仍来自 payGrade');
+      expect(
+        received[0].badgeLevel,
+        0,
+        reason: '荣誉等级项不是粉丝牌,不得填粉丝牌槽',
+      );
+      expect(
+        received[0].badges,
+        isEmpty,
+        reason: '否则聊天行会渲染出第二个平台等级',
+      );
+      expect(received[1].badgeLevel, 10, reason: '应跳过荣誉项取到粉丝团牌');
+      expect(received[1].badgeName, contains('粉丝团'));
+      expect(
+        received[1].badgeUrl,
+        contains('fansclub'),
+        reason: '粉丝牌 URL 必须是 fansclub 官方图',
+      );
+
+      await subscription.cancel();
+      await session.close();
+    });
+
     test('富文本表情段:#22 image piece → segments(text/emoji 按序);纯文本 segments 空', () async {
       final fake = FakeDouyinApi()
         ..enterResponse = douyinFixture('enter_live.json');
@@ -285,6 +368,7 @@ List<int> _chatPayload({
   String fansBadgeUrl = '',
   String fansBadgeName = '',
   String honorIconUrl = '',
+  bool honorBadgeInBadgeList = false,
   List<int> richText = const [],
 }) {
   final user = [
@@ -301,6 +385,29 @@ List<int> _chatPayload({
       ),
     // 粉丝团 badge 项(#61 repeated):#1 = 官方 CDN 图(含等级),
     // #8 = 描述子消息(#3 = 等级,#4 = 名称)。
+    //
+    // honorBadgeInBadgeList:实连 WS dump 到的真实形态 —— #61 反复携带的
+    // 第一项常是**荣誉等级**徽章(`new_user_grade_level_v1_N.png` +
+    // 描述子「荣誉等级N级勋章」),粉丝团牌只在其后。回归即由此产生:
+    // 解析器把荣誉项当粉丝牌 → UI 渲染出两个平台等级。
+    if (honorBadgeInBadgeList)
+      ..._pbBytes(
+        61,
+        [
+          ..._pbString(
+            1,
+            'https://p3-webcast.douyinpic.com/img/webcast/'
+            'new_user_grade_level_v1_$payGradeLevel.png~tplv-obj.image',
+          ),
+          ..._pbBytes(
+            8,
+            [
+              ..._pbUint(3, payGradeLevel),
+              ..._pbString(4, '荣誉等级$payGradeLevel 级勋章'),
+            ],
+          ),
+        ],
+      ),
     if (fansBadgeLevel > 0)
       ..._pbBytes(
         61,

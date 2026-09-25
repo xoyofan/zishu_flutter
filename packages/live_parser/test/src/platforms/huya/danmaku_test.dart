@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:live_parser/live_parser.dart';
 import 'package:live_parser/src/platforms/huya/danmaku.dart';
+import 'package:live_parser/src/platforms/huya/huya_wup.dart';
 import 'package:live_parser/src/platforms/huya/tars_codec.dart';
 import 'package:test/test.dart';
 
@@ -67,6 +68,36 @@ Uint8List _fansBadgeInfo({
           ..writeInt(badgeType, 17))
         .takeBytes();
 
+/// BadgeInfo 完整字段字节(官网 `assets/modules/taf/structs/FansServant.js`
+/// 的 `SimpleBadgeInfo`):tag3/4/12/13/17 之外补读 18/19/22/25/26。
+Uint8List _fansBadgeInfoFull({
+  required String name,
+  required int level,
+  int vFlag = 0,
+  String vLogo = '',
+  int badgeType = 0,
+  int superFansFlag = 0,
+  int customBadgeFlag = 0,
+  int fansIdentity = 0,
+  int badgeSize = 0,
+  int extinguished = 0,
+}) =>
+    (TarsWriter()
+          ..writeString(name, 3)
+          ..writeInt(level, 4)
+          ..writeInt(vFlag, 12)
+          ..writeString(vLogo, 13)
+          ..writeInt(badgeType, 17)
+          ..writeStruct((_) {}, 18) // tFaithInfo:不消费,读掉保持偏移
+          ..writeStruct((sf) => sf.writeInt(superFansFlag, 1), 19)
+          ..writeInt(customBadgeFlag, 22)
+          ..writeStruct((external) {
+            external.writeInt(fansIdentity, 1);
+            external.writeInt(badgeSize, 2);
+          }, 25)
+          ..writeInt(extinguished, 26))
+        .takeBytes();
+
 /// ConsumeLevelBadgeInfo{iLevel@1, iBadgeStyle@2, iIsPolished@3} 结构体字节。
 /// 依据 web 真源 parseOfficialConsumeLevel(huyaJce.ts:362-373)。
 Uint8List _consumeLevelInfo({required int level, int style = 0, int polished = 0}) =>
@@ -101,6 +132,93 @@ Uint8List _decorationVector(int tag, List<Uint8List> items) {
   }
   return out.takeBytes();
 }
+
+/// 拼一个 wup 响应包(4 字节大端包长 + ResponsePacket),sBuffer 内放 `tRsp`。
+Uint8List _wupResponse(String servant, String func, Uint8List tRsp) {
+  final sBuffer = TarsWriter()..writeBytesMap({'tRsp': tRsp}, 0);
+  final payload = (TarsWriter()
+        ..writeInt(3, 1)
+        ..writeInt(0, 2)
+        ..writeInt(0, 3)
+        ..writeInt(1, 4)
+        ..writeString(servant, 5)
+        ..writeString(func, 6)
+        ..writeBytes(sBuffer.takeBytes(), 7)
+        ..writeInt(0, 8)
+        ..writeStringMap(const {}, 9)
+        ..writeStringMap(const {}, 10))
+      .takeBytes();
+  final total = payload.length + 4;
+  return Uint8List.fromList([
+    (total >> 24) & 0xff,
+    (total >> 16) & 0xff,
+    (total >> 8) & 0xff,
+    total & 0xff,
+    ...payload,
+  ]);
+}
+
+/// `LIST<struct>` 字段字节(LIST 头手写,同 `_decorationVector` 的做法)。
+Uint8List _structListField(int tag, List<Uint8List> elements) {
+  final sizes = TarsWriter()..writeInt(elements.length, 0);
+  final out = BytesBuilder();
+  if (tag < 15) {
+    out.add([(tag << 4) | 9]);
+  } else {
+    out.add([(15 << 4) | 9, tag]);
+  }
+  out.add(sizes.takeBytes());
+  for (final element in elements) {
+    out
+      ..add(const [0x0a])
+      ..add(element)
+      ..add(const [0x0b]);
+  }
+  return out.takeBytes();
+}
+
+Uint8List _structOf(List<Uint8List> fields) {
+  final out = BytesBuilder()..add(const [0x0a]);
+  for (final field in fields) {
+    out.add(field);
+  }
+  return (out..add(const [0x0b])).takeBytes();
+}
+
+/// `GetResourceInfoRsp` 里只带一条 `CommonFansBadgeSplit`(bizType/type=14)。
+Uint8List _resourceInfoTars({
+  required String floorUrl,
+  required String identityUrl,
+  int maxLevel = 52,
+}) {
+  final payload = (TarsWriter()
+        ..writeStruct((resource) {
+          resource.writeInt(maxLevel, 0);
+          resource.writeStruct((common) {
+            common.writeString(floorUrl, 0);
+            common.writeString(identityUrl, 1);
+          }, 1);
+        }, 0))
+      .takeBytes();
+  final item = (TarsWriter()
+        ..writeString('commonFansBadgeSplit', 0)
+        ..writeInt(14, 1)
+        ..writeBytes(payload, 2)
+        ..writeInt(0, 3))
+      .takeBytes();
+  final resourceFields = (BytesBuilder()
+        ..add((TarsWriter()..writeInt(14, 0)).takeBytes())
+        ..add(_structListField(1, [item])))
+      .takeBytes();
+  return _structOf([_structListField(0, [resourceFields])]);
+}
+
+const String _kFloorTemplate =
+    'https://fileserver.cdn.huya.com/web_admin_badgeDefaultFloorUrl/'
+    '73b846b6b8684ce9b1793d50824a3d4d/<size>_<ua>_<dark>_<level>.name';
+const String _kIdentityTemplate =
+    'https://fileserver.cdn.huya.com/web_admin_badgeDefaultIdentityUrl/'
+    'b42f4df0d47540c28e11b1b10b57e870/<ua>_<dark>_<identity>.name';
 
 void main() {
   late FakeHuyaApi fake;
@@ -413,6 +531,169 @@ void main() {
       connector.connect(const DanmakuSessionRequest(site: 'huya', roomId: '9527')),
       throwsA(isA<ParserHttpException>()),
     );
+  });
+
+  test('BadgeInfo 补读 19/22/25/26:超粉/定制/身份/尺寸/熄灭', () async {
+    final session = await connector.connect(
+      const DanmakuSessionRequest(site: 'huya', roomId: '9527'),
+    );
+    final socket = transport.sockets.single;
+    final received = <DanmakuMessage>[];
+    final sub = session.messages.listen(received.add);
+
+    socket.pushBytes(
+      _pushFrame(
+        1400,
+        _chatNotice(
+          nick: '全字段',
+          content: '徽章全字段',
+          decorations: {
+            8: [
+              _decorationInfo(
+                10400,
+                _fansBadgeInfoFull(
+                  name: '全字段团',
+                  level: 15,
+                  superFansFlag: 1,
+                  customBadgeFlag: 1,
+                  fansIdentity: 12,
+                  badgeSize: 3,
+                  extinguished: 1,
+                ),
+              ),
+            ],
+          },
+        ),
+      ),
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    final badge = received.single.badges.single;
+    expect(badge.identity, 12, reason: 'tExternal.iFansIdentity@25');
+    expect(badge.badgeSize, 3, reason: 'tExternal.iBadgeSize@25');
+    expect(badge.extinguished, 1, reason: 'iExtinguished@26');
+    expect(badge.custom, isTrue, reason: 'iCustomBadgeFlag@22 == 1');
+    expect(received.single.superFan, isTrue, reason: 'tSuperFansInfo.iSFFlag@19');
+    expect(
+      received.single.nobleLevel,
+      0,
+      reason: '贵族只在 OnTVBarrageNotice,弹幕流恒 0(不编数据)',
+    );
+    // 未接房间资源 → 底图空串,UI 降级自绘胶囊。
+    expect(badge.floorUrlTemplate, '');
+    expect(badge.url, '');
+
+    await sub.cancel();
+    await session.close();
+  });
+
+  test('connect 时拉一次 getResourceInfo,底图模板回填到每条弹幕', () async {
+    fake.wupResponseByFunc['getResourceInfo'] = _wupResponse(
+      'wupui',
+      'getResourceInfo',
+      _resourceInfoTars(
+        floorUrl: _kFloorTemplate,
+        identityUrl: _kIdentityTemplate,
+      ),
+    );
+    final wired = HuyaDanmakuConnector(
+      parserHttp: ParserHttp(client: fake),
+      transport: transport,
+      wup: HuyaWupClient(httpClient: fake),
+      heartbeatInterval: const Duration(milliseconds: 50),
+    );
+    final session = await wired.connect(
+      const DanmakuSessionRequest(site: 'huya', roomId: '9527'),
+    );
+    expect(fake.wupFuncNames, ['getResourceInfo'], reason: '房间资源只拉一次');
+
+    // 资源 future 先完成,再推弹幕。
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    final socket = transport.sockets.single;
+    final received = <DanmakuMessage>[];
+    final sub = session.messages.listen(received.add);
+    socket.pushBytes(
+      _pushFrame(
+        1400,
+        _chatNotice(
+          nick: '有底图',
+          content: '官方底图',
+          decorations: {
+            8: [
+              _decorationInfo(
+                10400,
+                _fansBadgeInfoFull(
+                  name: '有底图团',
+                  level: 15,
+                  fansIdentity: 4,
+                  badgeSize: 2,
+                ),
+              ),
+            ],
+          },
+        ),
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    final badge = received.single.badges.single;
+    expect(badge.floorUrlTemplate, _kFloorTemplate);
+    expect(
+      badge.url,
+      'https://fileserver.cdn.huya.com/web_admin_badgeDefaultFloorUrl/'
+      '73b846b6b8684ce9b1793d50824a3d4d/2_3_0_15.png',
+      reason: '实测模板为 <size>_<ua>_<dark>_<level>.name,'
+          'identity=4 命中不到占位符;size=max(2,2)=2,dark=0,level=15',
+    );
+
+    await sub.cancel();
+    await session.close();
+  });
+
+  test('房间资源拉取失败不影响弹幕连接(降级空底图)', () async {
+    // fake 对未注册的 wup func 返回 HTTP 500。
+    final wired = HuyaDanmakuConnector(
+      parserHttp: ParserHttp(client: fake),
+      transport: transport,
+      wup: HuyaWupClient(httpClient: fake),
+      heartbeatInterval: const Duration(milliseconds: 50),
+    );
+    final session = await wired.connect(
+      const DanmakuSessionRequest(site: 'huya', roomId: '9527'),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 20));
+    expect(fake.wupFuncNames, ['getResourceInfo']);
+
+    final socket = transport.sockets.single;
+    final received = <DanmakuMessage>[];
+    final sub = session.messages.listen(received.add);
+    socket.pushBytes(
+      _pushFrame(
+        1400,
+        _chatNotice(
+          nick: '降级',
+          content: '资源挂了也能聊',
+          decorations: {
+            8: [
+              _decorationInfo(
+                10400,
+                _fansBadgeInfo(name: '降级团', level: 9),
+              ),
+            ],
+          },
+        ),
+      ),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 10));
+
+    expect(received, hasLength(1));
+    expect(received.single.text, '资源挂了也能聊');
+    expect(received.single.badges.single.floorUrlTemplate, '');
+    expect(received.single.badges.single.url, '');
+
+    await sub.cancel();
+    await session.close();
   });
 }
 
