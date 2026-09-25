@@ -138,6 +138,17 @@ query BrowsePage_AllDirectories($limit: Int) {
         }
         return _fetchTagRooms(tagId: tagId, page: request.page, limit: request.limit);
       }
+      if (cid.startsWith('lang:')) {
+        final code = cid.substring('lang:'.length).trim().toUpperCase();
+        if (code.isEmpty) {
+          throw const TwitchGqlException('语言代码为空');
+        }
+        return _fetchRoomsByLanguage(
+          code: code,
+          page: request.page,
+          limit: request.limit,
+        );
+      }
       return _fetchGameRooms(cid: cid, page: request.page, limit: request.limit);
     }
     return _fetchHomeRooms(page: request.page, limit: request.limit);
@@ -187,6 +198,57 @@ query BrowsePage_Tags(\$limit: Int) {
       rooms: _roomsOf(nodes).map(RoomRecord.fromSummary).toList(growable: false),
       page: page,
       hasMore: page <= 1 && nodes.length >= limit,
+    );
+  }
+
+  /// 按 `broadcastLanguage` 过滤的房间列表(客户端 best-effort 分页过滤)。
+  ///
+  /// 上游**没有**可用的服务端语言过滤:`streams(broadcastLanguage:)` 会报
+  /// Unknown argument,`streams(languages:[X])` schema 接受但被上游忽略(实测
+  /// 传 EN/JA/ZH/RU 返回同一批流)。因此这里逐页拉取并在客户端按
+  /// `broadcastLanguage` 过滤,**最多 [maxPages] 页**,结果可能少于真实总量。
+  Future<RoomListResult> _fetchRoomsByLanguage({
+    required String code,
+    required int page,
+    required int limit,
+  }) async {
+    const pageSize = 100;
+    const maxPages = 5;
+    final matched = <Map<String, dynamic>>[];
+    String? cursor;
+    var hasNext = true;
+    for (var i = 0; i < maxPages && hasNext; i++) {
+      final data = await _gql.query(
+        operationName: 'BrowsePage_ByLanguage',
+        variables: {'first': pageSize, 'after': cursor},
+        query: '''
+query BrowsePage_ByLanguage(\$first: Int, \$after: Cursor) {
+  streams(first: \$first, after: \$after) {
+    pageInfo { hasNextPage endCursor }
+    edges { node { $_twitchStreamNodeFragment } }
+  }
+}''',
+      );
+      final root = data is Map ? data['streams'] : null;
+      final stream = root is Map ? root : const <String, Object?>{};
+      final nodes = _nodesOf(stream);
+      for (final node in nodes) {
+        if (_text(node['broadcastLanguage']).toUpperCase() == code) {
+          matched.add(node);
+        }
+      }
+      final pageInfo = stream['pageInfo'];
+      hasNext = pageInfo is Map && pageInfo['hasNextPage'] == true;
+      cursor = pageInfo is Map ? _text(pageInfo['endCursor']) : null;
+      if (cursor == null || cursor.isEmpty) break;
+      if (matched.length >= page * limit) break;
+    }
+    final start = ((page - 1).clamp(0, 1 << 30)) * limit;
+    final slice = matched.skip(start).take(limit).toList(growable: false);
+    return RoomListResult(
+      rooms: _roomsOf(slice).map(RoomRecord.fromSummary).toList(growable: false),
+      page: page,
+      hasMore: start + slice.length < matched.length || hasNext,
     );
   }
 
@@ -263,11 +325,14 @@ query DirectoryPage_Game(\$id: ID!, \$limit: Int) {
     }
     final language = _text(node['broadcastLanguage']);
     if (language.isNotEmpty) {
+      // 语言 chip 可点:filterCid 带 `lang:` 前缀,fetchRooms 走客户端
+      // 分页过滤(见 _fetchRoomsByLanguage;上游无服务端语言过滤)。
       chips.add(
         SiteChip(
           id: language,
           name: twitchLanguageName(language),
           kind: SiteChipKind.language,
+          filterCid: 'lang:${language.toUpperCase()}',
         ),
       );
     }
