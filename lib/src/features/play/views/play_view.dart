@@ -11,6 +11,7 @@ import 'package:live_parser/live_parser.dart' show DanmakuMessage, RoomPayload;
 import '../../../platforms/common/playback/idle_releasing_live_player.dart';
 import '../../../platforms/common/playback/live_player.dart'
     show PlayerSnapshot, PlaybackNotice;
+import '../../../platforms/common/playback/playback_log.dart';
 import '../../../platforms/common/playback/playback_retry.dart'
     show retryProgressLabel;
 import '../../../shared/domain/category_display.dart';
@@ -61,7 +62,14 @@ class PlayView extends ConsumerStatefulWidget {
 }
 
 class _PlayViewState extends ConsumerState<PlayView> {
-  late final PlayParams _params = (site: widget.site, roomId: widget.roomId);
+  /// 当前房间参数:**必须随 widget 实时计算**,不能缓存。
+  ///
+  /// go_router 对同一路由模式 `/:site/play/:id` 切房会复用同一个页面元素
+  /// (`NoTransitionPage(key: state.pageKey)`),若这里缓存首次参数,切房后
+  /// `playControllerProvider` 仍 watch 旧房间 → 播放器已被新房间打开,但标题、
+  /// 侧栏主播信息等仍显示旧房间(用户实测 YY→SOOP 复现)。
+  PlayParams get _params => (site: widget.site, roomId: widget.roomId);
+
   bool _sidePanelVisible = true;
 
   /// 舞台宿主键:沉浸态切换时舞台会在 Row/Column 与全屏 SizedBox 间换位,
@@ -105,6 +113,30 @@ class _PlayViewState extends ConsumerState<PlayView> {
     // Esc 走全局键盘 handler(见 _onGlobalKey),与 Space/M/F/W 的
     // CallbackShortcuts 分工:字母键尊重输入框焦点,Esc 必须不依赖焦点。
     HardwareKeyboard.instance.addHandler(_onGlobalKey);
+  }
+
+  @override
+  void didUpdateWidget(covariant PlayView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.site == widget.site && oldWidget.roomId == widget.roomId) {
+      return;
+    }
+    // 切房(页面元素被复用):清掉与旧房绑定的呈现态计时/沉浸态,避免新房间
+    // 继承旧房的隐藏 chrome、侧抽屉与沉浸锁。
+    _hideTimer?.cancel();
+    _hideTimer = null;
+    _immersiveSideLockTimer?.cancel();
+    _immersiveSideLockTimer = null;
+    _immersiveSideHideTimer?.cancel();
+    _immersiveSideHideTimer = null;
+    _immersiveSideLocked = false;
+    _immersiveSideOpen = false;
+    _controlsVisible = true;
+    _sidePanelVisible = true;
+    PlaybackLog.write('play_view_params', {
+      'site': widget.site,
+      'room': widget.roomId,
+    });
   }
 
   @override
