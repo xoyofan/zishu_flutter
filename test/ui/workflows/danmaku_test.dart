@@ -22,6 +22,9 @@
 ///    「[表情名]」文本;空 segments 消息仍为三段结构(danmakuVisualIntegrity 覆盖)。
 /// 7. danmakuWrapAlignsLeft:带徽章长正文折行,第二行顶格到条目内容区最左
 ///    (徽章列正下方,UI-BUG-001 用户口径 2026-09-20),不缩进到昵称列。
+/// 8. pauseDisablesDanmakuOverlayRedraw:舞台 DanmakuOverlay 的 enabled 跟随
+///    播放快照 playing——暂停时 overlay 保持挂载但 enabled=false(停 ticker,
+///    暂停期不再为弹幕层持续重绘),恢复 playing 后 enabled=true。
 ///
 /// 定位约定(与 driver [expectDanmakuEntries] 一致):
 /// - 弹幕条目 = PlaySidePanel 内含「全角冒号」的 RichText。条目为单段落
@@ -56,10 +59,13 @@ import 'package:live_parser/live_parser.dart'
 import 'package:zishu_flutter/src/app/app_router.dart';
 import 'package:zishu_flutter/src/app/app_theme.dart';
 import 'package:zishu_flutter/src/features/danmaku/application/danmaku_session_provider.dart';
+import 'package:zishu_flutter/src/features/danmaku/widgets/danmaku_overlay.dart';
 import 'package:zishu_flutter/src/shared/presentation/zishu_tokens.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/features/play/widgets/play_side_panel.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
+
+import '../../support/recording_live_player.dart';
 
 /// 播放页深链位置(fixture 样例房间,与 navigation/layout 基线同房间)。
 const String _playLocation = '/douyu/play/63136';
@@ -247,7 +253,11 @@ class _FakeLivePlayer implements LivePlayer {
 /// 与 `platform_workflow.pumpPlatformApp` 同构,额外覆盖 [danmakuRegistryProvider]
 /// —— 这正是本用例「证明消费真实会话而非硬编码」的关键:弹幕数据只能来自我们
 /// 注入的 fake connector 所返回的会话。
-Future<void> _pumpHost(WidgetTester tester, _FakeDanmakuConnector connector) async {
+Future<void> _pumpHost(
+  WidgetTester tester,
+  _FakeDanmakuConnector connector, {
+  LivePlayer? player,
+}) async {
   tester.view.devicePixelRatio = 1.0;
   tester.view.physicalSize = const Size(1600, 1200);
   addTearDown(tester.view.resetPhysicalSize);
@@ -256,7 +266,7 @@ Future<void> _pumpHost(WidgetTester tester, _FakeDanmakuConnector connector) asy
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        playerProvider.overrideWithValue(_FakeLivePlayer()),
+        playerProvider.overrideWithValue(player ?? _FakeLivePlayer()),
         danmakuRegistryProvider.overrideWithValue(buildTestRegistry(connector)),
       ],
       child: const _TestApp(),
@@ -836,5 +846,38 @@ void main() {
 
     // 状态指示与「重新连接」按钮并排。
     expect(find.byKey(const Key('play-side-chat-refresh')), findsOneWidget);
+  });
+
+  testWidgets('pauseDisablesDanmakuOverlayRedraw:暂停停绘、恢复继续', (
+    tester,
+  ) async {
+    final connector = _FakeDanmakuConnector();
+    final player = RecordingLivePlayer();
+    await _pumpHost(tester, connector, player: player);
+    _goPlay(tester);
+    await _pumpStable(tester);
+
+    // overlay 全程挂载(暂停只停绘,不拆会话/不重建)。
+    final overlay = find.byType(DanmakuOverlay);
+    expect(overlay, findsOneWidget);
+
+    // 未收到快照前 playing 视为 false → 停绘。
+    expect(tester.widget<DanmakuOverlay>(overlay).enabled, isFalse);
+
+    // 播放中:正常绘制。
+    player.emitSnapshot(const PlayerSnapshot(playing: true));
+    await _pumpStable(tester);
+    expect(tester.widget<DanmakuOverlay>(overlay).enabled, isTrue);
+
+    // 暂停:enabled=false(overlay 停止重绘,弹幕消息仍照常入队)。
+    player.emitSnapshot(const PlayerSnapshot(playing: false));
+    await _pumpStable(tester);
+    expect(overlay, findsOneWidget, reason: '暂停不得拆掉 overlay');
+    expect(tester.widget<DanmakuOverlay>(overlay).enabled, isFalse);
+
+    // 恢复播放:enabled=true 继续绘制。
+    player.emitSnapshot(const PlayerSnapshot(playing: true));
+    await _pumpStable(tester);
+    expect(tester.widget<DanmakuOverlay>(overlay).enabled, isTrue);
   });
 }

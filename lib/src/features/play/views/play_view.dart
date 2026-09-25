@@ -363,8 +363,9 @@ class _PlayViewState extends ConsumerState<PlayView> {
       owner: this,
       action: _refreshStream,
     );
-    // 订阅播放快照:播放/暂停/静音变化实时刷新侧栏状态条。
-    ref.watch(playerSnapshotProvider);
+    // 订阅播放快照:播放/暂停/静音变化实时刷新侧栏状态条;同时取值驱动
+    // 舞台弹幕叠加层停绘(暂停时不为弹幕层持续重绘)。
+    final playerSnapshot = ref.watch(playerSnapshotProvider).value;
     final async = ref.watch(playControllerProvider(_params));
     final play = async.value;
     // 设置项「弹幕」总开关:关闭时控制条的弹幕按钮整体隐藏。
@@ -467,6 +468,7 @@ class _PlayViewState extends ConsumerState<PlayView> {
               site: widget.site,
               roomId: widget.roomId,
               visible: showDanmaku && danmakuEnabled,
+              playing: playerSnapshot?.playing ?? false,
             ),
             // 语音字幕条:控制栏上方一点,不随控制栏淡出(字幕常显语义);
             // 由全局「译」开关驱动,内部自管模型下载/引擎加载状态。
@@ -868,17 +870,23 @@ class _RoomHeader extends StatelessWidget {
 /// autoDispose 会话,不重复建连),把每次新增的尾部消息经单实例
 /// [StreamController.broadcast] 转发给 [DanmakuOverlay](overlay 吃稳定流,
 /// didUpdateWidget 仅在流实例变化时重订阅)。visible=false 时保持挂载但
-/// 停绘,避免频繁切开关导致会话重建/弹幕丢失。
+/// 停绘,避免频繁切开关导致会话重建/弹幕丢失。playing=false(暂停)时同样
+/// 停绘但消息照常入队——暂停期不为弹幕层持续重绘,恢复播放后继续。
 class _DanmakuLayer extends ConsumerStatefulWidget {
   const _DanmakuLayer({
     required this.site,
     required this.roomId,
     required this.visible,
+    required this.playing,
   });
 
   final String site;
   final String roomId;
   final bool visible;
+
+  /// 播放快照的 playing(快照未就位时为 false):仅控制 overlay 停绘,
+  /// 不影响弹幕订阅与入队。
+  final bool playing;
 
   @override
   ConsumerState<_DanmakuLayer> createState() => _DanmakuLayerState();
@@ -930,7 +938,8 @@ class _DanmakuLayerState extends ConsumerState<_DanmakuLayer> {
   @override
   Widget build(BuildContext context) {
     // 细粒度设置(透明度/字号/速度/显示区域):在此注入 overlay。
-    // 总开关仍由 [widget.visible](danmakuEnabled)控制(enabled=visible)。
+    // 总开关仍由 [widget.visible](danmakuEnabled) 与 [widget.playing]
+    // (暂停停绘)共同控制(enabled=visible && playing)。
     // 此前只传 messages/enabled,设置面板的滑杆全是死控件 —— 改这里即接通。
     final settings = ref.watch(danmakuSettingsProvider);
     // 飘屏正文中文化:开启时原文先上屏,译文返回原位替换(条目已离场则
@@ -940,7 +949,7 @@ class _DanmakuLayerState extends ConsumerState<_DanmakuLayer> {
     );
     return DanmakuOverlay(
       messages: _controller.stream,
-      enabled: widget.visible,
+      enabled: widget.visible && widget.playing,
       opacity: settings.opacity / 100,
       fontSize: settings.fontSize.toDouble(),
       speedFactor: settings.speed,
