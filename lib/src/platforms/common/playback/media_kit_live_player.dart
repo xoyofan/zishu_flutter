@@ -21,6 +21,31 @@ import 'player_error.dart';
 import 'twitch_ad_filter.dart';
 import 'window_presentation.dart';
 
+/// 是否需要「纹理首帧未上屏」自动 kick(BUG-WIN-VIDEO-001 候选)。
+///
+/// 判定的是**尺寸缺失型黑屏**:底层已宣称在播(playing)且不在缓冲,
+/// 但视频宽高缺失或非法(null / <=0)—— 画面拿不到纹理尺寸,UI 只能黑屏,
+/// 一次 pause/play 可让 mpv 重建输出、把首帧推上屏。
+///
+/// 抽成纯函数是为了可单测:武装(起计时)与到期复核必须走同一判定,
+/// 二者语义漂移会让「武装了却复核不过」或反之的计时器空转。
+/// [alreadyKicked] 为 true 时恒不 kick —— 一次 open 至多 kick 一次,
+/// 禁止形成 pause/play 循环。
+bool needsVideoKick({
+  required bool playing,
+  required bool buffering,
+  required int? width,
+  required int? height,
+  required bool alreadyKicked,
+}) {
+  if (alreadyKicked) return false;
+  if (!playing || buffering) return false;
+  return width == null ||
+      width <= 0 ||
+      height == null ||
+      height <= 0;
+}
+
 class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   /// [player] 是单测注入点:VM 测试无法加载原生 libmpv(`Player()` 会构造
   /// `NativePlayer` 并 `DynamicLibrary.open`),只能注入 `Player(platformPlayer:)`
@@ -118,6 +143,18 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   /// 卡顿时长记账:begin/end 配对输出每次 buffering 持续毫秒,落盘为
   /// `stall_begin` / `stall_end`。open/切源/离房/释放时重置,避免跨会话计时。
   final BufferingStallTracker _stallTracker = BufferingStallTracker();
+
+  /// 「尺寸缺失型黑屏」复核计时:武装后 1.5s 到期,复核 [needsVideoKick]
+  /// 仍成立才执行一次 pause/play(见 [_onVideoKickTimer])。
+  /// open/stop/releaseNative/dispose 时 reset,不得跨会话。
+  Timer? _videoKickTimer;
+
+  /// 本次 open 是否已 kick 过:置位后不再武装(一次 open 至多一次)。
+  /// open 时 reset。
+  bool _videoKicked = false;
+
+  /// kick 观察窗:给 mpv 补报 video-params 留时间,避免把正常起播误踢。
+  static const Duration _videoKickDelay = Duration(milliseconds: 1500);
 
   /// 健康观察窗:出帧后持续播满 [PlaybackRetryPolicy.healthWindow] 才把
   /// 连续失败计数归零。**这是"有限重试"能真正收敛的关键** —— 抖动的死流会
@@ -242,6 +279,10 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
           // 直接丢弃;open 落地后 [_resyncAfterOpen] 会补发真实状态。
           if (_eventsFenced) return;
           _emit((snapshot) => patch(snapshot, value));
+          // playing/buffering/宽高任一变化都重估 kick:尺寸迟到要撤销计时,
+          // 尺寸缺失且在播要武装。读底层 _player.state(事件先落 state 再
+          // 发出),不依赖快照去重;围栏期间 bind 直接返回,resync 补评估。
+          _syncVideoKick();
         }),
       );
     }
@@ -425,6 +466,15 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     final state = _player.state;
     final width = state.width;
     final height = state.height;
+    // 解围栏处的低频样本(每次 open / 看门狗复核各一条):黑屏但状态栏
+    // 「播放中」时,用它判定是否为「尺寸缺失型」—— playing=true 而
+    // width/height 为 null/0 即是(正常起播会随后补报真实宽高)。
+    PlaybackLog.write('video_state', {
+      'width': width,
+      'height': height,
+      'playing': state.playing,
+      'buffering': state.buffering,
+    });
     _emit(
       (s) => s.copyWith(
         playing: state.playing,
@@ -442,6 +492,70 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     // 看门狗重挂(补 R4 饥饿缺陷):open 开头撤掉看门狗后,若 mpv 重组播放
     // 列表不再发出 buffering 状态变化,自动重连会静默停摆。已挂则不覆盖(幂等)。
     if (!state.playing) _armStallTimer();
+    // 解围栏后的 kick 评估:open 在途被围栏吞掉的 playing/宽高事件在此
+    // 一次性补评估(低频:每次 open / 看门狗复核各一次)。
+    _syncVideoKick();
+  }
+
+  /// 按当前底层状态武装/撤销 kick 计时(幂等):
+  /// - 条件([needsVideoKick])不成立(尺寸到位 / 非 playing / 缓冲中 /
+  ///   已 kick 过)→ 撤销在途计时,不起新计时;
+  /// - 成立且未武装 → 起 [_videoKickDelay] 计时,到期复核后才执行。
+  /// 不直接执行 kick:尺寸可能只是晚报,到期复核才是准入门槛。
+  void _syncVideoKick() {
+    if (_disposed || _releaseRequested) return;
+    final state = _player.state;
+    final need = needsVideoKick(
+      playing: state.playing,
+      buffering: state.buffering,
+      width: state.width,
+      height: state.height,
+      alreadyKicked: _videoKicked,
+    );
+    if (!need) {
+      _videoKickTimer?.cancel();
+      _videoKickTimer = null;
+      return;
+    }
+    if (_videoKickTimer != null) return;
+    _videoKickTimer = Timer(_videoKickDelay, _onVideoKickTimer);
+  }
+
+  /// kick 计时到期:复核同一条件(尺寸可能已迟到、可能已切源),仍成立才
+  /// 置位 [_videoKicked]、留痕并执行一次 pause/play。复核不过则静默放弃,
+  /// 后续事件仍可重新武装([_videoKicked] 未置位)。
+  void _onVideoKickTimer() {
+    _videoKickTimer = null;
+    if (_disposed || _releaseRequested) return;
+    final state = _player.state;
+    if (!needsVideoKick(
+      playing: state.playing,
+      buffering: state.buffering,
+      width: state.width,
+      height: state.height,
+      alreadyKicked: _videoKicked,
+    )) {
+      return;
+    }
+    _videoKicked = true;
+    PlaybackLog.write('video_kick', {
+      'reason': 'no_video_size',
+      'width': state.width,
+      'height': state.height,
+    });
+    unawaited(_runVideoKick());
+  }
+
+  /// 执行纹理 kick:pause/play 让 mpv 重建视频输出、把首帧推上屏。
+  /// 这是实测手动恢复动作(暂停→播放)的自动化,只此一次,不进生命周期
+  /// 队列(队列此时可能被新 open 占用,而 kick 只针对当前底层会话)。
+  Future<void> _runVideoKick() async {
+    try {
+      await _player.pause();
+      await _player.play();
+    } catch (_) {
+      // 底层已释放/切源时的竞态:kick 是尽力恢复,失败不得影响主链路。
+    }
   }
 
   /// 收到**终局**诊断:记录类别(供放弃时给出对症建议)。不在此处重连 ——
@@ -675,6 +789,11 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     // 同步自增代际:后续任何 await 回来后若代际已变,说明有更新的 open/stop
     // 覆盖了本次指令,直接作废(不写快照、不动计时器)。
     final myGen = ++_sourceGeneration;
+    // kick 计时与 flag 同步段 reset(先于入队):排队中的旧会话计时不得
+    // 在新 open 落地前到期执行,新会话也从「未 kick」开始。
+    _videoKickTimer?.cancel();
+    _videoKickTimer = null;
+    _videoKicked = false;
     // 度量生命周期队列等待:切房时前一个 stop 排在开流前面会直接推后首帧。
     final requestedAt = DateTime.now();
     return _enqueueLifecycle(() async {
@@ -831,6 +950,10 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   Future<void> stop() {
     // 同步自增代际:作废在途的 open —— 离房后旧的 open 不得再把源挂上。
     _sourceGeneration++;
+    // kick 计时不得跨会话:离房即撤销,flag 一并归零(重进房允许重新武装)。
+    _videoKickTimer?.cancel();
+    _videoKickTimer = null;
+    _videoKicked = false;
     return _enqueueLifecycle(() async {
       if (_disposed) return;
       // 若上一个被作废的 open 死在围栏里,这里负责解围栏。
@@ -941,6 +1064,8 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
 
   Future<void> _beginNativeRelease() async {
     _releaseRequested = true;
+    _videoKickTimer?.cancel();
+    _videoKickTimer = null;
     await _lifecycleQueue;
     await _releaseNativeOnce();
   }
@@ -950,6 +1075,8 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       _disposed = true;
       _stallTimer?.cancel();
       _stallTimer = null;
+      _videoKickTimer?.cancel();
+      _videoKickTimer = null;
       _cancelHealthTimer();
       _stallTracker.reset();
       _currentLines = const [];
