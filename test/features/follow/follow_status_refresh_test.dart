@@ -24,6 +24,37 @@ import 'package:zishu_flutter/src/features/follow/application/follow_status_poll
 import 'package:zishu_flutter/src/shared/application/browse_source.dart';
 import 'package:zishu_flutter/src/shared/application/providers.dart';
 
+/// 假关注导入源。
+class FakeFollowImportSource implements FollowImportSource {
+  FakeFollowImportSource(this.rooms);
+
+  final List<RoomSummary> rooms;
+  int calls = 0;
+
+  @override
+  Future<List<RoomSummary>> importDouyinFollows({
+    void Function(FollowImportProgress progress)? onProgress,
+  }) async {
+    calls++;
+    onProgress?.call(const FollowImportProgress(page: 1, imported: 2));
+    return rooms;
+  }
+}
+
+/// 假批量关注直播源:一次返回当前直播房间快照。
+class FakeFollowLiveRefresher implements FollowLiveRefresher {
+  FakeFollowLiveRefresher(this.snapshot);
+
+  final FollowLiveSnapshot snapshot;
+  int calls = 0;
+
+  @override
+  Future<FollowLiveSnapshot> refreshFollowLive() async {
+    calls++;
+    return snapshot;
+  }
+}
+
 /// 假刷新源:记录被刷新的房间,并按脚本返回结果 / 抛错。
 class FakeRefresher implements RoomRefresher {
   FakeRefresher({this.results = const {}, this.failures = const {}});
@@ -124,6 +155,8 @@ RoomSummary _fresh({
 Future<ProviderContainer> _container({
   required List<Map<String, Object>> seed,
   RoomRefresher? refresher,
+  FollowLiveRefresher? followLiveRefresher,
+  FollowImportSource? followImportSource,
   bool overrideRefresher = false,
 }) async {
   SharedPreferencesAsyncPlatform.instance = InMemorySharedPreferencesAsync.withData(
@@ -132,6 +165,10 @@ Future<ProviderContainer> _container({
   final container = ProviderContainer(
     overrides: [
       if (overrideRefresher) roomRefresherProvider.overrideWithValue(refresher),
+      if (followLiveRefresher != null)
+        followLiveRefresherProvider.overrideWithValue(followLiveRefresher),
+      if (followImportSource != null)
+        followImportSourceProvider.overrideWithValue(followImportSource),
     ],
   );
   addTearDown(container.dispose);
@@ -148,7 +185,101 @@ Future<ProviderContainer> _container({
 }
 
 void main() {
+  group('关注导入', () {
+    test('导入抖音关注:报告分页进度并去重保留已有条目', () async {
+      final importer = FakeFollowImportSource([
+        _fresh(roomId: '1001', online: '', site: 'douyin'),
+        _fresh(roomId: '1002', online: '', site: 'douyin'),
+      ]);
+      final container = await _container(
+        seed: [_seedEntry(roomId: '1001', online: '', site: 'douyin')],
+        followImportSource: importer,
+      );
+
+      final progress = <FollowImportProgress>[];
+      final added = await container
+          .read(followProvider.notifier)
+          .importDouyinFollows(onProgress: progress.add);
+
+      expect(added, 1);
+      expect(progress.single.page, 1);
+      expect(progress.single.imported, 2);
+      expect(importer.calls, 1);
+      expect(container.read(followProvider), hasLength(2));
+      expect(container.read(followProvider).last.room.roomId, '1002');
+    });
+  });
+
   group('refreshStatuses 合并语义', () {
+    test('抖音:导入当前直播关注并加入本地关注', () async {
+      final batch = FakeFollowLiveRefresher(
+        FollowLiveSnapshot(
+          complete: true,
+          rooms: [
+            RoomRecord.fromSummary(
+              _fresh(
+                roomId: 'live-1',
+                online: '2.3万',
+                site: 'douyin',
+                roomState: RoomState.live,
+              ),
+            ),
+          ],
+        ),
+      );
+      final container = await _container(
+        seed: [_seedEntry(roomId: 'offline-1', online: '', site: 'douyin')],
+        followLiveRefresher: batch,
+      );
+
+      final added = await container
+          .read(followProvider.notifier)
+          .importDouyinLiveFollows();
+
+      expect(added, 1);
+      expect(batch.calls, 1);
+      final entries = container.read(followProvider);
+      expect(entries, hasLength(2));
+      final liveEntry = entries.firstWhere((entry) => entry.room.roomId == 'live-1');
+      expect(liveEntry.isLive, isTrue);
+    });
+
+    test('抖音:批量关注直播快照一次更新在播与离线', () async {
+      final batch = FakeFollowLiveRefresher(
+        FollowLiveSnapshot(
+          complete: true,
+          rooms: [
+            RoomRecord.fromSummary(
+              _fresh(
+                roomId: '1001',
+                online: '1.2万',
+                site: 'douyin',
+                roomState: RoomState.live,
+              ),
+            ),
+          ],
+        ),
+      );
+      final container = await _container(
+        seed: [
+          _seedEntry(roomId: '1001', online: '5千', site: 'douyin'),
+          _seedEntry(roomId: '1002', online: '3千', site: 'douyin'),
+        ],
+        followLiveRefresher: batch,
+      );
+
+      final refreshed = await container
+          .read(followProvider.notifier)
+          .refreshStatuses();
+
+      expect(refreshed, 2);
+      expect(batch.calls, 1);
+      final entries = container.read(followProvider);
+      expect(entries[0].room.roomState, RoomState.live);
+      expect(entries[0].room.online, '1.2万');
+      expect(entries[1].room.roomState, RoomState.offline);
+      expect(entries[1].room.online, '');
+    });
     test('成功:online/标题/封面以刷新为准,本地 cid 保留', () async {
       final fake = FakeRefresher(
         results: {

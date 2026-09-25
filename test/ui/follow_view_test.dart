@@ -160,6 +160,21 @@ void main() {
     expect(segment.selected, {FollowDensity.card});
   });
 
+  testWidgets('导入入口只在当前平台为抖音时显示', (tester) async {
+    suppressRenderFlexOverflow();
+    await pumpFollowApp(tester);
+
+    expect(find.text('导入抖音关注'), findsNothing);
+    expect(find.text('导入直播中'), findsNothing);
+
+    await tester.tap(find.text('抖音').first);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.text('导入抖音关注'), findsOneWidget);
+    expect(find.text('导入直播中'), findsOneWidget);
+  });
+
   testWidgets('点击 follow-density-row:切换为列表密度', (tester) async {
     suppressRenderFlexOverflow();
     await pumpFollowApp(tester);

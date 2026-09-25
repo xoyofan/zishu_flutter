@@ -4,7 +4,7 @@
 /// 「我的关注」页(`FollowRoomList` row 密度)与播放页侧栏「关注」列表
 /// 共用本组件,与 web 一致:两处只有一套行视图。侧栏只显示在播,页面
 /// 会显示轮播/离线,故人数列对三态都给出标注(在播=online、轮播=「轮播」
-/// 小标签、离线=「未开播」)。批量模式在行首插入复选框。
+/// 小标签、离线=相对上次开播时间)。批量模式在行首插入复选框。
 library;
 
 import 'package:flutter/material.dart';
@@ -75,8 +75,9 @@ class FollowEntryRow extends StatelessWidget {
         splashColor: AppStateLayer.splashOf(tokens.accent),
         highlightColor: AppStateLayer.pressedOf(tokens.accent),
         focusColor: AppStateLayer.focusOf(tokens.accent),
-        child: Container(
-          height: rowHeight,
+        child: Builder(builder: (context) {
+          final row = Container(
+            height: rowHeight,
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
           decoration: BoxDecoration(
             border: Border(
@@ -165,7 +166,7 @@ class FollowEntryRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 4),
-              // 观看人数列:在播人形图标 + 数字;轮播「轮播」小标签;离线「未开播」。
+              // 观看人数列:在播人形图标 + 数字;轮播「轮播」小标签;离线相对时间。
               if (live)
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -188,28 +189,32 @@ class FollowEntryRow extends StatelessWidget {
                 )
               else if (replay)
                 const FollowReplayBadge()
+              else if (entry.lastLiveAt > 0)
+                Text(
+                  offlineRowLastLiveLabel(entry.lastLiveAt),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: context.textCaption.copyWith(
+                    fontSize: AppFontSize.label,
+                    color: tokens.textSecondary,
+                  ),
+                )
               else
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.schedule_rounded,
-                      size: 11,
-                      color: tokens.textSecondary,
-                    ),
-                    const SizedBox(width: 2),
-                    Text(
-                      '未开播',
-                      style: context.textCaption.copyWith(
-                        fontSize: AppFontSize.label,
-                        color: tokens.textSecondary,
-                      ),
-                    ),
-                  ],
-                ),
+                const SizedBox.shrink(),
             ],
           ),
-        ),
+        );
+        if (!live && !replay) {
+            return Opacity(
+              opacity: 0.55,
+              child: ColorFiltered(
+                colorFilter: kGrayscaleFilter,
+                child: row,
+              ),
+            );
+          }
+          return row;
+        }),
       ),
     );
   }

@@ -26,6 +26,7 @@ import 'package:zishu_flutter/src/app/app_theme.dart';
 import 'package:zishu_flutter/src/features/follow/application/follow_provider.dart';
 import 'package:zishu_flutter/src/features/follow/widgets/follow_common.dart';
 import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_card.dart';
+import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_row.dart';
 import 'package:zishu_flutter/src/shared/application/browse_source.dart';
 import 'package:zishu_flutter/src/shared/application/providers.dart';
 
@@ -250,6 +251,71 @@ void main() {
         (payload.single as Map)['lastLiveAt'],
         1234567890000,
         reason: '落盘结构必须带 lastLiveAt,否则重启即丢',
+      );
+    });
+  });
+
+  group('离线列表行文案', () {
+    test('无记录留空,有记录显示相对时间', () {
+      final now = DateTime(2026, 9, 25, 12);
+      expect(
+        offlineRowLastLiveLabel(0, now: now),
+        isEmpty,
+      );
+      expect(
+        offlineRowLastLiveLabel(
+          now.subtract(const Duration(hours: 2)).millisecondsSinceEpoch,
+          now: now,
+        ),
+        '上次开播 2 小时前',
+      );
+      expect(
+        offlineRowLastLiveLabel(
+          now.subtract(const Duration(days: 3)).millisecondsSinceEpoch,
+          now: now,
+        ),
+        '上次开播 3 天前',
+      );
+    });
+
+    testWidgets('离线行整体灰化且不显示“未开播”', (tester) async {
+      final now = DateTime.now();
+      final entry = FollowEntry(
+        room: const RoomSummary(
+          site: 'douyin',
+          roomId: 'offline-row',
+          title: '离线直播间',
+          anchorName: '离线主播',
+          cid: '',
+          category: '游戏',
+          online: '',
+          cover: '',
+          roomState: RoomState.offline,
+        ),
+        isSpecial: false,
+        remindOn: false,
+        followedAt: now,
+        lastLiveAt: now
+            .subtract(const Duration(hours: 2))
+            .millisecondsSinceEpoch,
+      );
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            theme: ZishuTheme.dark(),
+            home: Scaffold(body: FollowEntryRow(entry: entry)),
+          ),
+        ),
+      );
+
+      expect(find.text('上次开播 2 小时前'), findsOneWidget);
+      expect(find.text('未开播'), findsNothing);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('follow-entry-douyin-offline-row')),
+          matching: find.byType(ColorFiltered),
+        ),
+        findsOneWidget,
       );
     });
   });

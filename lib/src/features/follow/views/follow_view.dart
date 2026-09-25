@@ -5,12 +5,15 @@
 /// 列表铺陈交给共享组件 [FollowRoomList](与播放页侧栏「关注」同一套视图)。
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
+import '../../../shared/application/browse_source.dart';
 import '../../../shared/application/providers.dart';
 import '../application/follow_provider.dart';
 import '../application/follow_sort.dart';
@@ -30,6 +33,8 @@ class _FollowViewState extends ConsumerState<FollowView> {
   FollowDensity _density = FollowDensity.card;
   bool _batchMode = false;
   bool _refreshing = false;
+  bool _importing = false;
+  bool _importingLive = false;
   final Set<String> _selectedKeys = {};
 
   /// 平台筛选 + 排序(纯视图计算,不改动 controller 状态)。
@@ -138,6 +143,74 @@ class _FollowViewState extends ConsumerState<FollowView> {
     );
   }
 
+  Future<void> _importDouyin() async {
+    if (_importing) return;
+    setState(() => _importing = true);
+    final progress = ValueNotifier(const FollowImportProgress(page: 0, imported: 0));
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => ValueListenableBuilder<FollowImportProgress>(
+          valueListenable: progress,
+          builder: (context, value, _) => AlertDialog(
+            title: const Text('正在导入抖音关注'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const LinearProgressIndicator(),
+                const SizedBox(height: AppSpacing.md),
+                Text(
+                  value.refreshing
+                      ? '正在批量刷新当前直播状态…'
+                      : '第 ${value.page} 页 · 已发现 ${value.imported}${value.total > 0 ? ' / ${value.total}' : ''} 个关注',
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    try {
+      final notifier = ref.read(followProvider.notifier);
+      final added = await notifier.importDouyinFollows(
+        onProgress: (value) => progress.value = value,
+      );
+      progress.value = FollowImportProgress(
+        page: progress.value.page,
+        imported: added,
+        total: progress.value.total,
+        refreshing: true,
+      );
+      await notifier.refreshStatuses();
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pop();
+      _toast(added == 0 ? '没有新增抖音关注,已刷新直播状态' : '已导入 $added 个抖音关注并刷新状态');
+    } catch (_) {
+      if (mounted) Navigator.of(context, rootNavigator: true).pop();
+      if (mounted) _toast('抖音关注导入失败,请检查登录 Cookie');
+    } finally {
+      progress.dispose();
+      if (mounted) setState(() => _importing = false);
+    }
+  }
+
+  Future<void> _importLive() async {
+    if (_importingLive) return;
+    setState(() => _importingLive = true);
+    try {
+      final added = await ref
+          .read(followProvider.notifier)
+          .importDouyinLiveFollows();
+      if (!mounted) return;
+      _toast(added == 0 ? '没有发现新的直播关注' : '已导入 $added 个直播关注');
+    } catch (_) {
+      if (mounted) _toast('直播关注导入失败,请稍后重试');
+    } finally {
+      if (mounted) setState(() => _importingLive = false);
+    }
+  }
+
   void _toast(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
@@ -184,6 +257,50 @@ class _FollowViewState extends ConsumerState<FollowView> {
               runSpacing: AppSpacing.xs,
               crossAxisAlignment: WrapCrossAlignment.center,
               children: [
+                if (_siteFilter == 'douyin') ...[
+                  if (_importingLive)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else
+                    TextButton.icon(
+                      onPressed: _importLive,
+                      icon: Icon(
+                        Icons.podcasts_rounded,
+                        size: 16,
+                        color: tokens.liveBadge,
+                      ),
+                      label: Text(
+                        '导入直播中',
+                        style: context.textBody.copyWith(
+                          color: tokens.liveBadge,
+                        ),
+                      ),
+                    ),
+                  if (_importing)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else
+                    TextButton.icon(
+                      onPressed: _importDouyin,
+                      icon: Icon(
+                        Icons.download_rounded,
+                        size: 16,
+                        color: tokens.textSecondary,
+                      ),
+                      label: Text(
+                        '导入抖音关注',
+                        style: context.textBody.copyWith(
+                          color: tokens.textSecondary,
+                        ),
+                      ),
+                    ),
+                ],
                 if (_refreshing)
                   const SizedBox(
                     width: 16,

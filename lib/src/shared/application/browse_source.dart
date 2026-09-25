@@ -62,3 +62,44 @@ abstract interface class RoomRefresher implements RoomSource {
     required String roomId,
   });
 }
+
+/// 关注平台一次返回的直播快照。
+class FollowLiveSnapshot {
+  const FollowLiveSnapshot({required this.rooms, required this.complete});
+
+  /// 接口返回的正在直播房间。
+  final List<RoomRecord> rooms;
+
+  /// 是否已读到服务端 `has_more=false`；false 时不能把缺失项标记为离线。
+  final bool complete;
+}
+
+/// 关注直播批量刷新能力(可选)。
+///
+/// 与逐房间 [RoomRefresher] 分离：抖音等平台可用一次 feed 请求返回
+/// 当前关注直播流，避免关注数量增大后逐条请求。
+abstract interface class FollowLiveRefresher {
+  Future<FollowLiveSnapshot> refreshFollowLive();
+}
+
+/// 关注导入进度。
+class FollowImportProgress {
+  const FollowImportProgress({
+    required this.page,
+    required this.imported,
+    this.total = 0,
+    this.refreshing = false,
+  });
+
+  final int page;
+  final int imported;
+  final int total;
+  final bool refreshing;
+}
+
+/// 平台关注列表导入能力(可选)。
+abstract interface class FollowImportSource {
+  Future<List<RoomSummary>> importDouyinFollows({
+    void Function(FollowImportProgress progress)? onProgress,
+  });
+}

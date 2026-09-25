@@ -20,8 +20,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../shared/application/auth_provider.dart';
 import '../../../shared/application/data_server_api.dart';
+import '../../../shared/application/browse_source.dart';
 import '../../../shared/application/fixture_sources.dart';
-import '../../../shared/application/providers.dart' show roomRefresherProvider;
+import '../../../shared/application/providers.dart'
+    show
+        followImportSourceProvider,
+        followLiveRefresherProvider,
+        roomRefresherProvider;
 import '../../../shared/domain/category_display.dart';
 
 /// 关注列表持久化键(SharedPreferencesAsync,带前缀避免与其它模块冲突)。
@@ -289,6 +294,58 @@ class FollowController extends Notifier<List<FollowEntry>> {
     _persist();
   }
 
+  /// 导入当前抖音账号的全部关注。
+  ///
+  /// 导入结果先合并到本地 state,再由 [_persist] 自动写入本机并同步已登录的
+  /// data-server;已有条目的特别关注/提醒/本地元信息保持不变。
+  Future<int> importDouyinFollows({
+    void Function(FollowImportProgress progress)? onProgress,
+  }) async {
+    final source = ref.read(followImportSourceProvider);
+    if (source == null) return 0;
+    final imported = await source.importDouyinFollows(onProgress: onProgress);
+    final existingKeys = {for (final entry in state) entry.key};
+    final additions = <FollowEntry>[
+      for (final room in imported)
+        if (!existingKeys.contains('${room.site}:${room.roomId}'))
+          FollowEntry(
+            room: room,
+            isSpecial: false,
+            remindOn: false,
+            followedAt: DateTime.now(),
+          ),
+    ];
+    if (additions.isEmpty) return 0;
+    state = [...state, ...additions];
+    await _persist();
+    return additions.length;
+  }
+
+  /// 导入当前抖音关注中正在直播的房间。
+  ///
+  /// 这是完整关注导入的轻量回退:即使 `/following/list/` 被限流,仍可先
+  /// 使用 `/webcast/feed/follow_top/` 把当前直播房间加入本地关注。
+  Future<int> importDouyinLiveFollows() async {
+    final source = ref.read(followLiveRefresherProvider);
+    if (source == null) return 0;
+    final snapshot = await source.refreshFollowLive();
+    final existingKeys = {for (final entry in state) entry.key};
+    final additions = <FollowEntry>[
+      for (final room in snapshot.rooms)
+        if (!existingKeys.contains('${room.site}:${room.roomId}'))
+          FollowEntry(
+            room: room.toSummary(),
+            isSpecial: false,
+            remindOn: false,
+            followedAt: DateTime.now(),
+          ),
+    ];
+    if (additions.isEmpty) return 0;
+    state = [...state, ...additions];
+    await _persist();
+    return additions.length;
+  }
+
   /// 刷新关注列表的房间状态(真实解析源才可用;无能力时返回 0)。
   ///
   /// 有界并发(4)+ 单条 10s 超时;单条失败保留原数据 —— 网络抖动不得把在播
@@ -299,14 +356,61 @@ class FollowController extends Notifier<List<FollowEntry>> {
   /// 关注 N 条时在 ceil(N/limit) 个周期内全覆盖);= 0 时全量刷新(用户
   /// 主动下拉/点刷新)。返回本轮实际刷新成功的条数。
   Future<int> refreshStatuses({int limit = 0}) async {
+    final batch = ref.read(followLiveRefresherProvider);
     final refresher = ref.read(roomRefresherProvider);
     final entries = state;
-    if (refresher == null || entries.isEmpty) return 0;
-
-    final targets = _pickRefreshWindow(entries, limit);
-    if (targets.isEmpty) return 0;
+    if ((batch == null && refresher == null) || entries.isEmpty) return 0;
 
     final updated = <String, RoomSummary>{};
+    var batchHandledDouyin = false;
+    if (batch != null && entries.any((entry) => entry.room.site == 'douyin')) {
+      try {
+        final snapshot = await batch.refreshFollowLive();
+        final liveByKey = {
+          for (final room in snapshot.rooms)
+            '${room.site}:${room.roomId}': room.toSummary(),
+        };
+        for (final entry in entries.where(
+          (entry) => entry.room.site == 'douyin',
+        )) {
+          final fresh = liveByKey[entry.key];
+          if (fresh != null) {
+            updated[entry.key] = _mergeRefreshed(entry.room, fresh);
+          } else if (snapshot.complete) {
+            updated[entry.key] = _mergeRefreshed(
+              entry.room,
+              RoomSummary(
+                site: entry.room.site,
+                roomId: entry.room.roomId,
+                title: '',
+                anchorName: '',
+                cid: '',
+                category: '',
+                online: '',
+                cover: '',
+                roomState: RoomState.offline,
+              ),
+            );
+          }
+        }
+        batchHandledDouyin = true;
+      } catch (_) {
+        // 批量接口失败时回退原逐房间链路,避免一次网络抖动丢失状态刷新。
+      }
+    }
+
+    final activeRefresher = refresher;
+    if (!batchHandledDouyin && activeRefresher == null) return 0;
+    final refreshEntries = activeRefresher == null
+        ? const <FollowEntry>[]
+        : batchHandledDouyin
+            ? entries.where((entry) => entry.room.site != 'douyin').toList()
+            : entries;
+    final targets = _pickRefreshWindow(refreshEntries, limit);
+    if (targets.isEmpty) {
+      if (updated.isEmpty) return 0;
+      return _commitStatusUpdates(updated);
+    }
     var cursor = 0;
     Future<void> worker() async {
       while (true) {
@@ -316,7 +420,7 @@ class FollowController extends Notifier<List<FollowEntry>> {
         try {
           // 刷新端口返回统一 RoomRecord;关注存储本切片仍是 RoomSummary,
           // 在消费边界 toSummary() 归一(状态/统计口径不变)。
-          final fresh = await refresher
+          final fresh = await activeRefresher!
               .refreshRoom(site: entry.room.site, roomId: entry.room.roomId)
               .timeout(const Duration(seconds: 10));
           updated[entry.key] = _mergeRefreshed(entry.room, fresh.toSummary());
@@ -331,10 +435,12 @@ class FollowController extends Notifier<List<FollowEntry>> {
 
     // 容器已销毁(应用退出/测试回收)时不再写 state 与存储。
     if (!ref.mounted) return 0;
-    if (updated.isEmpty) return 0;
-    // 以最新 state 重建:刷新期间用户可能已增删条目,不能被过期快照覆盖。
-    // 离线跃迁:原在播、刷新后离线 → 把当下记为「上次开播」(本地数据源的
-    // lastLiveAt 就来自这里;云端契约透传值在 pullRemote 侧以 max 合并)。
+    return _commitStatusUpdates(updated);
+  }
+
+  /// 将本轮批量/逐房间结果提交到最新 state,避免刷新期间覆盖用户增删。
+  Future<int> _commitStatusUpdates(Map<String, RoomSummary> updated) async {
+    if (!ref.mounted || updated.isEmpty) return 0;
     final nowMs = DateTime.now().millisecondsSinceEpoch;
     state = [
       for (final entry in state)

@@ -338,3 +338,20 @@ String offlineLastLiveLabel(int lastLiveAt) {
       '${two(time.month)}-${two(time.day)} '
       '${two(time.hour)}:${two(time.minute)}';
 }
+
+/// 列表行的上次开播相对时间;没有记录时留空,由行布局自然隐藏状态文案。
+String offlineRowLastLiveLabel(int lastLiveAt, {DateTime? now}) {
+  if (lastLiveAt <= 0) return '';
+  final current = now ?? DateTime.now();
+  var elapsed = current.difference(
+    DateTime.fromMillisecondsSinceEpoch(lastLiveAt),
+  );
+  if (elapsed.isNegative) elapsed = Duration.zero;
+  if (elapsed.inMinutes < 60) {
+    return '上次开播 ${elapsed.inMinutes} 分钟前';
+  }
+  if (elapsed.inHours < 24) {
+    return '上次开播 ${elapsed.inHours} 小时前';
+  }
+  return '上次开播 ${elapsed.inDays} 天前';
+}

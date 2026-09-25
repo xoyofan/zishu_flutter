@@ -9,8 +9,8 @@ import 'package:live_parser/live_parser.dart';
 import 'browse_source.dart';
 
 class ParserBrowseSource implements BrowseSource {
-  ParserBrowseSource({SiteRegistry? registry})
-    : _registry = registry ?? buildSiteRegistry();
+  ParserBrowseSource({SiteRegistry? registry, String douyinCookie = ''})
+    : _registry = registry ?? buildSiteRegistry(douyinCookie: douyinCookie);
 
   final SiteRegistry _registry;
 
@@ -39,11 +39,19 @@ class ParserBrowseSource implements BrowseSource {
   }
 }
 
-class ParserRoomSource implements RoomSource, RoomRecoverer, RoomRefresher {
-  ParserRoomSource({SiteRegistry? registry})
-    : _registry = registry ?? buildSiteRegistry();
+class ParserRoomSource
+    implements
+        RoomSource,
+        RoomRecoverer,
+        RoomRefresher,
+        FollowLiveRefresher,
+        FollowImportSource {
+  ParserRoomSource({SiteRegistry? registry, String douyinCookie = ''})
+    : _registry = registry ?? buildSiteRegistry(douyinCookie: douyinCookie),
+      _douyinCookie = douyinCookie;
 
   final SiteRegistry _registry;
+  final String _douyinCookie;
 
   @override
   Future<RoomPayload> resolveRoom({
@@ -98,6 +106,30 @@ class ParserRoomSource implements RoomSource, RoomRecoverer, RoomRefresher {
   /// 未实现该能力的站点抛 [StateError],由关注列表按**条目级**隔离并保留旧值。
   /// 注意:注册表出口套了 `CachedRoomResolver`,它已透传该能力且**不走短缓存**,
   /// 因此这里的刷新拿到的总是上游新鲜值。
+  @override
+  Future<List<RoomSummary>> importDouyinFollows({
+    void Function(FollowImportProgress progress)? onProgress,
+  }) async {
+    return fetchDouyinFollowingAnchors(
+      DouyinClient(cookieOverride: _douyinCookie),
+      onProgress: (progress) => onProgress?.call(
+        FollowImportProgress(
+          page: progress.page,
+          imported: progress.imported,
+          total: progress.total,
+        ),
+      ),
+    );
+  }
+
+  @override
+  Future<FollowLiveSnapshot> refreshFollowLive() async {
+    final result = await fetchDouyinFollowLiveRooms(
+      DouyinClient(cookieOverride: _douyinCookie),
+    );
+    return FollowLiveSnapshot(rooms: result.rooms, complete: result.complete);
+  }
+
   @override
   Future<RoomRecord> refreshRoom({
     required String site,
