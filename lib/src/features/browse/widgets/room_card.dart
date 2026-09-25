@@ -64,18 +64,20 @@ class RoomCard extends StatelessWidget {
   }
 }
 
-/// 封面下元信息:恒定**两行**。
+/// 封面下元信息:恒定**三行**(方案 A,2026-09-26)。
 ///
 /// 对齐参考实现 `RoomCard.vue` 的 `.room-card__body`(padding 6/8/8)与
 /// `.room-card__meta`(margin-top 4 / gap 6):
 /// - 第 1 行:房间标题(缺标题回退主播名,仍缺则占位不塌陷);
-/// - 第 2 行:主播名 + 特色 chip(Stage 2 起优先渲染 [RoomRecord.chips]
-///   —— 游戏/类型 tag 在前、language 在后,按 [SiteChipKind] 排序;
-///   promoTag 保留为尾部 chip,已与某个 chip 同名时不重复;平台名不进
-///   chip,由封面平台角标或单平台页签上下文承载)。
+/// - 第 2 行:主播名(不再在同一行塞 chips);
+/// - 第 3 行:特色 chip 行([RoomRecord.chips] 按 [SiteChipKind] 排序
+///   —— 游戏/类型 tag 在前、language 在后;promoTag 保留为尾部 chip,
+///   已与某个 chip 同名时不重复;平台名不进 chip,由封面平台角标或
+///   单平台页签上下文承载)。
 ///
-/// **两行高度必须恒定**:有的主播没有名字、多数房间没有 chip,若不占位,同一
-/// 网格里卡片高度参差(用户报「都保持2行的行高,不要多余 padding」)。
+/// **三行高度必须恒定**:有的主播没有名字、多数房间没有 chip,若不占位,同一
+/// 网格里卡片高度参差(用户报「都保持2行的行高,不要多余 padding」;
+/// 后续方案 A 明确统一多一行)。
 class _RoomCardMeta extends StatelessWidget {
   const _RoomCardMeta({required this.room, required this.showPlatformBadge});
 
@@ -132,29 +134,33 @@ class _RoomCardMeta extends StatelessWidget {
             style: context.textTitle.copyWith(fontSize: AppFontSize.subtitle),
           ),
           const SizedBox(height: AppSpacing.xs),
-          // 固定行高:内容缺失也占满一行,保证同网格卡片等高。
+          // 第 2 行:主播名(固定行高,内容缺失也占满一行)。
           SizedBox(
             height: _metaLineHeight,
-            child: Row(
-              children: [
-                if (anchor.isNotEmpty)
-                  Flexible(
-                    child: FollowAnchorName(
-                      site: room.site,
-                      name: anchor,
-                      live: room.isLive,
-                      fontSize: AppFontSize.bodySecondary,
-                      fontWeight: FontWeight.w500,
-                    ),
+            child: anchor.isEmpty
+                ? null
+                : FollowAnchorName(
+                    site: room.site,
+                    name: anchor,
+                    live: room.isLive,
+                    fontSize: AppFontSize.bodySecondary,
+                    fontWeight: FontWeight.w500,
                   ),
-                if (anchor.isNotEmpty && chipWidgets.isNotEmpty)
-                  const SizedBox(width: 6),
-                for (final (index, chip) in chipWidgets.indexed) ...[
-                  if (index > 0) const SizedBox(width: 6),
-                  chip,
-                ],
-              ],
-            ),
+          ),
+          const SizedBox(height: AppSpacing.xs),
+          // 第 3 行:特色 chips;为空时同样占满一行,保证所有平台卡片等高。
+          SizedBox(
+            height: _metaLineHeight,
+            child: chipWidgets.isEmpty
+                ? null
+                : Row(
+                    children: [
+                      for (final (index, chip) in chipWidgets.indexed) ...[
+                        if (index > 0) const SizedBox(width: 6),
+                        chip,
+                      ],
+                    ],
+                  ),
           ),
         ],
       ),

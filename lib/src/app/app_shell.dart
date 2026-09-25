@@ -18,7 +18,6 @@ import '../shared/domain/category_display.dart';
 import '../shared/presentation/design_tokens.dart';
 import '../shared/presentation/platform_brands.dart';
 import '../shared/presentation/zishu_tokens.dart';
-import '../shared/presentation/widgets/outline_chip.dart';
 import '../shared/presentation/widgets/platform_icon.dart';
 import '../features/follow/views/settings_view.dart' show openSettingsDialog;
 import '../shared/application/global_actions.dart';

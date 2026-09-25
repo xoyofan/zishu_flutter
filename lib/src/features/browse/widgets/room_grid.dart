@@ -95,13 +95,14 @@ class _RoomGridState extends State<RoomGrid> {
             crossAxisCount: columns,
             mainAxisSpacing: AppSpacing.gridMainAxisSpacing,
             crossAxisSpacing: AppSpacing.gridCrossAxisSpacing,
-            // 文本区预算 = 两行元信息(与 RoomCard._RoomCardMeta 严格同源):
-            //   padding 6+8 = 14,标题行 14×1.35 ≈ 18.9,间距 4,特色 chip 行 17
-            //   → 53.9;取 58 留 ~4px 覆盖测试字体(Ahem)与真实字体的行高差。
+            // 文本区预算 = 三行元信息(与 RoomCard._RoomCardMeta 严格同源,方案 A):
+            //   padding 6+8 = 14,标题行 14×1.35 ≈ 18.9,间距 4,主播名行 17,
+            //   间距 4,特色 chip 行 17 → 74.9;取 78 留 ~3px 覆盖测试字体(Ahem)
+            //   与真实字体的行高差(旧两行值 58 同口径留 ~4px)。
             // 旧值 80 会在卡片底部留 ~26px 空白(用户报「不要多余 padding」);
             // 大字体下再按 metaHeightFor 同步放大,避免纵向溢出(W11)。
             childAspectRatio:
-                cardWidth / (cardWidth * 9 / 16 + metaHeightFor(58, context)),
+                cardWidth / (cardWidth * 9 / 16 + metaHeightFor(78, context)),
           ),
           itemCount: rooms.length + footerCount,
           itemBuilder: (context, index) {

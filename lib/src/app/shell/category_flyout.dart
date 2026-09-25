@@ -105,21 +105,58 @@ class _PlatformCategorySheet extends ConsumerWidget {
                         runSpacing: 8,
                         children: [
                           for (final item in group.items)
-                            // 线框 chip(Stage 2 统一组件):透明底 + border,
-                            // InkWell 反馈组件内建;可点逻辑不变(pop + 跳子分类)。
-                            OutlineChip(
-                              key: Key('platform-cat-item-${item.cid}'),
-                              label: displayCategoryName(
-                                site,
-                                item.name,
-                                item.cid,
+                            // chip 底色不透明:InkWell 的叠色必须画在填色**之上**,
+                            // 故用 `Ink` 把底色铺进 Material 的 ink 层
+                            // (同 follow_avatars.dart 的 _FollowAvatarTile)。
+                            Ink(
+                              decoration: BoxDecoration(
+                                color: tokens.surfaceRaised,
+                                borderRadius: AppRadius.allMd,
+                                border: Border.all(color: tokens.border),
                               ),
-                              onTap: () {
-                                Navigator.of(context).pop();
-                                context.go(
-                                  _categoryRoute(site, cid: item.cid),
-                                );
-                              },
+                              child: InkWell(
+                                key: Key('platform-cat-item-${item.cid}'),
+                                borderRadius: AppRadius.allMd,
+                                // 底色已是抬升顶档 surfaceRaised,没有更亮的灰阶可抬:
+                                // hover 改走强调色 12% 淡染(同浮层内分类 chip 口径)。
+                                hoverColor: tokens.accent.withValues(
+                                  alpha: AppDirectoryDrawer.activeChipAlpha,
+                                ),
+                                // 焦点:底色与 surfaceRaised 同值会看不见,
+                                // 故取 AppFocus 环的光晕色(accent 24%,直接取自 token)。
+                                focusColor: AppFocus.ring(tokens.accent)
+                                    .first
+                                    .color,
+                                splashColor: AppStateLayer.splashOf(
+                                  context.tokens.accent,
+                                ),
+                                highlightColor: AppStateLayer.pressedOf(
+                                  context.tokens.accent,
+                                ),
+                                onTap: () {
+                                  Navigator.of(context).pop();
+                                  context.go(
+                                    _categoryRoute(site, cid: item.cid),
+                                  );
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  child: Text(
+                                    displayCategoryName(
+                                      site,
+                                      item.name,
+                                      item.cid,
+                                    ),
+                                    style: TextStyle(
+                                      fontSize: AppFontSize.bodySecondary,
+                                      color: tokens.textPrimary,
+                                    ),
+                                  ),
+                                ),
+                              ),
                             ),
                         ],
                       ),
@@ -289,8 +326,7 @@ class _CategoryBoardState extends State<_CategoryBoard> {
               for (final item in groups.first.items)
                 SizedBox(
                   width: _CategoryBoard._kColumnWidth,
-                  // 线框 chip(Stage 2 统一组件):可点逻辑不变。
-                  child: OutlineChip(
+                  child: _CategoryChip(
                     key: ValueKey('flyout-category-${item.cid}'),
                     label: displayCategoryName(site, item.name, item.cid),
                     onTap: () => _goCategory(context, item.cid),
@@ -346,16 +382,9 @@ class _CategoryBoardState extends State<_CategoryBoard> {
                         ),
                       ),
                       for (final item in group.items)
-                        // 线框 chip(Stage 2 统一组件):可点逻辑不变(跳子分类),
-                        // 原 _CategoryChip 的 hover 金字反馈由组件内建的
-                        // InkWell hover/accent 淡染承担。
-                        OutlineChip(
+                        _CategoryChip(
                           key: ValueKey('flyout-category-${item.cid}'),
-                          label: displayCategoryName(
-                            site,
-                            item.name,
-                            item.cid,
-                          ),
+                          label: displayCategoryName(site, item.name, item.cid),
                           onTap: () => _goCategory(context, item.cid),
                         ),
                     ],
@@ -394,3 +423,52 @@ class _FlyoutScrollbar extends StatelessWidget {
   }
 }
 
+/// 分类条目:hover → 金(平台主色)+ chip 底(同 `.nav-platform-menu__item:hover`)。
+class _CategoryChip extends StatefulWidget {
+  const _CategoryChip({super.key, required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  State<_CategoryChip> createState() => _CategoryChipState();
+}
+
+class _CategoryChipState extends State<_CategoryChip> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    // hover 底色改由 InkWell 的 hoverColor 承担:原先 Container 在 hover 时
+    // 自填 accent 12%,会把 InkWell 的叠色盖在下面(且叠加 M3 默认 8%,两层不可控);
+    // `_hovering` 现在只负责文字转强调色(web `.nav-platform-menu__item:hover`
+    // 的“金底 + 金字”:金底走 hoverColor,金字走这里)。
+    return MouseRegion(
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: InkWell(
+        onTap: widget.onTap,
+        hoverColor: context.tokens.accent.withValues(
+          alpha: AppDirectoryDrawer.activeChipAlpha,
+        ),
+        focusColor: AppStateLayer.focusOf(context.tokens.accent),
+        splashColor: AppStateLayer.splashOf(context.tokens.accent),
+        highlightColor: AppStateLayer.pressedOf(context.tokens.accent),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 0.64, vertical: 1.28),
+          child: Text(
+            widget.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: AppFontSize.bodySecondary,
+              color: _hovering
+                  ? context.tokens.accent
+                  : context.tokens.textPrimary,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}

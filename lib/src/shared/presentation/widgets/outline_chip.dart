@@ -11,7 +11,7 @@
 /// - 垂直 padding 恒为 0 —— `Container` 的 border 计入 effectivePadding
 ///   (`padding + decoration.padding`),11×1.3(caption 行高 14.3)+ 2×1px
 ///   边框 = 16.3,与改版前「14.3 + 2×1 padding」等高,守住元信息行
-///   17px 恒定行高(两行卡片等高契约,见 `room_card_meta_height_test`);
+///   17px 恒定行高(三行卡片等高契约,方案 A,见 `room_card_meta_height_test`);
 /// - [onTap] 为 null 时不包 `InkWell`:不可点 chip 无 hover/点击反馈,
 ///   也不会拦截指针(点击自然落到卡片整体 onTap)。
 library;
