@@ -57,12 +57,14 @@ class RoomRecord {
     this.startedAt,
     List<StreamQuality> streams = const [],
     List<QualityOption> availableQualities = const [],
+    List<SiteChip> chips = const [],
     this.source,
     this.fetchedAt,
     this.error,
     this.extension,
   }) : streams = _freezeStreams(streams),
-       availableQualities = List.unmodifiable(availableQualities);
+       availableQualities = List.unmodifiable(availableQualities),
+       chips = List.unmodifiable(chips);
 
   final String site;
   final String roomId;
@@ -91,6 +93,13 @@ class RoomRecord {
   // 播放:非播放请求或离线为空列表,不凭空制造播放地址。
   final List<StreamQuality> streams;
   final List<QualityOption> availableQualities;
+
+  /// 卡片 chip 来源(游戏标签、语言等);默认空列表,其它平台零影响。
+  ///
+  /// 与 [streams]/[availableQualities] 同策略:构造边界深冻结为不可变
+  /// 列表,事后改写外部持有者不得影响已构造记录(可点判据见
+  /// [SiteChip.navigable])。
+  final List<SiteChip> chips;
 
   // 来源/诊断:列表无此信息时可空。
   final String? source;
@@ -147,6 +156,7 @@ class RoomRecord {
     cid: _blankToNull(summary.cid),
     promoTag: _blankToNull(summary.promoTag),
     startedAt: summary.startedAt,
+    chips: summary.chips,
   );
 
   /// 回写浏览/刷新摘要(迁移期兼容;`null` 统计回旧口径空串)。
@@ -166,6 +176,7 @@ class RoomRecord {
     diamondFans: svip ?? '',
     roomState: roomState,
     startedAt: startedAt,
+    chips: chips,
   );
 
   /// 从播放详情转换(error/线路/来源诊断原样保留)。
@@ -239,6 +250,7 @@ class RoomRecord {
       availableQualities: fresh.availableQualities.isNotEmpty
           ? fresh.availableQualities
           : availableQualities,
+      chips: fresh.chips.isNotEmpty ? fresh.chips : chips,
       source: fresh.source ?? source,
       fetchedAt: fresh.fetchedAt ?? fetchedAt,
       error: fresh.error ?? error,
@@ -270,6 +282,7 @@ class RoomRecord {
     if (svip != null) 'diamondFans': svip,
     'streams': streams.map((s) => s.toJson()).toList(),
     'availableQualities': availableQualities.map((q) => q.toJson()).toList(),
+    if (chips.isNotEmpty) 'chips': [for (final chip in chips) chip.toJson()],
     if (source != null) 'source': source,
     if (fetchedAt != null) 'fetchedAt': fetchedAt!.toIso8601String(),
     if (error != null) 'error': error,
@@ -319,6 +332,11 @@ class RoomRecord {
       source: _blankToNull(json['source']?.toString()),
       fetchedAt: DateTime.tryParse(json['fetchedAt']?.toString() ?? ''),
       error: _blankToNull(json['error']?.toString()),
+      chips: [
+        for (final item in ((json['chips'] as List?) ?? const []))
+          if (item is Map)
+            SiteChip.fromJson(Map<String, dynamic>.from(item)),
+      ],
       extension: _readExtension(json['extension']),
     );
   }
