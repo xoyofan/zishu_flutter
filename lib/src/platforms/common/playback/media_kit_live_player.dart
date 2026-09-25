@@ -290,7 +290,8 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       return s.copyWith(
         error: playerErrorHint(classification.kind),
         errorKind: classification.kind,
-        notice: classification.kind == PlayerErrorKind.source &&
+        notice:
+            classification.kind == PlayerErrorKind.source &&
                 classification.code == 'source_open'
             ? PlaybackNotice.sourceOpenFailed
             : s.notice,
@@ -323,10 +324,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   void _onPlaying() {
     _stallTimer?.cancel();
     _stallTimer = null;
-    _emit((s) => s.copyWith(
-      error: null,
-      notice: PlaybackNotice.none,
-    ));
+    _emit((s) => s.copyWith(error: null, notice: PlaybackNotice.none));
     final retries = _stallRetries;
     // 健康播放起点:重复的 playing 事件不重置,免得连续抖动永远凑不满观察窗。
     _playingSince ??= DateTime.now();
@@ -671,6 +669,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
           'lines': [line, ...fallbacks].length,
         });
       }
+      if (_disposed || _releaseRequested) return;
       // 进入开流:屏蔽底层事件,直到本次 open 落地再补发真实状态。
       _eventsFenced = true;
       // 切源即重置快照:清错误、退出播放态,进入缓冲。
@@ -681,6 +680,9 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       final wrappedLines = <StreamLine>[];
       var wrappedAny = false;
       for (final item in baseLines) {
+        if (_disposed || _releaseRequested || myGen != _sourceGeneration) {
+          return;
+        }
         final prepared = await _adFilter.wrapLine(item);
         if (!identical(prepared, item)) wrappedAny = true;
         wrappedLines.add(prepared);
@@ -741,9 +743,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
           error: keepError ? s.error : null,
           errorKind: keepError ? s.errorKind : PlayerErrorKind.none,
           retryAttempt: _stallRetries,
-          notice: resetRetries
-              ? PlaybackNotice.networkJitter
-              : s.notice,
+          notice: resetRetries ? PlaybackNotice.networkJitter : s.notice,
         ),
       );
       try {
@@ -777,14 +777,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
         return;
       }
       // open 途中被更新的 open/stop 顶掉:作废,不写快照、不动计时器。
-      if (myGen != _sourceGeneration) {
-        PlaybackLog.write('open_superseded', {
-          'gen': myGen,
-          'current': _sourceGeneration,
-          'phase': 'in_flight',
-        });
-        return;
-      }
+      if (myGen != _sourceGeneration || _releaseRequested || _disposed) return;
       if (_disposed) return;
       // 解围栏并补发真实状态(含看门狗重挂,见 [_resyncAfterOpen])。
       _eventsFenced = false;
@@ -912,20 +905,39 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     return width / height;
   }
 
+  Future<void>? _releaseFuture;
+  bool _releaseRequested = false;
+
+  Future<void> releaseNative() {
+    return _releaseFuture ??= _beginNativeRelease();
+  }
+
+  Future<void> _beginNativeRelease() async {
+    _releaseRequested = true;
+    await _lifecycleQueue;
+    await _releaseNativeOnce();
+  }
+
+  Future<void> _releaseNativeOnce() async {
+    if (!_disposed) {
+      _disposed = true;
+      _stallTimer?.cancel();
+      _stallTimer = null;
+      _cancelHealthTimer();
+      _currentLines = const [];
+      for (final subscription in _subscriptions) {
+        await subscription.cancel();
+      }
+      _subscriptions.clear();
+      await _output.close();
+      await _adFilter.dispose();
+    }
+    await _player.dispose();
+    PlaybackLog.write('player_native_disposed');
+  }
+
   @override
   void dispose() {
-    if (_disposed) return;
-    _disposed = true;
-    _stallTimer?.cancel();
-    _stallTimer = null;
-    _cancelHealthTimer();
-    _currentLines = const [];
-    unawaited(_adFilter.dispose());
-    for (final subscription in _subscriptions) {
-      unawaited(subscription.cancel());
-    }
-    _subscriptions.clear();
-    unawaited(_output.close());
-    unawaited(_player.dispose());
+    unawaited(releaseNative());
   }
 }

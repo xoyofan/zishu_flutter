@@ -8,6 +8,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart' show DanmakuMessage, RoomPayload;
 
+import '../../../platforms/common/playback/idle_releasing_live_player.dart';
 import '../../../platforms/common/playback/live_player.dart'
     show PlayerSnapshot, PlaybackNotice;
 import '../../../platforms/common/playback/playback_retry.dart'
@@ -1055,7 +1056,14 @@ class _VideoStageState extends ConsumerState<_VideoStage> {
       content = Stack(
         fit: StackFit.expand,
         children: [
-          ref.read(playerProvider).buildVideoView(),
+          if (ref.watch(playerProvider)
+              case final IdleReleasingLivePlayer idlePlayer)
+            StreamBuilder<int>(
+              stream: idlePlayer.viewChanges,
+              builder: (_, snapshot) => idlePlayer.buildVideoView(),
+            )
+          else
+            ref.read(playerProvider).buildVideoView(),
           // 暂停遮罩:流已出过画面后用户暂停 → 居中紫薯 logo。仅在
           // 「曾经播过 + 现在没播 + 不在缓冲/报错」时出现,避免解析中/首帧前
           // 闪现 logo。
