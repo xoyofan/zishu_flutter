@@ -110,7 +110,6 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
             child: _RoomSection(
               site: widget.site,
               cid: item.cid,
-              isAll: widget.site == 'all',
             ),
           ),
         ],
@@ -491,12 +490,10 @@ class _RoomSection extends ConsumerWidget {
   const _RoomSection({
     required this.site,
     required this.cid,
-    required this.isAll,
   });
 
   final String site;
   final String cid;
-  final bool isAll;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -518,7 +515,6 @@ class _RoomSection extends ConsumerWidget {
                   rooms: value.rooms,
                   hasMore: value.hasMore,
                   onLoadMore: controller.loadMore,
-                  showPlatformBadge: isAll,
                   onRoomTap: (room) =>
                       context.push('/${room.site}/play/${room.roomId}'),
                 ),

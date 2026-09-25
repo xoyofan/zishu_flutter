@@ -18,7 +18,6 @@ class RoomGrid extends StatefulWidget {
     this.padding = const EdgeInsets.all(AppSpacing.lg),
     this.hasMore = false,
     this.onLoadMore,
-    this.showPlatformBadge = true,
   });
 
   final List<RoomRecord> rooms;
@@ -30,9 +29,6 @@ class RoomGrid extends StatefulWidget {
 
   /// 滚动接近底部时触发(接近底部阈值内部固定)。
   final VoidCallback? onLoadMore;
-
-  /// 是否显示平台角标(跨站聚合网格为 true)。
-  final bool showPlatformBadge;
 
   @override
   State<RoomGrid> createState() => _RoomGridState();
@@ -95,14 +91,13 @@ class _RoomGridState extends State<RoomGrid> {
             crossAxisCount: columns,
             mainAxisSpacing: AppSpacing.gridMainAxisSpacing,
             crossAxisSpacing: AppSpacing.gridCrossAxisSpacing,
-            // 文本区预算 = 三行元信息(与 RoomCard._RoomCardMeta 严格同源,方案 A):
-            //   padding 6+8 = 14,标题行 14×1.35 ≈ 18.9,间距 4,主播名行 17,
-            //   间距 4,特色 chip 行 17 → 74.9;取 78 留 ~3px 覆盖测试字体(Ahem)
-            //   与真实字体的行高差(旧两行值 58 同口径留 ~4px)。
-            // 旧值 80 会在卡片底部留 ~26px 空白(用户报「不要多余 padding」);
+            // 文本区预算 = 两行元信息(与 RoomCard._RoomCardMeta 严格同源,
+            // 2026-09 改版:封面下只有标题 + chips 两行,昵称已移到封面左下):
+            //   padding 6+8 = 14,标题行 14×1.35 ≈ 18.9,间距 4,特色 chips 行 17
+            //   → 53.9;取 58 留 ~4px 覆盖测试字体(Ahem)与真实字体的行高差。
             // 大字体下再按 metaHeightFor 同步放大,避免纵向溢出(W11)。
             childAspectRatio:
-                cardWidth / (cardWidth * 9 / 16 + metaHeightFor(78, context)),
+                cardWidth / (cardWidth * 9 / 16 + metaHeightFor(58, context)),
           ),
           itemCount: rooms.length + footerCount,
           itemBuilder: (context, index) {
@@ -113,7 +108,6 @@ class _RoomGridState extends State<RoomGrid> {
               // 不用 roomId 做外层 key,否则新平台会整批销毁/重建卡片。
               key: ValueKey('room-slot-$index'),
               room: room,
-              showPlatformBadge: widget.showPlatformBadge,
               onTap: widget.onRoomTap == null
                   ? null
                   : () => widget.onRoomTap!(room),

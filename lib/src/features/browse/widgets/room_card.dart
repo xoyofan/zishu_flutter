@@ -4,35 +4,30 @@ import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 
 import '../../../shared/presentation/design_tokens.dart';
+import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/widgets/cover_badges.dart';
 import '../../../shared/presentation/widgets/outline_chip.dart';
 import '../../../shared/presentation/widgets/translated_text.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
-import '../../follow/widgets/follow_common.dart';
 
-/// SFVideoLive 风格房间卡片:16:9 封面 + 四象限徽章 + 标题/主播。
+/// SFVideoLive 风格房间卡片:16:9 封面 + 四角 tag + 标题/chips 两行。
 ///
-/// 四象限角位与配色**逐条对齐参考实现**(`RoomCard.vue` + `CoverBadges.vue`):
-/// - 左上:分类色块(`.room-card__badge--category`,内角 8px 圆角);
-/// - 右上:促销/画质标签(`.room-card__badge--promo`,琥珀底);
-/// - 右下:热度(`.cover-online-badge`,暗底白字);
-/// - 左下:平台 pill(`.room-card__foot-left`,仅跨站聚合显示)。
+/// 封面四角口径(2026-09 用户改版裁决):
+/// - 左上:分类实底角标([CoverCategoryBadge],分类色,不改线框、不挪位);
+/// - 右上:平台身份/榜单线框 tag(`room.identityLabel`,如虎牙
+///   「超级明星」;复用 [OutlineChip] 视觉,空则不渲染,暂不做跳转);
+/// - 左下:主播昵称(平台品牌色底 + `chipForeground` 文字,单行省略,
+///   不包手势,点击落到整卡 onTap 进房);平台名角标已移除,左下让给昵称;
+/// - 右下:热度([CoverOnlineBadge],未开播不显示;轮播状态角标同位)。
 ///
-/// 四枚角标统一由 [CoverBadge] 家族渲染(圆角/内边距/字号一处定义),
-/// 与播放页侧栏预览卡共用,避免两处角位漂移。
+/// 四角角标统一由 [CoverBadge] 家族/线框 chip 渲染,与播放页侧栏预览卡
+/// 共用,避免两处角位漂移。封面下两行:第 1 行标题、第 2 行特色 chips
+/// (占位恒定行高,与 [metaHeightFor] 的两行预算同源)。
 class RoomCard extends StatelessWidget {
-  const RoomCard({
-    super.key,
-    required this.room,
-    this.onTap,
-    this.showPlatformBadge = true,
-  });
+  const RoomCard({super.key, required this.room, this.onTap});
 
   final RoomRecord room;
   final VoidCallback? onTap;
-
-  /// 是否显示平台角标;单平台网格(参考 Vue:仅跨站聚合显示)可关闭。
-  final bool showPlatformBadge;
 
   @override
   Widget build(BuildContext context) {
@@ -55,8 +50,8 @@ class RoomCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _Cover(room: room, showPlatformBadge: showPlatformBadge),
-            _RoomCardMeta(room: room, showPlatformBadge: showPlatformBadge),
+            _Cover(room: room),
+            _RoomCardMeta(room: room),
           ],
         ),
       ),
@@ -64,25 +59,22 @@ class RoomCard extends StatelessWidget {
   }
 }
 
-/// 封面下元信息:恒定**三行**(方案 A,2026-09-26)。
+/// 封面下元信息:**两行**(标题 + chips,2026-09 用户改版)。
 ///
-/// 对齐参考实现 `RoomCard.vue` 的 `.room-card__body`(padding 6/8/8)与
-/// `.room-card__meta`(margin-top 4 / gap 6):
+/// 对齐参考实现 `RoomCard.vue` 的 `.room-card__body`(padding 6/8/8):
 /// - 第 1 行:房间标题(缺标题回退主播名,仍缺则占位不塌陷);
-/// - 第 2 行:主播名(不再在同一行塞 chips);
-/// - 第 3 行:特色 chip 行([RoomRecord.chips] 按 [SiteChipKind] 排序
+/// - 第 2 行:特色 chip 行([RoomRecord.chips] 按 [SiteChipKind] 排序
 ///   —— 游戏/类型 tag 在前、language 在后;promoTag 保留为尾部 chip,
-///   已与某个 chip 同名时不重复;平台名不进 chip,由封面平台角标或
-///   单平台页签上下文承载)。
+///   已与某个 chip 同名时不重复;平台名不进 chip,平台名角标也已移除)。
+///   主播昵称不再在 meta 行,已移到封面左下角。
 ///
-/// **三行高度必须恒定**:有的主播没有名字、多数房间没有 chip,若不占位,同一
-/// 网格里卡片高度参差(用户报「都保持2行的行高,不要多余 padding」;
-/// 后续方案 A 明确统一多一行)。
+/// **两行高度必须恒定**:多数房间没有 chip,若不占位,同一网格里卡片高度
+/// 参差 —— 第 2 行缺内容也用固定行高占位,与 [metaHeightFor] 的 58px
+/// 两行预算同源(见 `room_card_meta_height_test`)。
 class _RoomCardMeta extends StatelessWidget {
-  const _RoomCardMeta({required this.room, required this.showPlatformBadge});
+  const _RoomCardMeta({required this.room});
 
   final RoomRecord room;
-  final bool showPlatformBadge;
 
   /// 元信息行高:12px 字号 × 1.35 行高(与参考实现 `min-height: 1.35em` 同口径)。
   static const double _metaLineHeight = 17;
@@ -94,7 +86,6 @@ class _RoomCardMeta extends StatelessWidget {
         : ((room.anchorName ?? '').trim().isNotEmpty
               ? room.anchorName!
               : ' ');
-    final anchor = (room.anchorName ?? '').trim();
     // chip 顺序:按 SiteChipKind 枚举序分桶拼接(桶内保输入序),
     // 实现「游戏/类型 tag 在前,language 在后」;UI 不看平台。
     final siteChips = [
@@ -134,21 +125,7 @@ class _RoomCardMeta extends StatelessWidget {
             style: context.textTitle.copyWith(fontSize: AppFontSize.subtitle),
           ),
           const SizedBox(height: AppSpacing.xs),
-          // 第 2 行:主播名(固定行高,内容缺失也占满一行)。
-          SizedBox(
-            height: _metaLineHeight,
-            child: anchor.isEmpty
-                ? null
-                : FollowAnchorName(
-                    site: room.site,
-                    name: anchor,
-                    live: room.isLive,
-                    fontSize: AppFontSize.bodySecondary,
-                    fontWeight: FontWeight.w500,
-                  ),
-          ),
-          const SizedBox(height: AppSpacing.xs),
-          // 第 3 行:特色 chips;为空时同样占满一行,保证所有平台卡片等高。
+          // 第 2 行:特色 chips;为空时同样占满一行,保证所有平台卡片等高。
           SizedBox(
             height: _metaLineHeight,
             child: chipWidgets.isEmpty
@@ -169,10 +146,9 @@ class _RoomCardMeta extends StatelessWidget {
 }
 
 class _Cover extends StatelessWidget {
-  const _Cover({required this.room, required this.showPlatformBadge});
+  const _Cover({required this.room});
 
   final RoomRecord room;
-  final bool showPlatformBadge;
 
   @override
   Widget build(BuildContext context) {
@@ -180,6 +156,9 @@ class _Cover extends StatelessWidget {
     // 在播判据只看状态真源 roomState(浏览目录按 4a-i 已赋 live),
     // 不再用统计数字是否存在推断在线。
     final live = room.isLive;
+    final brand = PlatformBrandCatalog.byId(room.site);
+    final identity = (room.identityLabel ?? '').trim();
+    final anchor = (room.anchorName ?? '').trim();
     return AspectRatio(
       aspectRatio: 16 / 9,
       child: Stack(
@@ -207,7 +186,7 @@ class _Cover extends StatelessWidget {
               key: Key('room-card-offline'),
               child: CoverOfflineOverlay(),
             ),
-          // 左上:分类色块。
+          // 左上:分类实底角标(保持现状,不改线框、不挪位)。
           Positioned(
             left: 0,
             top: 0,
@@ -220,8 +199,37 @@ class _Cover extends StatelessWidget {
               cid: room.cid ?? '',
             ),
           ),
-          // 右上:促销/画质标签已移到封面下方的特色 chip 行(用户口径:
-          // 「预览图下面第二行是各种特色 chip」),同一信息不在封面与行内各显示一次。
+          // 右上:平台身份/榜单线框 tag(room.identityLabel,如虎牙「超级明星」;
+          // 空则不渲染,暂不做跳转)。
+          if (identity.isNotEmpty)
+            Positioned(
+              right: 0,
+              top: 0,
+              child: OutlineChip(
+                // 测试锚点:右上身份 tag。
+                key: const Key('cover-badge-identity'),
+                label: identity,
+              ),
+            ),
+          // 左下:主播昵称(平台品牌色底 + chipForeground 文字,单行省略);
+          // 不包手势,点击落到整卡 onTap(进房)。平台名角标已移除,左下让给昵称。
+          if (anchor.isNotEmpty)
+            Positioned(
+              left: 0,
+              bottom: 0,
+              child: CoverBadge(
+                // 测试锚点:左下昵称条。
+                key: const Key('cover-badge-anchor'),
+                corner: CoverCorner.bottomLeft,
+                background: brand?.color,
+                foreground: brand?.chipForeground,
+                child: Text(
+                  anchor,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
           // 右下:热度(未开播不显示)。
           if (live)
             Positioned(
@@ -252,17 +260,8 @@ class _Cover extends StatelessWidget {
                 ),
               ),
             ),
-          // 左下:平台 pill(单平台网格可关闭)。
-          if (showPlatformBadge)
-            Positioned(
-              left: 0,
-              bottom: 0,
-              child: CoverPlatformBadge(
-                key: const Key('cover-badge-platform'),
-                corner: CoverCorner.bottomLeft,
-                site: room.site,
-              ),
-            ),
+          // 左下平台名角标已移除(用户口径 2026-09:全平台封面左下不再显示
+          // 平台 tag,位置让给主播昵称;平台信息由页签上下文承载)。
         ],
       ),
     );

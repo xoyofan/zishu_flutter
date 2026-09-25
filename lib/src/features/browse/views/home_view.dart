@@ -147,8 +147,6 @@ class _HomeViewState extends ConsumerState<HomeView> {
         rooms: rooms,
         hasMore: hasMore,
         onLoadMore: controller.loadMore,
-        // 跨站聚合时才展示平台角标(对齐 Vue 版行为)。
-        showPlatformBadge: widget.site == 'all',
         onRoomTap: (room) => context.push('/${room.site}/play/${room.roomId}'),
       ),
     );
