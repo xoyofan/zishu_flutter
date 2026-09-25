@@ -12,6 +12,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 import 'package:live_parser/live_parser.dart' show StreamLine, UpstreamProxy;
 import 'package:window_manager/window_manager.dart' show DragToResizeArea;
 
+import 'buffering_stall_tracker.dart';
 import 'live_player.dart';
 import 'playback_log.dart';
 import 'playback_retry.dart';
@@ -114,6 +115,10 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   /// 缓冲看门狗:缓冲态持续超过退避时长即视为断流,自动重开。
   Timer? _stallTimer;
 
+  /// 卡顿时长记账:begin/end 配对输出每次 buffering 持续毫秒,落盘为
+  /// `stall_begin` / `stall_end`。open/切源/离房/释放时重置,避免跨会话计时。
+  final BufferingStallTracker _stallTracker = BufferingStallTracker();
+
   /// 健康观察窗:出帧后持续播满 [PlaybackRetryPolicy.healthWindow] 才把
   /// 连续失败计数归零。**这是"有限重试"能真正收敛的关键** —— 抖动的死流会
   /// 反复 `buffering true→false→true`,若在 false 就清零,计数永远涨不上去,
@@ -201,6 +206,10 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
 
   /// 日志里的线路主机名(判断「恢复拿到的地址是否真的换了源」的关键线索)。
   static String? _hostOf(StreamLine line) => Uri.tryParse(line.url)?.host;
+
+  /// 当前首条线路的 host:`stall_begin` / `stall_end` 的归属源。
+  String? get _currentHost =>
+      _currentLines.isEmpty ? null : _hostOf(_currentLines.first);
 
   /// 超长诊断截断,防止单条 mpv 日志把文件撑爆。
   static String _clamp(String text) =>
@@ -308,6 +317,10 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   /// **退出缓冲不清零失败计数**(旧实现清了,是收敛缺陷):直播流的 buffering
   /// 标志在死流上也会短暂回落再拉起,清零会让计数永远追不上"放弃"上限。
   /// 计数只由 [PlaybackRetryPolicy.healthWindow] 观察窗确认健康后归零。
+  ///
+  /// 卡顿埋点与看门狗解耦:[_stallTracker] 记真→假转换的持续时长
+  /// (重复 true 不重置、孤立 false 忽略),只在新 begin / 已结算 end 落盘
+  /// `stall_begin` / `stall_end`,供事后统计缓冲频率与每次卡顿的 ms。
   void _onBuffering(bool buffering) {
     if (buffering) {
       // 进入缓冲先结算健康窗(已播满观察窗就归零),再起看门狗。
@@ -316,9 +329,16 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
         _emit((s) => s.copyWith(notice: PlaybackNotice.networkJitter));
       }
       _armStallTimer();
+      if (_stallTracker.begin()) {
+        PlaybackLog.write('stall_begin', {'host': _currentHost});
+      }
     } else {
       _stallTimer?.cancel();
       _stallTimer = null;
+      final stallMs = _stallTracker.end();
+      if (stallMs != null) {
+        PlaybackLog.write('stall_end', {'ms': stallMs, 'host': _currentHost});
+      }
     }
   }
 
@@ -732,6 +752,8 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       _stallTimer = null;
       _cancelHealthTimer();
       _playingSince = null;
+      // 切源/开流即开启新卡顿会话:丢弃旧源未结算的 begin,避免跨会话计时。
+      _stallTracker.reset();
       // 保留已出画面的宽高:自动重连期间 PiP 小窗要沿用原宽高比,不该退回 16:9。
       // 错误文案的区别对待很关键:用户主动切源([resetRetries] 为 true)才清错误,
       // 让卡片退出;自动重连([resetRetries] 为 false)要**留着**错误 + 计数,
@@ -821,6 +843,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       _stallTimer = null;
       _cancelHealthTimer();
       _playingSince = null;
+      _stallTracker.reset();
       _openStartedAt = null;
       _currentLines = const [];
       // 离房即重置恢复节流与重试记账:下一次进房从干净状态开始,
@@ -928,6 +951,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       _stallTimer?.cancel();
       _stallTimer = null;
       _cancelHealthTimer();
+      _stallTracker.reset();
       _currentLines = const [];
       for (final subscription in _subscriptions) {
         await subscription.cancel();
