@@ -4,8 +4,8 @@ part of '../play_side_panel.dart';
 /// 不随间距设置变化;间距由列表行 padding 表达)。
 const double _kChatLineHeight = 1.48;
 
-/// 表情图边长 = 正文字号 × 该系数(对齐 web 表情与文字同行的视觉比例)。
-const double _kEmojiSizeScale = 1.6;
+/// 表情图边长 = 正文字号 × 网页同款比例。
+const double _kEmojiSizeScale = 1.15;
 
 class _ChatRow extends StatelessWidget {
   const _ChatRow({required this.data, required this.fontSize});
@@ -44,16 +44,20 @@ class _ChatRow extends StatelessWidget {
             alignment: PlaceholderAlignment.middle,
             child: ColorFiltered(
               colorFilter: chatWebImageFilter,
-              child: Image.network(
-                segment.url,
+              child: CachedNetworkImage(
+                imageUrl: segment.url,
+                cacheKey: segment.url,
                 key: Key(
                   'chat-emoji-image-${segment.name.isNotEmpty ? segment.name : segment.text}',
                 ),
                 width: emojiSide,
                 height: emojiSide,
                 fit: BoxFit.contain,
-                semanticLabel: segment.name.isNotEmpty ? segment.name : segment.text,
-                errorBuilder: (_, _, _) => Text(segment.text, style: bodyStyle),
+                placeholder: (_, _) => SizedBox(
+                  width: emojiSide,
+                  height: emojiSide,
+                ),
+                errorWidget: (_, _, _) => Text(segment.text, style: bodyStyle),
               ),
             ),
           )
@@ -88,6 +92,11 @@ class _ChatRow extends StatelessWidget {
     // 「同一个人发言第二行文字应该从最左边开始」)。
     return Text.rich(
       key: const Key('play-side-chat-message'),
+      strutStyle: StrutStyle(
+        fontSize: fontSize,
+        height: _kChatLineHeight,
+        forceStrutHeight: true,
+      ),
       TextSpan(
         children: [
           // 徽章顺序对齐 web SideChatTab.vue:38-44 —— 平台用户等级 pill 在前、

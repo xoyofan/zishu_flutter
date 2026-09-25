@@ -37,6 +37,7 @@ library;
 
 import 'dart:async';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart' show RenderParagraph;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -432,14 +433,16 @@ void main() {
         reason: '斗鱼牌不再拼接等级数字');
     expect(find.text('10'), findsNothing,
         reason: '斗鱼无团名时不渲染粉丝牌');
-    // 斗鱼 UL 文字兜底对齐 web buildDouyuUserLevelStyle:「LV N」。
-    expect(find.text('LV31'), findsOneWidget);
-    expect(find.text('LV18'), findsOneWidget);
+    // 斗鱼官网等级为纯数字胶囊，不显示 LV 前缀。
+    expect(find.text('31'), findsOneWidget);
+    expect(find.text('18'), findsOneWidget);
+    expect(find.text('LV31'), findsNothing);
+    expect(find.text('LV18'), findsNothing);
     expect(find.text('Lv 0'), findsNothing, reason: '无等级不渲染占位');
 
     // 徽章顺序对齐 web SideChatTab.vue:38-44:平台等级 pill 在粉丝牌之前
     // (同一行内按 x 坐标比较;「徽章哥」一条同时带 LV31 与粉丝牌)。
-    final levelRect = tester.getRect(find.text('LV31'));
+    final levelRect = tester.getRect(find.text('31'));
     final fanRect = tester.getRect(find.text('提督骑士团'));
     expect(levelRect.left, lessThan(fanRect.left),
         reason: '平台等级(用户口径:平台等级在粉丝等级前)应排在粉丝牌左边');
@@ -612,12 +615,13 @@ void main() {
     final emojiSpan = rich.children![3];
     expect(emojiSpan, isA<WidgetSpan>(), reason: '有 url 的表情段应内联 WidgetSpan 图片');
     final emojiKey = Key('chat-emoji-image-[捂脸]');
-    final image = tester.widget<Image>(find.byKey(emojiKey));
+    // 表情图已改为 CachedNetworkImage（带磁盘缓存），不再是裸 Image。
+    final image = tester.widget<CachedNetworkImage>(find.byKey(emojiKey));
     expect(find.byKey(emojiKey), findsOneWidget);
-    expect(image.image, NetworkImage(emojiUrl), reason: '表情图应加载段携带的 url');
-    // 边长 ≈ 字号 × 1.6(默认 chatFontSize=14 → 22.4),fit contain。
-    expect(image.width, 14 * 1.6);
-    expect(image.height, 14 * 1.6);
+    expect(image.imageUrl, emojiUrl, reason: '表情图应加载段携带的 url');
+    // 边长 = 字号 × 1.15(默认 chatFontSize=14 → 16.1),fit contain。
+    expect(image.width, 14 * 1.15);
+    expect(image.height, 14 * 1.15);
     expect(image.fit, BoxFit.contain);
     // 文本段保持 TextSpan,用户名/冒号段不受影响。
     expect((rich.children![2] as TextSpan).text, '哈哈');
@@ -642,7 +646,7 @@ void main() {
 
     final session = connector.session!;
     session.emitConnected();
-    // 带平台等级徽章(LV31)+ 超长正文:正文必然折行。用户口径 2026-09-20
+    // 带平台等级徽章(数字 31)+ 超长正文:正文必然折行。用户口径 2026-09-20
     // (UI-BUG-001):「同一个人发言第二行文字应该从最左边开始」——第二行须
     // 顶到条目内容区最左(徽章列正下方),而非缩进到昵称列;对齐 web
     // SideChatTab 徽章 display:contents 的单段落内联流。
@@ -706,7 +710,7 @@ void main() {
     // 不能直接用文字盒比)。
     final badgePillRect = tester.getRect(
       find.ancestor(
-        of: find.text('LV31'),
+        of: find.text('31'),
         matching: find.byType(Container),
       ).first,
     );

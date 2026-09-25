@@ -138,6 +138,54 @@ abstract final class AppColors {
   static const Color modalBarrier = Color(0x73000000);
 }
 
+/// 虎牙官网聊天栏徽章的**布局常量**（房间 333003 实测）。
+///
+/// 颜色/图片一律走官方 CDN（URL 构造在 `live_parser` 的
+/// `platforms/huya/huya_chat_badges.dart`，真源为虎牙官网自己的
+/// `ConsumeLevelBadge` / `fans-icon` 组件），本类**只保留布局尺寸**，
+/// 不再自绘渐变或近似图形。
+abstract final class AppHuyaChatBadge {
+  // ---- 平台等级（ConsumeLevelBadge）----
+
+  /// 官网 `<span>` 的 `padding-left` 实测值 20 = 官方图左侧菱形区宽度。
+  ///
+  /// 等级图本身是官方 90×40(@2x) 素材，尺寸常量在解析包的
+  /// `kHuyaConsumeLevelBadgeWidth/Height`；此处仅供叠字定位使用。
+  static const double levelEmblem = 20;
+
+  // ---- 粉丝牌（fans-icon）----
+
+  /// 胶囊高（实测 20，与平台等级同高）。
+  static const double fanHeight = 20;
+
+  /// 左侧圆形等级徽记直径（实测徽记区 18px 宽，圆标略小于盒高）。
+  static const double fanLevelDisc = 15;
+
+  /// 粉丝牌 7 档底色（实测胶囊中部像素主色簇；每档给深→浅两端）。
+  /// 官方底图含等级圆标与团名留白，此处只取底色，结构由 Widget 表达。
+  static const List<Color> fanTier1 = [Color(0xFFF4F5F8), Color(0xFFFFFFFF)];
+  static const List<Color> fanTier2 = [Color(0xFF66AEDA), Color(0xFFA9D2EB)];
+  static const List<Color> fanTier3 = [Color(0xFF8E98ED), Color(0xFFBFC4F4)];
+  static const List<Color> fanTier4 = [Color(0xFFC56E8B), Color(0xFFDEADBD)];
+  static const List<Color> fanTier5 = [Color(0xFFD153FD), Color(0xFFF65BFA)];
+  static const List<Color> fanTier6 = [Color(0xFF8A43FF), Color(0xFF8A43FF)];
+  static const List<Color> fanTier7 = [Color(0xFFFB9401), Color(0xFFFF5D01)];
+
+  /// 粉丝牌底色渐变。实测分档：≤4 / 5–13 / 14–17 / 18–20 / 21–22 / 23–27 / ≥28。
+  ///
+  /// 第 6 档（23–27）实测只稳定采到深端 `#8A43FF`，浅端未取到足够像素，
+  /// 故两端同值（平涂），不臆造浅端。
+  static List<Color> fanGradient(int level) {
+    if (level <= 4) return fanTier1;
+    if (level <= 13) return fanTier2;
+    if (level <= 17) return fanTier3;
+    if (level <= 20) return fanTier4;
+    if (level <= 22) return fanTier5;
+    if (level <= 27) return fanTier6;
+    return fanTier7;
+  }
+}
+
 abstract final class AppSpacing {
   static const double xs = 4;
   static const double sm = 8;
@@ -199,6 +247,78 @@ abstract final class AppRadius {
   static final BorderRadius allLg = BorderRadius.circular(lg);
   static final BorderRadius allPill = BorderRadius.circular(pill);
   static final BorderRadius allCaptionPill = BorderRadius.circular(captionPill);
+}
+
+/// 斗鱼官网聊天栏徽章（房间 252140 实测）。
+///
+/// 斗鱼聊天列表是 `<canvas>` 渲染，**没有可解析的 DOM/CSS**，故全部数值
+/// 由高 DPI 截图逐像素测得（每行取胶囊包围盒 + 左/中/右三处颜色中位）。
+/// 结构：平台等级是 `[小徽标][数字]` 全圆角胶囊；粉丝牌是官方
+/// `fans/{lv}.png`（60×19，CDN `staticlive.douyucdn.cn` 可构造）+ 右侧团名。
+/// 官网聊天行共 4 个 `dy-*` 组件，本类只管可测的几何量；至尊大钻石
+/// （28×28）与贵族的**图标 URL 规则未确证**，UI 降级为等级数字占位
+/// （见 `side_panel/chat_badges.dart` 的 `_DouyuSupremeMedal`/`_DouyuNobleChip`）。
+abstract final class AppDouyuChatBadge {
+  // ---- 平台等级（LV 胶囊）----
+
+  /// 胶囊高：18 个样本全部实测 16。
+  static const double levelHeight = 16;
+
+  /// 胶囊宽：18 个样本全部实测 32（`x0=8`，行内左边距固定 8）。
+  static const double levelWidth = 32;
+
+  /// 全圆角：实测顶行宽 25/32，为完全圆端，取高的一半。
+  static const double levelRadius = 8;
+
+  /// 左侧小徽标区宽度（实测徽标在数字左侧，约占 1/3 盒宽）。
+  static const double levelEmblem = 10;
+
+  /// 5 档水平渐变（实测样本：8/13/14 / 15/20/25 / 30–38 / 40 / 52）。
+  static const List<Color> levelTier1 = [Color(0xFFE8CDA5), Color(0xFFDABB8C)];
+  static const List<Color> levelTier2 = [Color(0xFFA5E0A4), Color(0xFF82D485)];
+  static const List<Color> levelTier3 = [Color(0xFF77BAF8), Color(0xFF4E9FEA)];
+  static const List<Color> levelTier4 = [Color(0xFF8CA5FF), Color(0xFF647CF6)];
+  static const List<Color> levelTier5 = [Color(0xFF9991FF), Color(0xFF845EF8)];
+
+  /// 平台等级水平渐变；分档边界由 18 个实测样本反推，样本全部落档。
+  static List<Color> levelGradient(int level) {
+    if (level < 15) return levelTier1;
+    if (level < 30) return levelTier2;
+    if (level < 40) return levelTier3;
+    if (level < 50) return levelTier4;
+    return levelTier5;
+  }
+
+  // ---- 粉丝牌 ----
+
+  /// 粉丝牌高（实测 18；官方 PNG 为 60×19）。
+  static const double fanHeight = 18;
+
+  /// 官方 PNG 宽（`staticlive.douyucdn.cn/common/douyu/images/fans/{lv}.png`
+  /// 与本地 `assets/badges/douyu/fans/{lv}.png` 同款，实测 60×19）。
+  static const double fanImageWidth = 60;
+
+  /// 团名左内缩：官方图左侧等级区宽度（实测团名起点约在 24px）。
+  static const double fanTextInset = 24;
+
+  /// 粉丝牌无图时的中性深底（与 `AppColors.border` 同值，勿重复定义）。
+  static const Color fanFallbackBg = Color(0xFF3A3A3A);
+
+  /// 团名文字阴影（官网彩色牌上白字必须压暗才可读）。
+  static const List<BoxShadow> fanTextShadow = [
+    BoxShadow(color: Color(0x73000000), blurRadius: 2),
+    BoxShadow(
+      offset: Offset(0, 1),
+      blurRadius: 1,
+      color: Color(0x59000000),
+    ),
+  ];
+
+  // ---- 至尊大钻石 / 贵族（官网 lit 组件 `:host` 实测）----
+
+  /// 至尊大钻石徽章边长（官网 `dy-supreme-medal` 的 `:host` 实测 28×28，
+  /// 是四个 `dy-*` 组件里唯一的高于 16px 的）。
+  static const double supremeSide = 28;
 }
 
 /// 阴影(elevation)基线。

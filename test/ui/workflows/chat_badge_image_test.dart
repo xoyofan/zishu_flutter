@@ -23,6 +23,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:live_parser/live_parser.dart'
     show
+        DanmakuBadge,
         DanmakuConnector,
         DanmakuMessage,
         DanmakuMessageType,
@@ -342,7 +343,11 @@ void main() {
   });
 
   group('弹幕行徽章:图片优先 → 文字态兜底', () {
-    testWidgets('douyuRow:官方粉丝牌整图 + 团名叠层;UL 保持 LV 文字', (tester) async {
+    testWidgets('douyuRow:官网 LV 胶囊 32x16(徽标+数字) + 官方粉丝牌整图 + 团名叠层',
+        (tester) async {
+      // 依据官网 252140 逐像素实测（canvas 渲染，无 DOM）：
+      //  LV 胶囊 32x16 全圆角，结构 [小徽标][数字]，5 档水平渐变
+      //  粉丝牌高 18，官方 fans/{lv}.png(60x19) + 右侧团名
       final connector = _FakeDanmakuConnector();
       await _pumpPanel(tester, 'douyu', connector: connector);
       final session = _connected(connector);
@@ -352,19 +357,33 @@ void main() {
       );
       await _pumpStable(tester);
 
-      // 图片分支:douyu/fans/12.png(等级绘在图内,不另绘数字)。
+      // 平台等级：几何对齐官网实测 32x16，且不接图
+      final levelRect = tester.getRect(
+        find.byKey(const Key('douyu-user-level-pill')),
+      );
+      expect(levelRect.height, 16, reason: '官网 LV 胶囊 18 个样本实测高均为 16');
+      expect(levelRect.width, 32, reason: '官网 LV 胶囊 18 个样本实测宽均为 32');
+      expect(find.descendant(
+        of: find.byKey(const Key('douyu-user-level-pill')),
+        matching: find.text('31'),
+      ), findsOneWidget);
+      expect(find.text('LV31'), findsNothing, reason: '官网 LV 胶囊无 LV 前缀');
+
+      // 粉丝牌：官方 PNG(等级绘在图内) + 团名，盒高 18
       final img = _badgeImage(
         tester,
         assetPath: 'assets/badges/douyu/fans/12.png',
       );
       expect(img, isNotNull, reason: '斗鱼粉丝牌应走官方 PNG 图片分支');
-      expect(find.text('提督骑士团'), findsOneWidget,
-          reason: '官方牌整图上应叠团名文字');
-      expect(find.byType(ChatBadgeImage), findsOneWidget);
-      // 斗鱼 UL 文字兜底不回归(web 强制文字)。
-      expect(find.text('LV31'), findsOneWidget);
-      expect(find.byType(ChatBadgeImage),
-          findsOneWidget, reason: '斗鱼 UL 不接图,全行只有粉丝牌一张图');
+      expect(find.text('提督骑士团'), findsOneWidget, reason: '官方牌右侧应叠团名');
+      final fanBadgeRect = tester.getRect(
+        find.ancestor(of: find.text('提督骑士团'), matching: find.byType(Container)).first,
+      );
+      expect(fanBadgeRect.height, 18, reason: '官网粉丝牌实测盒高 18');
+      expect(fanBadgeRect.width, greaterThanOrEqualTo(60),
+          reason: '官方 PNG 宽 60，需为团名保留横向空间');
+      expect(find.byType(ChatBadgeImage), findsOneWidget,
+          reason: '斗鱼 UL 不接图,全行只有粉丝牌一张图');
     });
 
     testWidgets('douyuRowFallback:档位超资产清单(99 级)→ 帧内回落中性团名胶囊', (
@@ -383,27 +402,74 @@ void main() {
           reason: '无图回落文字态:中性深底团名胶囊');
     });
 
-    testWidgets('huyaRow:粉丝条维持渐变文字态;UL emblem 图上叠白数字', (tester) async {
+    testWidgets('huyaRow:平台等级与粉丝牌结构对齐官网(等级降级胶囊 + 圆标/团名/官方身份图)',
+        (tester) async {
+      // 依据虎牙官网自己的前端（room_match / components.bundle）：
+      //  平台等级 = https://diy-assets.msstatic.com/consumeLevelBadgeV2/{tier}/{tone}.png
+      //    （tier 由 iLevel 分档、tone 由 iIsPolished 决定；图 90x40@2x = 45x20）
+      //    URL 拼接是纯函数，由 live_parser 的 huya_chat_badges_test 逐档覆盖；
+      //    本用例只断言可观测的结构与几何。
+      //  粉丝牌 = 高 20，[圆形等级徽记][团名][身份图 fansBadge/3/v2/{id}.png]
       final connector = _FakeDanmakuConnector();
       await _pumpPanel(tester, 'huya', connector: connector);
       final session = _connected(connector);
       session.emitConnected();
       session.push(
-        _chat('虎牙哥', '来了', badgeLevel: 12, badgeName: '铁粉团', userLevel: 17),
+        DanmakuMessage(
+          type: DanmakuMessageType.chat,
+          roomId: '333003',
+          userName: '虎牙哥',
+          userId: 'huya-user',
+          text: '来了',
+          userLevel: 30,
+          userLevelBadgeStyle: 0,
+          userLevelIsPolished: 1,
+          userLevelIconUrl: 'https://cdn.example/huya-consume-level.png',
+          badges: const [
+            DanmakuBadge(name: '铁粉团', level: 12),
+          ],
+        ),
       );
+      // 无网环境下官方图必然加载失败 → 这里断言的是**降级胶囊**，
+      // 它的尺寸必须与官方图一致（45x20），且不得回退到 14px 小胶囊。
       await _pumpStable(tester);
 
-      // 粉丝条:渐变条 = 等级圆盘 + 团名(v2 emblem 不用于粉丝牌)。
-      expect(find.text('12'), findsOneWidget, reason: '粉丝条等级圆盘');
-      expect(find.text('铁粉团'), findsOneWidget);
-      // UL:identity 17→12 的 emblem 图 + 右下白数字叠层。
-      final emblem = _badgeImage(
-        tester,
-        assetPath: 'assets/badges/huya/vip/v2/12.png',
+      final fallback = find.byKey(const Key('huya-user-level-fallback'));
+      expect(fallback, findsOneWidget, reason: '官方图加载失败 → 降级数字胶囊');
+      final levelRect = tester.getRect(fallback);
+      expect(levelRect.height, 20, reason: '降级胶囊高 = 官方图等效高 20');
+      expect(levelRect.width, 45, reason: '降级胶囊宽 = 官方图等效宽 45');
+      expect(find.descendant(of: fallback, matching: find.text('30')), findsOneWidget);
+
+      // 粉丝牌：高 20，含圆形等级徽记(12)、团名、官方身份图
+      final fanRect = tester.getRect(find.byKey(const Key('huya-fan-badge')));
+      expect(fanRect.height, 20, reason: '官网 fans-icon 实测高 20');
+      expect(find.descendant(
+        of: find.byKey(const Key('huya-fan-badge')),
+        matching: find.text('12'),
+      ), findsOneWidget, reason: '左侧圆形等级徽记');
+      expect(find.descendant(
+        of: find.byKey(const Key('huya-fan-badge')),
+        matching: find.text('铁粉团'),
+      ), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('huya-fan-badge')),
+          matching: find.byKey(const Key('huya-fan-identity-icon')),
+        ),
+        findsOneWidget,
+        reason: '身份图标用官方 fansBadge/3/v2/{id}.png',
       );
-      expect(emblem, isNotNull, reason: '虎牙 UL 应走 vip/v2 emblem 图片分支');
-      expect(find.text('17'), findsOneWidget, reason: 'emblem 图上应叠等级数字');
-      expect(find.byType(ChatBadgeImage), findsOneWidget);
+      expect(
+        tester
+            .widgetList<Image>(find.byType(Image))
+            .map((i) => i.image)
+            .whereType<NetworkImage>()
+            .map((n) => n.url)
+            .any((u) => u.contains('/webui/fansBadge/3/v2/')),
+        isTrue,
+        reason: '身份图标必须是官方 CDN URL',
+      );
     });
 
     testWidgets('douyinRow:img-only 粉丝牌 + honor 整图;超档 honor 回落文字', (
@@ -418,10 +484,14 @@ void main() {
       session.push(_chat('抖神', '超档', userLevel: 76));
       await _pumpStable(tester);
 
+      // 回归：抖音粉丝牌必须用官方 `fansclub_level_v6_N.png`（150×48，
+      // 心形+等级在左、右侧留白给团名），且**优先用协议下发的图 URL**。
+      // 误用 `fansclub_new_advanced_badge_N_xmp`（60×48 紧凑款）会让粉丝牌
+      // 退化成与平台等级 honor 同款的「彩色圆角块+数字」，且丢掉团名位。
       expect(
         _badgeImage(tester, assetPath: 'assets/badges/douyin/fans/10.png'),
-        isNotNull,
-        reason: '抖音粉丝牌 img-only:有等级即整图',
+        isNull,
+        reason: '不得再渲染本地粉翼款错图',
       );
       expect(
         _badgeImage(tester, assetPath: 'assets/badges/douyin/honor/18.png'),
@@ -430,7 +500,27 @@ void main() {
       );
       // 76 > honorMax(75):无资产 → onFail 回落紫粉渐变数字文字态。
       expect(find.text('76'), findsOneWidget, reason: '超档 honor 回落文字 pill');
+      // 修正期望：ChatBadgeImage 加载失败后**仍留在 widget 树里**（只是内部
+      // 渲染 SizedBox.shrink 并回调 onFail），所以这里应是 2 个：
+      //   1 个粉丝牌（官方远程图）+ 1 个平台等级 honor/18.png（本地图）。
+      // 此前写成 1 是错的，导致该用例长期红。
       expect(find.byType(ChatBadgeImage), findsNWidgets(2));
+      // 无网环境下远程图既没加载成功、也没及时抛错，所以**不应**断言粉丝牌
+      // 已回落出等级文字（那是时序相关的）。只断言它用的是官方图 URL。
+      final badgeSrcs = tester
+          .widgetList<ChatBadgeImage>(find.byType(ChatBadgeImage))
+          .map((w) => w.src)
+          .toList();
+      expect(
+        badgeSrcs.any((s) => s.contains('fansclub_level_v6_10.png')),
+        isTrue,
+        reason: '粉丝牌应用官方 level_v6 图（协议无 url 时按等级拼）',
+      );
+      expect(
+        badgeSrcs.any((s) => s.contains('new_advanced_badge')),
+        isFalse,
+        reason: '不得再用 60x48 紧凑款（无团名位、且与平台等级同款观感）',
+      );
     });
   });
 }

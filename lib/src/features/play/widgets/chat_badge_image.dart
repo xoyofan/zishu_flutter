@@ -1,5 +1,6 @@
 library;
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 /// Web `SideChatTab.vue` 对徽章/等级/表情图片的统一增强:
@@ -110,6 +111,7 @@ class ChatBadgeImage extends StatefulWidget {
     this.fit,
     this.src = '',
     this.assetPathOverride,
+    this.useDiskCache = true,
     this.onFail,
   });
 
@@ -132,6 +134,9 @@ class ChatBadgeImage extends StatefulWidget {
 
   /// 显式资产路径；用于 Bilibili medal-frame 等不走等级编号的固定素材。
   final String? assetPathOverride;
+
+  /// 是否使用磁盘缓存；房间定制徽章可关闭,避免 URL 复用旧图。
+  final bool useDiskCache;
 
   /// 加载失败/无资产回调(每个失败只回一次;输入变化后重置重试)。
   final VoidCallback? onFail;
@@ -176,22 +181,40 @@ class _ChatBadgeImageState extends State<ChatBadgeImage> {
     final localPath = widget.assetPath;
     final fit = widget.fit ?? _defaultFit(widget.kind);
     if (widget.src.isNotEmpty) {
+      final Widget networkImage = widget.useDiskCache
+          ? CachedNetworkImage(
+              imageUrl: widget.src,
+              cacheKey: widget.src,
+              height: widget.height,
+              fit: fit,
+              alignment: Alignment.centerLeft,
+              filterQuality: FilterQuality.medium,
+              placeholder: (_, _) => SizedBox(height: widget.height),
+              errorWidget: (context, error, stackTrace) {
+                if (localPath.isEmpty) {
+                  _reportFail();
+                  return const SizedBox.shrink();
+                }
+                return _assetImage(localPath, fit);
+              },
+            )
+          : Image.network(
+              widget.src,
+              height: widget.height,
+              fit: fit,
+              alignment: Alignment.centerLeft,
+              filterQuality: FilterQuality.medium,
+              errorBuilder: (context, error, stackTrace) {
+                if (localPath.isEmpty) {
+                  _reportFail();
+                  return const SizedBox.shrink();
+                }
+                return _assetImage(localPath, fit);
+              },
+            );
       return ColorFiltered(
         colorFilter: chatWebImageFilter,
-        child: Image.network(
-          widget.src,
-          height: widget.height,
-          fit: fit,
-          alignment: Alignment.centerLeft,
-          filterQuality: FilterQuality.medium,
-          errorBuilder: (context, error, stackTrace) {
-            if (localPath.isEmpty) {
-              _reportFail();
-              return const SizedBox.shrink();
-            }
-            return _assetImage(localPath, fit);
-          },
-        ),
+        child: networkImage,
       );
     }
     if (localPath.isEmpty) {

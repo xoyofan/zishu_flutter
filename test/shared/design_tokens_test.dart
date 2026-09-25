@@ -7,6 +7,7 @@ library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:live_parser/live_parser.dart';
 
 import 'package:zishu_flutter/src/shared/presentation/design_tokens.dart';
 import 'package:zishu_flutter/src/shared/presentation/zishu_tokens.dart';
@@ -24,9 +25,67 @@ void main() {
   });
 
   group('聊天徽章 token 契约', () {
-    test('虎牙超粉 V 使用 Web 金色,浅色主题有独立可读值', () {
+    test('虎牙超粉 V 使用官网金色,浅色主题有独立可读值', () {
       expect(ZishuTokens.dark.chatSuperFan, const Color(0xFFFBBF24));
       expect(ZishuTokens.light.chatSuperFan, const Color(0xFFA16207));
+    });
+
+    // 以下数值全部来自官网实测，不是截图估算：
+    //  斗鱼 = 房间 252140 高 DPI 逐像素测量（canvas 渲染，无 DOM）
+    //  虎牙 = 房间 333003 getBoundingClientRect + computedStyle + 像素中位
+    test('斗鱼 LV 胶囊几何固定为官网实测 32x16/全圆角', () {
+      expect(AppDouyuChatBadge.levelHeight, 16);
+      expect(AppDouyuChatBadge.levelWidth, 32);
+      expect(AppDouyuChatBadge.levelRadius, 8);
+      expect(AppDouyuChatBadge.levelEmblem, 10);
+    });
+
+    test('斗鱼 LV 胶囊 5 档渐变与 18 个实测样本一致', () {
+      // 实测样本：8/13/14 米金、15/20/25 绿、30-38 蓝、40 靛、52 紫
+      expect(AppDouyuChatBadge.levelGradient(8), AppDouyuChatBadge.levelTier1);
+      expect(AppDouyuChatBadge.levelGradient(14), AppDouyuChatBadge.levelTier1);
+      expect(AppDouyuChatBadge.levelGradient(15), AppDouyuChatBadge.levelTier2);
+      expect(AppDouyuChatBadge.levelGradient(29), AppDouyuChatBadge.levelTier2);
+      expect(AppDouyuChatBadge.levelGradient(30), AppDouyuChatBadge.levelTier3);
+      expect(AppDouyuChatBadge.levelGradient(38), AppDouyuChatBadge.levelTier3);
+      expect(AppDouyuChatBadge.levelGradient(40), AppDouyuChatBadge.levelTier4);
+      expect(AppDouyuChatBadge.levelGradient(49), AppDouyuChatBadge.levelTier4);
+      expect(AppDouyuChatBadge.levelGradient(52), AppDouyuChatBadge.levelTier5);
+      expect(AppDouyuChatBadge.levelTier1.first, const Color(0xFFE8CDA5));
+      expect(AppDouyuChatBadge.levelTier3.first, const Color(0xFF77BAF8));
+      expect(AppDouyuChatBadge.levelTier5.last, const Color(0xFF845EF8));
+    });
+
+    test('斗鱼粉丝牌尺寸固定为官网实测(官方 PNG 60x19, 渲染高 18)', () {
+      expect(AppDouyuChatBadge.fanHeight, 18);
+      expect(AppDouyuChatBadge.fanImageWidth, 60);
+      expect(AppDouyuChatBadge.fanTextInset, 24);
+      expect(AppDouyuChatBadge.fanTextShadow, hasLength(2));
+      expect(AppDouyuChatBadge.fanFallbackBg, const Color(0xFF3A3A3A));
+    });
+
+    test('斗鱼至尊大钻石边长固定为官网 :host 实测 28(四个 dy-* 里唯一非 16px)', () {
+      expect(AppDouyuChatBadge.supremeSide, 28);
+    });
+
+    test('虎牙等级图尺寸与菱形区固定为官网实测 45x20 / 20', () {
+      // 官方图 90x40(@2x) = 45x20 CSS px；<span> padding-left 20 = 菱形区
+      expect(kHuyaConsumeLevelBadgeWidth, 45);
+      expect(kHuyaConsumeLevelBadgeHeight, 20);
+      expect(AppHuyaChatBadge.levelEmblem, 20);
+    });
+
+    test('虎牙粉丝牌 7 档底色与实测分档边界一致', () {
+      expect(AppHuyaChatBadge.fanHeight, 20);
+      expect(AppHuyaChatBadge.fanGradient(4), AppHuyaChatBadge.fanTier1);
+      expect(AppHuyaChatBadge.fanGradient(6), AppHuyaChatBadge.fanTier2);
+      expect(AppHuyaChatBadge.fanGradient(15), AppHuyaChatBadge.fanTier3);
+      expect(AppHuyaChatBadge.fanGradient(20), AppHuyaChatBadge.fanTier4);
+      expect(AppHuyaChatBadge.fanGradient(22), AppHuyaChatBadge.fanTier5);
+      expect(AppHuyaChatBadge.fanGradient(25), AppHuyaChatBadge.fanTier6);
+      expect(AppHuyaChatBadge.fanGradient(30), AppHuyaChatBadge.fanTier7);
+      expect(AppHuyaChatBadge.fanTier2.first, const Color(0xFF66AEDA));
+      expect(AppHuyaChatBadge.fanTier7.first, const Color(0xFFFB9401));
     });
   });
 
