@@ -235,3 +235,9 @@ abstract interface class LineRecoveryAware {
   /// 注册恢复回调;传 `null` 关闭恢复能力。
   void setLineRecovery(LineRecoveryHandler? handler);
 }
+
+/// 可动态切换视频硬件解码的播放器能力。
+abstract interface class VideoHardwareAccelerationAware {
+  /// enabled=true 使用 `hwdec=auto-safe`；false 强制 `hwdec=no`。
+  void setVideoHardwareAcceleration(bool enabled);
+}

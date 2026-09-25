@@ -46,7 +46,8 @@ bool needsVideoKick({
       height <= 0;
 }
 
-class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
+class MediaKitLivePlayer
+    implements LivePlayer, LineRecoveryAware, VideoHardwareAccelerationAware {
   /// [player] 是单测注入点:VM 测试无法加载原生 libmpv(`Player()` 会构造
   /// `NativePlayer` 并 `DynamicLibrary.open`),只能注入 `Player(platformPlayer:)`
   /// 的假后端来驱动事件与命令。生产调用点一律不传,行为与原先完全一致。
@@ -55,6 +56,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   MediaKitLivePlayer({
     Player? player,
     TwitchAdFilter? adFilter,
+    this.videoHardwareAccelerationEnabled = true,
     PlaybackRetryPolicy policy = const PlaybackRetryPolicy(),
     PlaybackRecoveryPolicy recoveryPolicy = const PlaybackRecoveryPolicy(),
     PlaybackResiliencePolicy resiliencePolicy =
@@ -71,6 +73,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   }
 
   final Player _player;
+  bool videoHardwareAccelerationEnabled;
 
   /// Twitch HLS 广告过滤代理:ttvnw.net 的线路经它改写为本地过滤地址,
   /// 非 Twitch 线路原样透传(见 [TwitchAdFilter.wrapLine])。
@@ -82,7 +85,12 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
 
   /// 广告期豁免策略:按住预算与复查间隔的唯一来源(可单测)。
   static const AdStallHoldPolicy _adHoldPolicy = AdStallHoldPolicy();
-  late final VideoController _videoController = VideoController(_player);
+  late final VideoController _videoController = VideoController(
+    _player,
+    configuration: VideoControllerConfiguration(
+      hwdec: videoHardwareAccelerationEnabled ? 'auto-safe' : 'no',
+    ),
+  );
 
   /// 向 UI 广播的快照流。
   final StreamController<PlayerSnapshot> _output =
@@ -240,6 +248,9 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   /// 上一次已落日志的 mpv 原始诊断:mpv 对同一故障会反复吐同一条日志行,
   /// 不去重会把文件日志灌满同一条噪音。换房/主动开流时重置。
   String? _lastLoggedDiag;
+  VideoParams? _lastVideoParams;
+  Timer? _videoStabilityTimer;
+  int? _firstFrameWatchGeneration;
 
   /// 日志里的线路主机名(判断「恢复拿到的地址是否真的换了源」的关键线索)。
   static String? _hostOf(StreamLine line) => Uri.tryParse(line.url)?.host;
@@ -255,6 +266,26 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   @override
   void setLineRecovery(LineRecoveryHandler? handler) => _lineRecovery = handler;
 
+  @override
+  void setVideoHardwareAcceleration(bool enabled) {
+    videoHardwareAccelerationEnabled = enabled;
+    final platform = _player.platform;
+    if (platform is! NativePlayer || _disposed) return;
+    unawaited(_applyHardwareAcceleration(platform, enabled));
+  }
+
+  Future<void> _applyHardwareAcceleration(
+    NativePlayer platform,
+    bool enabled,
+  ) async {
+    try {
+      await platform.setProperty('hwdec', enabled ? 'auto-safe' : 'no');
+      PlaybackLog.write('video_hwdec', {'enabled': enabled});
+    } catch (error) {
+      PlaybackLog.write('video_hwdec_error', {'error': error});
+    }
+  }
+
   bool get _disposedOrEmpty => _disposed || _currentLines.isEmpty;
 
   /// 把 [task] 串到生命周期队尾执行。
@@ -269,6 +300,11 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
 
   void _wire() {
     final events = _player.stream;
+    _subscriptions.add(
+      _player.stream.videoParams.map<void>((value) {
+        if (!_eventsFenced) _logVideoParams(value);
+      }).listen((_) {}),
+    );
     void bind<T>(
       Stream<T> source,
       PlayerSnapshot Function(PlayerSnapshot, T) patch,
@@ -395,6 +431,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
   void _onPlaying() {
     _stallTimer?.cancel();
     _stallTimer = null;
+    _startVideoStabilitySampling();
     _emit((s) => s.copyWith(error: null, notice: PlaybackNotice.none));
     final retries = _stallRetries;
     // 健康播放起点:重复的 playing 事件不重置,免得连续抖动永远凑不满观察窗。
@@ -416,6 +453,96 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
         _settleHealthyWindow(reason: 'window_elapsed');
       });
     }
+  }
+
+  void _logVideoParams(VideoParams value) {
+    if (_lastVideoParams == value) return;
+    _lastVideoParams = value;
+    PlaybackLog.write('video_params', {
+      'width': value.dw ?? value.w,
+      'height': value.dh ?? value.h,
+      'pixelformat': value.pixelformat,
+      'hw_pixelformat': value.hwPixelformat,
+    });
+  }
+
+  void _startVideoStabilitySampling() {
+    final platform = _player.platform;
+    if (platform is! NativePlayer) return;
+    _videoStabilityTimer?.cancel();
+    final generation = _sourceGeneration;
+    unawaited(_logVideoStability(platform, generation));
+    _videoStabilityTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) => unawaited(_logVideoStability(platform, generation)),
+    );
+  }
+
+  Future<void> _logVideoStability(
+    NativePlayer platform,
+    int generation,
+  ) async {
+    if (_disposed || generation != _sourceGeneration) return;
+    try {
+      final values = await Future.wait([
+        platform.getProperty('paused-for-cache'),
+        platform.getProperty('cache-buffering-state'),
+        platform.getProperty('demuxer-cache-duration'),
+        platform.getProperty('demuxer-cache-time'),
+        platform.getProperty('decoder-frame-drop-count'),
+        platform.getProperty('frame-drop-count'),
+        platform.getProperty('vo-drop-frame-count'),
+        platform.getProperty('mistimed-frame-count'),
+        platform.getProperty('vo-delayed-frame-count'),
+        platform.getProperty('video-codec'),
+        platform.getProperty('hwdec-current'),
+      ]);
+      if (_disposed || generation != _sourceGeneration) return;
+      PlaybackLog.write('video_stability', {
+        'host': _currentHost,
+        'paused_for_cache': values[0],
+        'cache_buffering_state': values[1],
+        'demuxer_cache_duration': values[2],
+        'demuxer_cache_time': values[3],
+        'decoder_frame_drops': values[4],
+        'frame_drops': values[5],
+        'vo_frame_drops': values[6],
+        'mistimed_frames': values[7],
+        'vo_delayed_frames': values[8],
+        'video_codec': values[9],
+        'hwdec_current': values[10],
+        'rss_mb': (ProcessInfo.currentRss / 1024 / 1024).toStringAsFixed(1),
+      });
+    } catch (error) {
+      PlaybackLog.write('video_stability_error', {'error': error});
+    }
+  }
+
+  void _watchFirstFrame() {
+    final generation = _sourceGeneration;
+    if (_firstFrameWatchGeneration == generation) return;
+    _firstFrameWatchGeneration = generation;
+    unawaited(() async {
+      try {
+        await _videoController.waitUntilFirstFrameRendered.timeout(
+          const Duration(seconds: 3),
+        );
+        if (!_disposed && generation == _sourceGeneration) {
+          PlaybackLog.write('video_first_frame_rendered', {
+            'generation': generation,
+            'host': _currentHost,
+          });
+        }
+      } catch (error) {
+        if (!_disposed && generation == _sourceGeneration) {
+          PlaybackLog.write('video_first_frame_timeout', {
+            'generation': generation,
+            'host': _currentHost,
+            'error': error,
+          });
+        }
+      }
+    }());
   }
 
   /// 结算健康观察窗:连续健康播放满 [PlaybackRetryPolicy.healthWindow] 才把
@@ -481,6 +608,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       'playing': state.playing,
       'buffering': state.buffering,
     });
+    _logVideoParams(state.videoParams);
     _emit(
       (s) => s.copyWith(
         playing: state.playing,
@@ -719,6 +847,10 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       for (final (name, value) in kLiveTuningProperties) {
         await platform.setProperty(name, value);
       }
+      await _applyHardwareAcceleration(
+        platform,
+        videoHardwareAccelerationEnabled,
+      );
       // 把实际生效的缓冲参数落盘:下一次会话可直接核对"配置是否真的注入",
       // 不必再从二进制/源码反推(排查卡顿时缺的正是这一环)。
       PlaybackLog.write('mpv_tuning', {
@@ -782,6 +914,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
 
   @override
   Widget buildVideoView({BoxFit fit = BoxFit.contain}) {
+    _watchFirstFrame();
     // 不启用内置控制条(由 play feature 的控制条接管),其余用库默认。
     return Video(controller: _videoController, fit: fit, controls: null);
   }
@@ -795,6 +928,9 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     // 同步自增代际:后续任何 await 回来后若代际已变,说明有更新的 open/stop
     // 覆盖了本次指令,直接作废(不写快照、不动计时器)。
     final myGen = ++_sourceGeneration;
+    _lastVideoParams = null;
+    _videoStabilityTimer?.cancel();
+    _videoStabilityTimer = null;
     // kick 计时与 flag 同步段 reset(先于入队):排队中的旧会话计时不得
     // 在新 open 落地前到期执行,新会话也从「未 kick」开始。
     _videoKickTimer?.cancel();
@@ -875,6 +1011,8 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       }
       _stallTimer?.cancel();
       _stallTimer = null;
+      _videoStabilityTimer?.cancel();
+      _videoStabilityTimer = null;
       _cancelHealthTimer();
       _playingSince = null;
       // 切源/开流即开启新卡顿会话:丢弃旧源未结算的 begin,避免跨会话计时。
@@ -972,6 +1110,8 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       }
       _stallTimer?.cancel();
       _stallTimer = null;
+      _videoStabilityTimer?.cancel();
+      _videoStabilityTimer = null;
       _cancelHealthTimer();
       _playingSince = null;
       _stallTracker.reset();
@@ -1083,6 +1223,8 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
       _disposed = true;
       _stallTimer?.cancel();
       _stallTimer = null;
+      _videoStabilityTimer?.cancel();
+      _videoStabilityTimer = null;
       _videoKickTimer?.cancel();
       _videoKickTimer = null;
       _cancelHealthTimer();

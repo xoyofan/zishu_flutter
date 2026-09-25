@@ -26,7 +26,24 @@ int _latestPlayerOpenToken = 0;
 /// 播放器单例:app 生命周期内复用,不随页面销毁。
 /// dispose 由根 ProviderContainer 统一触发(仅 app 退出时执行)。
 final playerProvider = Provider<LivePlayer>((ref) {
-  final player = IdleReleasingLivePlayer(createPlayer: MediaKitLivePlayer.new);
+  final player = IdleReleasingLivePlayer(
+    createPlayer: () => MediaKitLivePlayer(
+      videoHardwareAccelerationEnabled: ref
+          .read(settingsProvider)
+          .videoHardwareAcceleration,
+    ),
+  );
+  ref.listen<bool>(
+    settingsProvider.select((settings) => settings.videoHardwareAcceleration),
+    (_, enabled) {
+      if (player case IdleReleasingLivePlayer idlePlayer) {
+        final inner = idlePlayer.currentPlayer;
+        if (inner case final VideoHardwareAccelerationAware aware) {
+          aware.setVideoHardwareAcceleration(enabled);
+        }
+      }
+    },
+  );
   ref.onDispose(player.dispose);
   return player;
 });

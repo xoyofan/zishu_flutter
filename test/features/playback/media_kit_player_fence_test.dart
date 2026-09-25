@@ -76,6 +76,16 @@ class _FakePlatformPlayer extends PlatformPlayer {
 
   void emitPlaying(bool value) => playingController.add(value);
 
+  void emitVideoParams({
+    int width = 1920,
+    int height = 1080,
+    String pixelformat = 'yuv420p',
+  }) {
+    videoParamsController.add(
+      VideoParams(w: width, h: height, pixelformat: pixelformat),
+    );
+  }
+
   void emitCompleted() => completedController.add(true);
 
   void emitError(String message) => errorController.add(message);
@@ -150,6 +160,25 @@ void main() {
       await releasing;
       expect(fake.disposeCalls, 1);
       expect(fake.calls.last, 'stop');
+    });
+  });
+
+  group('视频画面诊断锚点', () {
+    test('videoParams 变化记录分辨率和像素格式', () async {
+      await player.open(lineA);
+      fake.emitVideoParams();
+      await pumpEventQueue();
+
+      expect(
+        logLines().any(
+          (line) =>
+              line.contains('video_params') &&
+              line.contains('width=1920') &&
+              line.contains('height=1080') &&
+              line.contains('pixelformat=yuv420p'),
+        ),
+        isTrue,
+      );
     });
   });
 

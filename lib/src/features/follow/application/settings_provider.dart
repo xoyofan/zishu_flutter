@@ -86,6 +86,7 @@ class SettingsState {
     required this.chatEnabled,
     required this.preferredLineFormat,
     required this.serverUrl,
+    this.videoHardwareAcceleration = true,
     this.defaultQualityBySite = const {},
     this.roomVolumes = const {},
     this.globalMuted = false,
@@ -127,6 +128,9 @@ class SettingsState {
   final double defaultVolume;
 
   final bool danmakuEnabled;
+
+  /// Windows 视频硬解开关；关闭后使用 `hwdec=no` 软件解码。
+  final bool videoHardwareAcceleration;
 
   /// 聊天 tab 总开关:关闭时聊天 tab 内容区显示「聊天已关闭」占位(聊天 provider 不停,只藏 UI)。
   final bool chatEnabled;
@@ -255,6 +259,7 @@ class SettingsState {
     bool? globalMuted,
     double? defaultVolume,
     bool? danmakuEnabled,
+    bool? videoHardwareAcceleration,
     bool? chatEnabled,
     PreferredLineFormat? preferredLineFormat,
     String? serverUrl,
@@ -276,6 +281,8 @@ class SettingsState {
       globalMuted: globalMuted ?? this.globalMuted,
       defaultVolume: defaultVolume ?? this.defaultVolume,
       danmakuEnabled: danmakuEnabled ?? this.danmakuEnabled,
+      videoHardwareAcceleration:
+          videoHardwareAcceleration ?? this.videoHardwareAcceleration,
       chatEnabled: chatEnabled ?? this.chatEnabled,
       preferredLineFormat: preferredLineFormat ?? this.preferredLineFormat,
       serverUrl: serverUrl ?? this.serverUrl,
@@ -302,6 +309,8 @@ class SettingsController extends Notifier<SettingsState> {
   static const String _kDefaultQualityBySite =
       'zishu.settings.defaultQualityBySite';
   static const String _kDanmakuEnabled = 'zishu.settings.danmakuEnabled';
+  static const String _kVideoHardwareAcceleration =
+      'zishu.settings.videoHardwareAcceleration';
   static const String _kChatEnabled = 'zishu.settings.chatEnabled';
   static const String _kChatFontSize = 'zishu.settings.chatFontSize';
   static const String _kChatOpacity = 'zishu.settings.chatOpacity';
@@ -333,6 +342,7 @@ class SettingsController extends Notifier<SettingsState> {
       themeMode: ThemeModeChoice.dark,
       defaultQuality: '超清',
       danmakuEnabled: true,
+      videoHardwareAcceleration: true,
       chatEnabled: true,
       preferredLineFormat: PreferredLineFormat.auto,
       serverUrl: SettingsState.defaultServerUrl,
@@ -349,6 +359,9 @@ class SettingsController extends Notifier<SettingsState> {
       final quality = await prefs.getString(_kDefaultQuality);
       final bySiteRaw = await prefs.getString(_kDefaultQualityBySite);
       final danmaku = await prefs.getBool(_kDanmakuEnabled);
+      final videoHardwareAcceleration = await prefs.getBool(
+        _kVideoHardwareAcceleration,
+      );
       final chat = await prefs.getBool(_kChatEnabled);
       final chatFontSize = await prefs.getInt(_kChatFontSize);
       final chatOpacity = await prefs.getInt(_kChatOpacity);
@@ -375,6 +388,7 @@ class SettingsController extends Notifier<SettingsState> {
             ?.clamp(SettingsState.volumeMin, SettingsState.volumeMax)
             .toDouble(),
         danmakuEnabled: danmaku,
+        videoHardwareAcceleration: videoHardwareAcceleration,
         chatEnabled: chat,
         chatFontSize: chatFontSize
             ?.clamp(
@@ -487,6 +501,17 @@ class SettingsController extends Notifier<SettingsState> {
     state = state.copyWith(speechCaptionEnabled: enabled);
     try {
       await SharedPreferencesAsync().setBool(_kSpeechCaptionEnabled, enabled);
+    } catch (_) {}
+  }
+
+  /// 设置视频硬件解码开关并持久化。
+  Future<void> setVideoHardwareAcceleration(bool enabled) async {
+    state = state.copyWith(videoHardwareAcceleration: enabled);
+    try {
+      await SharedPreferencesAsync().setBool(
+        _kVideoHardwareAcceleration,
+        enabled,
+      );
     } catch (_) {}
   }
 

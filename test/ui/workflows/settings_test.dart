@@ -234,6 +234,33 @@ void main() {
     );
   });
 
+  testWidgets('硬件解码开关可关闭并持久化', (tester) async {
+    await _pumpSettings(tester);
+    final hwdecSwitch = find.byKey(const Key('settings-hwdec-toggle'));
+    expect(hwdecSwitch, findsOneWidget);
+    expect(_readSettings(tester).videoHardwareAcceleration, isTrue);
+
+    await tester.ensureVisible(hwdecSwitch);
+    await tester.tap(hwdecSwitch);
+    await tester.pump(const Duration(milliseconds: 50));
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(_readSettings(tester).videoHardwareAcceleration, isFalse);
+    expect(
+      await SharedPreferencesAsync().getBool(
+        'zishu.settings.videoHardwareAcceleration',
+      ),
+      isFalse,
+    );
+
+    await _pumpSettings(tester);
+    expect(_readSettings(tester).videoHardwareAcceleration, isFalse);
+    expect(
+      tester.widget<Switch>(hwdecSwitch).value,
+      isFalse,
+    );
+  });
+
   testWidgets('主题模式切到深色:provider 状态更新且下拉控件反映', (tester) async {
     await _pumpSettings(tester);
 

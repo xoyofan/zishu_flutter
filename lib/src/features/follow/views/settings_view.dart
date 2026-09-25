@@ -98,6 +98,18 @@ class _SettingsViewState extends ConsumerState<SettingsView> {
                     ),
                   ),
                   _SettingsRow(
+                    label: '视频硬件解码',
+                    hint: '关闭后使用软件解码，用于排查黑屏和画面闪烁',
+                    trailing: Switch(
+                      key: const Key('settings-hwdec-toggle'),
+                      value: settings.videoHardwareAcceleration,
+                      onChanged: (value) => ref
+                          .read(settingsProvider.notifier)
+                          .setVideoHardwareAcceleration(value),
+                      overlayColor: controlStateLayer(tokens),
+                    ),
+                  ),
+                  _SettingsRow(
                     label: '按平台配置默认画质',
                     hint: _platformQualityExpanded ? '点此收起' : '为单个平台指定不同默认档',
                     trailing: IconButton(
