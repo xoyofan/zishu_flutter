@@ -180,6 +180,7 @@ void main() {
         cid: '1',
         cateNo: '2',
         promoTag: 'p',
+        identityLabel: '超级明星',
         startedAt: DateTime(2026, 9, 24, 20),
         source: 'live_parser/douyu',
         fetchedAt: DateTime(2026, 9, 24, 21),
@@ -200,6 +201,7 @@ void main() {
       expect(restored.cid, '1');
       expect(restored.cateNo, '2');
       expect(restored.promoTag, 'p');
+      expect(restored.identityLabel, '超级明星');
       expect(restored.startedAt, DateTime(2026, 9, 24, 20));
       expect(restored.source, 'live_parser/douyu');
       expect(restored.fetchedAt, DateTime(2026, 9, 24, 21));
@@ -289,6 +291,7 @@ void main() {
         cover: 'c',
         avatar: 'a',
         promoTag: 'p',
+        identityLabel: '超级明星',
         followers: '9',
         vip: '75',
         diamondFans: '3',
@@ -309,6 +312,8 @@ void main() {
       expect(back.diamondFans, '3');
       expect(back.roomState, RoomState.live);
       expect(back.promoTag, 'p');
+      expect(record.identityLabel, '超级明星');
+      expect(back.identityLabel, '超级明星');
       expect(back.avatar, 'a');
     });
 

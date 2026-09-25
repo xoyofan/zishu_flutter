@@ -54,6 +54,7 @@ class RoomRecord {
     this.cid,
     this.cateNo,
     this.promoTag,
+    this.identityLabel,
     this.startedAt,
     List<StreamQuality> streams = const [],
     List<QualityOption> availableQualities = const [],
@@ -80,6 +81,10 @@ class RoomRecord {
   final String? cid;
   final String? cateNo;
   final String? promoTag;
+
+  /// 平台身份/榜单标签(如虎牙「超级明星」):封面右上角线框 tag,
+  /// 空 = 不渲染。与 [promoTag](chips 行)分字段,不重复出现。
+  final String? identityLabel;
 
   /// 本场开播时间(平台真实返回时才有值,不伪造)。
   final DateTime? startedAt;
@@ -155,6 +160,7 @@ class RoomRecord {
     category: _blankToNull(summary.category),
     cid: _blankToNull(summary.cid),
     promoTag: _blankToNull(summary.promoTag),
+    identityLabel: _blankToNull(summary.identityLabel),
     startedAt: summary.startedAt,
     chips: summary.chips,
   );
@@ -171,6 +177,7 @@ class RoomRecord {
     cover: cover ?? '',
     avatar: avatar ?? '',
     promoTag: promoTag,
+    identityLabel: identityLabel,
     followers: followers ?? '',
     vip: vip ?? '',
     diamondFans: svip ?? '',
@@ -245,6 +252,7 @@ class RoomRecord {
       cid: fresh.cid ?? cid,
       cateNo: fresh.cateNo ?? cateNo,
       promoTag: fresh.promoTag ?? promoTag,
+      identityLabel: fresh.identityLabel ?? identityLabel,
       startedAt: fresh.startedAt ?? startedAt,
       streams: fresh.streams.isNotEmpty ? fresh.streams : streams,
       availableQualities: fresh.availableQualities.isNotEmpty
@@ -271,6 +279,7 @@ class RoomRecord {
     if (cid != null) 'cid': cid,
     if (cateNo != null) 'cateNo': cateNo,
     if (promoTag != null) 'promoTag': promoTag,
+    if (identityLabel != null) 'identityLabel': identityLabel,
     if (startedAt != null) 'startedAt': startedAt!.toIso8601String(),
     if (audience != null) 'audience': audience,
     if (followers != null) 'followers': followers,
@@ -316,6 +325,7 @@ class RoomRecord {
       cid: _blankToNull(json['cid']?.toString()),
       cateNo: _blankToNull(json['cateNo']?.toString()),
       promoTag: _blankToNull(json['promoTag']?.toString()),
+      identityLabel: _blankToNull(json['identityLabel']?.toString()),
       startedAt: DateTime.tryParse(json['startedAt']?.toString() ?? ''),
       streams: ((json['streams'] as List?) ?? const [])
           .whereType<Map>()

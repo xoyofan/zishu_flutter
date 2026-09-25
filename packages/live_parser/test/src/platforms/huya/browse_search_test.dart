@@ -69,7 +69,11 @@ void main() {
       expect(first.cid, '1');
       expect(first.category, '英雄联盟');
       expect(first.audience, '10.2万');
-      expect(first.promoTag, '官方赛况');
+      // sRecommendTagName 是平台身份/榜单标签(如「超级明星」),归
+      // identityLabel(卡片封面右上角线框 tag 数据源),不再填 promoTag
+      // —— 避免同一信息在右上角与 chips 行重复出现。
+      expect(first.identityLabel, '官方赛况');
+      expect(first.promoTag, isNull, reason: '虎牙身份标签不再占 promoTag');
 
       expect(result.rooms[1].cover, 'https://img.huya.com/b.jpg', reason: '// 补 https');
       expect(result.rooms[1].audience, '999');

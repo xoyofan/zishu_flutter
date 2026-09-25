@@ -10,7 +10,7 @@ import '../../models/models.dart';
 import '../../models/room_record.dart';
 import '../../registry/category_cache.dart';
 import '../douyu/json_utils.dart';
-import 'promo_tag.dart';
+import 'identity_label.dart';
 import 'room_api.dart';
 
 const Map<String, String> _huyaWebHeaders = {
@@ -209,7 +209,9 @@ class HuyaBrowseRepository implements BrowseRepository {
       category: jsonText(item['sGameFullName']),
       online: formatOnlineCount(item['lTotalCount'] ?? item['lUserCount']),
       cover: cover,
-      promoTag: pickHuyaPromoTag(item),
+      // 平台身份/榜单标签(右上角线框 tag);不填 promoTag,避免与
+      // chips 行促销标签重复(见 pickHuyaIdentityLabel)。
+      identityLabel: pickHuyaIdentityLabel(item),
       // getLiveList 目录 live-only:状态真源(6sol 裁决 Task 4a-i)。
       roomState: RoomState.live,
     );

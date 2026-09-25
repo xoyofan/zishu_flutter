@@ -340,6 +340,7 @@ class RoomSummary {
     required this.cover,
     this.avatar = '',
     this.promoTag,
+    this.identityLabel,
     this.followers = '',
     this.vip = '',
     this.diamondFans = '',
@@ -365,6 +366,12 @@ class RoomSummary {
   final String avatar;
 
   final String? promoTag;
+
+  /// 平台身份/榜单标签(如虎牙 `sRecommendTagName`「超级明星」)。
+  ///
+  /// 卡片封面右上角线框 tag 的数据源;空/缺失 = 不渲染。与
+  /// [promoTag](chips 行促销/画质标签)分字段,同一信息不重复出现。
+  final String? identityLabel;
 
   /// 粉丝/关注数文案(已格式化,如「123456」)。
   ///
@@ -460,6 +467,7 @@ class RoomSummary {
     if (avatar.isNotEmpty) 'avatar': avatar,
     'roomState': roomState.name,
     if (promoTag != null) 'promoTag': promoTag,
+    if (identityLabel != null) 'identityLabel': identityLabel,
     if (followers.isNotEmpty) 'followers': followers,
     if (vip.isNotEmpty) 'vip': vip,
     if (diamondFans.isNotEmpty) 'diamondFans': diamondFans,
@@ -484,6 +492,7 @@ class RoomSummary {
     ),
     startedAt: DateTime.tryParse(json['startedAt']?.toString() ?? ''),
     promoTag: json['promoTag']?.toString(),
+    identityLabel: json['identityLabel']?.toString(),
     followers: json['followers']?.toString() ?? '',
     vip: json['vip']?.toString() ?? '',
     diamondFans: json['diamondFans']?.toString() ?? '',
