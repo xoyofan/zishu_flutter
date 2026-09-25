@@ -8,14 +8,13 @@
 /// 宿主写法与 browse_home_test / play_follow_panel_test 一致:真实 router +
 /// 固定次数 pump(封面图在 VM 中不会真正加载)。
 ///
-/// 角位真源(widget 与 web 两侧均已对齐,2026-09-21 复核):
-/// - 网格卡 RoomCard.vue:262-273 `.room-card__foot-left { position:absolute;
-///   left:0; bottom:0; max-width:72% }` + `:deep(.platform-cover-badge)
-///   { border-radius: 0 8px 0 0 }` → 平台 badge **左下**贴角;
-///   热度则是另一个 `.cover-online-badge` 在**右下**;
+/// 角位真源(widget 与 web 两侧均已对齐,2026-09 房间卡改版后口径):
+/// - 首页网格卡 RoomCard 四角:左上**分类实底**、右上**平台身份线框 tag**
+///   (room.identityLabel,空不渲染)、左下**主播昵称**(平台品牌色底,
+///   平台名角标已移除)、右下**热度**;
+/// - 侧栏预览卡(PlayRoomCard/FollowEntryCard)沿用各自既有角位不变;
 /// - 内部看板 `tasks-ui-refine.md` T3 曾声称「平台 badge 在右下与热度并列」,
-///   与真源不符(真源截图 360×640 / 1920×1080 也显示左下平台 + 右下热度),
-///   故**不改象限**。
+///   与真源不符,故**不改象限**;
 library;
 
 import 'dart:convert';
@@ -47,6 +46,7 @@ import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 import 'package:zishu_flutter/src/shared/application/browse_source.dart';
 import 'package:zishu_flutter/src/shared/application/providers.dart';
 import 'package:zishu_flutter/src/shared/presentation/design_tokens.dart';
+import 'package:zishu_flutter/src/shared/presentation/platform_brands.dart';
 import 'package:zishu_flutter/src/shared/presentation/widgets/cover_badges.dart';
 import 'package:zishu_flutter/src/shared/presentation/widgets/outline_chip.dart';
 import 'package:zishu_flutter/src/shared/presentation/zishu_tokens.dart';
@@ -264,7 +264,7 @@ void main() {
     });
   });
 
-  testWidgets('首页卡四象限:左上分类 / 右上促销 / 右下热度 / 左下平台', (tester) async {
+  testWidgets('首页卡四角:左上分类实底 / 右上身份(空不渲染) / 左下昵称 / 右下热度', (tester) async {
     final app = await _pumpApp(tester);
     app.router.go('/all');
     await _pumpFrames(tester, 3);
@@ -273,6 +273,7 @@ void main() {
     final card = find.byKey(const Key('room-card-douyu-63136'));
     expect(card, findsOneWidget);
 
+    // 左上:分类实底角标(保持现状,不改线框、不挪位)。
     _expectCorner(
       tester,
       card,
@@ -281,6 +282,15 @@ void main() {
         matching: find.byKey(const Key('cover-badge-category')),
       ),
       CoverCorner.topLeft,
+    );
+    // 右上:平台身份线框 tag —— fixture 无 identityLabel,不渲染(可空)。
+    expect(
+      find.descendant(
+        of: card,
+        matching: find.byKey(const Key('cover-badge-identity')),
+      ),
+      findsNothing,
+      reason: 'fixture 房间无 identityLabel,右上身份 tag 不渲染',
     );
     // 促销/画质标签不再压在封面右上角,而是封面下方元信息行的「特色 chip」
     // (用户口径:预览图下面第二行是各种特色 chip;同一信息不在两处重复)。
@@ -309,17 +319,47 @@ void main() {
       ),
       CoverCorner.bottomRight,
     );
-    // 平台 badge 贴左下角:真源 `.room-card__foot-left`(RoomCard.vue:262-273,
-    // `left:0; bottom:0` + 圆角 `0 8px 0 0`)。看板曾误记为「右下与热度并列」。
-    _expectCorner(
-      tester,
-      card,
+    // 平台角标已移除(用户口径 2026-09:全平台封面左下不再显示平台 tag)。
+    expect(
       find.descendant(
         of: card,
         matching: find.byKey(const Key('cover-badge-platform')),
       ),
-      CoverCorner.bottomLeft,
+      findsNothing,
+      reason: '平台角标移除,左下让给主播昵称',
     );
+
+    // 左下:主播昵称,平台品牌色底 + chipForeground 文字(fixture 主播「神超」)。
+    final anchorBadge = find.descendant(
+      of: card,
+      matching: find.byKey(const Key('cover-badge-anchor')),
+    );
+    expect(anchorBadge, findsOneWidget, reason: '封面左下渲染主播昵称');
+    _expectCorner(tester, card, anchorBadge, CoverCorner.bottomLeft);
+    final brand = PlatformBrandCatalog.byId('douyu')!;
+    final badgeBox = tester.widget<DecoratedBox>(
+      find
+          .descendant(of: anchorBadge, matching: find.byType(DecoratedBox))
+          .first,
+    );
+    expect(
+      (badgeBox.decoration as BoxDecoration).color,
+      brand.color,
+      reason: '昵称底色 = 平台品牌色',
+    );
+    final anchorText = find.descendant(of: card, matching: find.text('神超'));
+    expect(anchorText, findsOneWidget);
+    final anchorStyle = tester
+        .widget<DefaultTextStyle>(
+          find
+              .ancestor(of: anchorText, matching: find.byType(DefaultTextStyle))
+              .first,
+        )
+        .style;
+    expect(anchorStyle.color, brand.chipForeground, reason: '昵称文字色 = chipForeground');
+    final anchorWidget = tester.widget<Text>(anchorText);
+    expect(anchorWidget.maxLines, 1, reason: '单行');
+    expect(anchorWidget.overflow, TextOverflow.ellipsis, reason: '单行省略号');
 
     // 角标文案与数据同源。
     expect(
@@ -337,6 +377,127 @@ void main() {
       '英雄联盟',
     );
     expect(tester.takeException(), isNull);
+  });
+
+  group('封面四角 tag(2026-09 改版)', () {
+    /// 只泵一张 RoomCard 的组件宿主(无 router)。
+    Future<void> pumpCard(WidgetTester tester, RoomRecord room) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            theme: ZishuTheme.dark(),
+            home: Scaffold(
+              body: SizedBox(width: 320, child: RoomCard(room: room)),
+            ),
+          ),
+        ),
+      );
+      await _pumpFrames(tester, 2);
+    }
+
+    testWidgets('右上身份线框 tag:有值渲染于右上,文案 = identityLabel,不可点', (tester) async {
+      await pumpCard(
+        tester,
+        RoomRecord(
+          site: 'huya',
+          roomId: '9101',
+          roomState: RoomState.live,
+          title: '身份房',
+          anchorName: '主播',
+          cid: '1',
+          category: '英雄联盟',
+          audience: '1.2万',
+          cover: '',
+          identityLabel: '超级明星',
+        ),
+      );
+
+      final card = find.byKey(const Key('room-card-huya-9101'));
+      final identity = find.descendant(
+        of: card,
+        matching: find.byKey(const Key('cover-badge-identity')),
+      );
+      expect(identity, findsOneWidget, reason: 'identityLabel 非空应渲染右上 tag');
+      _expectCorner(tester, card, identity, CoverCorner.topRight);
+      // 线框 chip 视觉 = OutlineChip;文案 = identityLabel;不做跳转。
+      final chip = tester.widget<OutlineChip>(identity);
+      expect(chip.label, '超级明星', reason: '文案 = identityLabel');
+      expect(chip.onTap, isNull, reason: '身份 tag 先不做跳转');
+      expect(
+        find.descendant(of: identity, matching: find.byType(InkWell)),
+        findsNothing,
+        reason: '不可点 → 无 InkWell',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('identityLabel 空串:右上 tag 不渲染', (tester) async {
+      await pumpCard(
+        tester,
+        RoomRecord(
+          site: 'huya',
+          roomId: '9102',
+          roomState: RoomState.live,
+          title: '无身份房',
+          anchorName: '主播',
+          cid: '1',
+          category: '英雄联盟',
+          audience: '1.2万',
+          cover: '',
+          identityLabel: '',
+        ),
+      );
+
+      expect(
+        find.byKey(const Key('cover-badge-identity')),
+        findsNothing,
+        reason: '空 identityLabel 不渲染',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('左下昵称条:无独立手势,点击落到卡片整体 onTap(进房)', (tester) async {
+      var taps = 0;
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            theme: ZishuTheme.dark(),
+            home: Scaffold(
+              body: SizedBox(
+                width: 320,
+                child: RoomCard(
+                  room: RoomRecord(
+                    site: 'douyu',
+                    roomId: '9103',
+                    roomState: RoomState.live,
+                    title: '点击房',
+                    anchorName: '点点',
+                    cid: '1',
+                    category: '英雄联盟',
+                    audience: '1万',
+                    cover: '',
+                  ),
+                  onTap: () => taps++,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await _pumpFrames(tester, 2);
+
+      final anchorBadge = find.byKey(const Key('cover-badge-anchor'));
+      expect(anchorBadge, findsOneWidget);
+      expect(
+        find.descendant(of: anchorBadge, matching: find.byType(InkWell)),
+        findsNothing,
+        reason: '昵称条不单独包手势',
+      );
+      await tester.tap(anchorBadge);
+      await _pumpFrames(tester, 2);
+      expect(taps, 1, reason: '封面点击仍进房(card onTap)');
+      expect(tester.takeException(), isNull);
+    });
   });
 
   testWidgets('侧栏关注(用户口径 2026-09-19):默认列表只显在播;网格在播卡四象限', (
@@ -618,7 +779,7 @@ void main() {
       await _pumpFrames(tester, 2);
     }
 
-    testWidgets('chips 单独一行:渲染在主播名下一行,不与主播名同行', (tester) async {
+    testWidgets('chips 行:标题下一行(meta 第 2 行),主播名在封面左下', (tester) async {
       final app = await _pumpApp(
         tester,
         browseSource: const _ChipBrowseSource(withTag: true),
@@ -628,25 +789,28 @@ void main() {
 
       final card = find.byKey(const Key('room-card-twitch-9001'));
       expect(card, findsOneWidget);
+      final title = find.descendant(of: card, matching: find.text('标签房'));
       final anchor = find.descendant(
         of: card,
         matching: find.text('标签主播'),
       );
       final tagChip = find.byKey(const Key('room-meta-chip-策略'));
-      expect(anchor, findsOneWidget, reason: '主播名在第 2 行');
-      expect(tagChip, findsOneWidget, reason: 'chips 在第 3 行');
+      expect(title, findsOneWidget, reason: 'meta 第 1 行标题');
+      expect(anchor, findsOneWidget, reason: '主播名移到封面左下,仍在卡内');
+      expect(tagChip, findsOneWidget, reason: 'chips 在 meta 第 2 行');
 
-      // 方案 A(2026-09-26):chips 移到主播名下面**单独一行**,
-      // 断言 chip 的 y 坐标严格大于主播名所在行的底部(不同行)。
-      final anchorTop = tester.getTopLeft(anchor).dy;
-      final anchorBottom = tester.getBottomLeft(anchor).dy;
-      final chipTop = tester.getTopLeft(tagChip).dy;
-      expect(chipTop, greaterThan(anchorTop), reason: 'chip 应在主播名之下');
+      // 昵称渲染在封面(16:9)高度范围内,不占 meta 文本区。
+      final cover = _coverRect(tester, card);
+      final anchorRect = tester.getRect(anchor);
       expect(
-        chipTop,
-        greaterThanOrEqualTo(anchorBottom),
-        reason: 'chip 不得与主播名挤在同一行',
+        anchorRect.bottom,
+        lessThanOrEqualTo(cover.bottom + 0.5),
+        reason: '昵称应在封面高度范围内',
       );
+      // 两行契约:chip 的 y 坐标严格大于标题底部(不同行)。
+      final titleBottom = tester.getBottomLeft(title).dy;
+      final chipTop = tester.getTopLeft(tagChip).dy;
+      expect(chipTop, greaterThan(titleBottom), reason: 'chip 应在标题下一行');
       expect(tester.takeException(), isNull);
     });
 
@@ -764,7 +928,8 @@ void main() {
         findsOneWidget,
         reason: 'promoTag 行为不变:仍是元信息行的特色 chip',
       );
-      expect(find.text('老王'), findsOneWidget, reason: '主播名渲染不变');
+      // 昵称移到封面左下,仍渲染一次(不进 meta 行)。
+      expect(find.text('老王'), findsOneWidget, reason: '主播名渲染不变(封面左下)');
       expect(
         tester.widget<OutlineChip>(
           find.byKey(const Key('room-meta-chip-超清')),
@@ -775,7 +940,7 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('chips 为空:第 3 行仍占位整行,卡片与有 chips 时完全等高', (
+    testWidgets('chips 为空:第 2 行仍占位整行,卡片与有 chips 时完全等高', (
       tester,
     ) async {
       RoomRecord room(String id, {List<SiteChip> chips = const []}) => RoomRecord(
@@ -823,7 +988,7 @@ void main() {
       expect(
         hWithout,
         hWith,
-        reason: 'chips 为空时第 3 行用占位行撑满,所有平台卡片等高',
+        reason: 'chips 为空时第 2 行用占位行撑满,所有平台卡片等高',
       );
       expect(tester.takeException(), isNull);
     });
