@@ -9,7 +9,7 @@ import '../../../shared/application/providers.dart';
 
 /// 房间列表查询参数:(site, cid) 唯一确定一个分页列表实例。
 class BrowseRoomQuery {
-  const BrowseRoomQuery({required this.site, this.cid});
+  const BrowseRoomQuery({required this.site, this.cid, this.limit});
 
   /// `all` 表示全平台聚合。
   final String site;
@@ -17,15 +17,24 @@ class BrowseRoomQuery {
   /// 子分类 id;空表示不按分类过滤。
   final String? cid;
 
+  /// 首屏条数上限:仅 `site == 'all'` 时由首页按「当前列数 × 首屏行数」
+  /// 算出来传入,让**每个平台**只请求首屏能容纳的量(而不是固定 30)。
+  /// 单平台页为 null,保持原默认分页行为。
+  final int? limit;
+
   @override
   bool operator ==(Object other) =>
-      other is BrowseRoomQuery && other.site == site && other.cid == cid;
+      other is BrowseRoomQuery &&
+      other.site == site &&
+      other.cid == cid &&
+      other.limit == limit;
 
   @override
-  int get hashCode => Object.hash(site, cid);
+  int get hashCode => Object.hash(site, cid, limit);
 
   @override
-  String toString() => 'BrowseRoomQuery(site: $site, cid: $cid)';
+  String toString() =>
+      'BrowseRoomQuery(site: $site, cid: $cid, limit: $limit)';
 }
 
 /// 房间列表 controller:按 (site, cid) 拉取第一页,支持分页追加与刷新。
@@ -41,7 +50,12 @@ class BrowseRoomController extends AsyncNotifier<RoomListResult> {
   Future<RoomListResult> build() async {
     // watch 数据源端口:G1 换 direct 实现时自动重建。
     final source = ref.watch(browseSourceProvider);
-    return source.fetchRooms(site: query.site, cid: query.cid, page: 1);
+    return source.fetchRooms(
+      site: query.site,
+      cid: query.cid,
+      page: 1,
+      limit: query.limit,
+    );
   }
 
   /// 加载下一页并把结果追加到现有列表;防重入,无更多时为空操作。

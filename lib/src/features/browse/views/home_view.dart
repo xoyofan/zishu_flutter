@@ -1,4 +1,18 @@
+/// 全平台/平台首页:宽屏渲染「左侧栏 + 房间网格」,窄屏仅房间网格。
+///
+/// `site == 'all'` 仍是**单张交错混排网格**(与分区版之前的形态一致),
+/// 但两件事按用户口径做了收敛:
+/// - **骨架**:首屏加载中显示与真实卡等大的骨架卡,不再空白/转圈;
+/// - **请求量**:按当前视口算「首屏能容纳多少张卡」(列数 × 首屏行数),
+///   作为 `limit` 下发到聚合查询 → 聚合层给**每个平台**各要这么多条,
+///   而不是每个平台固定 30 条。
+///
+/// 平台入口锚点 [home-platform-chip-{id}] 在左侧栏(见 [BrowseSidebar]),
+/// 此处不重复渲染横向 chips 行(窄屏平台切换由 AppShell 平台条承担)。
+library;
+
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,14 +25,9 @@ import '../../../shared/presentation/widgets/retry_button.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../application/browse_provider.dart';
 import '../widgets/browse_sidebar.dart';
-import '../widgets/home_sections.dart';
+import '../widgets/room_card_skeleton.dart';
 import '../widgets/room_grid.dart';
 
-/// 全平台/平台首页:`site == 'all'` 渲染「按平台独立区块 + 骨架」竖向列表
-/// (见 [HomeSections]);单平台页保持「左侧栏 + 房间网格」单请求布局。
-///
-/// 平台入口锚点 [home-platform-chip-{id}] 已迁至左侧栏(见 [BrowseSidebar]),
-/// 此处内容区不再重复渲染横向 chips 行(窄屏平台切换由 AppShell 平台条承担)。
 class HomeView extends ConsumerStatefulWidget {
   const HomeView({super.key, required this.site});
 
@@ -32,26 +41,24 @@ class HomeView extends ConsumerStatefulWidget {
 class _HomeViewState extends ConsumerState<HomeView> {
   /// 平台切换采用 stale-while-revalidate:新平台首屏请求期间保留上一次
   /// 已渲染的网格(卡片元素继续存活),避免整块内容变成 loading 再重建。
+  /// 记录 site:**只复用同一 site** 的旧数据,避免 `/all` 与平台页之间
+  /// 互相污染(否则从 `/all` 切到 `/huya` 会先把全平台混排网格留在屏幕上,
+  /// 或首屏被上一站数据顶掉而不显示骨架)。
   static RoomListResult? _lastVisibleRooms;
+  static String? _lastVisibleSite;
+
+  /// 仅测试用:清空静态缓存,避免跨用例泄漏。
+  @visibleForTesting
+  static void debugResetVisibleRooms() {
+    _lastVisibleRooms = null;
+    _lastVisibleSite = null;
+  }
 
   /// F5 刷新本平台首页(浏览器式):与下拉刷新同通路(refresh 保留旧值回退)。
-  /// 每次 build 以当前 site 重注册 —— 平台切换不重建 State 时闭包也不过期。
   void _refreshRooms() {
-    // 全平台首页:重置所有平台区块(与 HomeSections 下拉刷新同通路)。
-    if (widget.site == 'all') {
-      unawaited(
-        refreshAllHomeSections(
-          ref,
-          columns: AppRoomGrid.columnsFor(MediaQuery.sizeOf(context).width),
-        ),
-      );
-      return;
-    }
     unawaited(
       ref
-          .read(
-            browseRoomsProvider(BrowseRoomQuery(site: widget.site)).notifier,
-          )
+          .read(browseRoomsProvider(_queryFor(context)).notifier)
           .refresh(),
     );
   }
@@ -62,6 +69,37 @@ class _HomeViewState extends ConsumerState<HomeView> {
     super.dispose();
   }
 
+  /// 首屏容量:列数 × 首屏行数。
+  ///
+  /// 列数与卡片格高**必须与 [RoomGrid] 同源**(`AppRoomGrid.columnsFor` +
+  /// `cardWidth * 9/16 + metaHeightFor(58)`),否则请求量与实际能放下的
+  /// 卡片数不匹配,会出现「拉了一屏还空一行」或「多拉一屏浪费」。
+  static int _firstScreenCapacity(BuildContext context, BoxConstraints c) {
+    final viewportWidth = MediaQuery.sizeOf(context).width;
+    final columns = AppRoomGrid.columnsFor(viewportWidth);
+    final padding = AppSpacing.lg * 2;
+    final cardWidth =
+        (c.maxWidth - padding - AppSpacing.gridCrossAxisSpacing * (columns - 1)) /
+        columns;
+    final meta = metaHeightFor(58, context);
+    final cardHeight = cardWidth * 9 / 16 + meta;
+    final rows = math.max(1, (c.maxHeight / cardHeight).ceil());
+    return columns * rows;
+  }
+
+  BrowseRoomQuery _queryFor(BuildContext context) => BrowseRoomQuery(
+    site: widget.site,
+    limit: widget.site == 'all'
+        ? _firstScreenCapacity(
+            context,
+            BoxConstraints(
+              maxWidth: MediaQuery.sizeOf(context).width,
+              maxHeight: MediaQuery.sizeOf(context).height,
+            ),
+          )
+        : null,
+  );
+
   @override
   Widget build(BuildContext context) {
     // 注册 F5 刷新动作(builder 层快捷键经此落地,注销随本 State dispose)。
@@ -70,16 +108,46 @@ class _HomeViewState extends ConsumerState<HomeView> {
       owner: this,
       action: _refreshRooms,
     );
-    // 断点沿用 AppBreakpoints.phone(768)：与旧 chips 行同档，避免 768–1365
+    final query = _queryFor(context);
+    final roomsAsync = ref.watch(browseRoomsProvider(query));
+    final controller = ref.read(browseRoomsProvider(query).notifier);
+    // 断点沿用 AppBreakpoints.phone(768):与旧 chips 行同档,避免 768–1365
     // 区间出现平台入口真空;左栏在此档出现,内容区不再渲染 chips。
     // <768:平台切换由 AppShell 平台条(nav-platform-strip)承担。
     final isPhone = MediaQuery.sizeOf(context).width < AppBreakpoints.phone;
     final tokens = context.tokens;
 
-    // /all:按平台独立区块 + 骨架(每平台独立 provider,互不阻塞)。
-    final body = widget.site == 'all'
-        ? const HomeSections()
-        : _singleSiteBody(context);
+    // 房间网格主体(下拉刷新 + 滚动加载 + 空态/错误)。切平台时新 provider
+    // 先进入 loading,继续显示旧网格;新数据到达后只替换 RoomRecord。
+    final Widget body;
+    final sameSite = _lastVisibleSite == widget.site;
+    switch (roomsAsync) {
+      case AsyncValue(value: final value?):
+        _lastVisibleRooms = value;
+        _lastVisibleSite = widget.site;
+        body = _body(
+          context,
+          rooms: value.rooms,
+          hasMore: value.hasMore,
+        );
+      case AsyncValue(error: final _)
+          when sameSite && _lastVisibleRooms != null:
+        // 有旧数据时静默保留旧网格(继续展示),错误由下一次成功刷新覆盖。
+        body = _body(
+          context,
+          rooms: _lastVisibleRooms!.rooms,
+          hasMore: _lastVisibleRooms!.hasMore,
+        );
+      case AsyncValue(error: final error?):
+        body = _ErrorRetry(
+          message: '房间列表加载失败：$error',
+          onRetry: controller.refresh,
+        );
+      // 首屏无旧数据:显示与真实卡等大的骨架卡(数量=首屏容量),
+      // 而不是整块转圈,避免加载完成时布局跳动。
+      default:
+        body = _skeletonBody(context, count: query.limit ?? 12);
+    }
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -91,42 +159,33 @@ class _HomeViewState extends ConsumerState<HomeView> {
     );
   }
 
-  /// 单平台页主体:房间网格(下拉刷新 + 滚动加载 + 空态/错误)。
-  /// 切平台时新 provider 先进入 loading,继续显示旧网格(stale-while-
-  /// revalidate);新数据到达后只替换 RoomRecord。
-  Widget _singleSiteBody(BuildContext context) {
-    final query = BrowseRoomQuery(site: widget.site);
-    final roomsAsync = ref.watch(browseRoomsProvider(query));
-    final controller = ref.read(browseRoomsProvider(query).notifier);
-    return switch (roomsAsync) {
-      AsyncValue(:final value?) => _rememberAndBuild(context, value: value),
-      AsyncValue(:final error?) =>
-        _lastVisibleRooms != null
-            ? _body(
-                context,
-                rooms: _lastVisibleRooms!.rooms,
-                hasMore: _lastVisibleRooms!.hasMore,
-              )
-            : _ErrorRetry(
-                message: '房间列表加载失败：$error',
-                onRetry: controller.refresh,
-              ),
-      // 新平台请求在途(AsyncLoading):继续用上一份网格,不切成 loading。
-      _ when _lastVisibleRooms != null => _body(
-        context,
-        rooms: _lastVisibleRooms!.rooms,
-        hasMore: _lastVisibleRooms!.hasMore,
-      ),
-      _ => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-    };
-  }
-
-  Widget _rememberAndBuild(
-    BuildContext context, {
-    required RoomListResult value,
-  }) {
-    _lastVisibleRooms = value;
-    return _body(context, rooms: value.rooms, hasMore: value.hasMore);
+  /// 骨架网格:列数/间距/格高与 [RoomGrid] 严格同源,数量=首屏容量。
+  Widget _skeletonBody(BuildContext context, {required int count}) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final viewportWidth = MediaQuery.sizeOf(context).width;
+        final columns = AppRoomGrid.columnsFor(viewportWidth);
+        final available = constraints.maxWidth - AppSpacing.lg * 2;
+        final cardWidth =
+            (available - AppSpacing.gridCrossAxisSpacing * (columns - 1)) /
+            columns;
+        return GridView.builder(
+          key: const Key('home-skeleton-grid'),
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: columns,
+            mainAxisSpacing: AppSpacing.gridMainAxisSpacing,
+            crossAxisSpacing: AppSpacing.gridCrossAxisSpacing,
+            childAspectRatio:
+                cardWidth / (cardWidth * 9 / 16 + metaHeightFor(58, context)),
+          ),
+          itemCount: count,
+          itemBuilder: (context, index) => RoomCardSkeleton(
+            key: Key('home-skeleton-$index'),
+          ),
+        );
+      },
+    );
   }
 
   /// 有数据(含刷新中)时的网格主体:下拉刷新 + 滚动加载 + 空态。
@@ -135,7 +194,7 @@ class _HomeViewState extends ConsumerState<HomeView> {
     required List<RoomRecord> rooms,
     required bool hasMore,
   }) {
-    final query = BrowseRoomQuery(site: widget.site);
+    final query = _queryFor(context);
     final controller = ref.read(browseRoomsProvider(query).notifier);
     if (rooms.isEmpty) {
       return RefreshIndicator(
@@ -151,7 +210,9 @@ class _HomeViewState extends ConsumerState<HomeView> {
               color: context.tokens.textSecondary,
             ),
             const SizedBox(height: AppSpacing.md),
-            Center(child: Text('暂无直播间,下拉刷新试试', style: context.textSecondary)),
+            Center(
+              child: Text('暂无直播间,下拉刷新试试', style: context.textSecondary),
+            ),
           ],
         ),
       );
@@ -196,3 +257,7 @@ class _ErrorRetry extends StatelessWidget {
     );
   }
 }
+
+/// 仅测试用:清空 HomeView 的静态可见缓存,避免跨用例泄漏。
+@visibleForTesting
+void debugResetHomeVisibleRooms() => _HomeViewState.debugResetVisibleRooms();
