@@ -41,3 +41,21 @@ String fillTwitchImageTemplate(String url, {int width = 640, int height = 360}) 
       .replaceFirst('{height}', '$height')
       .replaceAll('{width}x{height}', '${width}x$height');
 }
+
+/// Twitch `broadcastLanguage` → 中文展示名。
+///
+/// 仅覆盖实测出现的语言码;未收录的码原样返回(数据诚实性:不猜译)。
+/// 映射表在 Twitch 侧,不进共享层——其它平台语言码语义不同,各自维护。
+/// 注意:语言 chip 仅展示不可点(Twitch `streams(broadcastLanguage:)`
+/// 过滤不支持),映射只影响展示文案。
+String twitchLanguageName(String code) => _twitchLanguageNames[code] ?? code;
+
+const Map<String, String> _twitchLanguageNames = {
+  'RU': '俄语',
+  'FR': '法语',
+  'EN': '英语',
+  'DE': '德语',
+  'JP': '日语',
+  'KR': '韩语',
+  'ZH': '中文',
+};

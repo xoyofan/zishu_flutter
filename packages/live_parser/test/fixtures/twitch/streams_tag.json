@@ -1,0 +1,32 @@
+{
+  "data": {
+    "streams": {
+      "edges": [
+        {
+          "node": {
+            "id": "316500000001",
+            "title": "RANKED 排位中",
+            "viewersCount": 8888,
+            "type": "live",
+            "broadcastLanguage": "RU",
+            "broadcaster": {
+              "id": "700000001",
+              "login": "tag_filtered_room",
+              "displayName": "标签过滤房间",
+              "profileImageURL": "https://static-cdn.jtvnw.net/jtv_user_pictures/tag-filtered-{width}x{height}.png"
+            },
+            "game": {
+              "id": "263490",
+              "name": "Rust",
+              "tags": [
+                {"id": "77777777-7777-4777-8777-777777777777", "localizedName": "策略"}
+              ]
+            },
+            "previewImageURL": "https://static-cdn.jtvnw.net/previews-ttv/live_user_tag_filtered_room-{width}x{height}.jpg"
+          }
+        }
+      ]
+    }
+  },
+  "extensions": {"durationMilliseconds": 55, "operationName": "BrowsePage_Tags"}
+}

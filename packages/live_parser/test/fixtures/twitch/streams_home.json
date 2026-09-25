@@ -1,1 +1,56 @@
-{"data":{"streams":{"edges":[{"node":{"id":"316490028915","title":"Shadowverse Premier Series 26-27","viewersCount":24504,"type":"live","broadcaster":{"id":"545050196","login":"kato_junichi0817","displayName":"加藤純一","profileImageURL":"https://static-cdn.jtvnw.net/jtv_user_pictures/kato-{width}x{height}.png"},"game":{"id":"114524791","name":"Shadowverse: Worlds Beyond"},"previewImageURL":"https://static-cdn.jtvnw.net/previews-ttv/live_user_kato_junichi0817-{width}x{height}.jpg"}},{"node":{"id":"316432048882","title":"SAVOGE RUST Day3","viewersCount":22942,"type":"live","broadcaster":{"id":"49207184","login":"fps_shaka","displayName":"fps_shaka","profileImageURL":"https://static-cdn.jtvnw.net/jtv_user_pictures/fps-shaka-profile-{width}x{height}.png"},"game":{"id":"263490","name":"Rust"},"previewImageURL":"https://static-cdn.jtvnw.net/previews-ttv/live_user_fps_shaka-{width}x{height}.jpg"}}]}},"extensions":{"durationMilliseconds":68,"operationName":"BrowsePage_Popular"}}
+{
+  "data": {
+    "streams": {
+      "edges": [
+        {
+          "node": {
+            "id": "316490028915",
+            "title": "Shadowverse Premier Series 26-27",
+            "viewersCount": 24504,
+            "type": "live",
+            "broadcastLanguage": "EN",
+            "broadcaster": {
+              "id": "545050196",
+              "login": "kato_junichi0817",
+              "displayName": "加藤純一",
+              "profileImageURL": "https://static-cdn.jtvnw.net/jtv_user_pictures/kato-{width}x{height}.png"
+            },
+            "game": {
+              "id": "114524791",
+              "name": "Shadowverse: Worlds Beyond",
+              "tags": [
+                {"id": "33333333-3333-4333-8333-333333333333", "localizedName": "第一人称射击游戏"},
+                {"id": "66666666-6666-4666-8666-666666666666", "localizedName": "LCK"}
+              ]
+            },
+            "previewImageURL": "https://static-cdn.jtvnw.net/previews-ttv/live_user_kato_junichi0817-{width}x{height}.jpg"
+          }
+        },
+        {
+          "node": {
+            "id": "316432048882",
+            "title": "SAVOGE RUST Day3",
+            "viewersCount": 22942,
+            "type": "live",
+            "broadcastLanguage": "RU",
+            "broadcaster": {
+              "id": "49207184",
+              "login": "fps_shaka",
+              "displayName": "fps_shaka",
+              "profileImageURL": "https://static-cdn.jtvnw.net/jtv_user_pictures/fps-shaka-profile-{width}x{height}.png"
+            },
+            "game": {
+              "id": "263490",
+              "name": "Rust",
+              "tags": [
+                {"id": "77777777-7777-4777-8777-777777777777", "localizedName": "策略"}
+              ]
+            },
+            "previewImageURL": "https://static-cdn.jtvnw.net/previews-ttv/live_user_fps_shaka-{width}x{height}.jpg"
+          }
+        }
+      ]
+    }
+  },
+  "extensions": {"durationMilliseconds": 68, "operationName": "BrowsePage_Popular"}
+}
