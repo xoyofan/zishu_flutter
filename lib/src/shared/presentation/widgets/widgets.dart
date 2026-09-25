@@ -4,6 +4,7 @@ export 'async_value_view.dart';
 export 'cover_badges.dart';
 export 'empty_view.dart';
 export 'error_view.dart';
+export 'outline_chip.dart';
 export 'platform_badge.dart';
 export 'platform_icon.dart';
 export 'retry_button.dart';
