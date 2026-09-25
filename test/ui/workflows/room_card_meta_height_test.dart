@@ -1,7 +1,8 @@
-/// 房间卡元信息区规格测试:恒定**两行**高、无多余 padding、特色 chip 就位。
+/// 房间卡元信息区规格测试:恒定**三行**高、无多余 padding、特色 chip 就位。
 ///
 /// 用户报:封面下「第一行主播名、第二行特色 chip」,有的主播/平台没有 chip,
-/// 卡片高度就会参差。参考实现 `.room-card__body { padding: 6px 8px 8px }` +
+/// 卡片高度就会参差。方案 A(2026-09-26)再拆:第 1 行标题、第 2 行主播名、
+/// 第 3 行 chips,三行缺内容也占位。参考实现 `.room-card__body { padding: 6px 8px 8px }` +
 /// `.room-card__meta { margin-top: 4px; gap: 6px }`,且占位态用 `min-height: 1.35em`
 /// 保持行高。本套用「同宽卡片高度必须全等」把这条钉住。
 library;
@@ -61,7 +62,7 @@ double _heightOf(WidgetTester tester, String site, String roomId) =>
     tester.getSize(find.byKey(Key('room-card-$site-$roomId'))).height;
 
 void main() {
-  testWidgets('两行元信息:有/无主播名与 chip 的卡片高度完全一致', (tester) async {
+  testWidgets('三行元信息:有/无主播名与 chip 的卡片高度完全一致', (tester) async {
     // 三种极端:全有 / 只有标题 / 全空(标题与主播名都没有)。
     await _pumpCards(tester, [
       RoomCard(room: _room(id: 'a', promoTag: '超清')),
@@ -75,13 +76,21 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('第二行:主播名 + 特色 chip(促销标签)', (tester) async {
+  testWidgets('第 2 行主播名、第 3 行特色 chip(促销标签)', (tester) async {
     await _pumpCards(tester, [
       RoomCard(room: _room(id: 'a', promoTag: '超清')),
       RoomCard(room: _room(id: 'b')),
     ]);
 
-    expect(find.text('主播名'), findsNWidgets(2), reason: '两行里的主播名一行一个');
+    expect(find.text('主播名'), findsNWidgets(2), reason: '第 2 行的主播名一行一个');
+    // chips 不再与主播名同行:chip 的 y 坐标必须大于主播名的 y 坐标(方案 A)。
+    final anchorFinder = find.text('主播名').first;
+    final chipFinder = find.byKey(const Key('room-meta-chip-超清'));
+    expect(
+      tester.getTopLeft(chipFinder).dy,
+      greaterThan(tester.getTopLeft(anchorFinder).dy),
+      reason: '特色 chip 在主播名下一行',
+    );
     expect(
       find.byKey(const Key('room-meta-chip-超清')),
       findsOneWidget,

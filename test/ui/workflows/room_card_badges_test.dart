@@ -618,6 +618,38 @@ void main() {
       await _pumpFrames(tester, 2);
     }
 
+    testWidgets('chips 单独一行:渲染在主播名下一行,不与主播名同行', (tester) async {
+      final app = await _pumpApp(
+        tester,
+        browseSource: const _ChipBrowseSource(withTag: true),
+      );
+      app.router.go('/twitch');
+      await _pumpFrames(tester, 5);
+
+      final card = find.byKey(const Key('room-card-twitch-9001'));
+      expect(card, findsOneWidget);
+      final anchor = find.descendant(
+        of: card,
+        matching: find.text('标签主播'),
+      );
+      final tagChip = find.byKey(const Key('room-meta-chip-策略'));
+      expect(anchor, findsOneWidget, reason: '主播名在第 2 行');
+      expect(tagChip, findsOneWidget, reason: 'chips 在第 3 行');
+
+      // 方案 A(2026-09-26):chips 移到主播名下面**单独一行**,
+      // 断言 chip 的 y 坐标严格大于主播名所在行的底部(不同行)。
+      final anchorTop = tester.getTopLeft(anchor).dy;
+      final anchorBottom = tester.getBottomLeft(anchor).dy;
+      final chipTop = tester.getTopLeft(tagChip).dy;
+      expect(chipTop, greaterThan(anchorTop), reason: 'chip 应在主播名之下');
+      expect(
+        chipTop,
+        greaterThanOrEqualTo(anchorBottom),
+        reason: 'chip 不得与主播名挤在同一行',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('可点 tag chip:线框样式,点击导航到过滤列表且不冒泡进房', (tester) async {
       final app = await _pumpApp(
         tester,
@@ -739,6 +771,59 @@ void main() {
         ).onTap,
         isNull,
         reason: 'promoTag 仍用同一线框组件且不可点',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('chips 为空:第 3 行仍占位整行,卡片与有 chips 时完全等高', (
+      tester,
+    ) async {
+      RoomRecord room(String id, {List<SiteChip> chips = const []}) => RoomRecord(
+        site: 'twitch',
+        roomId: id,
+        roomState: RoomState.live,
+        title: '占位房',
+        anchorName: '占位主播',
+        cid: 'g1',
+        category: '分类',
+        audience: '1.2万',
+        cover: '',
+        chips: chips,
+      );
+      final withChips = room(
+        '9020',
+        chips: const [
+          SiteChip(id: 'x', name: '策略', kind: SiteChipKind.tag, filterCid: 'tag:x'),
+        ],
+      );
+      final withoutChips = room('9021');
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            theme: ZishuTheme.dark(),
+            home: Scaffold(
+              body: Row(
+                children: [
+                  SizedBox(width: 360, child: RoomCard(room: withChips)),
+                  SizedBox(width: 360, child: RoomCard(room: withoutChips)),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await _pumpFrames(tester, 2);
+
+      final hWith = tester
+          .getSize(find.byKey(const Key('room-card-twitch-9020')))
+          .height;
+      final hWithout = tester
+          .getSize(find.byKey(const Key('room-card-twitch-9021')))
+          .height;
+      expect(
+        hWithout,
+        hWith,
+        reason: 'chips 为空时第 3 行用占位行撑满,所有平台卡片等高',
       );
       expect(tester.takeException(), isNull);
     });
