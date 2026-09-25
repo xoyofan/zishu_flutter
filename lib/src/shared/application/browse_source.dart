@@ -6,7 +6,18 @@ import 'package:live_parser/live_parser.dart';
 /// 栏目浏览数据源。
 abstract interface class BrowseSource {
   Future<CategoryResult> fetchCategories(String site);
-  Future<RoomListResult> fetchRooms({required String site, String? cid, int page});
+
+  /// 拉取房间列表首页/下一页。
+  ///
+  /// [limit] = 本次请求条数;`null` 表示调用方不指定,由实现取默认口径
+  /// (真实解析 30)。首页「按平台区块」路径下发首屏列数(见
+  /// `PlatformRoomsQuery.limit`),单平台页旧路径不指定,保持既有行为。
+  Future<RoomListResult> fetchRooms({
+    required String site,
+    String? cid,
+    int page,
+    int? limit,
+  });
 }
 
 /// 房间解析数据源(播放页)。

@@ -28,13 +28,15 @@ class ParserBrowseSource implements BrowseSource {
     required String site,
     String? cid,
     int page = 1,
+    int? limit,
   }) async {
     final browse = _registry[site]?.browse;
     if (browse == null) {
       throw StateError('站点 $site 不支持房间浏览');
     }
     return browse.fetchRooms(
-      RoomListRequest(site: site, cid: cid, page: page, limit: 30),
+      // 未指定时保持既有默认口径(30),单平台页请求量不变。
+      RoomListRequest(site: site, cid: cid, page: page, limit: limit ?? 30),
     );
   }
 }

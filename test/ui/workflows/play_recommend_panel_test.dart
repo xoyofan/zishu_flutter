@@ -77,6 +77,7 @@ class _FakeBrowseSource implements BrowseSource {
     required String site,
     String? cid,
     int page = 1,
+    int? limit,
   }) async {
     calls.add((site: site, cid: cid, page: page));
     final list = rooms['$site|${cid ?? ''}|$page'] ?? const <RoomRecord>[];

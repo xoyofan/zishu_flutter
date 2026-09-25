@@ -204,7 +204,10 @@ class FixtureBrowseSource implements BrowseSource {
   }
 
   @override
-  Future<RoomListResult> fetchRooms({required String site, String? cid, int page = 1}) async {
+  Future<RoomListResult> fetchRooms({required String site, String? cid, int page = 1, int? limit}) async {
+    // limit 仅为端口契约透传：样例数据不分页、不截断（单平台页“渲染全部样例”
+    // 与首页网格形状断言都建立在全量之上）；首屏请求量契约由
+    // home_sections_test 的 fake 源记录参数断言。
     final rooms = cid == null || cid.isEmpty
         ? kFixtureRooms
         : kFixtureRooms.where((room) => room.cid == cid).toList();

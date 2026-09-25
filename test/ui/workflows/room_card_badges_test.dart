@@ -146,6 +146,7 @@ class _ChipBrowseSource implements BrowseSource {
     required String site,
     String? cid,
     int page = 1,
+    int? limit,
   }) async => RoomListResult(
     page: page,
     hasMore: false,
