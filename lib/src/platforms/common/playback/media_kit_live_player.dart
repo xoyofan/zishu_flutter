@@ -288,6 +288,12 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     }
 
     bind(events.playing, (s, v) {
+      PlaybackLog.write('play_state', {
+        'playing': v,
+        'buffering': _latest.buffering,
+        'width': _latest.width,
+        'height': _latest.height,
+      });
       if (v) _onPlaying();
       return s.copyWith(playing: v);
     });
@@ -932,6 +938,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
 
   @override
   Future<void> play() => _enqueueLifecycle(() async {
+    PlaybackLog.write('play_cmd', {'action': 'play'});
     await _player.play();
     // 用户口径(2026-09-20 播放/暂停判断错):UI 反馈不等底层 playing 事件
     // 回流 —— media-kit 暂停后不一定再吐 playing 事件,回流也可能被时序
@@ -942,6 +949,7 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
 
   @override
   Future<void> pause() => _enqueueLifecycle(() async {
+    PlaybackLog.write('play_cmd', {'action': 'pause'});
     await _player.pause();
     _emit((snapshot) => snapshot.copyWith(playing: false));
   });
