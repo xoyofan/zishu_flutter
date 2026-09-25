@@ -11,9 +11,11 @@ import '../../../shared/presentation/widgets/retry_button.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../application/browse_provider.dart';
 import '../widgets/browse_sidebar.dart';
+import '../widgets/home_sections.dart';
 import '../widgets/room_grid.dart';
 
-/// 全平台/平台首页:宽屏渲染「左侧栏 + 房间网格」,窄屏仅房间网格。
+/// 全平台/平台首页:`site == 'all'` 渲染「按平台独立区块 + 骨架」竖向列表
+/// (见 [HomeSections]);单平台页保持「左侧栏 + 房间网格」单请求布局。
 ///
 /// 平台入口锚点 [home-platform-chip-{id}] 已迁至左侧栏(见 [BrowseSidebar]),
 /// 此处内容区不再重复渲染横向 chips 行(窄屏平台切换由 AppShell 平台条承担)。
@@ -35,9 +37,21 @@ class _HomeViewState extends ConsumerState<HomeView> {
   /// F5 刷新本平台首页(浏览器式):与下拉刷新同通路(refresh 保留旧值回退)。
   /// 每次 build 以当前 site 重注册 —— 平台切换不重建 State 时闭包也不过期。
   void _refreshRooms() {
+    // 全平台首页:重置所有平台区块(与 HomeSections 下拉刷新同通路)。
+    if (widget.site == 'all') {
+      unawaited(
+        refreshAllHomeSections(
+          ref,
+          columns: AppRoomGrid.columnsFor(MediaQuery.sizeOf(context).width),
+        ),
+      );
+      return;
+    }
     unawaited(
       ref
-          .read(browseRoomsProvider(BrowseRoomQuery(site: widget.site)).notifier)
+          .read(
+            browseRoomsProvider(BrowseRoomQuery(site: widget.site)).notifier,
+          )
           .refresh(),
     );
   }
@@ -56,40 +70,16 @@ class _HomeViewState extends ConsumerState<HomeView> {
       owner: this,
       action: _refreshRooms,
     );
-    final query = BrowseRoomQuery(site: widget.site);
-    final roomsAsync = ref.watch(browseRoomsProvider(query));
-    final controller = ref.read(browseRoomsProvider(query).notifier);
-    // 断点沿用 AppBreakpoints.phone(768):与旧 chips 行同档,避免 768–1365
+    // 断点沿用 AppBreakpoints.phone(768)：与旧 chips 行同档，避免 768–1365
     // 区间出现平台入口真空;左栏在此档出现,内容区不再渲染 chips。
     // <768:平台切换由 AppShell 平台条(nav-platform-strip)承担。
     final isPhone = MediaQuery.sizeOf(context).width < AppBreakpoints.phone;
     final tokens = context.tokens;
 
-    // 房间网格主体(下拉刷新 + 滚动加载 + 空态/错误)。切平台时新 provider
-    // 先进入 loading,继续显示旧网格;新数据到达后只替换 RoomRecord。
-    final body = switch (roomsAsync) {
-      AsyncValue(:final value?) => _rememberAndBuild(
-        context,
-        value: value,
-      ),
-      AsyncValue(:final error?) => _lastVisibleRooms != null
-          ? _body(
-              context,
-              rooms: _lastVisibleRooms!.rooms,
-              hasMore: _lastVisibleRooms!.hasMore,
-            )
-          : _ErrorRetry(
-              message: '房间列表加载失败：$error',
-              onRetry: controller.refresh,
-            ),
-      // 新平台请求在途(AsyncLoading):继续用上一份网格,不切成 loading。
-      _ when _lastVisibleRooms != null => _body(
-        context,
-        rooms: _lastVisibleRooms!.rooms,
-        hasMore: _lastVisibleRooms!.hasMore,
-      ),
-      _ => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-    };
+    // /all:按平台独立区块 + 骨架(每平台独立 provider,互不阻塞)。
+    final body = widget.site == 'all'
+        ? const HomeSections()
+        : _singleSiteBody(context);
 
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -101,16 +91,42 @@ class _HomeViewState extends ConsumerState<HomeView> {
     );
   }
 
+  /// 单平台页主体:房间网格(下拉刷新 + 滚动加载 + 空态/错误)。
+  /// 切平台时新 provider 先进入 loading,继续显示旧网格(stale-while-
+  /// revalidate);新数据到达后只替换 RoomRecord。
+  Widget _singleSiteBody(BuildContext context) {
+    final query = BrowseRoomQuery(site: widget.site);
+    final roomsAsync = ref.watch(browseRoomsProvider(query));
+    final controller = ref.read(browseRoomsProvider(query).notifier);
+    return switch (roomsAsync) {
+      AsyncValue(:final value?) => _rememberAndBuild(context, value: value),
+      AsyncValue(:final error?) =>
+        _lastVisibleRooms != null
+            ? _body(
+                context,
+                rooms: _lastVisibleRooms!.rooms,
+                hasMore: _lastVisibleRooms!.hasMore,
+              )
+            : _ErrorRetry(
+                message: '房间列表加载失败：$error',
+                onRetry: controller.refresh,
+              ),
+      // 新平台请求在途(AsyncLoading):继续用上一份网格,不切成 loading。
+      _ when _lastVisibleRooms != null => _body(
+        context,
+        rooms: _lastVisibleRooms!.rooms,
+        hasMore: _lastVisibleRooms!.hasMore,
+      ),
+      _ => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+    };
+  }
+
   Widget _rememberAndBuild(
     BuildContext context, {
     required RoomListResult value,
   }) {
     _lastVisibleRooms = value;
-    return _body(
-      context,
-      rooms: value.rooms,
-      hasMore: value.hasMore,
-    );
+    return _body(context, rooms: value.rooms, hasMore: value.hasMore);
   }
 
   /// 有数据(含刷新中)时的网格主体:下拉刷新 + 滚动加载 + 空态。
