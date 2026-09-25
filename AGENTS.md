@@ -26,6 +26,30 @@
 - 每次结构性修改至少运行 `flutter analyze` 和相关测试；Windows 主链路修改还需运行 `flutter build windows --debug -t lib/main.dart`。
 - `packages/live_parser` 与 `packages/speech2zh` 是**独立 package**（本仓库不是 pub workspace，也没有 melos）：`flutter analyze` 前必须分别在各自目录执行 `pub get`，否则 analyzer 会在 `packages/**/test` 上报出约 3000 个假 error（`uri_does_not_exist` / `undefined_function`），看起来像代码坏了。`tool/check.ps1` 已自动包含这两步。
 
+### Windows 播放资源诊断
+
+排查卡顿、内存或 GPU 异常时，必须同时看应用内生命周期日志和系统级采样，禁止只凭单次任务管理器截图下结论。
+
+1. **先核对二进制版本**：记录 exe 的构建时间；源码有修改但 exe 未重建时，日志不能代表当前源码。Release 进程占用输出文件时，先关闭 exe 再构建或启动新版本。
+2. **应用内 RSS 切房埋点**：日志位于 `$env:APPDATA\zishu_flutter\logs\playback.log`。进入并离开房间时会出现：
+   - `resource_sample phase=room_release_start ... rss_mb=...`：`player.stop()` 前的 RSS；
+   - `resource_sample phase=room_release_end ... rss_mb=... elapsed_ms=...`：旧源卸载完成后的 RSS；
+   - `resource_sample phase=room_release_error ...`：旧源卸载异常。
+   同时记录相邻的 `open`、`open_to_first_frame`、`reopen_requested`、`caption_load_ok` 和 `app_start`，用于把 RSS 变化对应到开流、重连或语音模型加载阶段。
+3. **系统级采样**：另开 PowerShell，在切房前启动：
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File tool/sample_runtime.ps1 `
+     -DurationSeconds 300 -IntervalSeconds 5 `
+     -OutputPath tool/screenshots/zishu/runtime.csv
+   ```
+
+   CSV 包含 `CpuPercent`、`PrivateMb`、`WorkingSetMb`、`GpuDedicatedMb`、`GpuSharedMb`、`Threads`、`Handles`。GPU counter 不可用时对应值为 0，脚本仍继续采样其余指标。
+4. **最小复现步骤**：固定一个平台、画质和窗口尺寸，播放 2～3 分钟后连续切换 10 次房间；再分别执行“不启用语音字幕”和“启用语音字幕”两组对照。记录站点、房间号、画质、字幕语言及每次切房时间。
+5. **判定口径**：RSS/Private Bytes 不会在 `stop()` 返回时立即下降，不能把 allocator 保留误判为泄漏；重点看 `room_release_end` 后 5～15 秒以及连续 10 次切房后的趋势。`PrivateMb`、GPU memory、线程或句柄每轮阶梯式增长且不回落，才视为资源泄漏；单轮峰值只记为基线。线程数量显著高于同场景基线时，再结合 `caption_load_ok` 和 ASR 房间切换判断 native session 是否未释放。
+
+详细字段与更多命令见 `tool/README.md`。
+
 ## 视觉真源
 - 视觉真源是项目根 `DESIGN.md`（格式取自 Google Stitch 的 DESIGN.md）：色板、字号阶梯、间距/圆角、elevation、组件状态矩阵、响应式断点、Do's and Don'ts 都在那里。
 - 改任何颜色/字号/间距/圆角/阴影前，先改 `DESIGN.md`，再改 token 文件（`lib/src/shared/presentation/design_tokens.dart` / `zishu_tokens.dart`）与 `test/shared/design_tokens_test.dart` 契约断言，最后改调用点。
