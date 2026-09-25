@@ -21,11 +21,11 @@ void main() {
   TwitchGqlClient gqlFor() => TwitchGqlClient(httpClient: api);
 
   group('分类索引', () {
-    test('games 输出单一分组,cid 为 game id', () async {
+    test('games 输出分类分组,cid 为 game id(标签组另见 chips_test)', () async {
       final result = await TwitchBrowseRepository(gqlFor()).fetchCategories('twitch');
       expect(result.site, 'twitch');
-      expect(result.groups, hasLength(1));
-      final items = result.groups.single.items;
+      expect(result.groups.first.id, 'games');
+      final items = result.groups.first.items;
       expect(items.map((e) => e.cid).toList(), ['509658', '263490', '32399']);
       expect(items.first.name, '聊天', reason: '海外平台分类名经 remap 表中文化(Just Chatting→聊天)');
       expect(items.first.pic, isNot(contains('{width}')));

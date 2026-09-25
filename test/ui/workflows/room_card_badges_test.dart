@@ -25,7 +25,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart'
-    show RoomRecord, RoomState, StreamLine;
+    show
+        CategoryResult,
+        RoomListResult,
+        RoomRecord,
+        RoomState,
+        SiteChip,
+        SiteChipKind,
+        StreamLine;
 import 'package:shared_preferences_platform_interface/in_memory_shared_preferences_async.dart';
 import 'package:shared_preferences_platform_interface/shared_preferences_async_platform_interface.dart';
 import 'package:zishu_flutter/src/app/app_router.dart';
@@ -34,9 +41,15 @@ import 'package:zishu_flutter/src/apps/windows/windows_app.dart';
 import 'package:zishu_flutter/src/features/browse/widgets/room_card.dart';
 import 'package:zishu_flutter/src/features/follow/widgets/follow_entry_card.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
+import 'package:zishu_flutter/src/features/play/views/play_view.dart';
 import 'package:zishu_flutter/src/features/play/widgets/play_room_grid.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
+import 'package:zishu_flutter/src/shared/application/browse_source.dart';
+import 'package:zishu_flutter/src/shared/application/providers.dart';
+import 'package:zishu_flutter/src/shared/presentation/design_tokens.dart';
 import 'package:zishu_flutter/src/shared/presentation/widgets/cover_badges.dart';
+import 'package:zishu_flutter/src/shared/presentation/widgets/outline_chip.dart';
+import 'package:zishu_flutter/src/shared/presentation/zishu_tokens.dart';
 
 const Duration _kFrame = Duration(milliseconds: 50);
 
@@ -116,9 +129,62 @@ Future<void> _pumpFrames(WidgetTester tester, [int times = 3]) async {
   }
 }
 
+/// 只带 Twitch 卡片 chips 的浏览源:fixture 房间无 [SiteChip],Stage 2 的
+/// 卡片 chip 用例需要可控的 chips 数据(语言/标签、可点/不可点、乱序输入)。
+class _ChipBrowseSource implements BrowseSource {
+  const _ChipBrowseSource({required this.withTag});
+
+  /// true → 房间带可点 tag chip(filterCid 'tag:x');false → 只带不可点语言 chip。
+  final bool withTag;
+
+  @override
+  Future<CategoryResult> fetchCategories(String site) async =>
+      CategoryResult(site: site, groups: const []);
+
+  @override
+  Future<RoomListResult> fetchRooms({
+    required String site,
+    String? cid,
+    int page = 1,
+  }) async => RoomListResult(
+    page: page,
+    hasMore: false,
+    rooms: [
+      RoomRecord(
+        site: 'twitch',
+        roomId: '9001',
+        roomState: RoomState.live,
+        title: '标签房',
+        anchorName: '标签主播',
+        cid: 'g1',
+        category: '分类',
+        audience: '1.2万',
+        cover: '',
+        // 故意乱序输入:language 在前,验证渲染按 SiteChipKind 排序(tag 前 language 后)。
+        chips: [
+          const SiteChip(
+            id: 'EN',
+            name: '英语',
+            kind: SiteChipKind.language,
+          ),
+          if (withTag)
+            const SiteChip(
+              id: 'x',
+              name: '策略',
+              kind: SiteChipKind.tag,
+              // 与 Stage 1 口径一致:filterCid 含 tag: 前缀,直接喂 fetchRooms。
+              filterCid: 'tag:x',
+            ),
+        ],
+      ),
+    ],
+  );
+}
+
 Future<({GoRouter router, ProviderContainer container})> _pumpApp(
   WidgetTester tester, {
   Map<String, Object> storage = const <String, Object>{},
+  BrowseSource? browseSource,
 }) async {
   SharedPreferencesAsyncPlatform.instance =
       InMemorySharedPreferencesAsync.withData(storage);
@@ -128,7 +194,11 @@ Future<({GoRouter router, ProviderContainer container})> _pumpApp(
   addTearDown(tester.view.resetDevicePixelRatio);
   await tester.pumpWidget(
     ProviderScope(
-      overrides: [playerProvider.overrideWithValue(_FakeLivePlayer())],
+      overrides: [
+        playerProvider.overrideWithValue(_FakeLivePlayer()),
+        if (browseSource != null)
+          browseSourceProvider.overrideWithValue(browseSource),
+      ],
       child: const WindowsApp(),
     ),
   );
@@ -528,6 +598,177 @@ void main() {
 
       expect(find.byKey(const Key('room-card-offline')), findsNothing);
       expect(find.text('轮播'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
+  });
+
+  group('卡片线框 chip(Stage 2:Twitch tags)', () {
+    /// 只泵一张 RoomCard 的组件宿主(无 router,验证渲染与回归护栏)。
+    Future<void> pumpCard(WidgetTester tester, RoomRecord room) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            theme: ZishuTheme.dark(),
+            home: Scaffold(
+              body: SizedBox(width: 360, child: RoomCard(room: room)),
+            ),
+          ),
+        ),
+      );
+      await _pumpFrames(tester, 2);
+    }
+
+    testWidgets('可点 tag chip:线框样式,点击导航到过滤列表且不冒泡进房', (tester) async {
+      final app = await _pumpApp(
+        tester,
+        browseSource: const _ChipBrowseSource(withTag: true),
+      );
+      app.router.go('/twitch');
+      await _pumpFrames(tester, 5);
+
+      final card = find.byKey(const Key('room-card-twitch-9001'));
+      expect(card, findsOneWidget);
+
+      // 排序:乱序输入(language 先)也渲染为 tag 前、language 后。
+      final chips = tester.widgetList<OutlineChip>(
+        find.descendant(of: card, matching: find.byType(OutlineChip)),
+      );
+      expect(
+        chips.map((c) => c.label).toList(),
+        ['策略', '英语'],
+        reason: '按 SiteChipKind 排序:tag 在前、language 在后',
+      );
+
+      final tagChip = find.byKey(const Key('room-meta-chip-策略'));
+      expect(tagChip, findsOneWidget, reason: '可点 tag chip 应渲染');
+
+      // 线框样式:透明底 + tokens.border 1px 描边 + AppRadius.allSm + caption 字号。
+      final container = tester.widget<Container>(
+        find.descendant(of: tagChip, matching: find.byType(Container)).first,
+      );
+      final deco = container.decoration! as BoxDecoration;
+      expect(deco.color, isNull, reason: '线框 chip 无填充底');
+      expect(deco.border?.top.color, ZishuTokens.dark.border);
+      expect(deco.border?.top.width, 1.0);
+      expect(deco.borderRadius, AppRadius.allSm);
+      final text = tester.widget<Text>(
+        find.descendant(of: tagChip, matching: find.byType(Text)).first,
+      );
+      expect(text.style?.fontSize, AppFontSize.caption);
+
+      // 可点:包 InkWell 且 onTap 非空。
+      final inkWell = find.descendant(of: tagChip, matching: find.byType(InkWell));
+      expect(inkWell, findsOneWidget);
+      expect(tester.widget<InkWell>(inkWell).onTap, isNotNull);
+
+      await tester.tap(tagChip);
+      await _pumpFrames(tester, 5);
+
+      expect(
+        app.router.routeInformationProvider.value.uri.path,
+        '/twitch/category/tag%3Ax',
+        reason: '点击 tag chip 应导航到 /twitch/category/tag%3Ax',
+      );
+      expect(
+        find.byType(PlayView),
+        findsNothing,
+        reason: '点击 chip 必须阻止冒泡到卡片整体 onTap(不得同时进房)',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('不可点 language chip:渲染但无 InkWell/点击不导航', (tester) async {
+      await pumpCard(
+        tester,
+        RoomRecord(
+          site: 'twitch',
+          roomId: '9002',
+          roomState: RoomState.live,
+          title: '语言房',
+          anchorName: '语言主播',
+          cid: 'g1',
+          category: '分类',
+          audience: '1.2万',
+          cover: '',
+          chips: const [
+            SiteChip(id: 'EN', name: '英语', kind: SiteChipKind.language),
+          ],
+        ),
+      );
+
+      final chip = find.byKey(const Key('room-meta-chip-英语'));
+      expect(chip, findsOneWidget, reason: '语言 chip 渲染(仅展示)');
+      expect(
+        find.descendant(of: chip, matching: find.byType(InkWell)),
+        findsNothing,
+        reason: '不可点 chip 不包 InkWell(无 hover/点击反馈、无 onTap)',
+      );
+
+      // 组件宿主无 router:若错误接了导航,context.go 会抛异常被下面断言抳住。
+      await tester.tap(chip);
+      await _pumpFrames(tester, 2);
+      expect(tester.takeException(), isNull, reason: '点击语言 chip 不得导航/不抛异常');
+    });
+
+    testWidgets('chips 为空:promoTag 与主播名渲染不变(零回归护栏)', (tester) async {
+      await pumpCard(
+        tester,
+        RoomRecord(
+          site: 'douyu',
+          roomId: '9010',
+          roomState: RoomState.live,
+          title: '无 chip 房',
+          anchorName: '老王',
+          cid: '1',
+          category: '英雄联盟',
+          audience: '1.2万',
+          cover: '',
+          promoTag: '超清',
+        ),
+      );
+
+      expect(
+        find.byKey(const Key('room-meta-chip-超清')),
+        findsOneWidget,
+        reason: 'promoTag 行为不变:仍是元信息行的特色 chip',
+      );
+      expect(find.text('老王'), findsOneWidget, reason: '主播名渲染不变');
+      expect(
+        tester.widget<OutlineChip>(
+          find.byKey(const Key('room-meta-chip-超清')),
+        ).onTap,
+        isNull,
+        reason: 'promoTag 仍用同一线框组件且不可点',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('promoTag 与 chips 同名时不重复渲染', (tester) async {
+      await pumpCard(
+        tester,
+        RoomRecord(
+          site: 'twitch',
+          roomId: '9011',
+          roomState: RoomState.live,
+          title: '重复房',
+          anchorName: '小张',
+          cid: 'g1',
+          category: '分类',
+          audience: '1.2万',
+          cover: '',
+          promoTag: '英语',
+          chips: const [
+            SiteChip(id: 'EN', name: '英语', kind: SiteChipKind.language),
+          ],
+        ),
+      );
+
+      expect(
+        find.byKey(const Key('room-meta-chip-英语')),
+        findsOneWidget,
+        reason: 'promoTag 已单独成 chip 时不重复',
+      );
+      expect(find.text('英语'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   });

@@ -345,6 +345,7 @@ class RoomSummary {
     this.diamondFans = '',
     this.roomState = RoomState.offline,
     this.startedAt,
+    this.chips = const [],
   });
 
   final String site;
@@ -434,6 +435,13 @@ class RoomSummary {
   /// 本场开播时间;平台没有提供或旧数据缺失时为 null。
   final DateTime? startedAt;
 
+  /// 卡片 chip 来源(游戏标签、语言等);默认空列表,其它平台零影响。
+  ///
+  /// UI 线框 chip 的数据源:[kind] 决定样式,[filterCid] 非空才可点
+  /// (见 [SiteChip.navigable])。出口侧的深冻结在 [RoomRecord] 构造
+  /// 边界完成;[RoomSummary] 为 const 值对象,由组装方持有列表。
+  final List<SiteChip> chips;
+
   /// 在播(与 [online] 非空一致;轮播/离线均为 false)。
   bool get isLive => roomState == RoomState.live;
 
@@ -456,6 +464,7 @@ class RoomSummary {
     if (vip.isNotEmpty) 'vip': vip,
     if (diamondFans.isNotEmpty) 'diamondFans': diamondFans,
     if (startedAt != null) 'startedAt': startedAt!.toIso8601String(),
+    if (chips.isNotEmpty) 'chips': [for (final chip in chips) chip.toJson()],
   };
 
   factory RoomSummary.fromJson(Map<String, dynamic> json) => RoomSummary(
@@ -478,7 +487,75 @@ class RoomSummary {
     followers: json['followers']?.toString() ?? '',
     vip: json['vip']?.toString() ?? '',
     diamondFans: json['diamondFans']?.toString() ?? '',
+    chips: [
+      for (final item in ((json['chips'] as List?) ?? const []))
+        if (item is Map)
+          SiteChip.fromJson(Map<String, dynamic>.from(item)),
+    ],
   );
+}
+
+/// chip 语义类型:分类 / 标签 / 语言 / 赛事活动。
+///
+/// UI 按 [SiteChipKind] 分支选样式,禁止按平台或名字猜类型;
+/// 枚举按 name 序列化,追加在末尾不影响旧 JSON 的读写。
+enum SiteChipKind { category, tag, language, event }
+
+/// 卡片 / 分类列表上的线框 chip 值对象。
+///
+/// - [id]:平台内唯一标识(Twitch 标签为 tag uuid,语言为语言码);
+/// - [name]:展示名(已本地化,UI 不再翻译);
+/// - [filterCid]:非空时可点,值即点后带入 [RoomListRequest.cid] 的
+///   过滤值(Twitch 标签为 tag id);null = 仅展示不可点
+///   (Twitch `streams(broadcastLanguage:)` 不支持,语言 chip 恒不可点)。
+class SiteChip {
+  const SiteChip({
+    required this.id,
+    required this.name,
+    required this.kind,
+    this.filterCid,
+  });
+
+  factory SiteChip.fromJson(Map<String, dynamic> json) => SiteChip(
+    id: json['id']?.toString() ?? '',
+    name: json['name']?.toString() ?? '',
+    kind: SiteChipKind.values.firstWhere(
+      (kind) => kind.name == json['kind'],
+      // 未知 kind 回落 category:旧 JSON 兼容优先,chip 仍可展示。
+      orElse: () => SiteChipKind.category,
+    ),
+    filterCid: json['filterCid']?.toString(),
+  );
+
+  final String id;
+  final String name;
+  final SiteChipKind kind;
+  final String? filterCid;
+
+  /// 可点判据:有 [filterCid] 才能进入过滤列表。
+  bool get navigable => filterCid != null;
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    'kind': kind.name,
+    if (filterCid != null) 'filterCid': filterCid,
+  };
+
+  @override
+  bool operator ==(Object other) =>
+      other is SiteChip &&
+      other.id == id &&
+      other.name == name &&
+      other.kind == kind &&
+      other.filterCid == filterCid;
+
+  @override
+  int get hashCode => Object.hash(id, name, kind, filterCid);
+
+  @override
+  String toString() =>
+      'SiteChip(${kind.name}, id: $id, name: $name, filterCid: $filterCid)';
 }
 
 /// 分类房间列表分页结果。
@@ -504,11 +581,16 @@ class CategoryItem {
     required this.cid,
     required this.name,
     required this.pic,
+    this.chips = const [],
   });
 
   final String cid;
   final String name;
   final String pic;
+
+  /// 列表型分类的附属标签(如分类行内线框 chip);默认空,
+  /// 现有平台逐字段构造不受影响。
+  final List<SiteChip> chips;
 }
 
 /// 一级分类分组。

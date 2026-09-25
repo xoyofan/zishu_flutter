@@ -16,6 +16,9 @@ class FakeTwitchApi extends http.BaseClient {
   Object? gameResponse;
   Object? searchResponse;
 
+  /// 按标签过滤的房间列表(`streams(tags:)`)响应。
+  Object? tagStreamsResponse;
+
   /// usher 主播放列表内容;留空则返回空串(用于「无可用画质」用例)。
   String usherBody = '';
 
@@ -23,6 +26,8 @@ class FakeTwitchApi extends http.BaseClient {
   bool gqlErrors = false;
 
   final List<String> gqlOperations = [];
+  final List<String> gqlQueries = [];
+  final List<Map<String, Object?>> gqlVariables = [];
   final List<Uri> requests = [];
 
   @override
@@ -43,9 +48,13 @@ class FakeTwitchApi extends http.BaseClient {
     if (url.host == 'usher.ttvnw.net') return http.Response(usherBody, 200);
 
     if (url.host == 'gql.twitch.tv' || url.host == 'gql.twitch.tv.') {
-      final body = jsonDecode(request.body);
-      final operation = (body as List).first['operationName'] as String? ?? '';
+      final first = (jsonDecode(request.body) as List).first as Map;
+      final operation = first['operationName'] as String? ?? '';
       gqlOperations.add(operation);
+      gqlQueries.add(first['query']?.toString() ?? '');
+      gqlVariables.add(
+        Map<String, Object?>.from(first['variables'] as Map? ?? const {}),
+      );
       if (gqlErrors) {
         return _json([
           {
@@ -63,6 +72,7 @@ class FakeTwitchApi extends http.BaseClient {
         }),
         'BrowsePage_AllDirectories' => _data({'games': gamesResponse}),
         'BrowsePage_Popular' => _data({'streams': streamsResponse}),
+        'BrowsePage_Tags' => _data({'streams': tagStreamsResponse}),
         'DirectoryPage_Game' => _data({'game': gameResponse}),
         'SearchResultsPage_SearchResults' => _data({'searchFor': searchResponse}),
         _ => http.Response('fake route missing: $operation', 500),

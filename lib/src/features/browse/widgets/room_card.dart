@@ -1,9 +1,11 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/widgets/cover_badges.dart';
+import '../../../shared/presentation/widgets/outline_chip.dart';
 import '../../../shared/presentation/widgets/translated_text.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../../follow/widgets/follow_common.dart';
@@ -67,8 +69,10 @@ class RoomCard extends StatelessWidget {
 /// 对齐参考实现 `RoomCard.vue` 的 `.room-card__body`(padding 6/8/8)与
 /// `.room-card__meta`(margin-top 4 / gap 6):
 /// - 第 1 行:房间标题(缺标题回退主播名,仍缺则占位不塌陷);
-/// - 第 2 行:主播名 + 特色 chip(促销/画质标签;平台名不进 chip,由封面
-///   平台角标或单平台页签上下文承载)。
+/// - 第 2 行:主播名 + 特色 chip(Stage 2 起优先渲染 [RoomRecord.chips]
+///   —— 游戏/类型 tag 在前、language 在后,按 [SiteChipKind] 排序;
+///   promoTag 保留为尾部 chip,已与某个 chip 同名时不重复;平台名不进
+///   chip,由封面平台角标或单平台页签上下文承载)。
 ///
 /// **两行高度必须恒定**:有的主播没有名字、多数房间没有 chip,若不占位,同一
 /// 网格里卡片高度参差(用户报「都保持2行的行高,不要多余 padding」)。
@@ -89,11 +93,30 @@ class _RoomCardMeta extends StatelessWidget {
               ? room.anchorName!
               : ' ');
     final anchor = (room.anchorName ?? '').trim();
-    final chips = <String>[
-      if (room.promoTag != null && room.promoTag!.trim().isNotEmpty)
-        room.promoTag!.trim(),
-      // 平台名不进 chip(用户口径 2026-09-18):平台信息由封面平台角标
-      // (CoverPlatformBadge,跨平台网格)或单平台页签上下文承载。
+    // chip 顺序:按 SiteChipKind 枚举序分桶拼接(桶内保输入序),
+    // 实现「游戏/类型 tag 在前,language 在后」;UI 不看平台。
+    final siteChips = [
+      for (final kind in SiteChipKind.values)
+        ...room.chips.where((chip) => chip.kind == kind),
+    ];
+    // promoTag 保留为特色 chip;已单独成 chip(name 相同)时不重复。
+    final promoTag = (room.promoTag ?? '').trim();
+    final chipWidgets = <Widget>[
+      for (final chip in siteChips)
+        OutlineChip(
+          key: Key('room-meta-chip-${chip.name}'),
+          label: chip.name,
+          // 可点判据只看 filterCid(Stage 1 口径);点击进该标签的过滤
+          // 房间列表,与分类浮层跳 `/:site/category/:cid` 同一路由。
+          onTap: chip.navigable
+              ? () => context.go(
+                  '/${room.site}/category/${Uri.encodeComponent(chip.filterCid!)}',
+                )
+              : null,
+        ),
+      if (promoTag.isNotEmpty &&
+          !siteChips.any((chip) => chip.name == promoTag))
+        OutlineChip(key: Key('room-meta-chip-$promoTag'), label: promoTag),
     ];
     return Padding(
       // 参考实现 .room-card__body:padding 6px 8px 8px。
@@ -124,41 +147,16 @@ class _RoomCardMeta extends StatelessWidget {
                       fontWeight: FontWeight.w500,
                     ),
                   ),
-                if (anchor.isNotEmpty && chips.isNotEmpty)
+                if (anchor.isNotEmpty && chipWidgets.isNotEmpty)
                   const SizedBox(width: 6),
-                for (final chip in chips) ...[
-                  _MetaChip(key: Key('room-meta-chip-$chip'), text: chip),
-                  if (chip != chips.last) const SizedBox(width: 6),
+                for (final (index, chip) in chipWidgets.indexed) ...[
+                  if (index > 0) const SizedBox(width: 6),
+                  chip,
                 ],
               ],
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// 元信息行里的特色 chip:对齐 `.room-card__tag`(小圆角浅底、次级文字)。
-class _MetaChip extends StatelessWidget {
-  const _MetaChip({super.key, required this.text});
-
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    final tokens = context.tokens;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-      decoration: BoxDecoration(
-        color: tokens.surfaceRaised,
-        borderRadius: AppRadius.allSm,
-      ),
-      child: Text(
-        text,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: context.textCaption.copyWith(fontSize: AppFontSize.caption),
       ),
     );
   }
