@@ -19,6 +19,10 @@ class FakeTwitchApi extends http.BaseClient {
   /// 按标签过滤的房间列表(`streams(tags:)`)响应。
   Object? tagStreamsResponse;
 
+  /// 语言过滤(`BrowsePage_ByLanguage`)按调用顺序轮换的分页响应;
+  /// 队列耗尽后重复最后一项。null 则回退到 [streamsResponse]。
+  final List<Object?> languagePages = [];
+
   /// usher 主播放列表内容;留空则返回空串(用于「无可用画质」用例)。
   String usherBody = '';
 
@@ -73,12 +77,21 @@ class FakeTwitchApi extends http.BaseClient {
         'BrowsePage_AllDirectories' => _data({'games': gamesResponse}),
         'BrowsePage_Popular' => _data({'streams': streamsResponse}),
         'BrowsePage_Tags' => _data({'streams': tagStreamsResponse}),
+        'BrowsePage_ByLanguage' => _data({
+          'streams': _languagePage(gqlVariables.last),
+        }),
         'DirectoryPage_Game' => _data({'game': gameResponse}),
         'SearchResultsPage_SearchResults' => _data({'searchFor': searchResponse}),
         _ => http.Response('fake route missing: $operation', 500),
       };
     }
     return http.Response('fake route missing: $url', 500);
+  }
+
+  Object? _languagePage(Map<String, Object?> variables) {
+    if (languagePages.isEmpty) return streamsResponse;
+    final index = gqlVariables.where((v) => v.containsKey('after')).length - 1;
+    return index < languagePages.length ? languagePages[index] : languagePages.last;
   }
 
   http.Response _data(Object? data) => _json([

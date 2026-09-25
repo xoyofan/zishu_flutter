@@ -5,8 +5,8 @@
 /// 1. fetchCategories 输出 分类 + 标签 两组,分类 first=100(GQL 硬上限);
 /// 2. 标签组跨游戏按 id 去重、出现游戏数降序、同数按名称稳定排序,
 ///    cid 带 `tag:` 前缀与游戏 id 区分,可点(端到端走 streams(tags:));
-/// 3. 房间卡片 chips = 游戏 tags(filterCid 可点) + broadcastLanguage
-///    (仅展示,filterCid 为 null);
+/// 3. 房间卡片 chips = 游戏 tags + broadcastLanguage(两者均可点:
+///    `tag:<id>` / `lang:<CODE>` 交 fetchRooms 过滤);
 /// 4. RoomSummary/RoomRecord 的 chips JSON roundtrip、mergeRefresh
 ///    「fresh 非空覆盖、空保留」与构造深冻结。
 library;
@@ -156,8 +156,12 @@ void main() {
       );
       expect(first[2].id, 'EN');
       expect(first[2].name, '英语');
-      expect(first[2].filterCid, isNull, reason: '语言 chip 仅展示不可点');
-      expect(first[2].navigable, isFalse);
+      expect(
+        first[2].filterCid,
+        'lang:${first[2].id.toUpperCase()}',
+        reason: '语言 chip 可点:走客户端分页过滤(上游无服务端语言过滤)',
+      );
+      expect(first[2].navigable, isTrue);
 
       final second = result.rooms.last.chips;
       expect(second.map((c) => c.kind).toList(), [
