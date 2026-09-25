@@ -170,6 +170,10 @@ class MediaKitLivePlayer implements LivePlayer, LineRecoveryAware {
     ('demuxer-lavf-probesize', '2097152'),
     ('demuxer-lavf-analyzeduration', '2'),
     ('network-timeout', '15'),
+    // mpv 默认 hwdec=no → Windows Release 播放整机 CPU 约 42%(24 核)、
+    // 暂停后 1.7%,确认为软件解码。auto-safe 优先走 d3d11va 硬解,失败时
+    // 由下方 hwdec-software-fallback 回退软解,两者成对存在。
+    ('hwdec', 'auto-safe'),
     ('hwdec-software-fallback', '1'),
     // 直播以音频为同步基准,恢复 b6be087 的稳定配置。
     ('video-sync', 'audio'),

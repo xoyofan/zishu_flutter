@@ -57,6 +57,15 @@ void main() {
       expect(properties['video-sync'], 'audio');
     });
 
+    test('硬解开启:auto-safe 与软解回退必须成对出现(修 CPU 42% 软解占用)', () {
+      final properties = asMap();
+      // mpv 默认 hwdec=no → Windows Release 播放整机 CPU 约 42%(24 核),
+      // 暂停后降到 1.7%,确认为软件解码;auto-safe 失败时由
+      // hwdec-software-fallback 回退软解,两者缺一不可。
+      expect(properties['hwdec'], 'auto-safe');
+      expect(properties['hwdec-software-fallback'], '1');
+    });
+
     test('代理仍按当前线路主机在 open 前重设', () {
       final source = File(
         'lib/src/platforms/common/playback/media_kit_live_player.dart',
