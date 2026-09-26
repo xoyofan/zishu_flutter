@@ -66,6 +66,7 @@ class RoomCard extends StatelessWidget {
 /// - 第 2 行:特色 chip 行([RoomRecord.chips] 按 [SiteChipKind] 排序
 ///   —— 游戏/类型 tag 在前、language 在后;promoTag 保留为尾部 chip,
 ///   已与某个 chip 同名时不重复;平台名不进 chip,平台名角标也已移除)。
+///   chip 可压缩(见下方 [Flexible] 说明),保证窄卡片也不溢出。
 ///   主播昵称不再在 meta 行,已移到封面左下角。
 ///
 /// **两行高度必须恒定**:多数房间没有 chip,若不占位,同一网格里卡片高度
@@ -126,6 +127,11 @@ class _RoomCardMeta extends StatelessWidget {
           ),
           const SizedBox(height: AppSpacing.xs),
           // 第 2 行:特色 chips;为空时同样占满一行,保证所有平台卡片等高。
+          //
+          // chip 一律包 [Flexible](松约束):够宽时保持自然宽度,不够宽时
+          // 按份压缩、内部 Text 省略,**不换行也不溢出** —— 与官网单行
+          // `overflow:hidden` 容器同口径(最窄列 4@768px 卡片 ~175px,
+          // 文字缩放 1.3 时三个 6 字标签刚性排布会溢出 136px,实测)。
           SizedBox(
             height: _metaLineHeight,
             child: chipWidgets.isEmpty
@@ -134,7 +140,7 @@ class _RoomCardMeta extends StatelessWidget {
                     children: [
                       for (final (index, chip) in chipWidgets.indexed) ...[
                         if (index > 0) const SizedBox(width: 6),
-                        chip,
+                        Flexible(child: chip),
                       ],
                     ],
                   ),

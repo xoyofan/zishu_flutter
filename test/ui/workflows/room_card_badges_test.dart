@@ -501,6 +501,122 @@ void main() {
     });
   });
 
+  group('斗鱼卡:左上角标 → 右上身份位 + 特色 chips(2026-09-26)', () {
+    /// 只泵一张 RoomCard 的组件宿主(无 router)。
+    Future<void> pumpCard(WidgetTester tester, RoomRecord room, {double width = 320}) async {
+      await tester.pumpWidget(
+        ProviderScope(
+          child: MaterialApp(
+            theme: ZishuTheme.dark(),
+            home: Scaffold(
+              body: SizedBox(width: width, child: RoomCard(room: room)),
+            ),
+          ),
+        ),
+      );
+      await _pumpFrames(tester, 2);
+    }
+
+    RoomRecord douyuRoom({List<SiteChip> chips = const []}) => RoomRecord(
+      site: 'douyu',
+      roomId: '9200',
+      roomState: RoomState.live,
+      title: '斗鱼房',
+      anchorName: '斗鱼主播',
+      cid: '2',
+      category: '炉石传说',
+      audience: '225.7万',
+      cover: '',
+      identityLabel: '全站榜TOP10',
+      chips: chips,
+    );
+
+    testWidgets('icv3 文案整文渲染在封面右上(不被 6 字规则砍掉)', (tester) async {
+      await pumpCard(tester, douyuRoom());
+
+      final card = find.byKey(const Key('room-card-douyu-9200'));
+      final identity = find.descendant(
+        of: card,
+        matching: find.byKey(const Key('cover-badge-identity')),
+      );
+      expect(
+        tester.widget<OutlineChip>(identity).label,
+        '全站榜TOP10',
+        reason: '官网角标整文渲染(实测最宽 8 字),解析层不截断',
+      );
+      _expectCorner(tester, card, identity, CoverCorner.topRight);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('roomLabel 三个 chips 渲成封面下方 chip 行,不可点', (tester) async {
+      await pumpCard(
+        tester,
+        douyuRoom(
+          chips: const [
+            SiteChip(id: 'dy:炉石金牌讲师', name: '炉石金牌讲师', kind: SiteChipKind.tag),
+            SiteChip(id: 'dy:竞技场钉子户', name: '竞技场钉子户', kind: SiteChipKind.tag),
+            SiteChip(id: 'dy:天梯高玩', name: '天梯高玩', kind: SiteChipKind.tag),
+          ],
+        ),
+      );
+
+      final card = find.byKey(const Key('room-card-douyu-9200'));
+      for (final name in ['炉石金牌讲师', '竞技场钉子户', '天梯高玩']) {
+        final chip = find.descendant(
+          of: card,
+          matching: find.byKey(Key('room-meta-chip-$name')),
+        );
+        expect(chip, findsOneWidget, reason: 'chip $name 应渲染');
+        expect(
+          find.descendant(of: chip, matching: find.byType(InkWell)),
+          findsNothing,
+          reason: '斗鱼特色标签无分类 id,不可点',
+        );
+      }
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('最窄网格列 + 大字体下 chips 行仍不溢出、不换行', (tester) async {
+      // 4 列 @768px 是实测最窄列(卡片 ~175px,内边距后 ~159px);
+      // 文字缩放 1.3 是 DESIGN.md 元信息区预算里的上限档。
+      tester.platformDispatcher.textScaleFactorTestValue = 1.3;
+      addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+      await pumpCard(
+        tester,
+        douyuRoom(
+          chips: const [
+            SiteChip(id: 'dy:炉石金牌讲师', name: '炉石金牌讲师', kind: SiteChipKind.tag),
+            SiteChip(id: 'dy:竞技场钉子户', name: '竞技场钉子户', kind: SiteChipKind.tag),
+            SiteChip(id: 'dy:竞技场高玩', name: '竞技场高玩', kind: SiteChipKind.tag),
+          ],
+        ),
+        width: 175,
+      );
+
+      // 无 overflow 异常 + chips 仍在同一行(不因压缩换行)。
+      expect(tester.takeException(), isNull, reason: 'chips 行不得溢出');
+      final card = find.byKey(const Key('room-card-douyu-9200'));
+      final tops = ['炉石金牌讲师', '竞技场钉子户', '竞技场高玩']
+          .map(
+            (name) => tester
+                .getTopLeft(
+                  find.descendant(
+                    of: card,
+                    matching: find.byKey(Key('room-meta-chip-$name')),
+                  ),
+                )
+                .dy,
+          )
+          .toSet();
+      expect(tops, hasLength(1), reason: '三个 chip 必在同一行(第 2 行定高 17px)');
+      expect(
+        tester.getSize(card).width,
+        175,
+        reason: '守卫:本用例跑在最窄网格列宽度上',
+      );
+    });
+  });
+
   testWidgets('侧栏关注(用户口径 2026-09-19):默认列表只显在播;网格在播卡四象限', (
     tester,
   ) async {
