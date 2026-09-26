@@ -228,6 +228,17 @@ abstract final class AppHuyaChatBadge {
   /// 等级数字字号 `0.58em`。
   static const double levelTextFontSize = 0.58 * AppChatBadge.em;
 
+  /// 等级胶囊**裁剪后**宽度（用户口径 2026-09-26）。
+  ///
+  /// 官方 45px(=2.25em + 1.23em) 宽里，右半段是**纯渐变空底**：实测官方图
+  /// `consumeLevelBadgeV2` 90×40@2x 逐列像素，CSS 22..40 段色数仅 3-4、
+  /// 无任何内容，专门留给叠在上面的等级数字。右侧裁掉 7px 后为 38px，
+  /// 仍容得下「20px 宝石区 + ~14px 数字 + 4px 右余量」。
+  static const double levelWidthCropped = 38;
+
+  /// 胶囊右圆角半径：裁掉右侧 7px 后右圆头已被切掉，用与左端同半径补回。
+  static const double levelRadius = 10;
+
   // ---- 粉丝牌（fans-icon）----
 
   /// 胶囊高 `1.15em`（web `--huya-fan-badge-h`，比通用粉丝牌矮一档）。
@@ -243,6 +254,13 @@ abstract final class AppHuyaChatBadge {
   /// 内容左右内边距 `padding: 0 .28em 0 .14em`。
   static const double fanPadLeft = 0.14 * AppChatBadge.em;
   static const double fanPadRight = 0.28 * AppChatBadge.em;
+
+  /// 身份图标（守盾 / V）边长 = 粉丝牌盒高。
+  ///
+  /// 官网 `.fans-icon-sf` 实测 22/26/28 × 20（高即盒高 20）。此前 V 标记按
+  /// `AppFontSize.caption`(11)、盾按 `fanHeight`(16.1) 渲染，都比原尺寸小，
+  /// 现统一回到盒高。
+  static const double fanIdentitySize = 20;
 
   /// 左侧圆形等级徽记直径：`min-width: 1.05em` 且自身字号 `.67em`
   /// → `1.05 × .67 × 14`。

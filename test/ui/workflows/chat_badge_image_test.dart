@@ -498,13 +498,21 @@ void main() {
         of: find.byKey(const Key('huya-fan-badge')),
         matching: find.text('铁粉团'),
       ), findsOneWidget);
+      // 身份图标是**粉丝牌之外的独立兄弟徽章**(用户口径 2026-09-26),
+      // 不在 `huya-fan-badge` 的 KeyedSubtree 内(否则会把整行量成 20 高)。
+      final identity = find.byKey(const Key('huya-fan-identity-icon'));
+      expect(identity, findsOneWidget, reason: '身份图标用官方 fansBadge/3/v2/{id}.png');
       expect(
-        find.descendant(
-          of: find.byKey(const Key('huya-fan-badge')),
-          matching: find.byKey(const Key('huya-fan-identity-icon')),
-        ),
-        findsOneWidget,
-        reason: '身份图标用官方 fansBadge/3/v2/{id}.png',
+        find.descendant(of: find.byKey(const Key('huya-fan-badge')), matching: identity),
+        findsNothing,
+        reason: '身份徽章不得被圈进粉丝牌的 KeyedSubtree',
+      );
+      // 回到原尺寸 20(官网 `.fans-icon-sf` 实测 22/26/28 × 20);
+      // 此前 V 标记按 11、盾按粉丝牌高 16.1 渲染,都小了一半。
+      expect(
+        tester.getRect(identity).height,
+        20,
+        reason: '身份图标边长应回到原尺寸 20',
       );
       expect(
         tester

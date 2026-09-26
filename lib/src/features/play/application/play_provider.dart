@@ -577,15 +577,17 @@ class PlayController extends AsyncNotifier<PlayState> {
     }
   }
 
-  /// 同画质下除 [line] 外的线路,作为 mpv 播放列表回退线路
-  /// (参考 pure_live 的线路自动切换)。无画质或线路时返回空列表。
-  List<StreamLine> _fallbackLines(StreamQuality? quality, StreamLine? line) {
-    if (quality == null || line == null) return const [];
-    return [
-      for (final candidate in quality.lines)
-        if (candidate.url != line.url) candidate,
-    ];
-  }
+  /// 回退线路：**恒为空**（用户口径 2026-09-26：去掉线路自动切换）。
+  ///
+  /// 此前这里把同画质下的其余线路全部作为 mpv 播放列表回退项，某条断流/超时时
+  /// mpv 会自动跳到下一条；副作用是**用户手动切了线路后**仍会看到
+  /// 「直播地址暂时无法打开，正在切换线路…」并被自动改线，与用户选的那条冲突。
+  /// 现在只播用户/策略选中的这一条，失败就如实报错，不偷换线路。
+  ///
+  /// 底层 [LivePlayer.open] 的 `fallbacks` 形参与 mpv 播放列表能力保留
+  /// （属平台层能力，不在本轮拆除），只是不再被喂数据。
+  List<StreamLine> _fallbackLines(StreamQuality? quality, StreamLine? line) =>
+      const [];
 
   /// 按偏好挑**可起播**的档位:在 [pickPlayQuality] 结果落在空线路占位档
   /// (懒取流:解析侧只给实给档真实线路,其余档位占位;或服务器把高请求

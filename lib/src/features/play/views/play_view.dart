@@ -1313,7 +1313,7 @@ class _PlaybackNoticeOverlay extends StatelessWidget {
 
   String get _message => switch (notice) {
     PlaybackNotice.networkJitter => '网络波动，缓冲中…',
-    PlaybackNotice.sourceOpenFailed => '直播地址暂时无法打开，正在切换线路…',
+    PlaybackNotice.sourceOpenFailed => '直播地址暂时无法打开，请手动切换线路或稍后重试',
     PlaybackNotice.reconnecting => '网络不稳定，正在重新连接…',
     PlaybackNotice.recoveringNewUrl => '正在获取新的直播地址…',
     PlaybackNotice.none => '正在缓冲直播画面…',

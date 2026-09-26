@@ -217,9 +217,7 @@ class _FanBadgeState extends State<_FanBadge> {
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  Positioned.fill(
-                    child: ClipOval(child: image),
-                  ),
+                  Positioned.fill(child: ClipOval(child: image)),
                   Positioned(
                     right: -7,
                     bottom: -5,
@@ -230,7 +228,9 @@ class _FanBadgeState extends State<_FanBadge> {
                         height: 1,
                         color: Colors.white,
                         fontWeight: FontWeight.w600,
-                        shadows: [Shadow(color: Colors.black87, blurRadius: 1.5)],
+                        shadows: [
+                          Shadow(color: Colors.black87, blurRadius: 1.5),
+                        ],
                       ),
                     ),
                   ),
@@ -329,40 +329,40 @@ class _FanBadgeState extends State<_FanBadge> {
     // 2. 取不到模板（未登录/资源请求失败/房间无定制）→ 降级为实测 7 档底色 +
     //    同构布局自绘，**不编造 CDN 路径**。
     if (site == 'huya') {
+      final tooltip = hasName ? '$name Lv.$level' : '粉丝牌 Lv.$level';
+      // 身份图标（守盾 / V）是**独立身份徽章**，不是粉丝牌底图的一部分
+      // （用户口径 2026-09-26）：作为粉丝牌右侧的并列兄弟节点单独渲染，
+      // 且回到原尺寸 20（官网 `.fans-icon-sf` 实测 22/26/28 × 20）。
       final identity = widget.vFlag > 0 && widget.vLogo.isNotEmpty
           ? _HuyaSuperFanBadge(logo: widget.vLogo)
           : _HuyaFanIdentityIcon(level: level, identity: widget.identity);
-      final tooltip = hasName ? '$name Lv.$level' : '粉丝牌 Lv.$level';
+      // 身份徽章放在 `huya-fan-badge` **之外**:否则这个 key 会把整个
+      // Row 圈进来,量到的是 Row 高(身份图标 20)而非粉丝牌胶囊高(16.1)。
+      Widget withIdentity(Widget badge) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          KeyedSubtree(key: const Key('huya-fan-badge'), child: badge),
+          const SizedBox(width: 2),
+          identity,
+        ],
+      );
       // 官方底图 URL 已由解析侧用房间级 `sFloorUrl` 模板拼好放进
-      // `DanmakuBadge.url`（底图内含等级圆标与团名留白），故这里只叠身份图标。
+      // `DanmakuBadge.url`（底图内含等级圆标与团名留白）。
       // `url` 为空 = 房间级资源没取到 → 降级自绘，**不编造 CDN 路径**。
       if (remoteUrl.isNotEmpty && !_imgFailed) {
         return Tooltip(
           message: tooltip,
-          child: KeyedSubtree(
-            key: const Key('huya-fan-badge'),
-            child: SizedBox(
+          child: withIdentity(
+            SizedBox(
               height: AppHuyaChatBadge.fanHeight,
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: ChatBadgeImage(
-                      site: site,
-                      kind: ChatBadgeKind.fans,
-                      level: level,
-                      height: AppHuyaChatBadge.fanHeight,
-                      src: remoteUrl,
-                      useDiskCache: false,
-                      onFail: _markImgFailed,
-                    ),
-                  ),
-                  Positioned(
-                    right: 0,
-                    top: 0,
-                    bottom: 0,
-                    child: identity,
-                  ),
-                ],
+              child: ChatBadgeImage(
+                site: site,
+                kind: ChatBadgeKind.fans,
+                level: level,
+                height: AppHuyaChatBadge.fanHeight,
+                src: remoteUrl,
+                useDiskCache: false,
+                onFail: _markImgFailed,
               ),
             ),
           ),
@@ -370,9 +370,8 @@ class _FanBadgeState extends State<_FanBadge> {
       }
       return Tooltip(
         message: tooltip,
-        child: KeyedSubtree(
-          key: const Key('huya-fan-badge'),
-          child: Container(
+        child: withIdentity(
+          Container(
             height: AppHuyaChatBadge.fanHeight,
             constraints: const BoxConstraints(
               minWidth: AppHuyaChatBadge.fanMinWidth,
@@ -414,8 +413,6 @@ class _FanBadgeState extends State<_FanBadge> {
                     ),
                   ),
                 ],
-                const SizedBox(width: AppSpacing.xs),
-                identity,
               ],
             ),
           ),
@@ -987,19 +984,29 @@ class _UserLevelBadgeState extends State<_UserLevelBadge> {
         key: const Key('huya-user-level-pill'),
         child: SizedBox(
           height: kHuyaConsumeLevelBadgeHeight,
-          width: kHuyaConsumeLevelBadgeWidth,
+          // 用户口径 2026-09-26:官方图右侧裁掉 7px(45→38)。官方图右半段是
+          // 纯渐变空底(留给叠字),裁掉不丢信息。
+          width: AppHuyaChatBadge.levelWidthCropped,
           child: Stack(
             children: [
               Positioned.fill(
-                child: ChatBadgeImage(
-                  site: site,
-                  kind: ChatBadgeKind.userLevel,
-                  level: level,
-                  height: kHuyaConsumeLevelBadgeHeight,
-                  src: url,
-                  assetPathOverride: '',
-                  useDiskCache: false,
-                  onFail: _markImgFailed,
+                child: ClipRRect(
+                  // 只圆右侧：裁切后右圆头已被切掉，用与左端同半径补回，
+                  // 否则胶囊右端是直角、看起来像被切断。
+                  borderRadius: const BorderRadius.only(
+                    topRight: Radius.circular(AppHuyaChatBadge.levelRadius),
+                    bottomRight: Radius.circular(AppHuyaChatBadge.levelRadius),
+                  ),
+                  child: ChatBadgeImage(
+                    site: site,
+                    kind: ChatBadgeKind.userLevel,
+                    level: level,
+                    height: kHuyaConsumeLevelBadgeHeight,
+                    src: url,
+                    assetPathOverride: '',
+                    useDiskCache: false,
+                    onFail: _markImgFailed,
+                  ),
                 ),
               ),
               // web `.chat-user-level--huya .chat-user-level__huya-lv`：
@@ -1226,7 +1233,7 @@ class _HuyaFanIdentityIcon extends StatelessWidget {
     if (id <= 0) return const SizedBox.shrink();
     return SizedBox(
       key: const Key('huya-fan-identity-icon'),
-      height: AppHuyaChatBadge.fanHeight,
+      height: AppHuyaChatBadge.fanIdentitySize,
       child: Image.network(
         huyaFansIdentityUrl(id),
         fit: BoxFit.contain,
@@ -1255,8 +1262,9 @@ class _HuyaSuperFanBadge extends StatelessWidget {
               child: CachedNetworkImage(
                 imageUrl: logo,
                 cacheKey: logo,
-                width: AppFontSize.caption,
-                height: AppFontSize.caption,
+                // 用户口径 2026-09-26:回到原尺寸。此前按
+                // AppFontSize.caption(11) 渲染,比官网的 20 小了一半。
+                height: AppHuyaChatBadge.fanIdentitySize,
                 fit: BoxFit.contain,
                 placeholder: (_, _) => const SizedBox.shrink(),
                 errorWidget: (_, _, _) => _fallbackMark(context),
@@ -1268,7 +1276,7 @@ class _HuyaSuperFanBadge extends StatelessWidget {
   Widget _fallbackMark(BuildContext context) => Text(
     'V',
     style: TextStyle(
-      fontSize: AppFontSize.label,
+      fontSize: AppHuyaChatBadge.fanIdentitySize * 0.82,
       height: 1,
       fontWeight: FontWeight.w900,
       fontStyle: FontStyle.italic,
