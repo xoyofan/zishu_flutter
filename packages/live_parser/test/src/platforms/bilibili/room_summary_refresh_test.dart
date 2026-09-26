@@ -172,6 +172,28 @@ void main() {
     expect(record.audience, '1.2万');
   });
 
+  test('大航海:上游报 0 人 → 显示「0」,与「没取到」(null)区分', () async {
+    fake
+      ..roomInfoResponse = _roomInfo(liveStatus: 1, online: 12345)
+      ..guardTopListResponse = {
+        'code': 0,
+        'data': {
+          'info': {'num': 0},
+          'top3': [],
+          'list': [],
+        },
+      };
+
+    final record = await resolver.refreshRoomSummary(
+      const RoomRequest(site: 'bilibili', roomIdOrUrl: '9527'),
+    );
+
+    // 0 是上游确实报告「一个大航海都没有」,不是取数失败:
+    // 展示层据此渲染 0(web `statDisplay` 对空值也是 "0"),
+    // 而失败/离线才留空 → UI 显示「—」。
+    expect(record.svip, '0');
+  });
+
   test('离线(live_status=0):audience 为 null,roomState=offline', () async {
     fake.roomInfoResponse = _roomInfo(liveStatus: 0, online: 9999);
 

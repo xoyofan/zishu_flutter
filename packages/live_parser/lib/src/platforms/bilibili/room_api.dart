@@ -134,15 +134,20 @@ Future<({String uname, String face})> fetchBilibiliAnchorInRoom(
 /// 大航海总人数(xlive/app-room/v2/guardTab/topList 的 `data.info.num`)。
 ///
 /// 口径对齐 web `fetchBilibiliGuardInfo`(SFVideoLive
-/// `services/streaming-server/src/resolve/bilibili/web-stream.ts:331`):
-/// 仅在播时查询(调用方门槛),失败/为 0 一律返回 0(展示层留空,不伪造)。
-Future<int> fetchBilibiliGuardTotal(
+/// `services/streaming-server/src/resolve/bilibili/web-stream.ts:331):
+/// 仅在播时查询(调用方门槛)。
+///
+/// **返回 `null` = 取数失败/不可用**(网络异常、上游错误、参数不足);
+/// 返回 `0` = **上游确实报告一个大航海都没有**。2026-09-26 前两者都折成 0,
+/// 于是「真 0 人」与「没取到」在展示层无法区分(都显示「—」);实测
+/// 40 间真实房间有 38 间能取到非 0,该接口本身可用,故拆开这两种语义。
+Future<int?> fetchBilibiliGuardTotal(
   ParserHttp http,
   BilibiliCredentials credentials,
   String roomId,
   int anchorUid,
 ) async {
-  if (roomId.isEmpty || anchorUid <= 0) return 0;
+  if (roomId.isEmpty || anchorUid <= 0) return null;
   try {
     final data = jsonMapOf(
       await bilibiliFetchJson(
@@ -160,9 +165,13 @@ Future<int> fetchBilibiliGuardTotal(
         roomId: roomId,
       ),
     );
-    return jsonInt(jsonMapOf(data['info'])['num']);
+    final info = jsonMapOf(data['info']);
+    // 上游错误/风控响应里没有 `info.num`(实测风控返回 `{"error":-1}`),
+    // 此前 jsonInt 缺失键会折成 0,连带把「没取到」说成「一个大航海都没有」。
+    if (!info.containsKey('num')) return null;
+    return jsonInt(info['num']);
   } on Object {
-    return 0;
+    return null;
   }
 }
 

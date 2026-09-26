@@ -111,17 +111,19 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
     final isReplay = liveStatus == 2;
     // 大航海人数(web ROOM_STAT_COLUMNS.bilibili 第 3 列 tone=svip
     // field=guard「大航海」,本包统一由 diamondFans 承载):仅在播时取
-    // guardTab/topList(web 真源 state==live 门槛),失败/为 0 留空。
-    final diamondFans = isLive
-        ? formatExactCount(
-            await fetchBilibiliGuardTotal(
-              http,
-              credentials,
-              rid,
-              jsonInt(info['uid']),
-            ),
+    // guardTab/topList(web 真源 state==live 门槛),失败留空(**null** = 没取到)。
+    // 取到就按原样展示,含 0 —— 0 是「上游报告一个都没有」,与失败不同。
+    final guardCount = isLive
+        ? await fetchBilibiliGuardTotal(
+            http,
+            credentials,
+            rid,
+            jsonInt(info['uid']),
           )
-        : '';
+        : null;
+    final diamondFans = guardCount == null
+        ? ''
+        : formatExactCountOrZero(guardCount);
     // 二级分类名优先(web pickText(area_name, parent_area_name) 同口径)。
     final refreshAreaName = jsonText(info['area_name']);
     return RoomRecord.fromSummary(RoomSummary(

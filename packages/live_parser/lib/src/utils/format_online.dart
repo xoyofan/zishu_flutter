@@ -20,6 +20,18 @@ String formatExactCount(Object? count) {
   return value.truncate().toString();
 }
 
+/// 计数展示(**保留真 0**):`0` → `'0'`,只有不可解析/负数才留空。
+///
+/// 给「上游确实报告了一个 0」的字段用(如 B 站大航海人数):调用方拿 `null`
+/// 表示取数失败,两者不再混成同一个「—」。web 侧 `statDisplay` 对空值也直接
+/// 显示 `"0"`,本函数与之对齐。
+String formatExactCountOrZero(Object? count) {
+  final value = count is num ? count : num.tryParse('${count ?? ''}'.trim());
+  if (value == null || value < 0) return '';
+  if (value == 0) return '0';
+  return value.truncate().toString();
+}
+
 /// [formatOnlineCount] 的逆运算:把「1.2万 / 3.4千 / 1234」还原为整数,用于跨站热度排序。
 /// 无法解析或为空一律返回 0,保证排序稳定。
 ///
