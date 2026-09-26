@@ -979,3 +979,25 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 - [ ] **`follow_style_row.png` 漂移根因未定性**:已排除本轮改动(clean tree 同样红)。两候选:①另一轨 `29afd14` 改了关注列表排序未刷 golden;②本机测试环境字体差异。倾向 ①(8 张 golden 只红这 1 张,若是全局字体问题应全红),但**未验证** —— 下轮若要动它,先在干净 master 上单独复跑并逐行比对,别默认按字体问题处理。
 - [ ] **本机测试字体缺 CJK 字形**:一次性目检探针里所有中文渲成豆腐块(`tool/screenshots` 下的目检图不可当视觉证据读文案);`test/ui/failures/` 里已提交的失败图会被后续 `flutter test` 跑掉,提交前需 `git checkout -- test/ui/failures/` 还原。
 - [ ] 斗鱼列表每页 40 条(旧接口 120):若首屏/翻页手感变差,再评估是否需要 V1 换页合并。
+
+## 2026-09-26 B 站统计/VIP 缺口查证 + 斗鱼粉丝牌牌面修复(完成)
+
+**结论**:B 站「角标 + VIP/SVIP」查证后**两个都不做**(A1 列表每房一个 `get_info`、A2 播放页加 chips 消费点),已归档的只有一条口径修正(D)。同期修掉斗鱼粉丝牌「底图没盖住文字」的真实缺陷。
+
+### B 站查证(不做的依据)
+- [x] **列表层无角标源**:`Area/getRoomList` 与 `webMain/getList` 条目全字段实测,**无任何 badge/tag/label 类字段**(斗鱼 V1 有 `icv3`+`roomLabel`,B 站没有)。「照斗鱼接线」在 B 站不成立。
+- [x] `get_info` 有 `tags`(逗号分隔多标签,40 间 25 间有、最多 13 个)可做 chips,但**只在进房路径可得**;`roomBaseInfo` 的 `room_ids` 传多值 -400(不支持批量),故浏览卡要 chips 只能每房一个请求 = A1,已裁决不做。
+- [x] **自纠**:上轮说「A 落在播放页房间头」是想当然 —— `chips` 全 UI 只有一个消费点(`RoomCard` 浏览网格),`RoomPayload` 也没 chips 字段,`refreshRoomSummary` 的结果只喂统计字段。**接了数据也没有地方显示**,故 A 必须重选路径。
+- [x] **VIP/SVIP 真相**:display 契约与 web 逐字段对齐无问题;大航海**只在 `refreshRoomSummary` 取**(列表恒空),取数本身可用(40 间 38 间非 0,先前两房为赛事房确实没有);粉丝勋章**我们和 web 都没有数据源**(SFVideoLive 的 `fanGroup` 只在 douyin/sse 填),那列两边都是空。
+- [x] **D 已做**(`7cd817f`):`fetchBilibiliGuardTotal` 改返回 `int?`,拆开「真 0 人」与「没取到」;根因是上游风控返回 `{"error":-1}` 没有 `info.num`,`jsonInt` 缺失键折成 0。新增 `formatExactCountOrZero`(不动全局 `formatExactCount`)。
+
+### 斗鱼粉丝牌(2c95b36)
+- [x] 现象:牌「变短了、没有覆盖上文字」。查清:容器宽由自己叠的团名文字决定(长团名实测 175px),而牌图 `assets/badges/douyu/fans/{lv}.png` 只有 60×19(左侧等级徽 + 右侧带水印的牌面底,本就是留给团名的)。旧实现 `contain`+`centerLeft` 把整图缩到 18px 高、左对齐停在 ~57px,右侧 ~118px 透明 → 团名压在聊天行背景上。
+- [x] **不能照抄官网**:官网粉丝牌是整块 `<img>`,团名烧在图里(`img.js-teamfans-medal` 150×54@3x → 渲 56×20,宽随团名变 58/76,DOM 零文字节点),但那图由前端按团名 id 从 `sta-op` 换,**协议不下发** —— 实测 9999 房真实弹幕 stt 只有 `bn/bl/bc`,`bimg` 空。故「等级图 + 叠文字」是必然降级,只能把降级修好。
+- [x] 修法:`ChatBadgeImage` 加 `repeat` 参数(默认 noRepeat,其余平台零影响);斗鱼本地图分支 `fit: BoxFit.none` + `repeatX` 按原图尺寸横向平铺铺满,等级徽不变形。远程图分支保持 contain(那张自带团名,平铺会重复文字)。
+- [x] 验收:新增两例(透传 / 长团名下底图宽 == 牌宽且 repeatX);analyze 0;`flutter test` 862 全过;token 守卫 0;release 带解析 exe 已重建。
+
+### 待办
+- [ ] **真机目视确认粉丝牌**:结构层已被单测钉住(底图宽 == 牌宽),但测试环境 `Image.asset` 加载不出 PNG、GUI 自动化盲点进不去房,像素级目视未做;需人工进任意斗鱼房看聊天行长团名粉丝牌。
+- [ ] B 站大航海上列表(每房一请求)与播放页 chips 消费点:已裁决不做,若日后要重开,先看本节结论再定路径。
+- [ ] 另一轨在途未提交:`play_view.dart` + `category_favorite_test.dart`(已自洽,862 全绿),本轨未触碰。
