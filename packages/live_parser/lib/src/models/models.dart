@@ -703,6 +703,7 @@ class DanmakuBadge {
     this.vLogo = '',
     this.identity = 0,
     this.badgeSize = 2,
+    this.badgeType = 0,
     this.floorUrlTemplate = '',
     this.extinguished = 0,
     this.custom = false,
@@ -721,6 +722,12 @@ class DanmakuBadge {
 
   /// 徽章尺寸档（虎牙 `BadgeInfo.tExternal.iBadgeSize`，官网钳制为 `max(size,2)`）。
   final int badgeSize;
+
+  /// 虎牙 `BadgeInfo.iBadgeType@17`。
+  ///
+  /// 官网拼粉丝牌底图时 `<identity>` 占位符取 `sfid || type`，
+  /// 即 [identity] 为 0 时回退本字段。
+  final int badgeType;
 
   /// 虎牙粉丝牌**底图模板**（房间级 `wupui/getResourceInfo` 下发的
   /// `CommonFansBadgeSplitResource.tCommonBadge.sFloorUrl`），含
