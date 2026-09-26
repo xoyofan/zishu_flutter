@@ -20,12 +20,7 @@ import '../widgets/room_grid.dart';
 /// - `/:site/category/:cid`(带具体分类):纯房间列表,由
 ///   [browseRoomsProvider] 按 (site, cid) 拉取(对齐 web `CategoryRoomsView.vue`)。
 class CategoryView extends ConsumerStatefulWidget {
-  const CategoryView({
-    super.key,
-    required this.site,
-    this.cid,
-    this.categoryKey,
-  });
+  const CategoryView({super.key, required this.site, this.cid, this.categoryKey});
 
   /// `all` 表示全平台聚合(组名前展示平台色点)。
   final String site;
@@ -65,15 +60,11 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
       // value 非 null 即有数据。
       AsyncValue(:final value?) =>
         value.groups.isEmpty
-            ? _HintPlaceholder(
-                icon: Icons.category_rounded,
-                message: '暂无分类数据,下拉或稍后再试',
-              )
+            ? _HintPlaceholder(icon: Icons.category_rounded, message: '暂无分类数据,下拉或稍后再试')
             : _content(context, value),
       AsyncValue(:final error?) => _ErrorRetry(
         message: '分类加载失败：$error',
-        onRetry: () =>
-            ref.read(browseCategoriesProvider(widget.site).notifier).refresh(),
+        onRetry: () => ref.read(browseCategoriesProvider(widget.site).notifier).refresh(),
       ),
       _ => const Center(child: CircularProgressIndicator(strokeWidth: 2)),
     };
@@ -97,9 +88,26 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
     // 路由带具体分类且能解析命中 → 纯房间列表形态。
     final hasConcreteCategory =
         (widget.cid != null && widget.cid!.isNotEmpty) ||
-        (widget.categoryKey != null &&
-            widget.categoryKey!.isNotEmpty &&
-            item != null);
+        (widget.categoryKey != null && widget.categoryKey!.isNotEmpty && item != null);
+    // 路由带了 cid 但**没命中分类索引**(item==null)时,仍按该 cid 渲染纯房间
+    // 列表,而不是退到分类索引页。原因:卡片 chip 点进来的 cid 是**过滤 id**
+    // 而非分类 id —— Twitch 游戏标签 `tag:<id>`、语言 `lang:<CODE>` 等,
+    // 它们本来就不在分类树里,靠分类索引匹配必然落空,落空就等于「点了没反应」。
+    if (hasConcreteCategory &&
+        item == null &&
+        widget.cid != null &&
+        widget.cid!.isNotEmpty) {
+      return Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (!isPhone) BrowseSidebar(site: widget.site),
+          if (!isPhone) Container(width: 1, color: tokens.border),
+          Expanded(
+            child: _RoomSection(site: widget.site, cid: widget.cid!),
+          ),
+        ],
+      );
+    }
     if (hasConcreteCategory && item != null) {
       return Row(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -107,10 +115,7 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
           if (!isPhone) BrowseSidebar(site: widget.site),
           if (!isPhone) Container(width: 1, color: tokens.border),
           Expanded(
-            child: _RoomSection(
-              site: widget.site,
-              cid: item.cid,
-            ),
+            child: _RoomSection(site: widget.site, cid: item.cid),
           ),
         ],
       );
@@ -130,8 +135,7 @@ class _CategoryViewState extends ConsumerState<CategoryView> {
                 isAll: widget.site == 'all',
                 width: _tabsWidth,
                 site: widget.site,
-                onGroupTap: (target) =>
-                    setState(() => _selectedGroupId = target.id),
+                onGroupTap: (target) => setState(() => _selectedGroupId = target.id),
               ),
               Container(width: 1, color: tokens.border),
               Expanded(
@@ -279,10 +283,7 @@ class _GroupTab extends StatelessWidget {
                 Container(
                   width: AppSpacing.sm,
                   height: AppSpacing.sm,
-                  decoration: BoxDecoration(
-                    color: dotColor,
-                    shape: BoxShape.circle,
-                  ),
+                  decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
                 ),
                 const SizedBox(width: AppSpacing.sm),
               ],
@@ -346,11 +347,7 @@ class _CategoryGrid extends StatelessWidget {
 /// 右上角带「我的分类」收藏星(对齐参考实现 `CategoryGrid.vue` 的 `favoritable`:
 /// 星标常驻、收藏后分类名与描边高亮)。星标自己在最上层命中,不触发 tile 跳转。
 class _CategoryTile extends ConsumerWidget {
-  const _CategoryTile({
-    required this.item,
-    required this.site,
-    required this.onTap,
-  });
+  const _CategoryTile({required this.item, required this.site, required this.onTap});
 
   final CategoryItem item;
 
@@ -396,9 +393,7 @@ class _CategoryTile extends ConsumerWidget {
                   decoration: BoxDecoration(
                     borderRadius: AppRadius.allMd,
                     color: tokens.surfaceRaised,
-                    border: Border.all(
-                      color: favorited ? brandColor : tokens.border,
-                    ),
+                    border: Border.all(color: favorited ? brandColor : tokens.border),
                   ),
                   clipBehavior: Clip.antiAlias,
                   alignment: Alignment.center,
@@ -415,8 +410,7 @@ class _CategoryTile extends ConsumerWidget {
                       : CachedNetworkImage(
                           imageUrl: item.pic,
                           fit: BoxFit.cover,
-                          placeholder: (_, _) =>
-                              ColoredBox(color: tokens.surfaceRaised),
+                          placeholder: (_, _) => ColoredBox(color: tokens.surfaceRaised),
                           errorWidget: (_, _, _) =>
                               ColoredBox(color: tokens.surfaceRaised),
                         ),
@@ -454,13 +448,9 @@ class _CategoryTile extends ConsumerWidget {
                             border: Border.all(color: tokens.border),
                           ),
                           child: Icon(
-                            favorited
-                                ? Icons.star_rounded
-                                : Icons.star_border_rounded,
+                            favorited ? Icons.star_rounded : Icons.star_border_rounded,
                             size: 12,
-                            color: favorited
-                                ? tokens.brand
-                                : tokens.textSecondary,
+                            color: favorited ? tokens.brand : tokens.textSecondary,
                           ),
                         ),
                       ),
@@ -487,10 +477,7 @@ class _CategoryTile extends ConsumerWidget {
 
 /// 选中子分类后的房间列表:复用 [browseRoomsProvider] 的分页与刷新。
 class _RoomSection extends ConsumerWidget {
-  const _RoomSection({
-    required this.site,
-    required this.cid,
-  });
+  const _RoomSection({required this.site, required this.cid});
 
   final String site;
   final String cid;
@@ -504,10 +491,7 @@ class _RoomSection extends ConsumerWidget {
     return switch (roomsAsync) {
       AsyncValue(:final value?) =>
         value.rooms.isEmpty
-            ? const _HintPlaceholder(
-                icon: Icons.snooze_rounded,
-                message: '该分类暂无直播中的房间',
-              )
+            ? const _HintPlaceholder(icon: Icons.snooze_rounded, message: '该分类暂无直播中的房间')
             : RefreshIndicator(
                 onRefresh: controller.refresh,
                 color: tokens.accent,
@@ -515,8 +499,7 @@ class _RoomSection extends ConsumerWidget {
                   rooms: value.rooms,
                   hasMore: value.hasMore,
                   onLoadMore: controller.loadMore,
-                  onRoomTap: (room) =>
-                      context.push('/${room.site}/play/${room.roomId}'),
+                  onRoomTap: (room) => context.push('/${room.site}/play/${room.roomId}'),
                 ),
               ),
       AsyncValue(:final error?) => _ErrorRetry(

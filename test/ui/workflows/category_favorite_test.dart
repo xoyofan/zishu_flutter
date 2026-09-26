@@ -174,6 +174,43 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('播放页头部:点分类本体进该分类首页(/:site/category/:cid)', (tester) async {
+    final container = await _pumpApp(tester);
+    // fixture 房间 63136:cid '1'、分类「英雄联盟」。
+    container.read(routerProvider).go('/douyu/play/63136');
+    await _frames(tester, 5);
+
+    final entry = find.byKey(const Key('play-category-entry'));
+    expect(entry, findsOneWidget, reason: '房间带分类上下文时分类本体应可点');
+
+    await tester.tap(entry);
+    await _frames(tester, 5);
+
+    expect(
+      container.read(routerProvider).routeInformationProvider.value.uri.path,
+      '/douyu/category/1',
+      reason: '应按**分类号**跳本站分类首页(soop 的 cid 是房间号,须用 cateNo)',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('播放页头部:点收藏星不穿透到分类跳转', (tester) async {
+    final container = await _pumpApp(tester);
+    // 星标与分类本体都是可点区域,星标必须自己命中,不得连带跳分类页。
+    container.read(routerProvider).go('/douyu/play/63136');
+    await _frames(tester, 5);
+
+    await tester.tap(find.byKey(const Key('play-category-favorite')));
+    await _frames(tester, 5);
+
+    expect(_isFavorited(container, 'douyu', '1'), isTrue);
+    expect(
+      container.read(routerProvider).routeInformationProvider.value.uri.path,
+      '/douyu/play/63136',
+      reason: '点星标只收藏,不跳分类首页',
+    );
+  });
+
   testWidgets('收藏上限 12:超出后不再增加且不抛异常', (tester) async {
     final container = await _pumpApp(tester);
     // 故意不等 _restore microtask:恢复完成前连续收藏不得被存储回放覆盖

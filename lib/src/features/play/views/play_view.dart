@@ -763,6 +763,9 @@ class _RoomHeader extends StatelessWidget {
     );
     // 自适应高度(web `padding .28rem .5rem .32rem`):内容撑开,不再固定 44。
     return Container(
+      // 纵向内边距维持原值:给分类本体加点击内边距会把头部撑高、挤矮侧栏,
+      // 打断 follow_style_shot 的侧栏封面网格 golden。命中区因此与旁边
+      // 13px 收藏星同级(不加 padding),不靠扩大盒模型换热区。
       padding: const EdgeInsets.fromLTRB(2, 4.5, 4, 5),
       child: Row(
         children: [
@@ -807,17 +810,61 @@ class _RoomHeader extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      PlatformIcon(id: site, size: 13),
-                      const SizedBox(width: 3),
-                      Text(
-                        categoryLabel.isNotEmpty ? categoryLabel : '直播',
-                        style: context.textBody.copyWith(
-                          fontSize: AppFontSize.body,
-                          height: 1,
-                          color: badgeFg,
-                          fontWeight: FontWeight.w600,
+                      // 分类本体可点:进该分类首页(`/:site/category/:cid`)。
+                      // 分类号必须用 favoriteCid(cateNo 优先)——soop 的 cid
+                      // 是房间号,直接用会跳到不存在的分类。
+                      // 无分类上下文(favoriteCid 空)时保持纯文本,不可点。
+                      if (favoriteCid.isNotEmpty)
+                        Tooltip(
+                          message: '查看$categoryLabel分类',
+                          child: InkWell(
+                            key: const Key('play-category-entry'),
+                            onTap: () => context.go(
+                              '/$site/category/'
+                              '${Uri.encodeComponent(favoriteCid)}',
+                            ),
+                            hoverColor: tokens.surfaceRaised.withValues(
+                              alpha: 0.24,
+                            ),
+                            splashColor: AppStateLayer.splashOf(tokens.accent),
+                            highlightColor: AppStateLayer.pressedOf(
+                              tokens.accent,
+                            ),
+                            focusColor: AppStateLayer.focusOf(tokens.accent),
+                            borderRadius: AppRadius.allSm,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                PlatformIcon(id: site, size: 13),
+                                const SizedBox(width: 3),
+                                Text(
+                                  categoryLabel.isNotEmpty
+                                      ? categoryLabel
+                                      : '直播',
+                                  style: context.textBody.copyWith(
+                                    fontSize: AppFontSize.body,
+                                    height: 1,
+                                    color: badgeFg,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        )
+                      else ...[
+                        PlatformIcon(id: site, size: 13),
+                        const SizedBox(width: 3),
+                        Text(
+                          categoryLabel.isNotEmpty ? categoryLabel : '直播',
+                          style: context.textBody.copyWith(
+                            fontSize: AppFontSize.body,
+                            height: 1,
+                            color: badgeFg,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
-                      ),
+                      ],
                       if (cid.isNotEmpty) ...[
                         const SizedBox(width: 2),
                         InkWell(

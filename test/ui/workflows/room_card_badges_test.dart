@@ -25,6 +25,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart'
     show
+        CategoryGroup,
+        CategoryItem,
         CategoryResult,
         RoomListResult,
         RoomRecord,
@@ -138,8 +140,21 @@ class _ChipBrowseSource implements BrowseSource {
   final bool withTag;
 
   @override
-  Future<CategoryResult> fetchCategories(String site) async =>
-      CategoryResult(site: site, groups: const []);
+  Future<CategoryResult> fetchCategories(String site) async => CategoryResult(
+    site: site,
+    // 必须给非空分类树:CategoryView 在 `groups.isEmpty` 时会短路成
+    // 「暂无分类数据」提示,根本进不了 _content,过滤 cid 的房间列表
+    // 永远渲染不出来(真实 Twitch 有分类树,故这里模拟真实形态)。
+    // 分组项的 cid 刻意用 'g1',与 chip 的过滤 cid('tag:x'/'lang:EN')
+    // 不同 —— 过滤 id 本来就不在分类树里,这正是回归的关键前提。
+    groups: const [
+      CategoryGroup(
+        id: 'g',
+        name: '分组',
+        items: [CategoryItem(cid: 'g1', name: '游戏', pic: '')],
+      ),
+    ],
+  );
 
   @override
   Future<RoomListResult> fetchRooms({
@@ -975,7 +990,7 @@ void main() {
       expect(tester.widget<InkWell>(inkWell).onTap, isNotNull);
 
       await tester.tap(tagChip);
-      await _pumpFrames(tester, 5);
+      await _pumpFrames(tester, 10);
 
       expect(
         app.router.routeInformationProvider.value.uri.path,
@@ -986,6 +1001,22 @@ void main() {
         find.byType(PlayView),
         findsNothing,
         reason: '点击 chip 必须阻止冒泡到卡片整体 onTap(不得同时进房)',
+      );
+      // 落地页必须真的按该 chip 过滤出房间列表。
+      // 回归:chip 的 cid 是过滤 id(`tag:x`/`lang:EN`),**不在分类索引树里**,
+      // CategoryView 原先要求「路由带 cid」且「能命中分类项」才渲染房间列表,
+      // 过滤 id 必然落空 → 退到分类索引页,表现为「点了没反应」。
+      expect(
+        find.byKey(const Key('room-card-twitch-9001')),
+        findsOneWidget,
+        reason: '应按 chip 的 filterCid 渲染该 chip 的房间列表',
+      );
+      expect(
+        find.byWidgetPredicate(
+          (w) => w.key is Key && '${w.key}'.contains('category-item-'),
+        ),
+        findsNothing,
+        reason: '过滤 cid 不应退回分类索引(子分类 tile)',
       );
       expect(tester.takeException(), isNull);
     });
