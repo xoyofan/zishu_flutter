@@ -507,7 +507,7 @@ class _FanBadgeState extends State<_FanBadge> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: AppFontSize.bodySecondary,
+                      fontSize: AppFontSize.caption,
                       height: 1.1,
                       color: resolvedTextColor,
                       fontWeight: FontWeight.w600,
@@ -530,14 +530,22 @@ class _FanBadgeState extends State<_FanBadge> {
         // 宽度由团名文字决定;比徽章宽出来的右侧用 [fanFallbackBg] 中性深底
         // 补上,保证团名任何长度都落在底色上。
         //
-        // 官网是「按团名长度渲染的整牌图」(实测宽 58/76 随团名变,团名烧在
-        // 图里,DOM 零文字节点),但那张图由前端按团名 id 从 sta-op 换取,
-        // **协议不下发** —— 实测 9999 房真实弹幕 stt 只有 bn/bl/bc,bimg 为
-        // 空,故「等级图 + 叠文字」是必然降级。
+        // 尺寸口径对齐 web `ChatFanBadge.vue` 斗鱼分支
+        // (`.chat-fan-badge--douyu-official`):底图 `object-fit:contain` +
+        // `object-position:left center`(= 本实现 contain + centerLeft)、
+        // 文字 `padding:0 .18em 0 1.58em` 且 `font-size:.78em`
+        // (→ [AppDouyuChatBadge.fanTextInset] 与 [AppFontSize.caption]),
+        // 名 `flex:1;min-width:0` + ellipsis。web 的 `min-width:4.1em`
+        // 恰等于 1.58+.78×3+.18,即**按 3 字团名与徽章同宽**设计;
+        // 字���按 12px + 内缩 24px 时 3 字要 64px > 60px 徽章,会撑出右缘
+        // (用户 2026-09-26 报「长度还是不够」)。
+        //
+        // web 自身不给牌区背景色(假定团名 ≤3 字);我们多接一层
+        // [fanFallbackBg] 纯为兜住 ≥4 字的超长团名,不影响常规档。
         //
         // 踩过的坑(2026-09-26):曾用 ImageRepeat.repeatX 把 60px 图平铺填
         // 宽,结果等级徽被复制到右侧(用户报「右侧显示了重复的左侧部分」);
-        // 曾用 BoxFit.stretch 铺满,则徽标横向压扁。两者都算篸改徽章,
+        // 曾用 BoxFit.fill 铺满,则徽标横向压扁。两者都算篸改徽章,
         // 一律不用 —— 延长底色不延长徽章。
         return Container(
           height: AppDouyuChatBadge.fanHeight,
@@ -572,7 +580,7 @@ class _FanBadgeState extends State<_FanBadge> {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      fontSize: AppFontSize.bodySecondary,
+                      fontSize: AppFontSize.caption,
                       height: 1.1,
                       color: resolvedTextColor,
                       fontWeight: FontWeight.w600,
@@ -595,7 +603,7 @@ class _FanBadgeState extends State<_FanBadge> {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(
-            fontSize: AppFontSize.bodySecondary,
+            fontSize: AppFontSize.caption,
             height: 1.1,
             color: AppOnBright.white,
             fontWeight: FontWeight.w600,

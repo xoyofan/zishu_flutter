@@ -364,7 +364,43 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('斗鱼粉丝牌:牌区有中性底(长团名不会裸露在聊天行背景上)', (
+  testWidgets('斗鱼粉丝牌:3 字团名按 web 口径恰好落在 60px 徽章内', (
+    tester,
+  ) async {
+    // 回归护栏(2026-09-26 用户报「长度还是不够」):web
+    // `.chat-fan-badge--douyu-official` 按 1.58em 内缩 + .78em 字号设计,
+    // 3 字团名 = 22 + 11×3 + 4 = 59px ≤ 60px 徽章。此前用 12px 字号 +
+    // 24px 内缩,3 字要 64px,撑出徽章右缘。
+    const fanName = '金咕咕';
+    await _pump(
+      tester,
+      'douyu',
+      _message(
+        site: 'douyu',
+        userLevel: 41,
+        badges: const [DanmakuBadge(name: fanName, level: 24)],
+      ),
+    );
+
+    final name = find.text(fanName);
+    expect(name, findsOneWidget);
+    final style = tester.widget<Text>(name).style;
+    expect(
+      style?.fontSize,
+      AppFontSize.caption,
+      reason: 'web 斗鱼官方牌文字为 .78em(折算 11px),不是 12px',
+    );
+    // 内缩 22 + 3×11 + 右侧 spacing 4 = 59,不得超 60px 徽章宽。
+    final textWidth = tester.getSize(name).width;
+    expect(
+      AppDouyuChatBadge.fanTextInset + textWidth + AppSpacing.xs,
+      lessThanOrEqualTo(AppDouyuChatBadge.fanImageWidth),
+      reason: '3 字团名必须整体落在官方 60px 徽章内',
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('斗鱼粉丝牌:牌区有中性底(超长团名不裸露在聊天行背景上)', (
     tester,
   ) async {
     // 两次踩坑的回归护栏(2026-09-26 用户报障):

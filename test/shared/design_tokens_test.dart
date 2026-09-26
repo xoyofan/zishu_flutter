@@ -59,7 +59,12 @@ void main() {
     test('斗鱼粉丝牌尺寸固定为官网实测(官方 PNG 60x19, 渲染高 18)', () {
       expect(AppDouyuChatBadge.fanHeight, 18);
       expect(AppDouyuChatBadge.fanImageWidth, 60);
-      expect(AppDouyuChatBadge.fanTextInset, 24);
+      // 团名左内缩 = web `ChatFanBadge.vue` 斗鱼分支
+      // `.chat-fan-badge--douyu-official .chat-fan-badge__content`
+      // 的 `padding-left: 1.58em`(按 14px 折算 22.1 → 22)。旧值 24 是
+      // 手写估值,叠 12px 字号后 3 字团名需 64px > 60px 徽章会撑出右缘
+      // (2026-09-26 用户报「长度还是不够」)。
+      expect(AppDouyuChatBadge.fanTextInset, 22);
       expect(AppDouyuChatBadge.fanTextShadow, hasLength(2));
       expect(AppDouyuChatBadge.fanFallbackBg, const Color(0xFF3A3A3A));
     });

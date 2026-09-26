@@ -298,8 +298,16 @@ abstract final class AppDouyuChatBadge {
   /// 与本地 `assets/badges/douyu/fans/{lv}.png` 同款，实测 60×19）。
   static const double fanImageWidth = 60;
 
-  /// 团名左内缩：官方图左侧等级区宽度（实测团名起点约在 24px）。
-  static const double fanTextInset = 24;
+  /// 团名左内缩：官方图左侧等级区宽度。
+  ///
+  /// 取自 web `ChatFanBadge.vue` 的斗鱼分支
+  /// `.chat-fan-badge--douyu-official .chat-fan-badge__content`
+  /// 的 `padding-left: 1.58em`（按聊天行 14px 折算 = 22.1px，取 22）。
+  /// 旧值 24 是手写估值：叠上 12px 字号后「金咕咕」这类 3 字团名需要
+  /// 24+12×3+4 = 64px > 60px 徽章，撑出徽章右缘（用户 2026-09-26 报
+  /// 「长度还是不够」）。web 的 4.1em 下限正好是 1.58+0.78×3+0.18，
+  /// 即按**3 字团名**与徽章同宽设计；字号同步降到 `AppFontSize.caption`。
+  static const double fanTextInset = 22;
 
   /// 粉丝牌无图时的中性深底（与 `AppColors.border` 同值，勿重复定义）。
   static const Color fanFallbackBg = Color(0xFF3A3A3A);
