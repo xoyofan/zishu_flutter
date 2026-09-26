@@ -480,6 +480,9 @@ class _FanBadgeState extends State<_FanBadge> {
           constraints: const BoxConstraints(
             minWidth: AppDouyuChatBadge.fanImageWidth,
           ),
+          decoration: const BoxDecoration(
+            color: AppDouyuChatBadge.fanFallbackBg,
+          ),
           child: Stack(
             children: [
               Positioned.fill(
@@ -523,26 +526,38 @@ class _FanBadgeState extends State<_FanBadge> {
             kind: ChatBadgeKind.fans,
             level: level,
           ).isNotEmpty) {
-        // 本地牌图 60×19:左侧等级徽 + 右侧牌面底。团名多长容器就多宽,
-        // 所以底图按原尺寸横向平铺铺满(官网是「按团名长度渲染的整牌图」,
-        // 协议不下发该图 —— 实测 stt 只有 bn/bl/bc,bimg 为空)。
-        // 若不铺满:contain 会把整图缩到 18px 高并左对齐停在 ~57px,
-        // 团名右侧直接裸露在聊天行背景上(2026-09-26 用户报障)。
+        // 徽章图**原样贴左**(60×19 自然尺寸,不拉伸/不裁切/不重复),容器
+        // 宽度由团名文字决定;比徽章宽出来的右侧用 [fanFallbackBg] 中性深底
+        // 补上,保证团名任何长度都落在底色上。
+        //
+        // 官网是「按团名长度渲染的整牌图」(实测宽 58/76 随团名变,团名烧在
+        // 图里,DOM 零文字节点),但那张图由前端按团名 id 从 sta-op 换取,
+        // **协议不下发** —— 实测 9999 房真实弹幕 stt 只有 bn/bl/bc,bimg 为
+        // 空,故「等级图 + 叠文字」是必然降级。
+        //
+        // 踩过的坑(2026-09-26):曾用 ImageRepeat.repeatX 把 60px 图平铺填
+        // 宽,结果等级徽被复制到右侧(用户报「右侧显示了重复的左侧部分」);
+        // 曾用 BoxFit.stretch 铺满,则徽标横向压扁。两者都算篸改徽章,
+        // 一律不用 —— 延长底色不延长徽章。
         return Container(
           height: AppDouyuChatBadge.fanHeight,
           constraints: const BoxConstraints(
             minWidth: AppDouyuChatBadge.fanImageWidth,
           ),
+          decoration: const BoxDecoration(
+            color: AppDouyuChatBadge.fanFallbackBg,
+          ),
           child: Stack(
             children: [
-              Positioned.fill(
+              Positioned(
+                left: 0,
+                top: 0,
+                bottom: 0,
                 child: ChatBadgeImage(
                   site: site,
                   kind: ChatBadgeKind.fans,
                   level: level,
                   height: AppDouyuChatBadge.fanHeight,
-                  fit: BoxFit.none,
-                  repeat: ImageRepeat.repeatX,
                   onFail: _markImgFailed,
                 ),
               ),

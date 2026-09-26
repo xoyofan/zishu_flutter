@@ -364,39 +364,17 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('ChatBadgeImage:repeatX 铺底(斗鱼牌面随团名变宽)', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: SizedBox(
-          width: 175,
-          child: ChatBadgeImage(
-            site: 'douyu',
-            kind: ChatBadgeKind.fans,
-            level: 24,
-            height: 18,
-            fit: BoxFit.none,
-            repeat: ImageRepeat.repeatX,
-          ),
-        ),
-      ),
-    );
-    for (var i = 0; i < 3; i++) {
-      await tester.pump();
-    }
-
-    final image = tester.widget<Image>(find.byType(Image));
-    expect(image.repeat, ImageRepeat.repeatX);
-    expect(image.fit, BoxFit.none, reason: '平铺必须按原图尺寸,不能拉伸');
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('斗鱼粉丝牌:长团名下牌面铺满整个宽度(不裸露文字)', (
+  testWidgets('斗鱼粉丝牌:牌区有中性底(长团名不会裸露在聊天行背景上)', (
     tester,
   ) async {
-    // 报障回归:容器宽 = 团名文字宽(实测 175px),而牌图只有 60px 宽。
-    // 旧实现用 contain + 左对齐,图缩到 18px 高后只占左侧 ~57px,
-    // 团名右侧 ~118px 裸露在聊天行背景上(用户 2026-09-26 报「变短了/
-    // 没有覆盖上文字」)。现在牌面按原尺寸横向平铺,必须铺到容器右缘。
+    // 两次踩坑的回归护栏(2026-09-26 用户报障):
+    // ① ImageRepeat.repeatX 铺底 → 等级徽被复制到右侧(用户:「右侧显示了
+    //    重复的左侧部分」);② BoxFit.fill 铺底 → 徽标横向压扁。
+    // 正确做法:徽章 60×19 **原样**贴左(不拉伸/不裁切/不重复),比徽章
+    // 宽出来的部分由 fanFallbackBg 中性深底接住。
+    //
+    // 注:测试环境加载不到 assets/badges/*(Image.asset 走空),本例断言的是
+    // 该分支共用的**牌区中性底**;徽章是否原样由真机目视。
     const fanName = '一个很长的粉丝团名字测试';
     await _pump(
       tester,
@@ -410,25 +388,16 @@ void main() {
 
     final name = find.text(fanName);
     expect(name, findsOneWidget);
-    // 底图与文字是 Stack 的两个子节点(兄弟),故从 Stack 往下找底图。
-    final stack = find.ancestor(of: name, matching: find.byType(Stack)).first;
-    final stackRect = tester.getRect(stack);
-    final image = find.descendant(of: stack, matching: find.byType(Image));
-    expect(image, findsOneWidget, reason: '底图应存在');
-    final imageRect = tester.getRect(image.first);
+    final holder = find
+        .ancestor(of: name, matching: find.byType(DecoratedBox))
+        .first;
+    final deco = tester
+        .widget<DecoratedBox>(holder)
+        .decoration as BoxDecoration;
     expect(
-      imageRect.width,
-      closeTo(stackRect.width, 0.5),
-      reason: '牌面底图必须铺满整个牌宽(repeatX),不能只占左侧 60px',
-    );
-    expect(
-      tester.widget<Image>(image.first).repeat,
-      ImageRepeat.repeatX,
-    );
-    expect(
-      stackRect.width,
-      greaterThan(AppDouyuChatBadge.fanImageWidth),
-      reason: '长团名下牌面应比单张 60px 牌更宽',
+      deco.color,
+      AppDouyuChatBadge.fanFallbackBg,
+      reason: '团名超出 60px 徽章的部分由中性深底接住',
     );
     expect(tester.takeException(), isNull);
   });
