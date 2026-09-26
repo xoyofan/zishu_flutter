@@ -926,3 +926,30 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 - [x] 真机验证:SOOP 分类页标题大量中文化生效;部分未译为批量入队队列丢弃回退原文(设计行为)。
 - [ ] 飘屏/聊天弹幕正文翻译未生效(translateBody 已注入但真机韩文未译;聊天行 translatedTextProvider 消费在翻译轨道计划中)——下轮排查 danmaku_overlay 调用链与队列时序。
 - [ ] 可选:翻译服务离线部署指引(Lingva/SimplyTranslate/LibreTranslate 均开源可 Docker 自建,设置页 endpoint 填自建地址)。
+
+## 2026-09-26 聊天徽章按平台官网前端重做(虎牙/斗鱼/抖音,完成)
+
+**结论**:聊天行的「平台等级 + 粉丝牌 + 各类身份徽章」全面改为**以各平台官网自己的前端代码与真实弹幕为准**,不再靠截图观感推断。三处根因级错误已修正。UI 轨 `f4e6cdd`/`d1eb0fb`,解析轨 `0025a04`/`a1bd0f5`。
+
+### 本轮完成项
+- [x] **虎牙平台等级**:改用官方 CDN 图 `diy-assets.msstatic.com/consumeLevelBadgeV2/{tier}/{light|gray}.png`(tier 由 iLevel 分档 1/10/20/30/40/45/50/60,tone 由 iIsPolished 决定;图 90×40@2x = 45×20)。实测 8 档 ×{light,gray,hide} 共 16 个 URL 全 200。此前误以为「canvas 随机生成」并自绘渐变,完全错判。
+- [x] **虎牙身份图标**:改用官方 `fansBadge/3/v2/{identity}.png`(1/2/3/4/11/12/13 全 200)。查明本地 `assets/badges/huya/vip/v2/*` 与 `fans/v2/*` 是**同一套身份图标**(V / 守盾),即官网 `fans-icon-sf`,原代码把它当平台等级底图是根本性误用。
+- [x] **虎牙粉丝牌底图**:接房间级 `wupui/getResourceInfo`(复用 `huya_wup.dart` 已验证的 WUP/TUP 通道,未另起基建),`iBizType=14` 解出 `tCommonBadge.sFloorUrl`,由解析侧拼好官方底图 URL 放进 `DanmakuBadge.url`,UI 直接消费。字段号由一次性探针 `tool/_probe_huya_resource_info.dart` **实测探明**,非推断。
+- [x] **虎牙 BadgeInfo 补字段**:tag 19 `tSuperFansInfo.iSFFlag`、22 `iCustomBadgeFlag`、25 `tExternal{iFansIdentity,iBadgeSize}`、26 `iExtinguished`;原已读的 3/4/12/13/17 经核对字段号正确。
+- [x] **斗鱼徽章补全**:官网实为 4 类组件(`dy-user-level`/`dy-fan-medal`/`dy-noble-level`/`dy-supreme-medal`),此前只做了 2 类。字段映射取自官网 `live-next-player-aside`:`ne`=贵族、`sl`+`sid`=至尊大钻石、`sahf`=超粉、`diaf`/`cdiaf`=钻粉、`diafid`=钻粉图标 id;另接 `fl`(bl 兜底)、`brid`、`hc`。LV 胶囊按逐像素实测改 32×16 全圆角 + 5 档水平渐变(<15 米金/15-29 绿/30-39 蓝/40-49 靛/≥50 紫,18 个样本全部落档)。
+- [x] **抖音粉丝牌回归修复**:此前误用 `fansclub_new_advanced_badge_N_xmp`(60×48 紧凑款)并丢弃协议 URL。该款右侧无团名位,且渲染后(~26px)退化为与平台等级 honor(~42px)同款的「彩色圆角块+数字」观感 —— 即用户报障的「粉丝徽章跟平台等级弄一样了」。已恢复协议 URL 优先,合成模版改回官方 `fansclub_level_v6_{lv}.png`(1..20 为 200、21+ 为 404)。
+- [x] **清掉两条长期误报的「既有失败」**:`douyinRow`(ChatBadgeImage 加载失败后仍留在树中,应为 2 个不是 1 个;`find.text('10')` 依赖网络时序不可靠,改断言官方 URL)、`danmakuEmojiSegments`(代码已换 CachedNetworkImage、边长系数 1.6→1.15,断言同步)。全量从 +847-3 变 +854-1。
+- [x] 查明并作废一条死兜底:官网硬编码粉丝牌底图模版 `fansBadge/3/{size}/{dark}/{level}.{name}` 实测 24 组合**全 404**,不得当兜底(参考工程 `resolveHuyaNamedBadgeBgUrl` 依赖的正是这条死链)。
+
+### 验证
+- 解析轨:`dart test` 560 全过(新增 `huya_chat_badges_test` 8 条 + `huya_fans_badge_resource_test`)。
+- 根:`flutter analyze` 0;`dart run tool/check_design_tokens.dart` OK(28→28,各规则差值 0);`flutter test` 854 过 1 失败。
+- `flutter build windows --debug -t lib/main.dart` ✓。
+
+### 待办(下轮)
+- [ ] **虎牙粉丝牌官方底图需实机确认**:`getResourceInfo` 需 `tUserId`,未登录/请求失败时 `url` 为空会走自绘降级。当前只验证了「URL 拼得对、analyze/测试全过」,**未验证真实弹幕里能加载成功**。需在可取到房间资源的环境目视确认;若仍见自绘样式,先查资源请求是否发出/是否被登录态拦住。
+- [ ] **斗鱼贵族/至尊/钻粉图标仍是文字/数字占位**:官方 `noble/global/web.json` 的 `{host}`、至尊 `getDiamondIconExt({diafid})` 的 URL 规则均未确证,故只接字段不拼 URL(至尊=28×28 数字方块、贵族=「贵族 N」chip、超粉=金色 V、钻粉=「钻粉」chip)。需取到规则后替换为官方图。
+- [ ] **`ne`/`sl`/`sid` 取值域未采到**:斗鱼抓包的 6 条样本里没有贵族/至尊用户,现按字段名直连、未做任何分档假设。需在有贵族/至尊用户的房间补抓样本。
+- [ ] **`brid` 跨房粉丝牌显隐闸门未做**:字段已入库,官网是否隐藏跨房粉丝团牌无确证口径,不在无证据下改行为(当前零行为变化)。
+- [ ] **`follow_style_shot_test` 关注页 golden 漂移**:来自另一轨 `29afd14 关注列表档内按观看数倒序并移除排序下拉` 改了排序未刷 golden。与聊天徽章无关,需该轨自行目检后 `--update-goldens`。
+- [ ] **教训归档**:①拷 worktree 用 `git diff --name-only` 会漏未跟踪文件,应另拷 `git status --porcelain` 的 `??`;②多 worktree 顺序合并时,后一份 diff 是相对「不含前一份改动」的文件算的,直接打上去会**回退**先前的改动(本轮已发生一次,靠标记校验发现);③抖音在途轨把 1.6→1.15、`Image`→`CachedNetworkImage` 改了却没同步断言,长期红。
