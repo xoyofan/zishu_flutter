@@ -10,7 +10,21 @@
         "c2name": "英雄联盟",
         "cid2": "1",
         "ol": 102400,
-        "roomLabel": ["官方赛况", "帧率拉满"]
+        "gametag": "",
+        "icv3": [
+          {
+            "cfgType": 2,
+            "cfgRich": {
+              "addr": "https://sta-op.douyucdn.cn/dy-listicon/e49a60e6cf3d6df5ca805c6a2cdfa3a6.png",
+              "backColor": "#7B90FD",
+              "rightBackColor": "#5F77F3",
+              "text": "段位LV4",
+              "fontColor": "#FFFFFF"
+            },
+            "iconId": "11736_0"
+          }
+        ],
+        "roomLabel": ["官方赛况", "帧率拉满", "国一东方镜", "峡谷之巅王者"]
       },
       {
         "rid": 222,
@@ -20,6 +34,8 @@
         "c2name_display": "英雄联盟",
         "cid2": "1",
         "ol": 999,
+        "gametag": "",
+        "icv3": [],
         "vipId": 3
       },
       {
@@ -29,7 +45,8 @@
         "rs16": "//rpic.douyucdn.cn/c.jpg",
         "c2name": "王者荣耀",
         "cid2": "2",
-        "ol": 50
+        "ol": 50,
+        "gametag": ""
       }
     ]
   }

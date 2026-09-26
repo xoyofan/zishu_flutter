@@ -10,7 +10,21 @@
         "c2name": "户外",
         "cid2": "9",
         "ol": 66666,
-        "copilotLabel": "高能时刻"
+        "copilotLabel": "高能时刻",
+        "gametag": "",
+        "icv3": [
+          {
+            "cfgType": 2,
+            "cfgRich": {
+              "addr": "https://sta-op.douyucdn.cn/dy-listicon/e49a60e6cf3d6df5ca805c6a2cdfa3a6.png",
+              "backColor": "#7B90FD",
+              "rightBackColor": "#5F77F3",
+              "text": "段位LV4",
+              "fontColor": "#FFFFFF"
+            },
+            "iconId": "11736_0"
+          }
+        ]
       },
       {
         "rid": 555,
@@ -18,7 +32,22 @@
         "nn": "主播E",
         "c2name": "烟雨阁",
         "cid2": "10",
-        "ol": 123456789
+        "ol": 123456789,
+        "gametag": "",
+        "icv3": [
+          {
+            "cfgType": 2,
+            "cfgRich": {
+              "addr": "https://sta-op.douyucdn.cn/dy-listicon/0c34c749a7052677fbe0aafe44636836.png",
+              "backColor": "#FF744F",
+              "rightBackColor": "#ED3035",
+              "text": "分区榜TOP1",
+              "fontColor": "#FFFFFF"
+            },
+            "iconId": "11797_0"
+          }
+        ],
+        "roomLabel": ["职业联赛", "娱乐赛事", "职业联赛"]
       }
     ]
   }

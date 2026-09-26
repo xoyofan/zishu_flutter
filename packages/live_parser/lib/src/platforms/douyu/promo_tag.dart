@@ -1,14 +1,12 @@
-/// 斗鱼推荐/运营角标:roomLabel 首项 > copilotLabel > 认证信息 > 贵族。
+/// 斗鱼运营角标兜底:copilotLabel > 认证信息 > 贵族。
+///
+/// 不再取 `roomLabel` 首项 —— 2026-09 起 roomLabel 整体编入卡片 chips 行
+/// (见 `card_tags.dart`),重复当 promoTag 会在同一张卡上显示两遍。
 library;
 
 import 'json_utils.dart';
 
 String? pickDouyuPromoTag(Map<String, dynamic> item) {
-  final labels = item['roomLabel'];
-  if (labels is List && labels.isNotEmpty) {
-    final first = jsonText(labels.first).trim();
-    if (first.isNotEmpty) return truncatePromoTag(first);
-  }
   final copilot = jsonText(item['copilotLabel']).trim();
   if (copilot.isNotEmpty) return truncatePromoTag(copilot);
 

@@ -1,4 +1,4 @@
-/// 斗鱼浏览:m.douyu.com 分类索引 + gapi/rkc/directory/mixList 首页与分类列表。
+/// 斗鱼浏览:m.douyu.com 分类索引 + gapi/rknc/directory/mixListV1 首页与分类列表。
 library;
 
 import 'dart:convert';
@@ -8,6 +8,7 @@ import '../../utils/format_online.dart';
 import '../../contracts/contracts.dart';
 import '../../models/models.dart';
 import '../../models/room_record.dart';
+import 'card_tags.dart';
 import 'json_utils.dart';
 import 'promo_tag.dart';
 import 'room_api.dart';
@@ -104,7 +105,11 @@ class DouyuBrowseRepository implements BrowseRepository {
   }) async {
     final data = jsonMapOf(
       (await _getJson(
-        Uri.parse('https://www.douyu.com/gapi/rkc/directory/mixList/$directory/$page'),
+        // V1 路径取自官网 `window.$DATA.pagePath`;旧 rkc/mixList 无 `icv3`
+        // (卡片左上角标),其余字段名与取值一致,实测封面 rs16 同为 /dy1。
+        Uri.parse(
+          'https://www.douyu.com/gapi/rknc/directory/mixListV1/$directory/$page',
+        ),
       ))['data'],
     );
     final items = jsonListOf(data['rl']);
@@ -161,6 +166,10 @@ class DouyuBrowseRepository implements BrowseRepository {
       online: formatOnlineCount(item['ol'] ?? item['online']),
       cover: cover,
       promoTag: pickDouyuPromoTag(item),
+      // 官网卡片左上角标(段位LV4 / 全站榜TOP3 …)→ 封面右上身份位。
+      identityLabel: pickDouyuIdentityLabel(item),
+      // roomLabel 特色标签 → 封面下方 chips 行。
+      chips: douyuCardChips(item),
       // mixList 目录 live-only:状态真源(6sol 裁决 Task 4a-i)。
       roomState: RoomState.live,
     );

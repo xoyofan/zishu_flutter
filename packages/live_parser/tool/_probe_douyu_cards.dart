@@ -23,8 +23,41 @@ Future<void> main() async {
   }
   await _rawIcv3(http, '0_0');
   await _rawIcv3(http, '2_2');
+  await _weird(http, '0_0');
   await _cover(http, '2_2');
   await _paging(http, '0_0');
+}
+
+/// 打印 cfgType 非 2 的 icv3 形态(空/图片型),确认取文案的口径。
+Future<void> _weird(ParserHttp http, String cid) async {
+  final v1 = await _fetch(http, 'gapi/rknc/directory/mixListV1/$cid/1');
+  // ignore: avoid_print
+  print('### 非 cfgType=2 的 icv3');
+  var shown = 0;
+  var maxLabel = 0;
+  var maxLabels = 0;
+  for (final item in v1) {
+    for (final e in _list(item['icv3'])) {
+      if (_map(e)['cfgType'] != 2) {
+        // ignore: avoid_print
+        print('  rid=${item['rid']} ${jsonEncode(e)}');
+        if (++shown >= 5) break;
+      }
+    }
+  }
+  for (final item in v1) {
+    final labels = _list(item['roomLabel']).whereType<String>().toList();
+    if (labels.length > maxLabels) maxLabels = labels.length;
+    for (final l in labels) {
+      if (l.length > maxLabel) {
+        maxLabel = l.length;
+        // ignore: avoid_print
+        print('  最长 label($maxLabel 字) rid=${item['rid']} $l');
+      }
+    }
+  }
+  // ignore: avoid_print
+  print('### roomLabel 最长 $maxLabel 字 / 单房最多 $maxLabels 个');
 }
 
 /// 打印旧/新接口同房间的封面字段,并 HEAD 校验图片可加载。

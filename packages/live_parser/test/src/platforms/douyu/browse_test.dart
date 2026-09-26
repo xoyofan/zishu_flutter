@@ -58,10 +58,26 @@ void main() {
     expect(first.category, '英雄联盟');
     expect(first.audience, '10.2万');
     expect(first.cover, 'https://rpic.douyucdn.cn/a.jpg');
-    expect(first.promoTag, '官方赛况');
+    // roomLabel 已编入 chips 行(不再当 promoTag 重复显示)。
+    expect(first.promoTag, isNull);
+    expect(
+      first.chips.map((c) => c.name).toList(),
+      ['官方赛况', '帧率拉满', '国一东方镜'],
+      reason: 'roomLabel 前 3 个编成 chips(官网单行放不下更多)',
+    );
+    expect(first.chips.every((c) => c.kind == SiteChipKind.tag), isTrue);
+    expect(first.chips.every((c) => !c.navigable), isTrue);
+    // icv3 → 封面右上身份位。
+    expect(first.identityLabel, '段位LV4');
 
     expect(result.rooms[1].promoTag, '贵族', reason: 'vipId>0 兜底角标');
     expect(result.rooms[1].audience, '999');
+    expect(
+      result.rooms[1].identityLabel,
+      isNull,
+      reason: 'icv3 空数组 → 右上身份位不渲染',
+    );
+    expect(result.rooms[1].chips, isEmpty);
 
     // 列表来自 RoomSummary:统一记录只映射已提供的统计(audience),
     // 上游列表没有 followers/vip/svip → 保持 null,不编造数字。
@@ -75,7 +91,9 @@ void main() {
       reason: 'mixList 分类目录条目来自直播列表,roomState 应为 live',
     );
     expect(record.audience, '10.2万');
-    expect(record.promoTag, '官方赛况');
+    expect(record.promoTag, isNull);
+    expect(record.identityLabel, '段位LV4');
+    expect(record.chips, hasLength(3));
     expect(record.followers, isNull);
     expect(record.vip, isNull);
     expect(record.svip, isNull);
@@ -100,8 +118,16 @@ void main() {
       reason: '首页 mixList 目录条目状态真源为 live',
     );
     expect(result.rooms[0].audience, '6.7万');
-    expect(result.rooms[0].promoTag, '高能时刻');
+    expect(result.rooms[0].promoTag, '高能时刻', reason: 'copilotLabel 兜底角标保留');
+    expect(result.rooms[0].identityLabel, '段位LV4');
+    expect(result.rooms[0].chips, isEmpty, reason: 'fixture 无 roomLabel');
     expect(result.rooms[1].audience, '12345.7万');
+    expect(result.rooms[1].identityLabel, '分区榜TOP1');
+    expect(
+      result.rooms[1].chips.map((c) => c.name).toList(),
+      ['职业联赛', '娱乐赛事'],
+      reason: 'roomLabel 同名去重后取前 3 个',
+    );
   });
 
   test('首页 mixList 失败回退移动端列表', () async {

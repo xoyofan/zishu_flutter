@@ -47,7 +47,7 @@ class FakeDouyuApi extends http.BaseClient {
   /// (refreshRoomSummary 侧按 best-effort 静默为空,不破坏刷新)。
   Object? anchorCardResponse;
 
-  /// mixList 按 directory(如 `0_0`、`2_1`)配置;未配置返回 500。
+  /// mixListV1 按 directory(如 `0_0`、`2_1`)配置;未配置返回 500。
   /// 传 'fail' 时返回 500 触发回退分支。
   final Map<String, Object?> mixListByDirectory = {};
 
@@ -129,7 +129,7 @@ class FakeDouyuApi extends http.BaseClient {
       }
       return _json(anchorCardResponse);
     }
-    if (path.startsWith('/gapi/rkc/directory/mixList/')) {
+    if (path.startsWith('/gapi/rknc/directory/mixListV1/')) {
       final directory = url.pathSegments.length > 4 ? url.pathSegments[4] : '';
       final configured = mixListByDirectory[directory];
       if (configured == null || configured == 'fail') {
