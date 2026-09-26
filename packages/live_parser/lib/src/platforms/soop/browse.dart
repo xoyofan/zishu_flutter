@@ -159,9 +159,15 @@ class SoopBrowseRepository implements BrowseRepository {
       final item = jsonMapOf(value);
       final roomId = jsonText(item['user_id']).trim();
       if (roomId.isEmpty) continue;
-      // 房间流只有韩文 category_name:优先按 category_no 反查中文名
-      // (web soop.ts:111-116 的 zhName 覆盖同构),未命中回退原名+remap。
-      final cateNo = jsonText(item['category_no']);
+      // 房间流只有韩文 category_name,且**分类号字段名是 `broad_cate_no`**
+      // (实测 2026-09-26:房间列表项根本没有 `category_no` 键,只读它会恒为空
+      // 串 → 反查表永远 miss → 分类一直显示韩文)。故主取 broad_cate_no,
+      // category_no 仅作兼容回落。
+      // 命中中文反查表则覆盖,未命中回退原名 + remap。
+      final cateNo =
+          jsonText(item['broad_cate_no']).isNotEmpty
+              ? jsonText(item['broad_cate_no'])
+              : jsonText(item['category_no']);
       final zhName = soopZhCategoryName(cateNo);
       final category = zhName ??
           remapCategoryName('soop', jsonText(item['category_name']));

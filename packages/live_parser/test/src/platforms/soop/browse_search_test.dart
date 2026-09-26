@@ -39,6 +39,92 @@ void main() {
       expect(fake.requests.length, calls, reason: '分类索引应命中缓存');
     });
 
+    test('分类名中文化:房间流按 broad_cate_no 反查,且收口上游直出的英文分类', () async {
+      // 回归(实测 2026-09-26):房间列表项**只有 `broad_cate_no`,没有
+      // `category_no`**,旧实现读 `category_no` 恒得空串 → cid→中文反查
+      // 永远 miss → 房间卡片一直显示韩文。
+      // 另:categoryList 本身返中文(与 lang 无关),但 `00130000` 直出英文
+      // `Talk/Cam`,需由内置覆盖收口。
+      // FakeSoopApi 的响应字段要的是**已解码对象**(与 soopFixture 同构),
+      // 直接给 JSON 字符串会被 ParserHttp 判为「非对象 JSON」。
+      final catJson = <String, Object?>{
+        'data': <String, Object?>{
+          'list': <Object?>[
+            <String, Object?>{'category_no': '00130000', 'category_name': 'Talk/Cam'},
+            <String, Object?>{'category_no': '00040019', 'category_name': '英雄联盟'},
+          ],
+        },
+      };
+      final roomJson = <String, Object?>{
+        'broad': <Object?>[
+          <String, Object?>{
+            'user_id': 'r1',
+            'broad_title': '聊天房',
+            'user_nick': 'A',
+            'broad_cate_no': '00130000',
+            'category_name': '토크/캠방',
+            'view_cnt': '10',
+          },
+          <String, Object?>{
+            'user_id': 'r2',
+            'broad_title': 'LOL 房',
+            'user_nick': 'B',
+            'broad_cate_no': '00040019',
+            'category_name': '리그 오브 레전드',
+            'view_cnt': '20',
+          },
+        ],
+      };
+      final f = FakeSoopApi()
+        ..categoryListResponse = catJson
+        ..recommendResponse = roomJson
+        ..categoryRoomsResponse = roomJson;
+      final repo = SoopBrowseRepository(ParserHttp(client: f));
+
+      // 先拉分类树填中文反查表,再拉房间流。
+      await repo.fetchCategories('soop');
+      final rooms = await repo.fetchRooms(
+        const RoomListRequest(site: 'soop', page: 1, limit: 30),
+      );
+
+      expect(rooms.rooms, hasLength(2));
+      expect(
+        rooms.rooms[0].category,
+        '聊天/秀场',
+        reason: 'broad_cate_no=00130000 应反查中文(上游英文 Talk/Cam 经 remap 收口)',
+      );
+      expect(
+        rooms.rooms[1].category,
+        '英雄联盟',
+        reason: 'broad_cate_no=00040019 应反查中文,不得回落韩文原名',
+      );
+    });
+
+    test('分类名中文化:未先进分类页时,英文覆盖分类仍不漏英文', () async {
+      // 覆盖表在**查表时**生效,与分类树是否已加载无关。
+      final roomJson = <String, Object?>{
+        'broad': <Object?>[
+          <String, Object?>{
+            'user_id': 'r1',
+            'broad_title': '聊天房',
+            'user_nick': 'A',
+            'broad_cate_no': '00130000',
+            'category_name': '토크/캠방',
+            'view_cnt': '10',
+          },
+        ],
+      };
+      final f = FakeSoopApi()
+        ..recommendResponse = roomJson
+        ..categoryRoomsResponse = roomJson;
+      final repo = SoopBrowseRepository(ParserHttp(client: f));
+
+      final rooms = await repo.fetchRooms(
+        const RoomListRequest(site: 'soop', page: 1, limit: 30),
+      );
+      expect(rooms.rooms.single.category, '聊天/秀场');
+    });
+
     test('首页推荐:broad 列表归一(覆盖 total/sum 计数)', () async {
       final result = await browse.fetchRooms(
         const RoomListRequest(site: 'soop', page: 1, limit: 30),

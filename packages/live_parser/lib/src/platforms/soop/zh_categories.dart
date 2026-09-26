@@ -25,3 +25,4 @@ void rememberSoopZhCategory(String cid, String zhName) {
 /// 房间列表/详情按 category_no 反查中文名;未命中返回 null(调用方回退
 /// 原名 + remap 归一,与 web 原名回退一致)。
 String? soopZhCategoryName(String cid) => _cidToZh[soopCateNoKey(cid)];
+

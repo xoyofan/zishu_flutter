@@ -70,6 +70,8 @@ const Map<String, List<String>> kCategoryGroups = {
   '黎明杀机': ['dead by daylight'],
   '聊天': ['just chatting'],
   '聊天/秀场': ['talk/cam'],
+  // SOOP categoryList 实测直出英文原名的分类(其余项该接口已返中文)。
+  '其他游戏': ['other games'],
   '猎杀：对决': ['hunt: showdown 1896'],
   '流放之路': ['path of exile'],
   '流放之路2': ['path of exile 2'],
