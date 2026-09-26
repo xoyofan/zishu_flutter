@@ -62,6 +62,7 @@ class _FanBadge extends StatefulWidget {
     this.iconUrl = '',
     this.vFlag = 0,
     this.vLogo = '',
+    this.identity = 0,
     this.color = 0,
     this.colorStart = 0,
     this.colorEnd = 0,
@@ -78,6 +79,10 @@ class _FanBadge extends StatefulWidget {
   final String iconUrl;
   final int vFlag;
   final String vLogo;
+
+  /// 身份图标档位（虎牙 `tExternal.iFansIdentity`）。
+  final int identity;
+
   final int color;
   final int colorStart;
   final int colorEnd;
@@ -275,14 +280,54 @@ class _FanBadgeState extends State<_FanBadge> {
     // 虎牙官网 333003 DOM 实测：粉丝牌 `fans-icon` 高 20，结构为
     // `[圆形等级徽记][团名][身份图标]`（`padding-left:18px` 是等级圆标区，
     // `padding-right` 等于身份图标宽 22/26/28）。
-    // 官方底图 `web_admin_badgeDefaultFloorUrl/{粉丝团hash}/2_3_0_{lv}` 需要
-    // 粉丝团专属 hash，弹幕协议不下发 → 用实测 7 档底色 + 同构布局复刻。
+    //
+    // 底图分两路（**优先官方**）：
+    // 1. 房间级 `wupui/getResourceInfo` 下发的 `sFloorUrl` 模板 → 拼出官方底图，
+    //    与官网像素一致（底图已含等级圆标与团名区，故只叠身份图标）。
+    // 2. 取不到模板（未登录/资源请求失败/房间无定制）→ 降级为实测 7 档底色 +
+    //    同构布局自绘，**不编造 CDN 路径**。
     if (site == 'huya') {
       final identity = widget.vFlag > 0 && widget.vLogo.isNotEmpty
           ? _HuyaSuperFanBadge(logo: widget.vLogo)
-          : _HuyaFanIdentityIcon(level: level);
+          : _HuyaFanIdentityIcon(level: level, identity: widget.identity);
+      final tooltip = hasName ? '$name Lv.$level' : '粉丝牌 Lv.$level';
+      // 官方底图 URL 已由解析侧用房间级 `sFloorUrl` 模板拼好放进
+      // `DanmakuBadge.url`（底图内含等级圆标与团名留白），故这里只叠身份图标。
+      // `url` 为空 = 房间级资源没取到 → 降级自绘，**不编造 CDN 路径**。
+      if (remoteUrl.isNotEmpty && !_imgFailed) {
+        return Tooltip(
+          message: tooltip,
+          child: KeyedSubtree(
+            key: const Key('huya-fan-badge'),
+            child: SizedBox(
+              height: AppHuyaChatBadge.fanHeight,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: ChatBadgeImage(
+                      site: site,
+                      kind: ChatBadgeKind.fans,
+                      level: level,
+                      height: AppHuyaChatBadge.fanHeight,
+                      src: remoteUrl,
+                      useDiskCache: false,
+                      onFail: _markImgFailed,
+                    ),
+                  ),
+                  Positioned(
+                    right: 0,
+                    top: 0,
+                    bottom: 0,
+                    child: identity,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
       return Tooltip(
-        message: hasName ? '$name Lv.$level' : '粉丝牌 Lv.$level',
+        message: tooltip,
         child: KeyedSubtree(
           key: const Key('huya-fan-badge'),
           child: Container(
@@ -1000,22 +1045,25 @@ class _HuyaFanLevelDisc extends StatelessWidget {
 /// （identity 1 = 金色 V，12/13 = 守盾）。本地素材与官网 `3_0_{identity}.png`
 /// 尺寸一致（78×60 / 84×60 → 按高 20 缩放得官方 26 / 28 宽）。
 class _HuyaFanIdentityIcon extends StatelessWidget {
-  const _HuyaFanIdentityIcon({required this.level});
+  const _HuyaFanIdentityIcon({required this.level, this.identity = 0});
 
   final int level;
+
+  /// 协议下发的身份档位（`tExternal.iFansIdentity`）；0 时按等级回落。
+  final int identity;
 
   @override
   Widget build(BuildContext context) {
     // 官方身份图标 URL：`.../fansBadge/3/v2/{identity}.png`（实测 7 档全 200）。
-    // 协议未下发 `tExternal.iFansIdentity` 时按等级回落（见
-    // `huyaFansIdentityFallback`），真实语义由粉丝团配置决定。
-    final identity = huyaFansIdentityFallback(level);
-    if (identity <= 0) return const SizedBox.shrink();
+    // 协议未下发 `iFansIdentity` 时按等级回落（见 `huyaFansIdentityFallback`）；
+    // 官网真实语义由粉丝团配置决定、与等级非单调，故仅作兜底。
+    final id = identity > 0 ? identity : huyaFansIdentityFallback(level);
+    if (id <= 0) return const SizedBox.shrink();
     return SizedBox(
       key: const Key('huya-fan-identity-icon'),
       height: AppHuyaChatBadge.fanHeight,
       child: Image.network(
-        huyaFansIdentityUrl(identity),
+        huyaFansIdentityUrl(id),
         fit: BoxFit.contain,
         filterQuality: FilterQuality.medium,
         errorBuilder: (_, _, _) => const SizedBox.shrink(),

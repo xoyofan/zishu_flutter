@@ -123,6 +123,7 @@ class _ChatRow extends StatelessWidget {
                 iconUrl: badge.iconUrl,
                 vFlag: badge.vFlag,
                 vLogo: badge.vLogo,
+                identity: badge.identity,
                 color: badge.color,
                 colorStart: data.badgeColorStart,
                 colorEnd: data.badgeColorEnd,
