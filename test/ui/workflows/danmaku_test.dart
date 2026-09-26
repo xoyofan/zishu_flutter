@@ -433,16 +433,16 @@ void main() {
         reason: '斗鱼牌不再拼接等级数字');
     expect(find.text('10'), findsNothing,
         reason: '斗鱼无团名时不渲染粉丝牌');
-    // 斗鱼官网等级为纯数字胶囊，不显示 LV 前缀。
-    expect(find.text('31'), findsOneWidget);
-    expect(find.text('18'), findsOneWidget);
-    expect(find.text('LV31'), findsNothing);
-    expect(find.text('LV18'), findsNothing);
+    // 斗鱼等级按 web 口径显示 `LV{level}` 文字胶囊（2026-09-26 起；旧口径
+    // 是官网 canvas 的纯数字 + 小徽标，见 DESIGN.md §4.4）。
+    expect(find.text('LV31'), findsOneWidget);
+    expect(find.text('LV18'), findsOneWidget);
+    expect(find.text('31'), findsNothing);
     expect(find.text('Lv 0'), findsNothing, reason: '无等级不渲染占位');
 
     // 徽章顺序对齐 web SideChatTab.vue:38-44:平台等级 pill 在粉丝牌之前
     // (同一行内按 x 坐标比较;「徽章哥」一条同时带 LV31 与粉丝牌)。
-    final levelRect = tester.getRect(find.text('31'));
+    final levelRect = tester.getRect(find.text('LV31'));
     final fanRect = tester.getRect(find.text('提督骑士团'));
     expect(levelRect.left, lessThan(fanRect.left),
         reason: '平台等级(用户口径:平台等级在粉丝等级前)应排在粉丝牌左边');
@@ -646,7 +646,7 @@ void main() {
 
     final session = connector.session!;
     session.emitConnected();
-    // 带平台等级徽章(数字 31)+ 超长正文:正文必然折行。用户口径 2026-09-20
+    // 带平台等级徽章(LV31 文字胶囊)+ 超长正文:正文必然折行。用户口径 2026-09-20
     // (UI-BUG-001):「同一个人发言第二行文字应该从最左边开始」——第二行须
     // 顶到条目内容区最左(徽章列正下方),而非缩进到昵称列;对齐 web
     // SideChatTab 徽章 display:contents 的单段落内联流。
@@ -706,11 +706,11 @@ void main() {
     // 断言 2:且严格在昵称列左侧(不再缩进到昵称起始列)。
     expect(line2Left, lessThan(userLeft - 1.0), reason: '第二行不得缩进到昵称列');
     // 断言 3:第二行与首行徽章列左对齐(徽章内联在段落最左)。取 LV31 的
-    // 最近 Container 祖先 = 徽章胶囊底座(内文字距胶囊壁还有 4px padding,
+    // 最近 Container 祖先 = 徽章胶囊底座(内文字距胶囊壁还有 .26em padding,
     // 不能直接用文字盒比)。
     final badgePillRect = tester.getRect(
       find.ancestor(
-        of: find.text('31'),
+        of: find.text('LV31'),
         matching: find.byType(Container),
       ).first,
     );

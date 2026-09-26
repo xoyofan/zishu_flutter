@@ -138,28 +138,127 @@ abstract final class AppColors {
   static const Color modalBarrier = Color(0x73000000);
 }
 
+/// 侧栏聊天行徽章的**跨平台**口径（真源：web `ChatFanBadge.vue` /
+/// `ChatUserLevelBadge.vue` 的 `<style scoped>`）。
+///
+/// web 的徽章尺寸全用 `em`，父级 `.chat-item` 是
+/// `font-size: var(--chat-item-font-size, 14px)`，与 Flutter 侧
+/// `SettingsState.defaultChatFontSize = 14` 同值 —— 所以本类每个常量都是
+/// **web 的 em 值 × 14** 的折算，不是截图估值。改数值前先改 `DESIGN.md` §4.4。
+abstract final class AppChatBadge {
+  /// 聊天行基准字号（web `--chat-item-font-size` 默认 14）。
+  static const double em = 14;
+
+  // ---- 用户等级（`.chat-user-level`）----
+
+  /// 通用高度 `1.48em`（斗鱼被自己的 `1.15em` 覆盖，见
+  /// [AppDouyuChatBadge.levelHeight]）。
+  static const double levelHeight = 1.48 * em;
+
+  /// 通用最小宽 `1.2em`；斗鱼/B站是 `min-width: auto`，不设下限。
+  static const double levelMinWidth = 1.2 * em;
+
+  /// 斗鱼/B站文字字号 `.64em` 与左右内边距 `padding: 0 .26em`。
+  static const double levelFontSize = 0.64 * em;
+  static const double levelPadX = 0.26 * em;
+
+  /// 其他平台文字字号（`1em`，没吃到 `.64em` 覆盖）与内边距 `.22em`。
+  static const double levelFontSizeWide = em;
+  static const double levelPadXWide = 0.22 * em;
+
+  // ---- 粉丝牌（`.chat-fan-badge`）----
+
+  /// 通用高 `1.28em`。
+  static const double fanHeight = 1.28 * em;
+
+  /// 有底图/渐变时的最小宽 `3.2em`（纯文字牌不设）。
+  static const double fanMinWidth = 3.2 * em;
+
+  /// 文字层 `padding: 0 .22em 0 .16em`。
+  static const double fanPadRight = 0.22 * em;
+  static const double fanPadLeft = 0.16 * em;
+
+  /// 文字层列间距 `gap: .18em`。
+  static const double fanGap = 0.18 * em;
+
+  /// 粉丝牌文字 `.9em`。
+  static const double fanFontSize = 0.9 * em;
+
+  /// 粉牌文字阴影：web `.chat-fan-badge--has-bg:not(.chat-fan-badge--gradient)
+  /// .chat-fan-badge__content { text-shadow: 0 0 2px rgba(0,0,0,.45),
+  /// 0 1px 1px rgba(0,0,0,.35) }` —— 所有「文字压在底图上」的牌共用。
+  static const List<BoxShadow> fanTextShadow = [
+    BoxShadow(color: Color(0x73000000), blurRadius: 2),
+    BoxShadow(
+      offset: Offset(0, 1),
+      blurRadius: 1,
+      color: Color(0x59000000),
+    ),
+  ];
+
+  /// 纯图标徽章（Twitch / YY）`1.15em`。
+  static const double iconHeight = 1.15 * em;
+
+  // ---- B 站渐变粉丝牌（`.chat-fan-badge--bilibili-composed`）----
+
+  static const double biliFanHeight = 1.48 * em;
+  static const double biliFanMinWidth = 3.5 * em;
+  static const double biliFanPadX = 0.5 * em;
+  static const double biliFanGap = 0.2 * em;
+}
+
 /// 虎牙官网聊天栏徽章的**布局常量**（房间 333003 实测）。
 ///
 /// 颜色/图片一律走官方 CDN（URL 构造在 `live_parser` 的
 /// `platforms/huya/huya_chat_badges.dart`，真源为虎牙官网自己的
-/// `ConsumeLevelBadge` / `fans-icon` 组件），本类**只保留布局尺寸**，
-/// 不再自绘渐变或近似图形。
+/// `ConsumeLevelBadge` / `fans-icon` 组件）；尺寸按 `DESIGN.md` §4.4 取
+/// web `ChatUserLevelBadge` / `ChatFanBadge` 的 em 折算值。
 abstract final class AppHuyaChatBadge {
   // ---- 平台等级（ConsumeLevelBadge）----
 
-  /// 官网 `<span>` 的 `padding-left` 实测值 20 = 官方图左侧菱形区宽度。
+  /// 等级数字相对官方图**右下角**的偏移（web `--huya` 的
+  /// `.chat-user-level__huya-lv { right: .12em; bottom: .06em }`）。
   ///
-  /// 等级图本身是官方 90×40(@2x) 素材，尺寸常量在解析包的
-  /// `kHuyaConsumeLevelBadgeWidth/Height`；此处仅供叠字定位使用。
-  static const double levelEmblem = 20;
+  /// ⚠️ 不是"左侧菱形之后居中"：官方图（`consumeLevelBadgeV2`，90×40 @2x）
+  /// 左侧菱形已含图形，web 把数字压在右下角，尺寸常量在解析包的
+  /// `kHuyaConsumeLevelBadgeWidth/Height`。
+  static const double levelTextRight = 0.12 * AppChatBadge.em;
+  static const double levelTextBottom = 0.06 * AppChatBadge.em;
+
+  /// 等级数字字号 `0.58em`。
+  static const double levelTextFontSize = 0.58 * AppChatBadge.em;
 
   // ---- 粉丝牌（fans-icon）----
 
-  /// 胶囊高（实测 20，与平台等级同高）。
-  static const double fanHeight = 20;
+  /// 胶囊高 `1.15em`（web `--huya-fan-badge-h`，比通用粉丝牌矮一档）。
+  static const double fanHeight = 1.15 * AppChatBadge.em;
 
-  /// 左侧圆形等级徽记直径（实测徽记区 18px 宽，圆标略小于盒高）。
-  static const double fanLevelDisc = 15;
+  /// 胶囊最小宽 `3.4em`（composed 分支）。
+  static const double fanMinWidth = 3.4 * AppChatBadge.em;
+
+  /// 胶囊圆角 `2px`（web `.chat-fan-badge--huya { border-radius: 2px }`，
+  /// 不是通用胶囊的 999）。
+  static const double fanRadius = 2;
+
+  /// 内容左右内边距 `padding: 0 .28em 0 .14em`。
+  static const double fanPadLeft = 0.14 * AppChatBadge.em;
+  static const double fanPadRight = 0.28 * AppChatBadge.em;
+
+  /// 左侧圆形等级徽记直径：`min-width: 1.05em` 且自身字号 `.67em`
+  /// → `1.05 × .67 × 14`。
+  static const double fanLevelDisc = 1.05 * 0.67 * AppChatBadge.em;
+
+  /// 徽记内数字字号 `.67em`。
+  static const double fanLevelDiscFontSize = 0.67 * AppChatBadge.em;
+
+  /// 徽记底色 `rgba(0,0,0,.22)`（web `.chat-fan-badge__level-disc`）。
+  static const Color fanLevelDiscBg = Color(0x38000000);
+
+  /// 徽记到团名的间距（`margin: 0 .14em 0 0`，按徽记自身 `.67em` 折算）。
+  static const double fanDiscGap = 0.14 * 0.67 * AppChatBadge.em;
+
+  /// 团名字号 `.79em`。
+  static const double fanNameFontSize = 0.79 * AppChatBadge.em;
 
   /// 粉丝牌 7 档底色（实测胶囊中部像素主色簇；每档给深→浅两端）。
   /// 官方底图含等级圆标与团名留白，此处只取底色，结构由 Widget 表达。
@@ -249,45 +348,28 @@ abstract final class AppRadius {
   static final BorderRadius allCaptionPill = BorderRadius.circular(captionPill);
 }
 
-/// 斗鱼官网聊天栏徽章（房间 252140 实测）。
+/// 斗鱼官网聊天栏徽章（房间 252140 实测 + web 参考实现折算）。
 ///
-/// 斗鱼聊天列表是 `<canvas>` 渲染，**没有可解析的 DOM/CSS**，故全部数值
+/// 斗鱼聊天列表是 `<canvas>` 渲染，**没有可解析的 DOM/CSS**，故官方侧数值
 /// 由高 DPI 截图逐像素测得（每行取胶囊包围盒 + 左/中/右三处颜色中位）。
-/// 结构：平台等级是 `[小徽标][数字]` 全圆角胶囊；粉丝牌是官方
-/// `fans/{lv}.png`（60×19，CDN `staticlive.douyucdn.cn` 可构造）+ 右侧团名。
-/// 官网聊天行共 4 个 `dy-*` 组件，本类只管可测的几何量；至尊大钻石
-/// （28×28）与贵族的**图标 URL 规则未确证**，UI 降级为等级数字占位
+/// 结构：粉丝牌是官方 `fans/{lv}.png`（60×19，CDN `staticlive.douyucdn.cn`
+/// 可构造）+ 右侧团名。官网聊天行共 4 个 `dy-*` 组件，本类只管可测的几何量；
+/// 至尊大钻石（28×28）与贵族的**图标 URL 规则未确证**，UI 降级为等级数字占位
 /// （见 `side_panel/chat_badges.dart` 的 `_DouyuSupremeMedal`/`_DouyuNobleChip`）。
+///
+/// 平台等级（LV 胶囊）在 2026-09-26 由"官网 canvas 实测口径"**改为 web 口径**
+/// （`LV{level}` 自适应文字胶囊，见 `DESIGN.md` §4.4）；官网那套
+/// 「小徽标 + 数字」的 32×16 全圆端胶囊与其 5 档米金/绿/蓝/靛/紫渐变已随之下线
+/// （git 历史可查）。
 abstract final class AppDouyuChatBadge {
   // ---- 平台等级（LV 胶囊）----
 
-  /// 胶囊高：18 个样本全部实测 16。
-  static const double levelHeight = 16;
+  /// 胶囊高 `1.15em`（web `.chat-user-level--douyu { height: 1.15em }`
+  /// 折算 16.1）。
+  static const double levelHeight = 1.15 * AppChatBadge.em;
 
-  /// 胶囊宽：18 个样本全部实测 32（`x0=8`，行内左边距固定 8）。
-  static const double levelWidth = 32;
-
-  /// 全圆角：实测顶行宽 25/32，为完全圆端，取高的一半。
-  static const double levelRadius = 8;
-
-  /// 左侧小徽标区宽度（实测徽标在数字左侧，约占 1/3 盒宽）。
-  static const double levelEmblem = 10;
-
-  /// 5 档水平渐变（实测样本：8/13/14 / 15/20/25 / 30–38 / 40 / 52）。
-  static const List<Color> levelTier1 = [Color(0xFFE8CDA5), Color(0xFFDABB8C)];
-  static const List<Color> levelTier2 = [Color(0xFFA5E0A4), Color(0xFF82D485)];
-  static const List<Color> levelTier3 = [Color(0xFF77BAF8), Color(0xFF4E9FEA)];
-  static const List<Color> levelTier4 = [Color(0xFF8CA5FF), Color(0xFF647CF6)];
-  static const List<Color> levelTier5 = [Color(0xFF9991FF), Color(0xFF845EF8)];
-
-  /// 平台等级水平渐变；分档边界由 18 个实测样本反推，样本全部落档。
-  static List<Color> levelGradient(int level) {
-    if (level < 15) return levelTier1;
-    if (level < 30) return levelTier2;
-    if (level < 40) return levelTier3;
-    if (level < 50) return levelTier4;
-    return levelTier5;
-  }
+  /// 胶囊圆角 `2px`（web `.chat-user-level--douyu { border-radius: 2px }`）。
+  static const double levelRadius = 2;
 
   // ---- 粉丝牌 ----
 
@@ -312,15 +394,9 @@ abstract final class AppDouyuChatBadge {
   /// 粉丝牌无图时的中性深底（与 `AppColors.border` 同值，勿重复定义）。
   static const Color fanFallbackBg = Color(0xFF3A3A3A);
 
-  /// 团名文字阴影（官网彩色牌上白字必须压暗才可读）。
-  static const List<BoxShadow> fanTextShadow = [
-    BoxShadow(color: Color(0x73000000), blurRadius: 2),
-    BoxShadow(
-      offset: Offset(0, 1),
-      blurRadius: 1,
-      color: Color(0x59000000),
-    ),
-  ];
+  /// 团名文字阴影（彩色牌上白字必须压暗才可读；与 web 的通用
+  /// `.chat-fan-badge__content` text-shadow 同值，故直接复用）。
+  static const List<BoxShadow> fanTextShadow = AppChatBadge.fanTextShadow;
 
   // ---- 至尊大钻石 / 贵族（官网 lit 组件 `:host` 实测）----
 

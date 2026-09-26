@@ -30,30 +30,46 @@ void main() {
       expect(ZishuTokens.light.chatSuperFan, const Color(0xFFA16207));
     });
 
-    // 以下数值全部来自官网实测，不是截图估算：
-    //  斗鱼 = 房间 252140 高 DPI 逐像素测量（canvas 渲染，无 DOM）
-    //  虎牙 = 房间 333003 getBoundingClientRect + computedStyle + 像素中位
-    test('斗鱼 LV 胶囊几何固定为官网实测 32x16/全圆角', () {
-      expect(AppDouyuChatBadge.levelHeight, 16);
-      expect(AppDouyuChatBadge.levelWidth, 32);
-      expect(AppDouyuChatBadge.levelRadius, 8);
-      expect(AppDouyuChatBadge.levelEmblem, 10);
+    // 以下数值来自 web 参考实现的 em 折算（1em = 聊天行字号 14），
+    // 不是截图估算：
+    //  真源 = SFVideoLive/apps/web/src/components/chat/ChatFanBadge.vue
+    //        与 ChatUserLevelBadge.vue 的 <style scoped>
+    //  官方侧（斗鱼 canvas 房间 252140 / 虎牙房间 333003）实测值只保留
+    //  解析包仍需要的几何量（如 kHuyaConsumeLevelBadgeWidth）。
+    test('聊天徽章通用尺寸按 web 的 em 口径折算(1em = 14)', () {
+      expect(AppChatBadge.em, 14);
+      expect(AppChatBadge.levelHeight, closeTo(20.72, 0.001));
+      expect(AppChatBadge.levelMinWidth, closeTo(16.8, 0.001));
+      expect(AppChatBadge.levelFontSize, closeTo(8.96, 0.001));
+      expect(AppChatBadge.levelPadX, closeTo(3.64, 0.001));
+      expect(AppChatBadge.levelFontSizeWide, 14);
+      expect(AppChatBadge.levelPadXWide, closeTo(3.08, 0.001));
+      expect(AppChatBadge.fanHeight, closeTo(17.92, 0.001));
+      expect(AppChatBadge.fanMinWidth, closeTo(44.8, 0.001));
+      expect(AppChatBadge.fanPadLeft, closeTo(2.24, 0.001));
+      expect(AppChatBadge.fanPadRight, closeTo(3.08, 0.001));
+      expect(AppChatBadge.fanGap, closeTo(2.52, 0.001));
+      expect(AppChatBadge.fanFontSize, closeTo(12.6, 0.001));
+      expect(AppChatBadge.iconHeight, closeTo(16.1, 0.001));
+      expect(AppChatBadge.biliFanHeight, closeTo(20.72, 0.001));
+      expect(AppChatBadge.biliFanMinWidth, 49);
+      expect(AppChatBadge.biliFanPadX, 7);
+      expect(AppChatBadge.biliFanGap, closeTo(2.8, 0.001));
+      expect(AppChatBadge.fanTextShadow, hasLength(2));
     });
 
-    test('斗鱼 LV 胶囊 5 档渐变与 18 个实测样本一致', () {
-      // 实测样本：8/13/14 米金、15/20/25 绿、30-38 蓝、40 靛、52 紫
-      expect(AppDouyuChatBadge.levelGradient(8), AppDouyuChatBadge.levelTier1);
-      expect(AppDouyuChatBadge.levelGradient(14), AppDouyuChatBadge.levelTier1);
-      expect(AppDouyuChatBadge.levelGradient(15), AppDouyuChatBadge.levelTier2);
-      expect(AppDouyuChatBadge.levelGradient(29), AppDouyuChatBadge.levelTier2);
-      expect(AppDouyuChatBadge.levelGradient(30), AppDouyuChatBadge.levelTier3);
-      expect(AppDouyuChatBadge.levelGradient(38), AppDouyuChatBadge.levelTier3);
-      expect(AppDouyuChatBadge.levelGradient(40), AppDouyuChatBadge.levelTier4);
-      expect(AppDouyuChatBadge.levelGradient(49), AppDouyuChatBadge.levelTier4);
-      expect(AppDouyuChatBadge.levelGradient(52), AppDouyuChatBadge.levelTier5);
-      expect(AppDouyuChatBadge.levelTier1.first, const Color(0xFFE8CDA5));
-      expect(AppDouyuChatBadge.levelTier3.first, const Color(0xFF77BAF8));
-      expect(AppDouyuChatBadge.levelTier5.last, const Color(0xFF845EF8));
+    test('斗鱼 LV 胶囊按 web 口径(1.15em 高 / 2px 圆角),旧官网 32x16 口径已下线', () {
+      // web `.chat-user-level--douyu { height: 1.15em; border-radius: 2px }`。
+      // 旧值（32×16 全圆端 + `levelEmblem` 小徽标 + 5 档米金/绿/蓝/靛/紫
+      // `levelGradient`）是斗鱼官网 canvas 的实测口径，2026-09-26 按用户
+      // 「复刻原网页样式」改为 web 口径；官网档位记录见 DESIGN.md §4.4。
+      expect(AppDouyuChatBadge.levelHeight, closeTo(16.1, 0.001));
+      expect(AppDouyuChatBadge.levelRadius, 2);
+      expect(
+        AppDouyuChatBadge.levelHeight,
+        lessThan(AppChatBadge.levelHeight),
+        reason: '斗鱼等级胶囊比通用 1.48em 矮一档',
+      );
     });
 
     test('斗鱼粉丝牌尺寸固定为官网实测(官方 PNG 60x19, 渲染高 18)', () {
@@ -73,15 +89,30 @@ void main() {
       expect(AppDouyuChatBadge.supremeSide, 28);
     });
 
-    test('虎牙等级图尺寸与菱形区固定为官网实测 45x20 / 20', () {
-      // 官方图 90x40(@2x) = 45x20 CSS px；<span> padding-left 20 = 菱形区
+    test('虎牙等级图 45x20 不变,叠字改为 web 的右下角定位', () {
+      // 官方图 90x40(@2x) = 45x20 CSS px（解析包常量，仍用于图片尺寸）。
       expect(kHuyaConsumeLevelBadgeWidth, 45);
       expect(kHuyaConsumeLevelBadgeHeight, 20);
-      expect(AppHuyaChatBadge.levelEmblem, 20);
+      // web `.chat-user-level__huya-lv { right: .12em; bottom: .06em;
+      // font-size: .58em }`。旧值是把数字放在「左侧菱形之后居中」
+      // （`levelEmblem = 20`），2026-09-26 按 web 口径改到右下角。
+      expect(AppHuyaChatBadge.levelTextRight, closeTo(1.68, 0.001));
+      expect(AppHuyaChatBadge.levelTextBottom, closeTo(0.84, 0.001));
+      expect(AppHuyaChatBadge.levelTextFontSize, closeTo(8.12, 0.001));
+    });
+
+    test('虎牙粉丝牌按 web 口径(1.15em 高 / 3.4em 最小宽 / 2px 圆角)', () {
+      expect(AppHuyaChatBadge.fanHeight, closeTo(16.1, 0.001));
+      expect(AppHuyaChatBadge.fanMinWidth, closeTo(47.6, 0.001));
+      expect(AppHuyaChatBadge.fanRadius, 2);
+      expect(AppHuyaChatBadge.fanPadLeft, closeTo(1.96, 0.001));
+      expect(AppHuyaChatBadge.fanPadRight, closeTo(3.92, 0.001));
+      expect(AppHuyaChatBadge.fanLevelDisc, closeTo(9.85, 0.01));
+      expect(AppHuyaChatBadge.fanDiscGap, closeTo(1.31, 0.01));
+      expect(AppHuyaChatBadge.fanNameFontSize, closeTo(11.06, 0.001));
     });
 
     test('虎牙粉丝牌 7 档底色与实测分档边界一致', () {
-      expect(AppHuyaChatBadge.fanHeight, 20);
       expect(AppHuyaChatBadge.fanGradient(4), AppHuyaChatBadge.fanTier1);
       expect(AppHuyaChatBadge.fanGradient(6), AppHuyaChatBadge.fanTier2);
       expect(AppHuyaChatBadge.fanGradient(15), AppHuyaChatBadge.fanTier3);

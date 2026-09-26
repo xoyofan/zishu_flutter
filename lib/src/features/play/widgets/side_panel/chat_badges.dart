@@ -82,12 +82,15 @@ String douyinFansBadgeUrl(int level) {
 ///   (先灰图换彩色)**,无协议图回落官方 `fansclub_new_badge` CDN;
 ///   失败回落红色渐变圆盘文字态;见 [douyinFansColoredBadgeUrl] 与
 ///   [douyinFansBadgeUrl];
-/// - 虎牙:对齐虎牙官网聊天栏的「皇冠 + 等级 + 团名」粉丝牌胶囊；
-///   `vFlag > 0` 时优先显示 `vLogo`，无图/失败回落 V；
-/// - B 站:有协议渐变色维持「团名 级」渐变胶囊;无协议色走官方边框图
-///   `medal-frame.png` + 文字叠层(web resolveBilibiliBadgeBgUrl),失败回落
-///   中性深底;消费协议文字色/等级数字色(0 = 回落白/文字色);
-/// - 其他:品牌色 pill。
+/// - 虎牙:web `.chat-fan-badge--huya-composed` —— 「圆标 + 团名」**2px 圆角**
+///   胶囊（高 `1.15em`、最小宽 `3.4em`），尾部再挂官网身份图标
+///   （`vFlag > 0` 时优先 `vLogo`，无图/失败回落 V）；
+/// - B 站:有协议渐变色 → `.chat-fan-badge--bilibili-composed`
+///   （高 `1.48em`、最小宽 `3.5em`、左右 `.5em`）；无协议色 → 官方边框图
+///   `medal-frame.png` + 文字叠层（web `resolveBilibiliBadgeBgUrl`，走
+///   `.chat-fan-badge--has-bg` 的 `1.28em`/`3.2em` 口径）；消费协议
+///   文字色/等级数字色(0 = 回落白/文字色)；
+/// - 其他:协议图优先；无图回落品牌色 pill（Twitch/YY 是纯图标站，高 `1.15em`）。
 class _FanBadge extends StatefulWidget {
   const _FanBadge({
     required this.site,
@@ -371,20 +374,29 @@ class _FanBadgeState extends State<_FanBadge> {
           key: const Key('huya-fan-badge'),
           child: Container(
             height: AppHuyaChatBadge.fanHeight,
+            constraints: const BoxConstraints(
+              minWidth: AppHuyaChatBadge.fanMinWidth,
+            ),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: AppHuyaChatBadge.fanGradient(level),
               ),
-              borderRadius: BorderRadius.circular(AppHuyaChatBadge.fanHeight / 2),
+              // web `.chat-fan-badge--huya { border-radius: 2px }`：不是胶囊。
+              borderRadius: BorderRadius.circular(AppHuyaChatBadge.fanRadius),
             ),
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+            padding: const EdgeInsets.only(
+              left: AppHuyaChatBadge.fanPadLeft,
+              right: AppHuyaChatBadge.fanPadRight,
+            ),
             alignment: Alignment.centerLeft,
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 _HuyaFanLevelDisc(level: level),
                 if (hasName) ...[
-                  const SizedBox(width: AppSpacing.xs),
+                  // web `.chat-fan-badge__level-disc { margin: 0 .14em 0 0 }`
+                  // （自身字号 .67em → 1.31px）。
+                  const SizedBox(width: AppHuyaChatBadge.fanDiscGap),
                   ConstrainedBox(
                     constraints: const BoxConstraints(maxWidth: 64),
                     child: Text(
@@ -392,10 +404,12 @@ class _FanBadgeState extends State<_FanBadge> {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
-                        fontSize: AppFontSize.bodySecondary,
-                        height: 1.1,
+                        // web `.chat-fan-badge__name--huya { font-size: .79em;
+                        // font-weight: 700 }` —— 不是 12px/400。
+                        fontSize: AppHuyaChatBadge.fanNameFontSize,
+                        height: 1,
                         color: AppOnBright.white,
-                        fontWeight: FontWeight.w400,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ),
@@ -415,6 +429,11 @@ class _FanBadgeState extends State<_FanBadge> {
       final start = colorStart != 0 ? colorStart : colorEnd;
       final end = colorEnd != 0 ? colorEnd : colorStart;
       final hasProtocolColor = start != 0 || end != 0;
+      // web `.chat-fan-badge__content { gap: .18em; font-size: .9em }`；
+      // composed 分支把 gap 覆写为 `.2em`。
+      final contentGap = hasProtocolColor
+          ? AppChatBadge.biliFanGap
+          : AppChatBadge.fanGap;
       final content = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -425,19 +444,19 @@ class _FanBadgeState extends State<_FanBadge> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: AppFontSize.body,
-                  height: 1.1,
+                  fontSize: AppChatBadge.fanFontSize,
+                  height: 1,
                   color: resolvedTextColor,
                   fontWeight: FontWeight.w700,
                 ),
               ),
             ),
-          if (hasName) const SizedBox(width: 2),
+          if (hasName) SizedBox(width: contentGap),
           Text(
             '$level',
             style: TextStyle(
-              fontSize: AppFontSize.body,
-              height: 1.1,
+              fontSize: AppChatBadge.fanFontSize,
+              height: 1,
               color: resolvedLevelColor,
               fontWeight: FontWeight.w700,
               fontFeatures: const [FontFeature.tabularFigures()],
@@ -445,52 +464,79 @@ class _FanBadgeState extends State<_FanBadge> {
           ),
         ],
       );
+      // 无协议渐变色 → 官方边框图 `medal-frame.png` + 文字叠层。web 此时走
+      // `.chat-fan-badge--has-bg`（不是 composed）：高 `1.28em`、`min-width: 3.2em`、
+      // 内容 `padding: 0 .22em 0 .16em`，并叠 `text-shadow` 保证压图可读。
       if (!hasProtocolColor && !_imgFailed) {
         return Tooltip(
           message: hasName ? '$name Lv.$level' : '粉丝团 Lv.$level',
-          child: ClipRRect(
-            borderRadius: const BorderRadius.all(Radius.circular(999)),
-            child: Container(
-              height: 21, // web bilibiliComposed/官方边框牌 1.48em ≈ 20.7
-              constraints: const BoxConstraints(minWidth: 49), // 3.5em
-              decoration: const BoxDecoration(),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: Align(
-                      alignment: Alignment.centerLeft,
-                      child: ChatBadgeImage(
-                        site: site,
-                        kind: ChatBadgeKind.fans,
-                        level: level,
-                        height: 21,
-                        assetPathOverride: bilibiliMedalFrameAssetPath(),
-                        onFail: _markImgFailed,
+          child: KeyedSubtree(
+            key: const Key('bilibili-fan-badge'),
+            child: ClipRRect(
+              borderRadius: const BorderRadius.all(Radius.circular(999)),
+              child: Container(
+                height: AppChatBadge.fanHeight,
+                constraints: const BoxConstraints(
+                  minWidth: AppChatBadge.fanMinWidth,
+                ),
+                decoration: const BoxDecoration(),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: ChatBadgeImage(
+                          site: site,
+                          kind: ChatBadgeKind.fans,
+                          level: level,
+                          height: AppChatBadge.fanHeight,
+                          assetPathOverride: bilibiliMedalFrameAssetPath(),
+                          onFail: _markImgFailed,
+                        ),
                       ),
                     ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    child: Center(child: content),
-                  ),
-                ],
+                    Padding(
+                      padding: const EdgeInsets.only(
+                        left: AppChatBadge.fanPadLeft,
+                        right: AppChatBadge.fanPadRight,
+                      ),
+                      child: Center(
+                        child: DefaultTextStyle.merge(
+                          style: const TextStyle(
+                            shadows: AppChatBadge.fanTextShadow,
+                          ),
+                          child: content,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
         );
       }
+      // 有协议渐变色 → web `.chat-fan-badge--bilibili-composed`：高 `1.48em`、
+      // `min-width: 3.5em`、`padding: 0 .5em`、圆角 999px、字重 700。
       return Tooltip(
         message: hasName ? '$name Lv.$level' : '粉丝团 Lv.$level',
-        child: _BadgeBox(
-          height: 21,
-          radius: 999,
-          gradient: hasProtocolColor ? [Color(start), Color(end)] : null,
-          color: hasProtocolColor ? null : neutralBg,
-          // web `linear-gradient(to left, start, end)`:start 在右、end 在左。
-          gradientBegin: Alignment.centerRight,
-          gradientEnd: Alignment.centerLeft,
-          border: colorBorder != 0 ? Color(colorBorder) : null,
-          child: content,
+        child: KeyedSubtree(
+          key: const Key('bilibili-fan-badge'),
+          child: _BadgeBox(
+            height: AppChatBadge.biliFanHeight,
+            minWidth: AppChatBadge.biliFanMinWidth,
+            radius: AppRadius.pill,
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppChatBadge.biliFanPadX,
+            ),
+            gradient: hasProtocolColor ? [Color(start), Color(end)] : null,
+            color: hasProtocolColor ? null : neutralBg,
+            // web `linear-gradient(to left, start, end)`:start 在右、end 在左。
+            gradientBegin: Alignment.centerRight,
+            gradientEnd: Alignment.centerLeft,
+            border: colorBorder != 0 ? Color(colorBorder) : null,
+            child: content,
+          ),
         ),
       );
     }
@@ -514,48 +560,51 @@ class _FanBadgeState extends State<_FanBadge> {
       }
       if (!hasName) return const SizedBox.shrink();
       if (remoteUrl.isNotEmpty && !_imgFailed) {
-        return Container(
-          height: AppDouyuChatBadge.fanHeight,
-          constraints: const BoxConstraints(
-            minWidth: AppDouyuChatBadge.fanImageWidth,
-          ),
-          decoration: const BoxDecoration(
-            color: AppDouyuChatBadge.fanFallbackBg,
-          ),
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: ChatBadgeImage(
-                  site: site,
-                  kind: ChatBadgeKind.fans,
-                  level: level,
-                  height: AppDouyuChatBadge.fanHeight,
-                  src: remoteUrl,
-                  useDiskCache: false,
-                  onFail: _markImgFailed,
+        return KeyedSubtree(
+          key: const Key('douyu-fan-badge'),
+          child: Container(
+            height: AppDouyuChatBadge.fanHeight,
+            constraints: const BoxConstraints(
+              minWidth: AppDouyuChatBadge.fanImageWidth,
+            ),
+            decoration: const BoxDecoration(
+              color: AppDouyuChatBadge.fanFallbackBg,
+            ),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: ChatBadgeImage(
+                    site: site,
+                    kind: ChatBadgeKind.fans,
+                    level: level,
+                    height: AppDouyuChatBadge.fanHeight,
+                    src: remoteUrl,
+                    useDiskCache: false,
+                    onFail: _markImgFailed,
+                  ),
                 ),
-              ),
-              Positioned(
-                left: AppDouyuChatBadge.fanTextInset,
-                right: AppSpacing.xs,
-                top: 0,
-                bottom: 0,
-                child: Center(
-                  child: Text(
-                    name.trim(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: AppFontSize.caption,
-                      height: 1.1,
-                      color: resolvedTextColor,
-                      fontWeight: FontWeight.w600,
-                      shadows: AppDouyuChatBadge.fanTextShadow,
+                Positioned(
+                  left: AppDouyuChatBadge.fanTextInset,
+                  right: AppSpacing.xs,
+                  top: 0,
+                  bottom: 0,
+                  child: Center(
+                    child: Text(
+                      name.trim(),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: AppFontSize.caption,
+                        height: 1.1,
+                        color: resolvedTextColor,
+                        fontWeight: FontWeight.w600,
+                        shadows: AppDouyuChatBadge.fanTextShadow,
+                      ),
                     ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       }
@@ -651,27 +700,37 @@ class _FanBadgeState extends State<_FanBadge> {
         ),
       );
     }
-    // 其他平台:协议图优先;没有真实图才走中性文字胶囊。
+    // 其他平台:协议图优先;没有真实图才走品牌色文字胶囊。
+    //
+    // web 口径：Twitch / YY 是**纯图标徽章**（`.chat-fan-badge--platform-bg` /
+    // `--yy`，高 `1.15em`）；其余平台有底图时用通用高度 `1.28em`。
+    final isIconOnlySite = site == 'twitch' || site == 'yy';
     if (remoteUrl.isNotEmpty && !_imgFailed) {
       return ChatBadgeImage(
         site: site,
         kind: ChatBadgeKind.fans,
         level: level,
-        height: site == 'twitch' ? 18 : 15,
+        height: isIconOnlySite
+            ? AppChatBadge.iconHeight
+            : AppChatBadge.fanHeight,
         src: remoteUrl,
         onFail: _markImgFailed,
       );
     }
     return _BadgeBox(
-      height: 15,
+      height: AppChatBadge.fanHeight,
       radius: 999,
+      padding: const EdgeInsets.only(
+        left: AppChatBadge.fanPadLeft,
+        right: AppChatBadge.fanPadRight,
+      ),
       color: tokens.brand.withValues(alpha: 0.18),
       border: tokens.brand.withValues(alpha: 0.6),
       child: Text(
         label(site, name, hasName, level),
         style: TextStyle(
-          fontSize: AppFontSize.overline,
-          height: 1.1,
+          fontSize: AppChatBadge.fanFontSize,
+          height: 1,
           color: tokens.brand,
           fontWeight: FontWeight.w700,
         ),
@@ -821,14 +880,17 @@ class _DouyuDiamondFanChip extends StatelessWidget {
   }
 }
 
-/// 用户等级徽章(各平台按官网形态渲染):
-/// - 虎牙:对齐虎牙官网 333003 聊天栏的纯数字小圆角胶囊；贵族/VIP emblem
-///   与平台等级是两种身份，不再把 `vip/v2` 图片冒充平台等级；
+/// 用户等级徽章（各平台按 web `ChatUserLevelBadge.vue` 形态渲染）。
+///
+/// 尺寸口径统一在 `DESIGN.md` §4.4；这里只记分支语义：
+/// - 虎牙:官方 `consumeLevelBadgeV2` 图（高 1.48em），等级数字叠在**右下角**；
+///   贵族/VIP emblem 与平台等级是两种身份，不把 `vip/v2` 图片冒充平台等级；
 /// - 抖音:honor 荣誉图 `douyin/honor/{lv}.png`(≤75;图内含数字不叠文字);
 ///   失败/超档回落紫粉渐变数字;
-/// - 斗鱼:纯数字等级胶囊，按官网低/中/高档使用绿/蓝/橙红配色；
-/// - B 站:保持文字(wealth 不在本轮);
-/// - 其他:「Lv N」+ 灰底(web default #6b7280)。
+/// - 斗鱼:`LV{level}` 渐变文字胶囊（高 `1.15em`、圆角 2px、字号 `.64em`）；
+/// - B 站:`LV{level}` 渐变文字胶囊（高 `1.48em`、圆角 999px、字号 `.64em`）；
+///   protocol wealth 图不在本轮；
+/// - 其他:纯数字 + 灰底 `#6b7280`（web default 分支）。
 class _UserLevelBadge extends StatefulWidget {
   const _UserLevelBadge({
     required this.site,
@@ -940,20 +1002,23 @@ class _UserLevelBadgeState extends State<_UserLevelBadge> {
                   onFail: _markImgFailed,
                 ),
               ),
-              // 官网 `<span>` 的 padding-left:20px 即左侧菱形区宽度。
+              // web `.chat-user-level--huya .chat-user-level__huya-lv`：
+              // 数字绝对定位在官方图**右下角**（`right: .12em; bottom: .06em`，
+              // `font-size: .58em`，白色 + `text-shadow: 0 0 2px rgba(0,0,0,.55)`）。
               Positioned(
-                left: AppHuyaChatBadge.levelEmblem,
-                top: 0,
-                bottom: 0,
-                child: Center(
-                  child: Text(
-                    '$level',
-                    style: const TextStyle(
-                      fontSize: AppFontSize.bodySecondary,
-                      height: 1.1,
-                      color: AppOnBright.white,
-                      fontWeight: FontWeight.w700,
-                    ),
+                right: AppHuyaChatBadge.levelTextRight,
+                bottom: AppHuyaChatBadge.levelTextBottom,
+                child: Text(
+                  '$level',
+                  style: const TextStyle(
+                    fontSize: AppHuyaChatBadge.levelTextFontSize,
+                    height: 1,
+                    color: AppOnBright.white,
+                    fontWeight: FontWeight.w700,
+                    shadows: [
+                      // 对齐 web text-shadow 的 0 0 2px rgba(0,0,0,.55)。
+                      Shadow(color: Color(0x8C000000), blurRadius: 2),
+                    ],
                   ),
                 ),
               ),
@@ -962,45 +1027,69 @@ class _UserLevelBadgeState extends State<_UserLevelBadge> {
         ),
       );
     }
-    // 斗鱼官网 252140 逐像素实测：LV 是 `[小徽标][数字]` 全圆角胶囊 32×16，
-    // 水平渐变分 5 档（<15 米金 / 15–29 绿 / 30–39 蓝 / 40–49 靛 / ≥50 紫）。
-    // 协议里的 iconUrl 不能把它变成图片。
+    // 斗鱼平台等级：**web 口径**（`.chat-user-level--douyu`）—— `LV{level}`
+    // 文字胶囊，宽自适应、圆角 2px、高 `1.15em`、字号 `.64em`、左右内边距 `.26em`。
+    // 渐变取 web `buildDouyuUserLevelStyle` → `levelTierGradient(level,
+    // [50,40,30,20,10])`（与斗鱼官网那套米金/绿/蓝/靛/紫无关的通用 tier 表）。
+    //
+    // ⚠️ 斗鱼官网自己那套「小徽标 + 数字」32×16 全圆端胶囊已按"UI 参考 web"
+    // 下线（用户口径 2026-09-26「复刻原网页样式」），依据见 `DESIGN.md` §4.4。
+    // 协议里的 iconUrl 从来不能把它变成图片。
     if (site == 'douyu') {
-      final emblemSide = AppDouyuChatBadge.levelEmblem - AppSpacing.xs;
       return KeyedSubtree(
         key: const Key('douyu-user-level-pill'),
         child: Container(
           height: AppDouyuChatBadge.levelHeight,
-          width: AppDouyuChatBadge.levelWidth,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppChatBadge.levelPadX,
+          ),
+          alignment: Alignment.center,
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              colors: AppDouyuChatBadge.levelGradient(level),
+              colors: _levelTier(level, const [50, 40, 30, 20, 10]),
             ),
             borderRadius: BorderRadius.circular(AppDouyuChatBadge.levelRadius),
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // 官网 LV 胶囊左侧的小徽标(canvas 绘制)；用同尺寸浅色圆点占位。
-              Container(
-                width: emblemSide,
-                height: emblemSide,
-                margin: const EdgeInsets.only(right: AppSpacing.xs),
-                decoration: BoxDecoration(
-                  color: AppOnBright.white.withValues(alpha: 0.55),
-                  borderRadius: BorderRadius.circular(emblemSide / 2),
-                ),
-              ),
-              Text(
-                '$level',
-                style: const TextStyle(
-                  fontSize: AppFontSize.overline,
-                  height: 1.1,
-                  color: AppOnBright.white,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
+          child: Text(
+            'LV$level',
+            style: const TextStyle(
+              fontSize: AppChatBadge.levelFontSize,
+              height: 1,
+              color: AppOnBright.white,
+              fontWeight: FontWeight.w700,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
+          ),
+        ),
+      );
+    }
+    // B 站平台等级：web `buildBilibiliUserLevelStyle` 直接复用斗鱼的 tier 渐变，
+    // CSS 走 `.chat-user-level--bilibili` —— 高 `1.48em`（**不**被 douyu 的
+    // `1.15em` 覆盖）、`min-width:auto`、圆角 999px、文字 `.64em` + `.26em` 内边距。
+    if (site == 'bilibili') {
+      return KeyedSubtree(
+        key: const Key('bilibili-user-level-pill'),
+        child: Container(
+          height: AppChatBadge.levelHeight,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppChatBadge.levelPadX,
+          ),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: _levelTier(level, const [50, 40, 30, 20, 10]),
+            ),
+            borderRadius: BorderRadius.circular(AppRadius.pill),
+          ),
+          child: Text(
+            'LV$level',
+            style: const TextStyle(
+              fontSize: AppChatBadge.levelFontSize,
+              height: 1,
+              color: AppOnBright.white,
+              fontWeight: FontWeight.w700,
+              fontFeatures: [FontFeature.tabularFigures()],
+            ),
           ),
         ),
       );
@@ -1019,6 +1108,8 @@ class _UserLevelBadgeState extends State<_UserLevelBadge> {
       return image;
     }
     // 抖音:honor 整图(等级绘在图内);失败/超 75 档回落紫粉渐变数字。
+    // 素材是 96×48 的长胶囊(内容只占 x 16..86),限宽到内容区,避免背景
+    // 拖出一条长尾(见 [kDouyinHonorBadgeAspectRatio])。
     if (site == 'douyin' &&
         !_imgFailed &&
         badgeAssetPath(
@@ -1031,16 +1122,18 @@ class _UserLevelBadgeState extends State<_UserLevelBadge> {
         kind: ChatBadgeKind.userLevel,
         level: level,
         height: 21,
+        maxAspectRatio: kDouyinHonorBadgeAspectRatio,
+        cropAlignment: kDouyinHonorBadgeCropAlignment,
         onFail: _markImgFailed,
       );
     }
-    // 斗鱼已在上面按官网数字胶囊提前返回；B站/其他/图片兜底沿用既有文字态。
+    // 斗鱼/B站已在上面按 web 胶囊提前返回；这里是「图片兜底 / 其他平台」文字态。
+    // 尺寸取 web `.chat-user-level` 的通用口径：高 `1.48em`、`min-width: 1.2em`、
+    // **圆角 0**（web 基础类就是 `border-radius: 0`，只有 bilibili/douyu 覆写成
+    // 圆角）、文字 `1em` + 左右 `.22em` 内边距、灰底 `#6b7280` + 白字 700。
     List<Color> colors;
     var label = '';
-    if (site == 'bilibili') {
-      label = 'LV$level';
-      colors = _levelTier(level, const [50, 40, 30, 20, 10]);
-    } else if (site == 'douyin') {
+    if (site == 'douyin') {
       label = '$level';
       colors = const [Color(0xffa855f7), Color(0xffec4899)];
     } else if (site == 'huya') {
@@ -1052,9 +1145,13 @@ class _UserLevelBadgeState extends State<_UserLevelBadge> {
       colors = const [Color(0xff6b7280)];
     }
     return _BadgeBox(
-      height: 16,
-      minWidth: 16,
-      radius: 2,
+      key: const Key('other-user-level-pill'),
+      height: AppChatBadge.levelHeight,
+      minWidth: AppChatBadge.levelMinWidth,
+      radius: 0,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppChatBadge.levelPadXWide,
+      ),
       gradient: colors.length > 1 ? colors : null,
       color: widget.color != 0
           ? Color(0xff000000 | (widget.color & 0xffffff))
@@ -1062,9 +1159,9 @@ class _UserLevelBadgeState extends State<_UserLevelBadge> {
       child: Text(
         label,
         style: const TextStyle(
-          fontSize: AppFontSize.overline,
-          height: 1.1,
-          color: Colors.white,
+          fontSize: AppChatBadge.levelFontSizeWide,
+          height: 1,
+          color: AppOnBright.white,
           fontWeight: FontWeight.w700,
         ),
       ),
@@ -1072,10 +1169,12 @@ class _UserLevelBadgeState extends State<_UserLevelBadge> {
   }
 }
 
-/// 虎牙粉丝牌胶囊左侧的圆形等级徽记。
+/// 虎牙粉丝牌胶囊左侧的圆形等级徽记（web `.chat-fan-badge__level-disc`）。
 ///
 /// 官网 `fans-icon` 的 `padding-left:18px` 区域就是这枚圆标（等级数字绘在
-/// 官方底图里）；底图不可得时用同尺寸圆形 + 数字复刻。
+/// 官方底图里）；底图不可得时用同尺寸圆形 + 数字复刻。web 口径：
+/// `min-width: 1.05em`（自身字号 `.67em` → 直径 9.85）、`background: rgba(0,0,0,.22)`、
+/// 字重 800、`border-radius: 999px`。
 class _HuyaFanLevelDisc extends StatelessWidget {
   const _HuyaFanLevelDisc({required this.level});
 
@@ -1087,17 +1186,17 @@ class _HuyaFanLevelDisc extends StatelessWidget {
       width: AppHuyaChatBadge.fanLevelDisc,
       height: AppHuyaChatBadge.fanLevelDisc,
       alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: AppOnBright.white.withValues(alpha: 0.28),
+      decoration: const BoxDecoration(
+        color: AppHuyaChatBadge.fanLevelDiscBg,
         shape: BoxShape.circle,
       ),
       child: Text(
         '$level',
         style: const TextStyle(
-          fontSize: AppFontSize.overline,
-          height: 1.1,
+          fontSize: AppHuyaChatBadge.fanLevelDiscFontSize,
+          height: 1,
           color: AppOnBright.white,
-          fontWeight: FontWeight.w700,
+          fontWeight: FontWeight.w800,
         ),
       ),
     );
@@ -1227,6 +1326,7 @@ class _BadgeBox extends StatelessWidget {
     this.border,
     this.gradientBegin = Alignment.centerLeft,
     this.gradientEnd = Alignment.centerRight,
+    this.padding = const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
   });
 
   final double height;
@@ -1237,6 +1337,11 @@ class _BadgeBox extends StatelessWidget {
   final Color? border;
   final Alignment gradientBegin;
   final Alignment gradientEnd;
+
+  /// 内容内边距。默认 4/1 是历史值；按 web 口径复刻时显式传入
+  /// （如用户等级文字 `.22em` = 3.08、B 站渐变牌 `.5em` = 7）。
+  final EdgeInsetsGeometry padding;
+
   final Widget child;
 
   @override
@@ -1256,7 +1361,7 @@ class _BadgeBox extends StatelessWidget {
     return Container(
       height: height,
       constraints: minWidth > 0 ? BoxConstraints(minWidth: minWidth) : null,
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+      padding: padding,
       alignment: Alignment.center,
       decoration: decoration,
       child: child,

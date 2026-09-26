@@ -329,6 +329,138 @@ void main() {
     );
   });
 
+  testWidgets('B站平台等级按 web 口径(LV{level} 文字胶囊,高 1.48em/圆角 999)', (
+    tester,
+  ) async {
+    // 口径变更(2026-09-26 用户「复刻原网页样式」):B 站平台等级从
+    // 「16px 方角渐变」改成 web `.chat-user-level--bilibili` —— 高 1.48em(20.72)、
+    // `min-width: auto`、圆角 999px、文字 `.64em`(8.96) + 左右 `.26em`(3.64)。
+    // 见 DESIGN.md §4.4。
+    await _pump(
+      tester,
+      'bilibili',
+      _message(site: 'bilibili', userLevel: 25),
+    );
+
+    final pill = find.byKey(const Key('bilibili-user-level-pill'));
+    expect(pill, findsOneWidget);
+    expect(
+      tester.getRect(pill).height,
+      closeTo(AppChatBadge.levelHeight, 0.01),
+      reason: 'web .chat-user-level--bilibili 高 1.48em = 20.72',
+    );
+    expect(find.text('LV25'), findsOneWidget, reason: 'web userLevelLabel 是 LV 前缀');
+
+    final box = tester.widget<Container>(
+      find.descendant(of: pill, matching: find.byType(Container)).first,
+    );
+    final deco = box.decoration! as BoxDecoration;
+    expect(
+      deco.borderRadius,
+      BorderRadius.circular(AppRadius.pill),
+      reason: 'web `.chat-user-level--bilibili { border-radius: 999px }`',
+    );
+    expect(
+      box.padding,
+      const EdgeInsets.symmetric(horizontal: AppChatBadge.levelPadX),
+      reason: 'web `padding: 0 .26em` = 3.64',
+    );
+    expect(deco.gradient, isNotNull, reason: 'tier 渐变（同斗鱼 buildBilibiliUserLevelStyle）');
+  });
+
+  testWidgets('B站粉丝牌:有协议色走 composed(1.48em/3.5em)', (tester) async {
+    // web `.chat-fan-badge--bilibili-composed`：高 1.48em(20.72)、
+    // 最小宽 3.5em(49)、`padding: 0 .5em`(7)。
+    await _pump(
+      tester,
+      'bilibili',
+      DanmakuMessage(
+        type: DanmakuMessageType.chat,
+        roomId: 'room-1',
+        userName: '小电视',
+        userId: 'u-1',
+        text: '你好',
+        userLevel: 25,
+        badgeColorStart: 0xfffb7299,
+        badgeColorEnd: 0xff5c3aa8,
+        badges: const [DanmakuBadge(name: '提督骑士团', level: 12)],
+      ),
+    );
+
+    final composed = find.byKey(const Key('bilibili-fan-badge'));
+    expect(composed, findsOneWidget);
+    expect(
+      tester.getRect(composed).height,
+      closeTo(AppChatBadge.biliFanHeight, 0.01),
+      reason: '有协议色 = composed，高 1.48em',
+    );
+    expect(
+      tester.getRect(composed).width,
+      greaterThanOrEqualTo(AppChatBadge.biliFanMinWidth),
+      reason: 'composed 最小宽 3.5em = 49',
+    );
+  });
+
+  testWidgets('B站粉丝牌:无协议色走 has-bg(1.28em/3.2em,不是 composed)', (tester) async {
+    // web 无协议渐变色时走 `.chat-fan-badge--has-bg`（官方边框图 medal-frame）：
+    // 高 1.28em(17.92)、最小宽 3.2em(44.8)、内容 `padding: 0 .22em 0 .16em`。
+    // 旧实现把它写成 21/49 + 左右 10 内边距，明显偏宽。
+    await _pump(
+      tester,
+      'bilibili',
+      _message(
+        site: 'bilibili',
+        userLevel: 6,
+        badges: const [DanmakuBadge(name: '舰团', level: 4)],
+      ),
+    );
+
+    final framed = find.byKey(const Key('bilibili-fan-badge'));
+    expect(framed, findsOneWidget);
+    expect(
+      tester.getRect(framed).height,
+      closeTo(AppChatBadge.fanHeight, 0.01),
+      reason: '无协议色 = has-bg，高 1.28em = 17.92',
+    );
+    expect(
+      tester.getRect(framed).width,
+      greaterThanOrEqualTo(AppChatBadge.fanMinWidth),
+      reason: 'has-bg 最小宽 3.2em = 44.8',
+    );
+  });
+
+  testWidgets('其他平台等级按 web default 口径(高 1.48em / 圆角 0 / 字号 1em)', (
+    tester,
+  ) async {
+    // web 基础类 `.chat-user-level`：高 1.48em、`min-width: 1.2em`、
+    // `border-radius: 0`（只有 bilibili/douyu 覆写成圆角）、文字 `1em` +
+    // 左右 `.22em`。旧实现是 16px 高 / 2px 圆角 / 9px 字号。
+    await _pump(tester, 'twitch', _message(site: 'twitch', userLevel: 12));
+
+    final pill = find.byKey(const Key('other-user-level-pill'));
+    expect(pill, findsOneWidget);
+    expect(
+      tester.getRect(pill).height,
+      closeTo(AppChatBadge.levelHeight, 0.01),
+    );
+    final box = tester.widget<Container>(
+      find.descendant(of: pill, matching: find.byType(Container)).first,
+    );
+    expect(
+      (box.decoration! as BoxDecoration).borderRadius,
+      BorderRadius.circular(0),
+      reason: 'web 基础类是方角',
+    );
+    final text = tester.widget<Text>(
+      find.descendant(of: pill, matching: find.byType(Text)).first,
+    );
+    expect(
+      text.style?.fontSize,
+      AppChatBadge.levelFontSizeWide,
+      reason: '其他平台没吃到 `.64em` 覆盖，文字是 1em = 14',
+    );
+  });
+
   test('抖音粉丝牌:协议图优先 + 灰图换彩色 + 兜底 new_badge(web 口径)', () {
     // 口径抄 web `resolveDouyinBadgeBgUrl` / `resolveDouyinColoredFansBadgeUrl`:
     // 1) 协议 URL 优先,但 `pop_gray_super_badge` 要换成同尺寸彩色款

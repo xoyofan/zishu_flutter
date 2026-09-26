@@ -35,6 +35,21 @@ const int kDouyinFansMaxLevel = 20;
 /// 抖音荣誉等级本地图上限(web manifest douyin.honorMax)。
 const int kDouyinHonorMaxLevel = 75;
 
+/// 抖音荣誉等级(honor)徽章素材的裁剪比例 = 内容区宽度 ÷ 素材高度。
+///
+/// 官方 `new_user_grade_level_v1_{lv}`(CDN)与本地 `douyin/honor/{lv}.png`
+/// 同为 **96×48** 的「图标 + 数字」长胶囊:2026-09-26 逐像素实测 1/5/9/11/21/
+/// 30/44/49/60/75 级,内容只占 **x 16..86**(图标起 16,两位数数字止 86),
+/// 左右各留 16/10px 纯半透明背景。按原比例渲染(高 21 → 宽 42px)时背景拖出
+/// 一条长尾 —— 用户报「粉丝徽章背景太宽」即指此。
+///
+/// 只保留内容区 + 左右各 3px 内边距 = 素材 76px 宽(高 21 时显示 33.25px)。
+const double kDouyinHonorBadgeAspectRatio = 76 / 48;
+
+/// 抖音 honor 横向裁切对齐:内容居中偏左(左留白 16 > 右留白 10),
+/// `Alignment.x = 0.2` 即左裁 12px、右裁 8px。
+const Alignment kDouyinHonorBadgeCropAlignment = Alignment(0.2, 0);
+
 /// 斗鱼粉丝牌本地图上限(web manifest douyu.fansMax)。
 const int kDouyuFansMaxLevel = 50;
 
@@ -112,6 +127,8 @@ class ChatBadgeImage extends StatefulWidget {
     this.src = '',
     this.assetPathOverride,
     this.useDiskCache = true,
+    this.maxAspectRatio,
+    this.cropAlignment = Alignment.center,
     this.onFail,
   });
 
@@ -137,6 +154,19 @@ class ChatBadgeImage extends StatefulWidget {
 
   /// 是否使用磁盘缓存；房间定制徽章可关闭,避免 URL 复用旧图。
   final bool useDiskCache;
+
+  /// 宽度上限 = `height × maxAspectRatio`；null = 不限宽(按素材自身比例)。
+  ///
+  /// 官方素材常把「徽章内容」画在一张更宽的长胶囊里(左右各留一段纯背景,
+  /// 如抖音 honor 是 96×48、内容只占 x 16..86)。按原比例渲染时背景会拖出
+  /// 一条长尾,视觉上「背景太宽」。给定上限后改用 [BoxFit.cover] 横向裁掉
+  /// 超出部分,保留哪一段由 [cropAlignment] 决定。
+  final double? maxAspectRatio;
+
+  /// 横向裁切时保留素材的哪一段([Alignment] 语义:左 = 保留最左)。
+  ///
+  /// 仅在 [maxAspectRatio] 非空时生效;默认居中。
+  final Alignment cropAlignment;
 
   /// 加载失败/无资产回调(每个失败只回一次;输入变化后重置重试)。
   final VoidCallback? onFail;
@@ -179,37 +209,48 @@ class _ChatBadgeImageState extends State<ChatBadgeImage> {
   Widget build(BuildContext context) {
     if (_failed) return const SizedBox.shrink();
     final localPath = widget.assetPath;
-    final fit = widget.fit ?? _defaultFit(widget.kind);
+    // 限宽 = 要横向裁掉素材两侧多余背景:改用 cover + 指定对齐,
+    // 宽度由 height × maxAspectRatio 决定(见 [maxAspectRatio])。
+    final width = widget.maxAspectRatio == null
+        ? null
+        : widget.height * widget.maxAspectRatio!;
+    final fit = width == null ? (widget.fit ?? _defaultFit(widget.kind)) : BoxFit.cover;
+    final alignment = width == null
+        ? Alignment.centerLeft
+        : widget.cropAlignment;
     if (widget.src.isNotEmpty) {
       final Widget networkImage = widget.useDiskCache
           ? CachedNetworkImage(
               imageUrl: widget.src,
               cacheKey: widget.src,
+              width: width,
               height: widget.height,
               fit: fit,
-              alignment: Alignment.centerLeft,
+              alignment: alignment,
               filterQuality: FilterQuality.medium,
-              placeholder: (_, _) => SizedBox(height: widget.height),
+              placeholder: (_, _) =>
+                  SizedBox(width: width, height: widget.height),
               errorWidget: (context, error, stackTrace) {
                 if (localPath.isEmpty) {
                   _reportFail();
                   return const SizedBox.shrink();
                 }
-                return _assetImage(localPath, fit);
+                return _assetImage(localPath, fit, width, alignment);
               },
             )
           : Image.network(
               widget.src,
+              width: width,
               height: widget.height,
               fit: fit,
-              alignment: Alignment.centerLeft,
+              alignment: alignment,
               filterQuality: FilterQuality.medium,
               errorBuilder: (context, error, stackTrace) {
                 if (localPath.isEmpty) {
                   _reportFail();
                   return const SizedBox.shrink();
                 }
-                return _assetImage(localPath, fit);
+                return _assetImage(localPath, fit, width, alignment);
               },
             );
       return ColorFiltered(
@@ -222,16 +263,22 @@ class _ChatBadgeImageState extends State<ChatBadgeImage> {
       _reportFail();
       return const SizedBox.shrink();
     }
-    return _assetImage(localPath, fit);
+    return _assetImage(localPath, fit, width, alignment);
   }
 
-  Widget _assetImage(String path, BoxFit fit) => ColorFiltered(
+  Widget _assetImage(
+    String path,
+    BoxFit fit,
+    double? width,
+    Alignment alignment,
+  ) => ColorFiltered(
     colorFilter: chatWebImageFilter,
     child: Image.asset(
       path,
+      width: width,
       height: widget.height,
       fit: fit,
-      alignment: Alignment.centerLeft,
+      alignment: alignment,
       filterQuality: FilterQuality.medium,
       errorBuilder: (context, error, stackTrace) {
         _reportFail();

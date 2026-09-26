@@ -337,6 +337,38 @@ golden 差 2074px，整块底色/描边都变）。需要更明显的交互态�
 `labelFontSize = 11`、`rowGap = 2`。经 `app_theme.dart` 的 `sliderTheme` 全局生效，
 各面板不再局部包裹同规格 `SliderTheme`。
 
+### 4.4 聊天徽章规格（侧栏聊天行的平台等级 / 粉丝牌）
+
+**真源**：`SFVideoLive/apps/web/src/components/chat/ChatFanBadge.vue` 与
+`ChatUserLevelBadge.vue` 的 `<style scoped>`。web 的徽章尺寸全用 `em`，父级
+`.chat-item` 是 `font-size: var(--chat-item-font-size, 14px)`（= Flutter 侧
+`SettingsState.defaultChatFontSize = 14`、`AppFontSize.subtitle`），故 **1em = 14px**。
+
+| 语义 | web 值 | 折算 px | Flutter token |
+|---|---|---|---|
+| 用户等级高（通用） | `1.48em` | 20.72 | `AppChatBadge.levelHeight` |
+| 用户等级高（斗鱼） | `1.15em` | 16.1 | `AppDouyuChatBadge.levelHeight` |
+| 用户等级文字（斗鱼/B站） | `.64em` | 8.96 | `AppChatBadge.levelFontSize` |
+| 用户等级内边距（斗鱼/B站） | `.26em` | 3.64 | `AppChatBadge.levelPadX` |
+| 用户等级内边距（其他平台） | `.22em` | 3.08 | `AppChatBadge.levelPadXWide` |
+| 粉丝牌高（通用） | `1.28em` | 17.92 | `AppChatBadge.fanHeight` |
+| 粉丝牌最小宽 / 内边距 | `3.2em` / `.16em`+`.22em` | 44.8 / 2.24+3.08 | `AppChatBadge.fanMinWidth` / `fanPadLeft`+`fanPadRight` |
+| 粉丝牌文字 | `.9em` | 12.6 | `AppChatBadge.fanFontSize` |
+| B 站渐变牌（有协议色） | `1.48em` / `3.5em` / `.5em` | 20.72 / 49 / 7 | `AppChatBadge.biliFanHeight` / `biliFanMinWidth` / `biliFanPadX` |
+| 虎牙粉丝牌 | `1.15em` / `3.4em` / `.14em`+`.28em` | 16.1 / 47.6 / 1.96+3.92 | `AppHuyaChatBadge.fanHeight` / `fanMinWidth` / `fanPadLeft`+`fanPadRight` |
+| Twitch / YY 图标 | `1.15em` | 16.1 | `AppChatBadge.iconHeight` |
+
+口径说明：
+
+- 斗鱼与 B 站的**用户等级**都用 web 的 `levelTierGradient(level, [50,40,30,20,10])`
+  文字胶囊（`LV{level}`）；斗鱼圆角 `2px`、B 站 `999px`，两者文字 `.64em`。
+  —— 斗鱼官网自己的 LV 胶囊（`AppDouyuChatBadge` 里留档的 32×16 米金/绿/蓝/靛/紫
+  实测档）是 canvas 画的**另一套**观感，与 web 参考实现不一致，按"UI 参考 web"取 web。
+- **等级已绘在图内的平台**（抖音 honor / 斗鱼 fans / 虎牙 consume 除外）不叠数字；
+  虎牙是唯一叠数字的（`chatUserLevelOverlayText`），位置在官方图**右下角**
+  （`right: .12em; bottom: .06em`，字号 `.58em`）。
+- 斗鱼粉丝牌的 60×19 官方 PNG 原样贴左、团名右内缩 `1.58em`(22) 见 §5.4 例外登记。
+
 ---
 
 ## 5. Layout Principles

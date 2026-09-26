@@ -38,6 +38,7 @@ import 'package:zishu_flutter/src/app/app_theme.dart';
 import 'package:zishu_flutter/src/features/danmaku/application/danmaku_session_provider.dart';
 import 'package:zishu_flutter/src/features/play/widgets/chat_badge_image.dart';
 import 'package:zishu_flutter/src/features/play/widgets/play_side_panel.dart';
+import 'package:zishu_flutter/src/shared/presentation/design_tokens.dart';
 
 /// 测试替身弹幕会话(同 danmaku_test 思路,由测试完全驱动,不碰网络)。
 class _FakeDanmakuSession implements DanmakuSession {
@@ -343,11 +344,13 @@ void main() {
   });
 
   group('弹幕行徽章:图片优先 → 文字态兜底', () {
-    testWidgets('douyuRow:官网 LV 胶囊 32x16(徽标+数字) + 官方粉丝牌整图 + 团名叠层',
+    testWidgets('douyuRow:平台等级按 web 口径(LV{level} 文字胶囊) + 官方粉丝牌整图 + 团名叠层',
         (tester) async {
-      // 依据官网 252140 逐像素实测（canvas 渲染，无 DOM）：
-      //  LV 胶囊 32x16 全圆角，结构 [小徽标][数字]，5 档水平渐变
-      //  粉丝牌高 18，官方 fans/{lv}.png(60x19) + 右侧团名
+      // 口径变更（2026-09-26 用户「复刻原网页样式」）：LV 胶囊从"斗鱼官网
+      // canvas 实测 32×16 小徽标+数字"改为 web `.chat-user-level--douyu` ——
+      // `LV{level}` 文字、高 1.15em(16.1)、圆角 2px、字号 .64em(8.96)、
+      // 左右内边距 .26em(3.64)、**宽随内容自适应**（不再固定 32）。
+      // 见 DESIGN.md §4.4。粉丝牌不变：官方 fans/{lv}.png(60x19) + 团名，盒高 18。
       final connector = _FakeDanmakuConnector();
       await _pumpPanel(tester, 'douyu', connector: connector);
       final session = _connected(connector);
@@ -357,17 +360,44 @@ void main() {
       );
       await _pumpStable(tester);
 
-      // 平台等级：几何对齐官网实测 32x16，且不接图
-      final levelRect = tester.getRect(
-        find.byKey(const Key('douyu-user-level-pill')),
+      // 平台等级：web 口径（高 1.15em、圆角 2px、LV 前缀、宽自适应、不接图）
+      final levelPill = find.byKey(const Key('douyu-user-level-pill'));
+      final levelRect = tester.getRect(levelPill);
+      expect(
+        levelRect.height,
+        closeTo(AppDouyuChatBadge.levelHeight, 0.01),
+        reason: 'web .chat-user-level--douyu 的高是 1.15em = 16.1',
       );
-      expect(levelRect.height, 16, reason: '官网 LV 胶囊 18 个样本实测高均为 16');
-      expect(levelRect.width, 32, reason: '官网 LV 胶囊 18 个样本实测宽均为 32');
-      expect(find.descendant(
-        of: find.byKey(const Key('douyu-user-level-pill')),
-        matching: find.text('31'),
-      ), findsOneWidget);
-      expect(find.text('LV31'), findsNothing, reason: '官网 LV 胶囊无 LV 前缀');
+      expect(
+        find.descendant(of: levelPill, matching: find.text('LV31')),
+        findsOneWidget,
+        reason: 'web userLevelLabel 斗鱼是 "LV{level}"',
+      );
+      final levelBox = tester.widget<Container>(
+        find
+            .descendant(of: levelPill, matching: find.byType(Container))
+            .first,
+      );
+      expect(
+        (levelBox.decoration! as BoxDecoration).borderRadius,
+        BorderRadius.circular(AppDouyuChatBadge.levelRadius),
+        reason: 'web 斗鱼 LV 是 2px 圆角（不是全圆端）',
+      );
+      expect(
+        levelBox.padding,
+        const EdgeInsets.symmetric(horizontal: AppChatBadge.levelPadX),
+        reason: 'web `padding: 0 .26em`',
+      );
+      expect(
+        (levelBox.decoration! as BoxDecoration).gradient,
+        isNotNull,
+        reason: 'web buildDouyuUserLevelStyle 给 tier 渐变',
+      );
+      expect(
+        levelRect.width,
+        lessThan(AppDouyuChatBadge.fanImageWidth),
+        reason: '宽随内容自适应，不再固定 32px 撑出空白',
+      );
 
       // 粉丝牌：官方 PNG(等级绘在图内) + 团名，盒高 18
       final img = _badgeImage(
@@ -409,7 +439,10 @@ void main() {
       //    （tier 由 iLevel 分档、tone 由 iIsPolished 决定；图 90x40@2x = 45x20）
       //    URL 拼接是纯函数，由 live_parser 的 huya_chat_badges_test 逐档覆盖；
       //    本用例只断言可观测的结构与几何。
-      //  粉丝牌 = 高 20，[圆形等级徽记][团名][身份图 fansBadge/3/v2/{id}.png]
+      //  粉丝牌 = **web 口径**（`.chat-fan-badge--huya-composed`）：高 1.15em(16.1)、
+      //    2px 圆角、[圆形等级徽记][团名][身份图 fansBadge/3/v2/{id}.png]。
+      //    旧值（高 20 全圆角胶囊）是虎牙官网 fans-icon 的实测口径，
+      //    2026-09-26 按用户「复刻原网页样式」改到 web 口径（DESIGN.md §4.4）。
       final connector = _FakeDanmakuConnector();
       await _pumpPanel(tester, 'huya', connector: connector);
       final session = _connected(connector);
@@ -441,9 +474,22 @@ void main() {
       expect(levelRect.width, 45, reason: '降级胶囊宽 = 官方图等效宽 45');
       expect(find.descendant(of: fallback, matching: find.text('30')), findsOneWidget);
 
-      // 粉丝牌：高 20，含圆形等级徽记(12)、团名、官方身份图
-      final fanRect = tester.getRect(find.byKey(const Key('huya-fan-badge')));
-      expect(fanRect.height, 20, reason: '官网 fans-icon 实测高 20');
+      // 粉丝牌：web 口径（高 1.15em、2px 圆角），含圆形等级徽记(12)、团名、官方身份图
+      final fanBadge = find.byKey(const Key('huya-fan-badge'));
+      final fanRect = tester.getRect(fanBadge);
+      expect(
+        fanRect.height,
+        closeTo(AppHuyaChatBadge.fanHeight, 0.01),
+        reason: 'web `--huya-fan-badge-h: 1.15em` = 16.1（旧值 20 是官网实测口径）',
+      );
+      final fanBox = tester.widget<Container>(
+        find.descendant(of: fanBadge, matching: find.byType(Container)).first,
+      );
+      expect(
+        (fanBox.decoration! as BoxDecoration).borderRadius,
+        BorderRadius.circular(AppHuyaChatBadge.fanRadius),
+        reason: 'web `.chat-fan-badge--huya { border-radius: 2px }`，不是胶囊',
+      );
       expect(find.descendant(
         of: find.byKey(const Key('huya-fan-badge')),
         matching: find.text('12'),
@@ -521,6 +567,43 @@ void main() {
         badgeSrcs.any((s) => s.contains('new_advanced_badge')),
         isFalse,
         reason: '不得再用 60x48 紧凑款（无团名位、且与平台等级同款观感）',
+      );
+    });
+
+    testWidgets('douyinHonorWidth:honor 素材按内容区裁切,不再拖出半透明长尾', (
+      tester,
+    ) async {
+      // 官方 `new_user_grade_level_v1_*`(CDN)与本地 `douyin/honor/*.png` 同为
+      // 96×48 长胶囊:逐像素实测 10 个等级的内容只占 x 16..86(图标 16 起、
+      // 两位数数字止 86),左右各留 16/10px 纯半透明背景。按原比例渲染时
+      // (高 21 → 宽 42px)背景拖出一条长尾 → 用户 2026-09-26 报「粉丝徽章
+      // 背景太宽」。本用例钉死裁切口径,防止回退成原比例。
+      final connector = _FakeDanmakuConnector();
+      await _pumpPanel(tester, 'douyin', connector: connector);
+      final session = _connected(connector);
+      session.emitConnected();
+      session.push(_chat('抖哥', '来了', userLevel: 30));
+      await _pumpStable(tester);
+
+      final honor = _badgeImage(
+        tester,
+        assetPath: 'assets/badges/douyin/honor/30.png',
+      );
+      expect(honor, isNotNull, reason: '抖音平台等级走本地 honor 整图');
+      expect(honor!.maxAspectRatio, kDouyinHonorBadgeAspectRatio);
+      expect(honor.cropAlignment, kDouyinHonorBadgeCropAlignment);
+
+      final rect = tester.getRect(find.byWidget(honor));
+      expect(rect.height, closeTo(21, 0.01));
+      expect(
+        rect.width,
+        closeTo(21 * kDouyinHonorBadgeAspectRatio, 0.01),
+        reason: '裁到内容区 + 3px 内边距:高 21 → 宽 33.25',
+      );
+      expect(
+        rect.width,
+        lessThan(38),
+        reason: '不得再按 96×48 原比例渲染出 42px 的半透明长尾',
       );
     });
   });
