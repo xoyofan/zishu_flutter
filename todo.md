@@ -953,3 +953,29 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 - [ ] **`brid` 跨房粉丝牌显隐闸门未做**:字段已入库,官网是否隐藏跨房粉丝团牌无确证口径,不在无证据下改行为(当前零行为变化)。
 - [ ] **`follow_style_shot_test` 关注页 golden 漂移**:来自另一轨 `29afd14 关注列表档内按观看数倒序并移除排序下拉` 改了排序未刷 golden。与聊天徽章无关,需该轨自行目检后 `--update-goldens`。
 - [ ] **教训归档**:①拷 worktree 用 `git diff --name-only` 会漏未跟踪文件,应另拷 `git status --porcelain` 的 `??`;②多 worktree 顺序合并时,后一份 diff 是相对「不含前一份改动」的文件算的,直接打上去会**回退**先前的改动(本轮已发生一次,靠标记校验发现);③抖音在途轨把 1.6→1.15、`Image`→`CachedNetworkImage` 改了却没同步断言,长期红。
+
+## 2026-09-26 斗鱼卡片左上角标接线 + 渐变配色裁决(不做)(完成)
+
+**结论**:斗鱼官网卡片左上角标是列表接口的 `icv3` 字段,**只存在于新接口**;已接成我们的封面右上身份位 + 封面下方多 chips。配色(`backColor`/`rightBackColor`/`addr`)经用户裁决 **C:不做**,保持线框样式。UI 轨 `d8d7e52`,解析轨 `37dff44`。
+
+### 本轮完成项
+- [x] **接口换代**:浏览列表 `gapi/rkc/directory/mixList` → `gapi/rknc/directory/mixListV1`(路径取自官网 `window.$DATA.pagePath`)。旧接口**没有 `icv3`**,其余字段名/取值一致(封面 rs16 同为 `/dy1`,逐页 40 条、翻页无重叠)。`promoTag` 不再取 `roomLabel` 首项(已进 chips,避免同卡重复),copilotLabel/认证/贵族兜底不动。
+- [x] **`icv3` → 右上身份位**(`douyu/card_tags.dart`):取首条有 `cfgRich.text` 的角标。实测取值 段位LV4/LV5/LV6、全站十大/冠军/亚军、全站榜TOP3/TOP10、分区榜TOP1~3、分区冠军/季军、百钻成就。官网按 12px **整文不截断**(最宽「全站榜TOP10」8 字),故只留 10 字防御上限,**不按虎牙的 6 字规则砍**。
+- [x] **`roomLabel` → 多 chips**:编成 `kind=tag` 不可点 chip,同名去重、取前 3。官网渲染在标题下单行 18px 容器(实测 `overflow:hidden` + `white-space:nowrap`),实测单房最多 22 个标签、最长 6 字,再多官网也直接裁掉。
+- [x] **修掉一处既有溢出缺陷**:chips 行是定高单行 `Row` 且子项刚性,最窄网格列(4 列 @768px,卡片约 175px)+ 文字缩放 1.3 时三个 6 字标签**横向溢出 136px**。改为 chip 一律包 `Flexible`(松约束):够宽保持自然宽,不够宽按份压缩 + 内部省略,不换行不溢出,17px 定高与卡片等高契约不变(Twitch 的 tag+language 行同样受益)。
+- [x] 真机验证:release 带解析 exe(`--dart-define=ZISHU_REAL_PARSER=true`)全平台首页,斗鱼卡右上「分区榜TOP2 / 分区榜TOP3 / 白金猎空 / 职业选手」与 chips 行「TI2冠军·僵尸头子·OB战队」均正常,无 chips 的房与有 chips 的房等高。
+
+### 配色裁决:不做(用户选 C)
+- [x] `backColor` / `rightBackColor` **确有官方对应**:官网内联 `style="background:linear-gradient(to right, {backColor}, {rightBackColor})"`,实测段位LV5 = `#FF744F → #ED3035` 与上游逐字节对上;容器 22px 高、右侧 4px 圆角、白字 12px。
+- [x] `addr`(`sta-op.douyucdn.cn/dy-listicon/*.png`)**官网该角标根本没用**:整条祖先链 `background-image` 与 `::before` 均为 `none`,属未被消费的遗留字段。**不做**。
+- [x] 不做的代价(留档,若日后重议):身份位仍是线框,与官网实底渐变不一致;且要动 `DESIGN.md` 落「平台下发徽章配色可直出」的口子(色板真源 + 裸色守卫),并解决「与左上分类实底角标撞脸」。
+
+### 验证
+- 解析轨:`dart test` 569 全过(新增 `card_tags_test` 10 条)、`dart analyze` 0。
+- 根:`flutter analyze` 0;`dart run tool/check_design_tokens.dart` OK(28→28);`flutter build windows --debug` 与 `--release --dart-define=ZISHU_REAL_PARSER=true` 均成功。
+- `flutter test` 857 过 1 失败(`follow_style_row.png`):**在 clean tree 上同样失败**(0.36% / 2801px),故与本轮改动无关。
+
+### 待办(下轮)
+- [ ] **`follow_style_row.png` 漂移根因未定性**:已排除本轮改动(clean tree 同样红)。两候选:①另一轨 `29afd14` 改了关注列表排序未刷 golden;②本机测试环境字体差异。倾向 ①(8 张 golden 只红这 1 张,若是全局字体问题应全红),但**未验证** —— 下轮若要动它,先在干净 master 上单独复跑并逐行比对,别默认按字体问题处理。
+- [ ] **本机测试字体缺 CJK 字形**:一次性目检探针里所有中文渲成豆腐块(`tool/screenshots` 下的目检图不可当视觉证据读文案);`test/ui/failures/` 里已提交的失败图会被后续 `flutter test` 跑掉,提交前需 `git checkout -- test/ui/failures/` 还原。
+- [ ] 斗鱼列表每页 40 条(旧接口 120):若首屏/翻页手感变差,再评估是否需要 V1 换页合并。
