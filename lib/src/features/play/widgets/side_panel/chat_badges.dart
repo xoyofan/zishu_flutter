@@ -523,6 +523,11 @@ class _FanBadgeState extends State<_FanBadge> {
             kind: ChatBadgeKind.fans,
             level: level,
           ).isNotEmpty) {
+        // 本地牌图 60×19:左侧等级徽 + 右侧牌面底。团名多长容器就多宽,
+        // 所以底图按原尺寸横向平铺铺满(官网是「按团名长度渲染的整牌图」,
+        // 协议不下发该图 —— 实测 stt 只有 bn/bl/bc,bimg 为空)。
+        // 若不铺满:contain 会把整图缩到 18px 高并左对齐停在 ~57px,
+        // 团名右侧直接裸露在聊天行背景上(2026-09-26 用户报障)。
         return Container(
           height: AppDouyuChatBadge.fanHeight,
           constraints: const BoxConstraints(
@@ -531,15 +536,14 @@ class _FanBadgeState extends State<_FanBadge> {
           child: Stack(
             children: [
               Positioned.fill(
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: ChatBadgeImage(
-                    site: site,
-                    kind: ChatBadgeKind.fans,
-                    level: level,
-                    height: AppDouyuChatBadge.fanHeight,
-                    onFail: _markImgFailed,
-                  ),
+                child: ChatBadgeImage(
+                  site: site,
+                  kind: ChatBadgeKind.fans,
+                  level: level,
+                  height: AppDouyuChatBadge.fanHeight,
+                  fit: BoxFit.none,
+                  repeat: ImageRepeat.repeatX,
+                  onFail: _markImgFailed,
                 ),
               ),
               Padding(

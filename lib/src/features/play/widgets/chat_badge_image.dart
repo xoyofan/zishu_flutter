@@ -109,6 +109,7 @@ class ChatBadgeImage extends StatefulWidget {
     required this.height,
     this.name,
     this.fit,
+    this.repeat = ImageRepeat.noRepeat,
     this.src = '',
     this.assetPathOverride,
     this.useDiskCache = true,
@@ -128,6 +129,15 @@ class ChatBadgeImage extends StatefulWidget {
 
   /// 覆写默认 fit(默认 fans/userLevel 均 contain)。
   final BoxFit? fit;
+
+  /// 图片重复方式(仅横向有意义)。
+  ///
+  /// 斗鱼粉丝牌用它铺底:官方 PNG 是 60×19 的「等级徽 + 带水印的牌面」,
+  /// 右侧牌面本来就是给团名文字留的底;团名变长时容器比图宽,必须把牌面
+  /// 横向平铺到整个宽度,否则 [BoxFit.contain] 只会把整图缩到 18px 高、
+  /// 左对齐停在 57px,右侧文字裸露在聊天行背景上(2026-09-26 实测)。
+  /// 其余平台保持 [ImageRepeat.noRepeat]——它们的图是完整牌/方形图标。
+  final ImageRepeat repeat;
 
   /// 协议/平台直接下发的远程图 URL,优先于本地静态资源。
   final String src;
@@ -231,6 +241,8 @@ class _ChatBadgeImageState extends State<ChatBadgeImage> {
       path,
       height: widget.height,
       fit: fit,
+      // repeatX 铺底时按原图尺寸平铺(fit=BoxFit.none),不用 stretch 变形。
+      repeat: widget.repeat,
       alignment: Alignment.centerLeft,
       filterQuality: FilterQuality.medium,
       errorBuilder: (context, error, stackTrace) {

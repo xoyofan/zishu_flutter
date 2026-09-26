@@ -9,6 +9,7 @@ import 'package:zishu_flutter/src/app/app_theme.dart';
 import 'package:zishu_flutter/src/features/danmaku/application/danmaku_session_provider.dart';
 import 'package:zishu_flutter/src/features/play/widgets/chat_badge_image.dart';
 import 'package:zishu_flutter/src/features/play/widgets/play_side_panel.dart';
+import 'package:zishu_flutter/src/shared/presentation/design_tokens.dart';
 
 class _FakeSession implements DanmakuSession {
   final _messages = StreamController<DanmakuMessage>.broadcast();
@@ -360,6 +361,75 @@ void main() {
     );
 
     expect(find.byType(Image), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('ChatBadgeImage:repeatX 铺底(斗鱼牌面随团名变宽)', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: SizedBox(
+          width: 175,
+          child: ChatBadgeImage(
+            site: 'douyu',
+            kind: ChatBadgeKind.fans,
+            level: 24,
+            height: 18,
+            fit: BoxFit.none,
+            repeat: ImageRepeat.repeatX,
+          ),
+        ),
+      ),
+    );
+    for (var i = 0; i < 3; i++) {
+      await tester.pump();
+    }
+
+    final image = tester.widget<Image>(find.byType(Image));
+    expect(image.repeat, ImageRepeat.repeatX);
+    expect(image.fit, BoxFit.none, reason: '平铺必须按原图尺寸,不能拉伸');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('斗鱼粉丝牌:长团名下牌面铺满整个宽度(不裸露文字)', (
+    tester,
+  ) async {
+    // 报障回归:容器宽 = 团名文字宽(实测 175px),而牌图只有 60px 宽。
+    // 旧实现用 contain + 左对齐,图缩到 18px 高后只占左侧 ~57px,
+    // 团名右侧 ~118px 裸露在聊天行背景上(用户 2026-09-26 报「变短了/
+    // 没有覆盖上文字」)。现在牌面按原尺寸横向平铺,必须铺到容器右缘。
+    const fanName = '一个很长的粉丝团名字测试';
+    await _pump(
+      tester,
+      'douyu',
+      _message(
+        site: 'douyu',
+        userLevel: 41,
+        badges: const [DanmakuBadge(name: fanName, level: 24)],
+      ),
+    );
+
+    final name = find.text(fanName);
+    expect(name, findsOneWidget);
+    // 底图与文字是 Stack 的两个子节点(兄弟),故从 Stack 往下找底图。
+    final stack = find.ancestor(of: name, matching: find.byType(Stack)).first;
+    final stackRect = tester.getRect(stack);
+    final image = find.descendant(of: stack, matching: find.byType(Image));
+    expect(image, findsOneWidget, reason: '底图应存在');
+    final imageRect = tester.getRect(image.first);
+    expect(
+      imageRect.width,
+      closeTo(stackRect.width, 0.5),
+      reason: '牌面底图必须铺满整个牌宽(repeatX),不能只占左侧 60px',
+    );
+    expect(
+      tester.widget<Image>(image.first).repeat,
+      ImageRepeat.repeatX,
+    );
+    expect(
+      stackRect.width,
+      greaterThan(AppDouyuChatBadge.fanImageWidth),
+      reason: '长团名下牌面应比单张 60px 牌更宽',
+    );
     expect(tester.takeException(), isNull);
   });
 }
