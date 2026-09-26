@@ -29,23 +29,59 @@ String _soopSubscriberAsset(int months) {
   return 'assets/badges/soop/$name';
 }
 
-/// 抖音粉丝牌官网聊天行同款图 URL(60×48 紧凑款,
-/// `fansclub_new_advanced_badge_{level}_xmp.png`)。
+/// 抖音粉丝团徽章**彩色化**:协议常下发未点亮的灰图,换回同尺寸彩色款。
+///
+/// 口径抄 web `apps/web/src/utils/badges/fanBadges/douyin.ts` 的
+/// `resolveDouyinColoredFansBadgeUrl`:
+/// - `pop_gray_super_badge` → `pop_super_badge`(实测两者同为 60×48,仅颜色差异,
+///   2026-09-26 实测真实弹幕 513 条里 152 条是灰图、361 条是彩色 —— 不换则
+///   近三成徽章显示为灰色);
+/// - 其余灰图(`advanced_gray` 等)→ 官方 `fansclub_new_badge_{lv}_xmp`。
+/// 其余 URL 原样返回(含主播定制款)。
+String douyinFansColoredBadgeUrl(String url, int level) {
+  final text = url.trim();
+  if (text.isEmpty) return '';
+  if (RegExp(r'pop_gray_super_badge', caseSensitive: false).hasMatch(text)) {
+    return text.replaceAll(
+      RegExp(r'pop_gray_super_badge', caseSensitive: false),
+      'pop_super_badge',
+    );
+  }
+  if (_douyinGrayBadgePattern.hasMatch(text) && level > 0) {
+    return douyinFansBadgeUrl(level);
+  }
+  return text;
+}
+
+final RegExp _douyinGrayBadgePattern = RegExp(
+  r'advanced_gray|pop_gray_super_badge',
+  caseSensitive: false,
+);
+
+/// 抖音粉丝牌官方 CDN 兜底图 URL。
+///
+/// 模板用 `fansclub_new_badge_{level}_xmp.png`(实测 90×48,高 21px → 宽
+/// 39.4px),**不是** `fansclub_level_v6`(150×48 → 65.6px 长条)—— 与 web
+/// `resolveDouyinBadgeBgUrl` 的无协议 URL 分支一致。2026-09-26 用户报
+/// 「粉丝牌背景太长」即源于此:正常协议图 `ranklist_fansclub_pop_super_badge`
+/// 是 60×48(26.2px),兜底却给 65.6px 长条,同一房间里宽度差 2.5 倍。
 ///
 /// 档位 1..20 有图(实测 2026-09-25:21+ 返回 404,上限同
 /// [kDouyinFansMaxLevel]);越界返回 '' → 调用方走红色渐变圆盘文字态。
 String douyinFansBadgeUrl(int level) {
   if (level <= 0 || level > kDouyinFansMaxLevel) return '';
   return 'https://p3-webcast.douyinpic.com/img/webcast/'
-      'fansclub_level_v6_$level.png~tplv-obj.image';
+      'fansclub_new_badge_$level'
+      '_xmp.png~tplv-obj.image';
 }
 
 /// 粉丝牌(对齐 web ChatFanBadge 各平台分支;本地图优先 → 文字态兜底):
 /// - 斗鱼:官方粉丝牌 PNG(`douyu/fans/{lv}.png`,等级已绘在图内 → 不叠数字)
 ///   作底图、团名叠右侧；加载失败/无图回落中性深底团名胶囊；无团名不渲染。
-/// - 抖音:img-only 站(web CHAT_FAN_BADGE_IMG_ONLY_SITES),有等级即整图
-///   `fansclub_new_advanced_badge_{lv}_xmp.png`(官网聊天行同款 60×48 **远程**
-///   图,见 [douyinFansBadgeUrl]);失败回落红色渐变圆盘文字态;
+/// - 抖音:img-only 站(web `CHAT_FAN_BADGE_IMG_ONLY_SITES`),**协议图优先
+///   (先灰图换彩色)**,无协议图回落官方 `fansclub_new_badge` CDN;
+///   失败回落红色渐变圆盘文字态;见 [douyinFansColoredBadgeUrl] 与
+///   [douyinFansBadgeUrl];
 /// - 虎牙:对齐虎牙官网聊天栏的「皇冠 + 等级 + 团名」粉丝牌胶囊；
 ///   `vFlag > 0` 时优先显示 `vLogo`，无图/失败回落 V；
 /// - B 站:有协议渐变色维持「团名 级」渐变胶囊;无协议色走官方边框图
@@ -236,18 +272,21 @@ class _FanBadgeState extends State<_FanBadge> {
       );
     }
 
-    // 抖音:img-only 站,**只用官网聊天行同款 60×48 紧凑图**
-    // (`fansclub_new_advanced_badge_N_xmp`)。高度沿用 21px(与其他平台徽章
-    // 一致),宽度随 60/48 原图比例 → 26px,不再有宽底长条。
+    // 抖音:img-only 站(web `CHAT_FAN_BADGE_IMG_ONLY_SITES`)。
+    // 链路抄 web `resolveDouyinBadgeBgUrl`:**协议图优先(先灰图换彩色)**,
+    // 无协议图才用官方 `fansclub_new_badge` 兜底(90×48 → 39.4px);
+    // 高度沿用 21px(与其他平台徽章一致),宽度按原图比例。
     //
-    // 回归:先后用过两个都不对的素材 ——
-    //   - WS 协议下发的 `fansclub_level_v6_N.png`(**150×48 黄色宽底长条**,
-    //     同高度下宽 65px,背景颜色远比徽章宽,用户报障「背景没那么宽」)；
-    //   - 本地 `assets/badges/douyin/fans/N.png`(实为粉翼大摆台,非官网样式)。
+    // 2026-09-26 用户报「粉丝牌背景太长」的根因:此前兜底模板写成
+    // `fansclub_level_v6`(150×48 → 65.6px 长条),而协议主流图
+    // `ranklist_fansclub_pop_super_badge` 只有 60×48(26.2px),同一房间
+    // 里宽度差 2.5 倍;同时漏了 web 的「灰图换彩色」,实测真实弹幕
+    // 513 条里 152 条(30%)是未点亮灰图,直接渲染就是灰牌。
     if (site == 'douyin') {
       const badgeHeight = 21.0;
-      final officialUrl =
-          remoteUrl.isNotEmpty ? remoteUrl : douyinFansBadgeUrl(level);
+      final officialUrl = douyinFansColoredBadgeUrl(remoteUrl, level).isNotEmpty
+          ? douyinFansColoredBadgeUrl(remoteUrl, level)
+          : douyinFansBadgeUrl(level);
       if (officialUrl.isNotEmpty && !_imgFailed) {
         return ChatBadgeImage(
           site: site,

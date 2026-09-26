@@ -512,9 +512,10 @@ void main() {
           .map((w) => w.src)
           .toList();
       expect(
-        badgeSrcs.any((s) => s.contains('fansclub_level_v6_10.png')),
+        badgeSrcs.any((s) => s.contains('fansclub_new_badge_10_xmp.png')),
         isTrue,
-        reason: '粉丝牌应用官方 level_v6 图（协议无 url 时按等级拼）',
+        reason: '粉丝牌协议无 url 时回落官方 new_badge(90×48);'
+            '不用 level_v6(150×48 长条)',
       );
       expect(
         badgeSrcs.any((s) => s.contains('new_advanced_badge')),

@@ -329,22 +329,53 @@ void main() {
     );
   });
 
-  test('抖音粉丝牌 URL:只用官方 level_v6 族(150x48,含团名留白),档位 1..20', () {
-    // 回归：曾误用 `fansclub_new_advanced_badge_N_xmp`(60x48 紧凑款) ——
-    // 它右侧没有团名位，且渲染后(~26px 宽)退化成与平台等级 honor
-    // (96x48, ~42px 宽)同款的「彩色圆角块 + 数字」观感。
+  test('抖音粉丝牌:协议图优先 + 灰图换彩色 + 兜底 new_badge(web 口径)', () {
+    // 口径抄 web `resolveDouyinBadgeBgUrl` / `resolveDouyinColoredFansBadgeUrl`:
+    // 1) 协议 URL 优先,但 `pop_gray_super_badge` 要换成同尺寸彩色款
+    //    (实测真实弹幕 513 条里 152 条是未点亮灰图);
+    // 2) 无协议 URL 回落官方 `fansclub_new_badge`(90×48 → 高 21 时 39.4px),
+    //    **不是** `fansclub_level_v6`(150×48 → 65.6px 长条,用户 2026-09-26
+    //    报「粉丝牌背景太长」)。
     expect(
       douyinFansBadgeUrl(9),
       'https://p3-webcast.douyinpic.com/img/webcast/'
-      'fansclub_level_v6_9.png~tplv-obj.image',
+      'fansclub_new_badge_9_xmp.png~tplv-obj.image',
     );
-    expect(douyinFansBadgeUrl(1), contains('fansclub_level_v6_1.png'));
-    expect(douyinFansBadgeUrl(20), contains('fansclub_level_v6_20.png'));
+    expect(douyinFansBadgeUrl(1), contains('fansclub_new_badge_1_xmp.png'));
+    expect(douyinFansBadgeUrl(20), contains('fansclub_new_badge_20_xmp.png'));
     expect(douyinFansBadgeUrl(0), isEmpty, reason: '无等级不出图');
     expect(douyinFansBadgeUrl(21), isEmpty, reason: '超档位(实测 404)不出图');
     for (final lv in [1, 9, 20]) {
-      expect(douyinFansBadgeUrl(lv), isNot(contains('new_advanced_badge')));
+      expect(
+        douyinFansBadgeUrl(lv),
+        isNot(contains('level_v6')),
+        reason: 'level_v6 是 150×48 长条,与协议主流 60×48 差 2.5 倍',
+      );
     }
+
+    // 灰图 → 彩色:同为 60×48,只去 gray_。
+    expect(
+      douyinFansColoredBadgeUrl(
+        'https://p11-webcast.douyinpic.com/img/webcast/'
+        'ranklist_fansclub_pop_gray_super_badge_7.png~tplv-obj.image',
+        7,
+      ),
+      'https://p11-webcast.douyinpic.com/img/webcast/'
+      'ranklist_fansclub_pop_super_badge_7.png~tplv-obj.image',
+    );
+    // 彩色图原样透传(主播定制款不能被改写)。
+    const custom = 'https://example.com/my_fans_badge.png';
+    expect(douyinFansColoredBadgeUrl(custom, 5), custom);
+    // 其他灰图族(advanced_gray)→ 官方 new_badge 兜底。
+    expect(
+      douyinFansColoredBadgeUrl(
+        'https://p3-webcast.douyinpic.com/img/webcast/'
+        'fansclub_new_advanced_gray_badge_9_xmp.png~tplv-obj.image',
+        9,
+      ),
+      douyinFansBadgeUrl(9),
+    );
+    expect(douyinFansColoredBadgeUrl('', 9), isEmpty);
   });
 
   testWidgets('ChatBadgeImage 接受协议 URL 并保留本地资源回退', (tester) async {
