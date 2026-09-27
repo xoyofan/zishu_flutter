@@ -80,7 +80,7 @@ class _BottomNav extends StatelessWidget {
             route: _categoryRoute(currentSite),
             active: false,
           ),
-          _BottomMyCategoryItem(currentSite: currentSite),
+          const _BottomMyCategoryItem(),
           _BottomItem(
             key: const Key('nav-follow'),
             leading: const _NavFollowAvatars(
@@ -171,12 +171,11 @@ class _BottomItem extends StatelessWidget {
   }
 }
 
-/// 底栏「我的分类」项:桌面走 hover 浮层,触屏没有 hover —— 直接开管理弹窗
-/// (与顶栏 hover 浮层里的「管理分类」是同一个弹窗,不是另一套实现)。
+/// 底栏「我的分类」项:触屏没有 hover —— 直接开管理弹窗
+/// (与顶栏 hover 浮层里的「管理分类」是同一个弹窗,不是另一套实现;
+/// 目录默认全平台跨平台映射,与 web 管理抽屉一致)。
 class _BottomMyCategoryItem extends StatelessWidget {
-  const _BottomMyCategoryItem({required this.currentSite});
-
-  final String currentSite;
+  const _BottomMyCategoryItem();
 
   @override
   Widget build(BuildContext context) {
@@ -187,7 +186,7 @@ class _BottomMyCategoryItem extends StatelessWidget {
       active: false,
       onTap: () => showDialog<void>(
         context: context,
-        builder: (_) => _MyCategoryManageDialog(site: currentSite),
+        builder: (_) => const _MyCategoryManageDialog(),
       ),
     );
   }

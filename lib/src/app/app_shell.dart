@@ -271,7 +271,6 @@ class _AppShellState extends ConsumerState<AppShell> {
             centerX: _myCatX,
             width: _kMyCategoryFlyoutWidth,
             child: _MyCategoryFlyout(
-              site: widget.site,
               onEnter: _cancelClose,
               onExit: _scheduleClose,
               onClose: _closeAll,

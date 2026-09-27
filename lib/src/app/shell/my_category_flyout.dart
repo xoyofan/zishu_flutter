@@ -6,14 +6,11 @@ part of '../app_shell.dart';
 /// 空集合显示「暂无收藏分类」。chip 点击跳对应子分类并收起浮层。
 class _MyCategoryFlyout extends ConsumerWidget {
   const _MyCategoryFlyout({
-    required this.site,
     required this.onEnter,
     required this.onExit,
     required this.onClose,
   });
 
-  /// 当前站点,用于「管理分类」弹窗的分类目录。
-  final String site;
   final VoidCallback onEnter;
   final VoidCallback onExit;
 
@@ -48,7 +45,7 @@ class _MyCategoryFlyout extends ConsumerWidget {
                     onClose();
                     showDialog<void>(
                       context: context,
-                      builder: (_) => _MyCategoryManageDialog(site: site),
+                      builder: (_) => const _MyCategoryManageDialog(),
                     );
                   },
                   style: TextButton.styleFrom(
@@ -79,8 +76,15 @@ class _MyCategoryFlyout extends ConsumerWidget {
                           entry: entry,
                           onTap: () {
                             onClose();
+                            // 对齐 web `NavMyCategoryMenu.vue`:收藏 chip 恒跳
+                            // 全平台分类页(`all-category-rooms`),按跨平台 key
+                            // 打开;平台私有分类(未命中映射表)才退回收藏时
+                            // 平台的原生分类页。
+                            final key = myCategoryCrossKey(entry);
                             context.go(
-                              _categoryRoute(entry.site, cid: entry.cid),
+                              key.isNotEmpty
+                                  ? _categoryRoute('all', cid: key)
+                                  : _categoryRoute(entry.site, cid: entry.cid),
                             );
                           },
                         ),
@@ -173,17 +177,30 @@ class _MyCategoryChipState extends State<_MyCategoryChip> {
   }
 }
 
-/// 我的分类管理弹窗:勾选当前平台的分类作为收藏(上限
-/// [MyCategoryController.maxCount]),顶部列出已收藏项可移除。
-class _MyCategoryManageDialog extends ConsumerWidget {
-  const _MyCategoryManageDialog({required this.site});
-
-  final String site;
+/// 我的分类管理弹窗:目录默认「全平台」—— 跨平台映射目录(cross catalog,
+/// 条目 cid 即跨平台 key、name 为 canonical 中文名),对齐 web
+/// `MyCategoryManageSheet.vue` 打开时 `activeSite = "all"`;顶部可切到具体
+/// 平台看该站原生目录。收藏/取消与选中态都走**跨平台口径**
+/// ([MyCategoryController.toggleForCategory] / [isCategoryFavorited]):
+/// 收藏「英雄联盟」任一平台条目,全平台同 key 分类一并命中,
+/// 上限仍为 [MyCategoryController.maxCount]。
+class _MyCategoryManageDialog extends ConsumerStatefulWidget {
+  const _MyCategoryManageDialog();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_MyCategoryManageDialog> createState() =>
+      _MyCategoryManageDialogState();
+}
+
+class _MyCategoryManageDialogState
+    extends ConsumerState<_MyCategoryManageDialog> {
+  /// 目录当前站点:默认全平台(跨平台映射),与 web 管理抽屉一致。
+  String _pickSite = 'all';
+
+  @override
+  Widget build(BuildContext context) {
     final favorites = ref.watch(myCategoriesProvider);
-    final async = ref.watch(browseCategoriesProvider(site));
+    final async = ref.watch(browseCategoriesProvider(_pickSite));
     return AlertDialog(
       backgroundColor: context.tokens.surface,
       title: Text(
@@ -195,7 +212,7 @@ class _MyCategoryManageDialog extends ConsumerWidget {
       ),
       content: SizedBox(
         width: 420,
-        height: 360,
+        height: 420,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -223,6 +240,21 @@ class _MyCategoryManageDialog extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
             ],
+            // 目录站点切换:全平台(跨平台映射)+ 各 browse 平台,
+            // 对齐 web `MyCategoryManageSheet` 的 PlatformTabs。
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final brand in PlatformBrandCatalog.browsePlatforms)
+                  _SiteTabChip(
+                    label: brand.name,
+                    selected: _pickSite == brand.id,
+                    onTap: () => setState(() => _pickSite = brand.id),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
             Text(
               '分类目录(点击收藏/取消)',
               style: TextStyle(
@@ -263,7 +295,7 @@ class _MyCategoryManageDialog extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            displayCategoryGroupName(site, group.name),
+                            displayCategoryGroupName(_pickSite, group.name),
                             style: TextStyle(
                               fontSize: AppFontSize.bodySecondary,
                               fontWeight: FontWeight.w700,
@@ -278,27 +310,31 @@ class _MyCategoryManageDialog extends ConsumerWidget {
                               for (final item in group.items)
                                 _PickableChip(
                                   label: displayCategoryName(
-                                    site,
+                                    _pickSite,
                                     item.name,
                                     item.cid,
                                   ),
-                                  selected: favorites.any(
-                                    (entry) =>
-                                        entry.site == site &&
-                                        entry.cid == item.cid,
+                                  // 跨平台口径选中态:命中同 key 的任一平台
+                                  // 收藏都算已选(全平台目录 cid 即跨平台 key)。
+                                  selected: isCategoryFavorited(
+                                    favorites,
+                                    site: _pickSite,
+                                    cid: item.cid,
+                                    name: item.name,
                                   ),
                                   onTap: () async {
+                                    final label = displayCategoryName(
+                                      _pickSite,
+                                      item.name,
+                                      item.cid,
+                                    );
                                     final ok = await ref
                                         .read(myCategoriesProvider.notifier)
-                                        .toggle(
+                                        .toggleForCategory(
                                           MyCategoryEntry(
-                                            site: site,
+                                            site: _pickSite,
                                             cid: item.cid,
-                                            name: displayCategoryName(
-                                              site,
-                                              item.name,
-                                              item.cid,
-                                            ),
+                                            name: label,
                                           ),
                                         );
                                     if (!ok && context.mounted) {
@@ -324,6 +360,57 @@ class _MyCategoryManageDialog extends ConsumerWidget {
       AsyncError(:final error) => _FlyoutHint('分类加载失败:$error', danger: true),
       _ => _FlyoutHint('加载分类…'),
     };
+  }
+}
+
+/// 目录站点切换 chip(全平台 / 各平台):无星标,选中金描边。
+class _SiteTabChip extends StatelessWidget {
+  const _SiteTabChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Ink(
+      decoration: BoxDecoration(
+        color: selected
+            ? context.tokens.brand.withValues(alpha: 0.12)
+            : context.tokens.surfaceSoft,
+        border: Border.all(
+          color: selected
+              ? context.tokens.brand.withValues(alpha: 0.55)
+              : context.tokens.border,
+        ),
+        borderRadius: AppRadius.allPill,
+      ),
+      child: InkWell(
+        borderRadius: AppRadius.allPill,
+        onTap: onTap,
+        hoverColor: context.tokens.brand.withValues(alpha: 0.1),
+        focusColor: AppFocus.ring(context.tokens.brand).first.color,
+        splashColor: AppStateLayer.splashOf(context.tokens.brand),
+        highlightColor: AppStateLayer.pressedOf(context.tokens.brand),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 9.6, vertical: 5),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: AppFontSize.body,
+              fontWeight: selected ? FontWeight.w700 : FontWeight.w400,
+              color: selected
+                  ? context.tokens.brand
+                  : context.tokens.textSecondary,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 

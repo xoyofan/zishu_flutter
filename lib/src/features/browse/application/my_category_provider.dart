@@ -79,6 +79,12 @@ class MyCategoryController extends Notifier<List<MyCategoryEntry>> {
     return const <MyCategoryEntry>[];
   }
 
+  /// 用户已做过本地增删(收藏/取消/移除)。置位后 [_restore] 的迟到回放必须
+  /// 放弃 —— 此前只靠「state 非空」判据,漏了「用户把收藏清空」的场景:
+  /// 启动恢复窗口内取消最后一条收藏,迟到的读盘回放会把旧条目复活
+  /// (2026-09-27 全平台目录回归测试实捕)。
+  bool _userMutated = false;
+
   /// 是否已收藏(精确键,仅浮层渲染等展示场景使用;收藏判定请用
   /// [isCategoryFavorited] 的跨平台口径)。
   bool contains(String site, String cid) =>
@@ -91,6 +97,7 @@ class MyCategoryController extends Notifier<List<MyCategoryEntry>> {
   /// 已达上限且是新增时返回 false(UI 侧提示)。
   Future<bool> toggleForCategory(MyCategoryEntry entry) async {
     if (!entry.isValid) return false;
+    _userMutated = true;
     final key = myCategoryCrossKey(entry);
     final matchedKeys = {
       for (final item in state)
@@ -113,6 +120,7 @@ class MyCategoryController extends Notifier<List<MyCategoryEntry>> {
   /// 收藏/取消收藏;已达上限且是新增时返回 false(UI 侧提示)。
   Future<bool> toggle(MyCategoryEntry entry) async {
     if (!entry.isValid) return false;
+    _userMutated = true;
     if (contains(entry.site, entry.cid)) {
       state = [for (final item in state) if (item.key != entry.key) item];
     } else {
@@ -124,6 +132,7 @@ class MyCategoryController extends Notifier<List<MyCategoryEntry>> {
   }
 
   Future<void> remove(MyCategoryEntry entry) async {
+    _userMutated = true;
     state = [for (final item in state) if (item.key != entry.key) item];
     await _persist();
   }
@@ -147,10 +156,12 @@ class MyCategoryController extends Notifier<List<MyCategoryEntry>> {
         restored = await _migrateFromV2(prefs);
       }
       if (restored == null) return;
-      // 恢复是**一次性**的:若用户在读盘完成前已收藏/取消(本地已非空),
-      // 不得用存储回放覆盖用户动作 —— 否则刚点的收藏会被静默抹掉,
-      // 且伴随写盘会把被抹掉的结果固化成真实数据(实测:连续 toggle 丢条目)。
-      if (state.isNotEmpty) return;
+      // 恢复是**一次性**的:若用户在读盘完成前已收藏/取消,不得用存储回放
+      // 覆盖用户动作 —— 否则刚点的收藏会被静默抹掉,且伴随写盘会把被抹掉的
+      // 结果固化成真实数据(实测:连续 toggle 丢条目)。判据是 [_userMutated]
+      // (任一用户增删动作同步置位),不能只看 state 非空 —— 用户清空收藏后
+      // state 为空,迟到回放仍会把旧条目复活。
+      if (_userMutated || state.isNotEmpty) return;
       state = restored;
     } catch (_) {
       // 存储不可用/数据损坏:保持空集合,不阻塞 UI。
