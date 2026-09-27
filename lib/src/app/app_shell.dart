@@ -15,6 +15,7 @@ import '../features/follow/application/follow_status_poller.dart';
 import '../features/follow/application/settings_provider.dart';
 import '../shared/application/auth_provider.dart';
 import '../shared/domain/category_display.dart';
+import '../shared/domain/category_sections.dart';
 import '../shared/presentation/design_tokens.dart';
 import '../shared/presentation/platform_brands.dart';
 import '../shared/presentation/zishu_tokens.dart';
@@ -311,17 +312,21 @@ const int _kFollowFlyoutMaxColumns = 7;
 /// 之前固定 560px 宽 + 看板内部再按内容排,条目少时右侧就留出整片空列 ——
 /// 这里让「列数 → 宽度」同源推导,列少则面板窄。
 ({int columns, double width}) _platformFlyoutLayoutFor(CategoryResult? result) {
-  final groups = result?.groups ?? const <CategoryGroup>[];
+  // 与浮层内容(_CategoryBoard)同源:先走共用的一级分区构建逻辑
+  // (斗鱼/虎牙/抖音过滤非游戏分区 + 排序),列数 = 实际分区数。
+  final sections = result == null
+      ? const <CategorySection>[]
+      : buildCategorySections(result.site, result.groups);
   final maxColumns =
       ((_kFlyoutMaxWidth - _kPlatformFlyoutChrome) /
               _kPlatformFlyoutColumnWidth)
           .floor()
           .clamp(1, 64);
-  final rawColumns = groups.length > 1
-      // 多分组:横向分栏,一组一列(超出 maxColumns 时由看板横向滚动)。
-      ? groups.length
+  final rawColumns = sections.length > 1
+      // 多分区:横向分栏,一区一列(超出 maxColumns 时由看板横向滚动)。
+      ? sections.length
       // 单组:平铺网格,列数 = 条目数封顶 5(twitch 40 条不再摊成 13 列)。
-      : (groups.isEmpty ? 1 : groups.first.items.length.clamp(1, 5));
+      : (sections.isEmpty ? 1 : sections.first.items.length.clamp(1, 5));
   final columns = rawColumns.clamp(1, maxColumns);
   final width = (_kPlatformFlyoutChrome + columns * _kPlatformFlyoutColumnWidth)
       .clamp(_kFlyoutMinWidth, _kFlyoutMaxWidth);

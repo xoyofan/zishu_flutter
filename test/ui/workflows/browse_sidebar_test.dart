@@ -293,6 +293,10 @@ void main() {
     final router = await pumpApp(tester, width: 1600, height: 1200);
 
     // 分类树来自 browseCategoriesProvider(fixture 含 网游竞技/英雄联盟 等)。
+    // 用户口径 2026-09-27:多分组平台显示「一级分区标题 → 二级分类」,
+    // 不平铺(fixture douyu 有 网游竞技/娱乐天地 两组,应各有一个分区标题)。
+    expect(find.text('网游竞技'), findsOneWidget);
+    expect(find.text('娱乐天地'), findsOneWidget);
     expect(find.byKey(const Key('browse-sidebar-cat-1')), findsOneWidget);
     await tester.tap(find.byKey(const Key('browse-sidebar-cat-1')));
     await tester.pump(const Duration(milliseconds: 50));

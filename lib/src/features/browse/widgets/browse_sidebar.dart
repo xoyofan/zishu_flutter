@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 
 import '../../../shared/domain/category_display.dart';
+import '../../../shared/domain/category_sections.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/widgets/platform_icon.dart';
@@ -329,11 +330,15 @@ class _PlatformTab extends StatelessWidget {
   }
 }
 
-/// 下段:分类网格(2 列),数据来自 [browseCategoriesProvider]。
+/// 下段:分类树,数据来自 [browseCategoriesProvider]。
 ///
-/// 对齐参考 `__cat-grid`(auto-fill minmax(80px,1fr) 在 220px 抽屉下为 2 列):
-/// 条目居中、fill 底、无边框;active 金边 + 金字 + 金 12% 底;空数据时
-/// 显示参考实现的空态文案。
+/// 与顶部平台 hover 浮层(`_CategoryBoard`)共用同一套一级分区构建逻辑
+/// ([buildCategorySections],用户口径 2026-09-27):多组平台显示
+/// **一级分区标题 → 二级分类网格**,不平铺;单一大组平台(twitch/soop/快手)
+/// 无一级分区结构,隐藏组标题平铺(对齐参考 `isFlatCategoryGroups`)。
+///
+/// 布局对齐参考 `__cat-grid`(2 列):条目居中、fill 底、无边框;active
+/// 金边 + 金字 + 金 12% 底(待接);空数据时显示参考实现的空态文案。
 class _CategoryTree extends StatelessWidget {
   const _CategoryTree({required this.site, required this.categoriesAsync});
 
@@ -342,33 +347,79 @@ class _CategoryTree extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final tokens = context.tokens;
     return switch (categoriesAsync) {
-      AsyncValue(:final value?) =>
-        value.groups.isEmpty
-            ? _DrawerHint(text: '该平台暂无分类', tokens: tokens)
-            : GridView.count(
-                padding: const EdgeInsets.fromLTRB(
-                  AppDirectoryDrawer.catPadH,
-                  AppDirectoryDrawer.catPadTop,
-                  AppDirectoryDrawer.catPadH,
-                  AppDirectoryDrawer.catPadBottom,
-                ),
-                crossAxisCount: 2,
-                mainAxisSpacing: AppDirectoryDrawer.catGapMain,
-                crossAxisSpacing: AppDirectoryDrawer.catGapCross,
-                // 220px 抽屉、8.8px 左右内边距下条目宽约 99.4px;参考条目
-                // min-height 20.8px,据此推 aspect 使默认行高一致。
-                childAspectRatio: 99.4 / AppDirectoryDrawer.catItemHeight,
-                children: [
-                  for (final group in value.groups)
-                    for (final item in group.items)
-                      _CategoryLeaf(site: site, cid: item.cid, name: item.name),
-                ],
-              ),
-      // 加载中/出错时折叠分类网格,不阻塞房间网格渲染。
+      AsyncValue(:final value?) => _buildSections(context, value),
+      // 加载中/出错时折叠分类树,不阻塞房间网格渲染。
       _ => const SizedBox.shrink(),
     };
+  }
+
+  Widget _buildSections(BuildContext context, CategoryResult value) {
+    final tokens = context.tokens;
+    final sections = buildCategorySections(site, value.groups);
+    if (sections.isEmpty) {
+      return _DrawerHint(text: '该平台暂无分类', tokens: tokens);
+    }
+    if (isFlatCategoryGroups(value.groups)) {
+      // 单一大组:平铺网格(无组标题),与参考实现一致。
+      return GridView.count(
+        padding: const EdgeInsets.fromLTRB(
+          AppDirectoryDrawer.catPadH,
+          AppDirectoryDrawer.catPadTop,
+          AppDirectoryDrawer.catPadH,
+          AppDirectoryDrawer.catPadBottom,
+        ),
+        crossAxisCount: 2,
+        mainAxisSpacing: AppDirectoryDrawer.catGapMain,
+        crossAxisSpacing: AppDirectoryDrawer.catGapCross,
+        // 220px 抽屉、8.8px 左右内边距下条目宽约 99.4px;参考条目
+        // min-height 20.8px,据此推 aspect 使默认行高一致。
+        childAspectRatio: 99.4 / AppDirectoryDrawer.catItemHeight,
+        children: [
+          for (final item in sections.first.items)
+            _CategoryLeaf(site: site, cid: item.cid, name: item.name),
+        ],
+      );
+    }
+    // 多组:一级分区标题 + 该组二级分类网格(逐区排列,整列纵向滚动)。
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        AppDirectoryDrawer.catPadH,
+        AppDirectoryDrawer.catPadTop,
+        AppDirectoryDrawer.catPadH,
+        AppDirectoryDrawer.catPadBottom,
+      ),
+      children: [
+        for (final section in sections) ...[
+          Padding(
+            padding: const EdgeInsets.only(bottom: AppDirectoryDrawer.catGapMain),
+            child: Text(
+              displayCategoryGroupName(site, section.name),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: AppDirectoryDrawer.catFontSize,
+                fontWeight: FontWeight.w700,
+                color: tokens.textSecondary,
+              ),
+            ),
+          ),
+          GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            mainAxisSpacing: AppDirectoryDrawer.catGapMain,
+            crossAxisSpacing: AppDirectoryDrawer.catGapCross,
+            childAspectRatio: 99.4 / AppDirectoryDrawer.catItemHeight,
+            children: [
+              for (final item in section.items)
+                _CategoryLeaf(site: site, cid: item.cid, name: item.name),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.sm),
+        ],
+      ],
+    );
   }
 }
 

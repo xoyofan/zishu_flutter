@@ -275,7 +275,9 @@ class _PlatformCategoryFlyout extends ConsumerWidget {
   }
 }
 
-/// 分类看板:单组平台平铺网格,多组平台横向分栏(列间 1px 竖线)。
+/// 分类看板:与首页左侧边栏(`_CategoryTree`)共用同一套一级分区构建逻辑
+/// ([buildCategorySections],用户口径 2026-09-27)—— 一级分区标题 +
+/// 二级分类条目,不平铺;单一大组平台(twitch/soop/快手)隐藏组标题平铺。
 class _CategoryBoard extends StatefulWidget {
   const _CategoryBoard({required this.site, required this.groups});
 
@@ -312,8 +314,9 @@ class _CategoryBoardState extends State<_CategoryBoard> {
   @override
   Widget build(BuildContext context) {
     final site = widget.site;
-    final groups = widget.groups;
-    if (groups.length == 1) {
+    // 共用逻辑(与侧栏同源):过滤非游戏分区 + 排序后的 sections,不限条数。
+    final sections = buildCategorySections(site, widget.groups);
+    if (isFlatCategoryGroups(widget.groups)) {
       // 单一大组:平铺网格(对齐 `.nav-platform-menu__hot-track`)。
       // soop 等单组可达 300+ 条:限高内纵向滚动 + 常驻滚动条
       // (对齐 web `nav-platform-menu__hot-scroll scrolly`)。
@@ -323,7 +326,7 @@ class _CategoryBoardState extends State<_CategoryBoard> {
           controller: _controllerFor(0),
           child: Wrap(
             children: [
-              for (final item in groups.first.items)
+              for (final item in sections.first.items)
                 SizedBox(
                   width: _CategoryBoard._kColumnWidth,
                   child: _CategoryChip(
@@ -342,7 +345,7 @@ class _CategoryBoardState extends State<_CategoryBoard> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final group in groups)
+          for (final section in sections)
             Container(
               width: _CategoryBoard._kColumnWidth,
               padding: const EdgeInsets.only(left: 2.4),
@@ -355,9 +358,9 @@ class _CategoryBoardState extends State<_CategoryBoard> {
               // 列内容超高时列内纵向滚动:此前是无界 Column,内容一多
               // 直接撑破 _FlyoutPanel 的 maxHeight 报 bottom overflow。
               child: _FlyoutScrollbar(
-                controller: _controllerFor(groups.indexOf(group)),
+                controller: _controllerFor(sections.indexOf(section)),
                 child: SingleChildScrollView(
-                  controller: _controllerFor(groups.indexOf(group)),
+                  controller: _controllerFor(sections.indexOf(section)),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisSize: MainAxisSize.min,
@@ -371,7 +374,7 @@ class _CategoryBoardState extends State<_CategoryBoard> {
                           ),
                         ),
                         child: Text(
-                          displayCategoryGroupName(site, group.name),
+                          displayCategoryGroupName(site, section.name),
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -381,7 +384,7 @@ class _CategoryBoardState extends State<_CategoryBoard> {
                           ),
                         ),
                       ),
-                      for (final item in group.items)
+                      for (final item in section.items)
                         _CategoryChip(
                           key: ValueKey('flyout-category-${item.cid}'),
                           label: displayCategoryName(site, item.name, item.cid),
