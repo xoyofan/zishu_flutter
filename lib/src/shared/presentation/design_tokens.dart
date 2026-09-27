@@ -262,6 +262,26 @@ abstract final class AppHuyaChatBadge {
   /// 现统一回到盒高。
   static const double fanIdentitySize = 20;
 
+  // ---- 定制粉丝牌（iCustomBadgeFlag==1,NewFloor 组合）----
+  // 官网 `dy` CustomBadge shadow DOM 实测(2026-09-27 房间 518518):
+  // Floor 80×20(空底框) / Lv 等级图 58×20(左缘贴 0,数字画在图内右段) /
+  // 团名 12px 白字 400,左缘 ≈42(避开 Lv 数字区)。
+
+  /// NewFloor 底框宽(官网 Floor 自然尺寸 160×40 @2x → 80×20)。
+  static const double customFloorWidth = 80;
+
+  /// Lv 等级数字图盒宽(官网 116×40 @2x → 58×20)。
+  static const double customLevelWidth = 58;
+
+  /// 团名左缘(官网 <i> 名字区避开 Lv 数字段,实测左缘 ~42)。
+  static const double customNameLeft = 42;
+
+  /// 团名右缘(底框右内侧留 2px)。
+  static const double customNameRight = 2;
+
+  /// 团名字号(官网 computed 12px / weight 400,与通用牌 .79em/700 不同)。
+  static const double customNameFontSize = 12;
+
   /// 左侧圆形等级徽记直径：`min-width: 1.05em` 且自身字号 `.67em`
   /// → `1.05 × .67 × 14`。
   static const double fanLevelDisc = 1.05 * 0.67 * AppChatBadge.em;
@@ -415,6 +435,78 @@ abstract final class AppDouyuChatBadge {
   /// 团名文字阴影（彩色牌上白字必须压暗才可读；与 web 的通用
   /// `.chat-fan-badge__content` text-shadow 同值，故直接复用）。
   static const List<BoxShadow> fanTextShadow = AppChatBadge.fanTextShadow;
+
+  // ---- 粉丝牌官方组合样式（web `dy-fan-medal` lit 组件，2026-09-27 实测）----
+  //
+  // 官网 2024 起粉丝牌不再是单张烘焙 PNG，而是四层组合：等级桶背景图
+  // (`com_bg_{bucket}`，5 级一档，配置 `wconf.douyucdn.cn/resource/common/
+  // fans_medal_web_v5.json`) + 房间自定义前缀图(`brid` 匹配) + 等级数字 +
+  // 团名文本。以下常量抄自组件 shadow CSS 的 CSS 变量。
+
+  /// 容器宽（`--container-width:68px`；实测渲染 66px，背景图 66×19）。
+  static const double medalWidth = 66;
+
+  /// 容器高（`--container-height:19px`）。
+  static const double medalHeight = 19;
+
+  /// 左区宽 = 前缀/等级数字区（`--container-gap-left:24px`）。
+  static const double medalLeftZone = 24;
+
+  /// 团名右内缩（`--container-gap-right:4px`）。
+  static const double medalRightGap = 4;
+
+  /// 房间前缀图尺寸（`--prefix-width:24px` / `--prefix-height:22px`；
+  /// 底部对齐容器，顶部溢出 3px —— web 原样）。
+  static const double medalPrefixWidth = 24;
+  static const double medalPrefixHeight = 22;
+
+  /// 有前缀图时等级数字盒（width 13 / height 10）。
+  ///
+  /// 位置 2026-09-27 官网 shadow DOM computed style 实测（room 96555，
+  /// zoom 0.9 已还原）：`left: 13px; bottom: 0; top: 9px` —— **底边贴容器
+  /// 底**（9+10=19），不是垂直居中；早前记录的 `--level-with-prefix-left:15`
+  /// 与 computed 不符，以 computed 为准。
+  static const double medalLevelSmallLeft = 13;
+  static const double medalLevelSmallWidth = 13;
+  static const double medalLevelSmallHeight = 10;
+
+  /// 团名字号（web `.name` computed 12px）。
+  static const double medalNameFontSize = 12;
+
+  /// 等级数字字号：无前缀图时占满左区（web 用 per-level 小图，我们用文本
+  /// 近似，盒 22×19 → 数字 ~14px）；有前缀图时小盒 13×10 → ~9px。
+  static const double medalLevelFontSize = 14;
+  static const double medalLevelSmallFontSize = 9;
+
+  // ---- 钻粉 suffix 层（2026-09-27 官网 shadow DOM computed 实测）----
+
+  /// 有钻粉 suffix 时容器加宽。**computed 渲染实测 84px**(2026-09-27
+  /// zoom 0.9 下 hostW 75.6 还原;`--container-with-suffix-width` 的 96
+  /// 与实际渲染不符,以 computed 为准)。保底值:团名超宽时按内容继续
+  /// 撑开(见 medalWidthWithSuffixMax)。
+  static const double medalWidthWithSuffix = 84;
+
+  /// 团名超宽时容器撑开的上限(官网 span 内容自适应永不截断,我们用
+  /// 撑开近似;超出才走 ellipsis 兜底)。
+  static const double medalWidthWithSuffixMax = 140;
+
+  /// suffix 图(钻粉钻石图 + 月数叠字)。computed 渲染实测宽 26、高 21
+  /// (zoom 0.9 下 23.4 还原;源图 33×24 按该盒 fill 绘制),底边贴容器
+  /// 底、**右缘贴容器右缘(gap=0)**、顶部溢出 2px(y=-2..19)。
+  static const double medalSuffixWidth = 26;
+  static const double medalSuffixHeight = 21;
+  static const double medalSuffixRight = 0;
+
+  /// suffix 图上的月数小字盒(computed 实测 x=68.8..84、y=7..19,即右缘
+  /// 与底缘都贴容器;白字 **12px**)。
+  static const double medalSuffixMonthWidth = 15;
+  static const double medalSuffixMonthHeight = 12;
+  static const double medalSuffixMonthFontSize = 12;
+
+  /// 有 suffix 时团名右内缩 = suffix 宽 26 + 名字与 suffix 间隙 2。
+  /// computed 实测名字右缘 x=56、suffix 左缘 x=58(容器 84 → 84-56=28);
+  /// 容器因长名撑开时 suffix 恒贴最右,该 inset 对任意宽度均成立。
+  static const double medalNameRightWithSuffix = 28;
 
   // ---- 至尊大钻石 / 贵族（官网 lit 组件 `:host` 实测）----
 

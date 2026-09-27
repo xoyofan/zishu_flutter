@@ -99,6 +99,7 @@ class _FanBadge extends StatefulWidget {
     this.kind = '',
     this.url = '',
     this.iconUrl = '',
+    this.levelUrl = '',
     this.vFlag = 0,
     this.vLogo = '',
     this.identity = 0,
@@ -108,6 +109,10 @@ class _FanBadge extends StatefulWidget {
     this.colorBorder = 0,
     this.textColor = 0,
     this.levelColor = 0,
+    this.brid = 0,
+    this.custom = false,
+    this.months = 0,
+    this.diafid = 0,
   });
 
   final String site;
@@ -116,8 +121,23 @@ class _FanBadge extends StatefulWidget {
   final String kind;
   final String url;
   final String iconUrl;
+
+  /// 虎牙定制牌独立等级数字图(`AppLevel <ua>_<level>.png`)。
+  final String levelUrl;
   final int vFlag;
   final String vLogo;
+
+  /// 粉丝牌所属房间号（斗鱼协议 `brid`，房间自定义前缀图的匹配键）。
+  final int brid;
+
+  /// 虎牙 `iCustomBadgeFlag == 1`:定制粉丝牌(NewFloor 空底框 + 等级图)。
+  final bool custom;
+
+  /// 斗鱼钻粉成长月数(协议 `dfgm`,>0 = 是钻粉,粉丝牌右侧叠 suffix 层)。
+  final int months;
+
+  /// 斗鱼钻粉 suffix 装扮 id(协议 `diafid`)→ 查主播装扮表取 suffix 图。
+  final int diafid;
 
   /// 身份图标档位（虎牙 `tExternal.iFansIdentity`）。
   final int identity;
@@ -349,6 +369,72 @@ class _FanBadgeState extends State<_FanBadge> {
       // 官方底图 URL 已由解析侧用房间级 `sFloorUrl` 模板拼好放进
       // `DanmakuBadge.url`（底图内含等级圆标与团名留白）。
       // `url` 为空 = 房间级资源没取到 → 降级自绘，**不编造 CDN 路径**。
+      // **定制牌**(官网 NewFloor 空底框 + Lv 等级数字图 + 团名,shadow DOM
+      // 实测:Floor 80×20 / Lv 58×20 / 名字左缘 ~42px,官网把等级图叠在
+      // 底框左区、团名居右)。等级图缺失 → 回落通用底图路径(等级烘焙)。
+      if (widget.custom &&
+          widget.levelUrl.isNotEmpty &&
+          remoteUrl.isNotEmpty &&
+          !_imgFailed) {
+        return Tooltip(
+          message: tooltip,
+          child: withIdentity(
+            KeyedSubtree(
+              key: const Key('huya-custom-fan-badge'),
+              child: SizedBox(
+                width: AppHuyaChatBadge.customFloorWidth,
+                height: AppHuyaChatBadge.fanHeight,
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: ChatBadgeImage(
+                        site: site,
+                        kind: ChatBadgeKind.fans,
+                        level: level,
+                        height: AppHuyaChatBadge.fanHeight,
+                        src: remoteUrl,
+                        useDiskCache: false,
+                        onFail: _markImgFailed,
+                      ),
+                    ),
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      width: AppHuyaChatBadge.customLevelWidth,
+                      height: AppHuyaChatBadge.fanHeight,
+                      child: CachedNetworkImage(
+                        imageUrl: widget.levelUrl,
+                        fit: BoxFit.contain,
+                        cacheKey: widget.levelUrl,
+                        errorWidget: (_, _, _) => const SizedBox.shrink(),
+                      ),
+                    ),
+                    Positioned(
+                      left: AppHuyaChatBadge.customNameLeft,
+                      right: AppHuyaChatBadge.customNameRight,
+                      top: 0,
+                      bottom: 0,
+                      child: Center(
+                        child: Text(
+                          name!.trim(),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: AppHuyaChatBadge.customNameFontSize,
+                            height: 1,
+                            color: AppOnBright.white,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }
       if (remoteUrl.isNotEmpty && !_imgFailed) {
         return Tooltip(
           message: tooltip,
@@ -556,145 +642,21 @@ class _FanBadgeState extends State<_FanBadge> {
           break; // 空 kind = 粉丝牌，走下面的官方图分支
       }
       if (!hasName) return const SizedBox.shrink();
-      if (remoteUrl.isNotEmpty && !_imgFailed) {
-        return KeyedSubtree(
-          key: const Key('douyu-fan-badge'),
-          child: Container(
-            height: AppDouyuChatBadge.fanHeight,
-            constraints: const BoxConstraints(
-              minWidth: AppDouyuChatBadge.fanImageWidth,
-            ),
-            decoration: const BoxDecoration(
-              color: AppDouyuChatBadge.fanFallbackBg,
-            ),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: ChatBadgeImage(
-                    site: site,
-                    kind: ChatBadgeKind.fans,
-                    level: level,
-                    height: AppDouyuChatBadge.fanHeight,
-                    src: remoteUrl,
-                    useDiskCache: false,
-                    onFail: _markImgFailed,
-                  ),
-                ),
-                Positioned(
-                  left: AppDouyuChatBadge.fanTextInset,
-                  right: AppSpacing.xs,
-                  top: 0,
-                  bottom: 0,
-                  child: Center(
-                    child: Text(
-                      name.trim(),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: AppFontSize.caption,
-                        height: 1.1,
-                        color: resolvedTextColor,
-                        fontWeight: FontWeight.w600,
-                        shadows: AppDouyuChatBadge.fanTextShadow,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      }
-      if (!_imgFailed &&
-          badgeAssetPath(
-            site: site,
-            kind: ChatBadgeKind.fans,
-            level: level,
-          ).isNotEmpty) {
-        // 徽章图**原样贴左**(60×19 自然尺寸,不拉伸/不裁切/不重复),容器
-        // 宽度由团名文字决定;比徽章宽出来的右侧用 [fanFallbackBg] 中性深底
-        // 补上,保证团名任何长度都落在底色上。
-        //
-        // 尺寸口径对齐 web `ChatFanBadge.vue` 斗鱼分支
-        // (`.chat-fan-badge--douyu-official`):底图 `object-fit:contain` +
-        // `object-position:left center`(= 本实现 contain + centerLeft)、
-        // 文字 `padding:0 .18em 0 1.58em` 且 `font-size:.78em`
-        // (→ [AppDouyuChatBadge.fanTextInset] 与 [AppFontSize.caption]),
-        // 名 `flex:1;min-width:0` + ellipsis。web 的 `min-width:4.1em`
-        // 恰等于 1.58+.78×3+.18,即**按 3 字团名与徽章同宽**设计;
-        // 字���按 12px + 内缩 24px 时 3 字要 64px > 60px 徽章,会撑出右缘
-        // (用户 2026-09-26 报「长度还是不够」)。
-        //
-        // web 自身不给牌区背景色(假定团名 ≤3 字);我们多接一层
-        // [fanFallbackBg] 纯为兜住 ≥4 字的超长团名,不影响常规档。
-        //
-        // 踩过的坑(2026-09-26):曾用 ImageRepeat.repeatX 把 60px 图平铺填
-        // 宽,结果等级徽被复制到右侧(用户报「右侧显示了重复的左侧部分」);
-        // 曾用 BoxFit.fill 铺满,则徽标横向压扁。两者都算篸改徽章,
-        // 一律不用 —— 延长底色不延长徽章。
-        return Container(
-          height: AppDouyuChatBadge.fanHeight,
-          constraints: const BoxConstraints(
-            minWidth: AppDouyuChatBadge.fanImageWidth,
-          ),
-          decoration: const BoxDecoration(
-            color: AppDouyuChatBadge.fanFallbackBg,
-          ),
-          child: Stack(
-            children: [
-              Positioned(
-                left: 0,
-                top: 0,
-                bottom: 0,
-                child: ChatBadgeImage(
-                  site: site,
-                  kind: ChatBadgeKind.fans,
-                  level: level,
-                  height: AppDouyuChatBadge.fanHeight,
-                  onFail: _markImgFailed,
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.only(
-                  left: AppDouyuChatBadge.fanTextInset,
-                  right: AppSpacing.xs,
-                ),
-                child: Center(
-                  child: Text(
-                    name.trim(),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: AppFontSize.caption,
-                      height: 1.1,
-                      color: resolvedTextColor,
-                      fontWeight: FontWeight.w600,
-                      shadows: AppDouyuChatBadge.fanTextShadow,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      }
-      return _BadgeBox(
-        height: AppDouyuChatBadge.fanHeight,
-        minWidth: AppDouyuChatBadge.fanImageWidth,
-        radius: AppRadius.pill,
-        color: AppDouyuChatBadge.fanFallbackBg,
-        child: Text(
-          name.trim(),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            fontSize: AppFontSize.caption,
-            height: 1.1,
-            color: AppOnBright.white,
-            fontWeight: FontWeight.w600,
-            shadows: AppDouyuChatBadge.fanTextShadow,
-          ),
-        ),
+      // 官方**组合样式**(2026-09-27 起,对齐官网 web `dy-fan-medal` lit 组件):
+      // 等级桶背景图(5 级一档,wconf fans_medal_web_v5.json) + 房间自定义
+      // 前缀图(brid 匹配) + 等级数字 + 团名。旧单张烘焙 PNG 是静态历史款,
+      // 与官网当前样式(动态 webp 前缀/华丽桶图)脱节 —— 用户口径「部分粉丝牌
+      // 是动态的还有复杂的样式,应该结合 web 来对齐」。配置拉取失败或等级
+      // 无桶时回落旧渲染(legacyBuilder),不阻断显示。
+      return _DouyuFanMedal(
+        level: level,
+        name: name.trim(),
+        brid: widget.brid,
+        months: widget.months,
+        diafid: widget.diafid,
+        textColor: resolvedTextColor,
+        legacyBuilder: () =>
+            _buildDouyuLegacyFanBadge(context, resolvedTextColor),
       );
     }
     // 其他平台:协议图优先;没有真实图才走品牌色文字胶囊。
@@ -738,6 +700,412 @@ class _FanBadgeState extends State<_FanBadge> {
   /// 默认平台分支的胶囊文案:「团名 级」或纯等级。
   String label(String site, String? name, bool hasName, int level) =>
       hasName && name != null ? '${name.trim()} $level' : '$level';
+
+  /// 斗鱼粉丝牌**旧渲染**(官方单张烘焙 PNG 时代):web 组合样式的配置
+  /// 不可得(拉取失败/等级无桶)时由 [_DouyuFanMedal] 回落到这里。
+  Widget _buildDouyuLegacyFanBadge(
+    BuildContext context,
+    Color resolvedTextColor,
+  ) {
+    final name = widget.name;
+    if (name == null) return const SizedBox.shrink();
+    final remoteUrl = widget.iconUrl.isNotEmpty ? widget.iconUrl : widget.url;
+    // 协议图优先(官网旧款 `staticlive` 烘焙 PNG):失败走本地素材。
+    if (remoteUrl.isNotEmpty && !_imgFailed) {
+      return KeyedSubtree(
+        key: const Key('douyu-fan-badge'),
+        child: Container(
+          height: AppDouyuChatBadge.fanHeight,
+          constraints: const BoxConstraints(
+            minWidth: AppDouyuChatBadge.fanImageWidth,
+          ),
+          decoration: const BoxDecoration(
+            color: AppDouyuChatBadge.fanFallbackBg,
+          ),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: ChatBadgeImage(
+                  site: widget.site,
+                  kind: ChatBadgeKind.fans,
+                  level: widget.level,
+                  height: AppDouyuChatBadge.fanHeight,
+                  src: remoteUrl,
+                  useDiskCache: false,
+                  onFail: _markImgFailed,
+                ),
+              ),
+              Positioned(
+                left: AppDouyuChatBadge.fanTextInset,
+                right: AppSpacing.xs,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: Text(
+                    name.trim(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: AppFontSize.caption,
+                      height: 1.1,
+                      color: resolvedTextColor,
+                      fontWeight: FontWeight.w600,
+                      shadows: AppDouyuChatBadge.fanTextShadow,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+    // 本地烘焙 PNG 贴左:等级已绘在图内。曾踩的坑(ImageRepeat.repeatX
+    // 平铺复制等级徽、BoxFit.fill 压扁)见 git 历史,一律不用。
+    if (!_imgFailed &&
+        badgeAssetPath(
+          site: widget.site,
+          kind: ChatBadgeKind.fans,
+          level: widget.level,
+        ).isNotEmpty) {
+      return Container(
+        height: AppDouyuChatBadge.fanHeight,
+        constraints: const BoxConstraints(
+          minWidth: AppDouyuChatBadge.fanImageWidth,
+        ),
+        decoration: const BoxDecoration(
+          color: AppDouyuChatBadge.fanFallbackBg,
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              child: ChatBadgeImage(
+                site: widget.site,
+                kind: ChatBadgeKind.fans,
+                level: widget.level,
+                height: AppDouyuChatBadge.fanHeight,
+                onFail: _markImgFailed,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.only(
+                left: AppDouyuChatBadge.fanTextInset,
+                right: AppSpacing.xs,
+              ),
+              child: Center(
+                child: Text(
+                  name.trim(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: AppFontSize.caption,
+                    height: 1.1,
+                    color: resolvedTextColor,
+                    fontWeight: FontWeight.w600,
+                    shadows: AppDouyuChatBadge.fanTextShadow,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    return _BadgeBox(
+      height: AppDouyuChatBadge.fanHeight,
+      minWidth: AppDouyuChatBadge.fanImageWidth,
+      radius: AppRadius.pill,
+      color: AppDouyuChatBadge.fanFallbackBg,
+      child: Text(
+        name.trim(),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: const TextStyle(
+          fontSize: AppFontSize.caption,
+          height: 1.1,
+          color: AppOnBright.white,
+          fontWeight: FontWeight.w600,
+          shadows: AppDouyuChatBadge.fanTextShadow,
+        ),
+      ),
+    );
+  }
+}
+
+/// 斗鱼粉丝牌官方组合样式(对齐官网 web `dy-fan-medal` lit 组件)。
+///
+/// 四层结构(2026-09-27 房间 96555 shadow DOM 实测):
+/// 1. 背景图 `backdrop`:等级按 5 级一档分桶,配置源
+///    `wconf.douyucdn.cn/resource/common/fans_medal_web_v5.json`(与官网
+///    同一份数据,见 `DouyuFansMedalAssets`);
+/// 2. 前缀图 `prefix`:房间自定义徽记,按 `brid` 匹配;底部对齐、顶部
+///    溢出容器 3px(web 原样,24×22);
+/// 3. 等级数字:web 是编译进 CSS 的 per-level 小图(AkrobatBlack 字形),
+///    离线化成本高,这里用白字近似 —— 无前缀时占满左区 22×19,有前缀时
+///    落在右侧 13×10 小盒;
+/// 4. 团名 `name`:白字 12px 居中,右侧内缩 4px。
+///
+/// 配置未就绪/等级无桶 → [legacyBuilder](旧渲染),不阻断显示。
+class _DouyuFanMedal extends StatefulWidget {
+  const _DouyuFanMedal({
+    required this.level,
+    required this.name,
+    required this.legacyBuilder,
+    this.brid = 0,
+    this.months = 0,
+    this.diafid = 0,
+    this.textColor = Colors.white,
+  });
+
+  final int level;
+  final String name;
+  final int brid;
+
+  /// 钻粉成长月数(>0 = 叠钻粉 suffix 层,容器加宽 66→96)。
+  final int months;
+
+  /// 钻粉 suffix 装扮 id(`diafid`)→ 查装扮表取主播购买款 suffix 图。
+  final int diafid;
+  final Color textColor;
+  final Widget Function() legacyBuilder;
+
+  @override
+  State<_DouyuFanMedal> createState() => _DouyuFanMedalState();
+}
+
+class _DouyuFanMedalState extends State<_DouyuFanMedal> {
+  DouyuFansMedalConfig? _config;
+  bool _loadFailed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final config = await DouyuFansMedalAssets.instance.get();
+    if (!mounted) return;
+    if (config == null) {
+      setState(() => _loadFailed = true);
+      return;
+    }
+    setState(() => _config = config);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final config = _config;
+    final backdropUrl = config?.backdropUrl(widget.level);
+    if (config == null && !_loadFailed) {
+      // 配置在途:占位避免布局跳动,不闪旧样式。
+      return SizedBox(
+        width: AppDouyuChatBadge.medalWidth,
+        height: AppDouyuChatBadge.medalHeight,
+      );
+    }
+    if (backdropUrl == null || backdropUrl.isEmpty) {
+      // 配置拉取失败,或该等级没有桶图(理论上不会,commBg 覆盖 0..61+)
+      // → 回落旧渲染。
+      return widget.legacyBuilder();
+    }
+    final prefixUrl = _config?.prefixUrl(widget.brid);
+    // suffix 图:有 diafid 且装扮表(inter_com_w_anchor_rights.json)命中
+    // → 主播购买款(动图 webp);否则默认款(diamond_list[1] 的 6ab5daa PNG)。
+    final suffixUrl =
+        _config?.diamondSuffixUrl(widget.diafid) ?? kDouyuDiamondFanSuffixUrl;
+    // 钻粉 suffix 层(月数>0):官网把钻粉钻石图结合在粉丝牌后面,容器
+    // 加宽 66→84(computed 实测保底)。官网团名 span 按内容自适应、永不
+    // 截断(overflow:visible 无 ellipsis),这里按团名实测宽度把容器继续
+    // 撑开(suffix 上限 140),suffix 恒贴最右。
+    //
+    // 测量必须合并 DefaultTextStyle(2026-09-27 房间 84452「保飞派」被截
+    // 成「保...」的根因):真实 Text 会继承 MaterialApp 主题的 fontFamily
+    // (AppTypography.family),裸 TextStyle 的 TextPainter 用默认字体测宽,
+    // CJK 字形推进宽度不同 → 测量宽 < 渲染宽 → 名字被 ellipsis。同因还
+    // 要带上 textScaler;+2px 是亚像素/字距合成余量。
+    final hasSuffix = widget.months > 0;
+    final nameStyle = DefaultTextStyle.of(context).style.merge(
+          TextStyle(
+            fontSize: AppDouyuChatBadge.medalNameFontSize,
+            height: 1,
+            color: widget.textColor,
+            fontWeight: FontWeight.w600,
+          ),
+        );
+    final namePainter = TextPainter(
+      text: TextSpan(text: widget.name, style: nameStyle),
+      maxLines: 1,
+      textDirection: TextDirection.ltr,
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final nameWidth = namePainter.width + 2;
+    final minWidth = hasSuffix
+        ? AppDouyuChatBadge.medalWidthWithSuffix
+        : AppDouyuChatBadge.medalWidth;
+    // 官网容器是内容自适应的 min-width:66/84,团名更长就继续撑开
+    // (非 suffix 右缘让位 medalRightGap,suffix 右缘让位 suffix 区+间隙)。
+    var badgeWidth = minWidth;
+    final needed = hasSuffix
+        ? AppDouyuChatBadge.medalLeftZone +
+            nameWidth +
+            2 +
+            AppDouyuChatBadge.medalSuffixWidth
+        : AppDouyuChatBadge.medalLeftZone + nameWidth +
+            AppDouyuChatBadge.medalRightGap;
+    if (needed > badgeWidth) badgeWidth = needed;
+    if (hasSuffix && badgeWidth > AppDouyuChatBadge.medalWidthWithSuffixMax) {
+      badgeWidth = AppDouyuChatBadge.medalWidthWithSuffixMax;
+    }
+    return KeyedSubtree(
+      key: const Key('douyu-fan-badge'),
+      child: SizedBox(
+        width: badgeWidth,
+        height: AppDouyuChatBadge.medalHeight,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            // 1) 背景图(等级桶)
+            Positioned.fill(
+              child: CachedNetworkImage(
+                imageUrl: backdropUrl,
+                fit: BoxFit.fill,
+                cacheKey: backdropUrl,
+                placeholder: (_, _) => const SizedBox.shrink(),
+                errorWidget: (_, _, _) => Container(
+                  color: AppDouyuChatBadge.fanFallbackBg,
+                ),
+              ),
+            ),
+            // 2) 房间自定义前缀图(底部对齐,顶部溢出 3px = web 原样)
+            if (prefixUrl != null && prefixUrl.isNotEmpty)
+              Positioned(
+                left: 1,
+                bottom: 0,
+                width: AppDouyuChatBadge.medalPrefixWidth,
+                height: AppDouyuChatBadge.medalPrefixHeight,
+                child: CachedNetworkImage(
+                  imageUrl: prefixUrl,
+                  fit: BoxFit.contain,
+                  cacheKey: prefixUrl,
+                  placeholder: (_, _) => const SizedBox.shrink(),
+                  errorWidget: (_, _, _) => const SizedBox.shrink(),
+                ),
+              ),
+            // 3) 等级数字(白字近似 web 的 per-level 小图)。有前缀时 web
+            //    computed 实测(2026-09-27):13×10 小盒、bottom:0 —— 数字
+            //    **贴容器底**(用户报「数字太靠上」即此处当年误做整高居中);
+            //    无前缀时 web 是整高数字图(0..19,字形本身略偏中下),
+            //    文本居中近似可接受。
+            Positioned(
+              left: prefixUrl != null
+                  ? AppDouyuChatBadge.medalLevelSmallLeft
+                  : 1,
+              width: prefixUrl != null
+                  ? AppDouyuChatBadge.medalLevelSmallWidth
+                  : AppDouyuChatBadge.medalLeftZone - 2,
+              bottom: 0,
+              height: prefixUrl != null
+                  ? AppDouyuChatBadge.medalLevelSmallHeight
+                  : AppDouyuChatBadge.medalHeight,
+              child: Center(
+                child: Text(
+                  '${widget.level}',
+                  maxLines: 1,
+                  style: TextStyle(
+                    fontSize: prefixUrl != null
+                        ? AppDouyuChatBadge.medalLevelSmallFontSize
+                        : AppDouyuChatBadge.medalLevelFontSize,
+                    height: 1,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                    fontFeatures: const [FontFeature.tabularFigures()],
+                    shadows: [
+                      // web 烘焙数字自带立体暗边;白字必须压暗才可读。
+                      Shadow(color: Colors.black.withValues(alpha: 0.45), blurRadius: 1.5),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+            // 4) 团名(有钻粉 suffix 时右缘让位 suffix 区,web
+            //    `.container.has-suffix .name{right:30px}`)
+            Positioned(
+              left: AppDouyuChatBadge.medalLeftZone,
+              right: hasSuffix
+                  ? AppDouyuChatBadge.medalNameRightWithSuffix
+                  : AppDouyuChatBadge.medalRightGap,
+              top: 0,
+              bottom: 0,
+              child: Center(
+                // 官网 .name overflow:visible、内容自适应永不截断(2026-09-27
+                // 实测)。容器宽度已按文字实测撑开,visible 只是极端情况
+                // (超长名触顶 140)下不截字、允许画出边界的兜底。
+                child: Text(
+                  widget.name,
+                  maxLines: 1,
+                  softWrap: false,
+                  overflow: TextOverflow.visible,
+                  style: nameStyle,
+                ),
+              ),
+            ),
+            // 5) 钻粉 suffix 层(官网把钻粉钻石图**结合在粉丝牌后面**,即
+            //    用户口径「gif 样式结合在粉丝牌后面」;默认款是静态 PNG,
+            //    房间自定款动图 webp 协议未下发,降级统一默认款) + 月数
+            //    白字。几何为 computed 实测:图 26×21 右侧贴底、顶溢 2px;
+            //    月数字 15×12 贴底叠在图上。
+            if (hasSuffix) ...[
+              Positioned(
+                right: AppDouyuChatBadge.medalSuffixRight,
+                bottom: 0,
+                width: AppDouyuChatBadge.medalSuffixWidth,
+                height: AppDouyuChatBadge.medalSuffixHeight,
+                child: CachedNetworkImage(
+                  imageUrl: suffixUrl,
+                  // 源图 33×24,官网按 CSS 档 30×21 缩放绘制(fill),contain
+                  // 会因宽高比差异横向留白显得没靠右。
+                  fit: BoxFit.fill,
+                  cacheKey: suffixUrl,
+                  filterQuality: FilterQuality.medium,
+                  placeholder: (_, _) => const SizedBox.shrink(),
+                  errorWidget: (_, _, _) => const SizedBox.shrink(),
+                ),
+              ),
+              Positioned(
+                right: AppDouyuChatBadge.medalSuffixRight,
+                bottom: 0,
+                width: AppDouyuChatBadge.medalSuffixMonthWidth,
+                height: AppDouyuChatBadge.medalSuffixMonthHeight,
+                child: Center(
+                  child: Text(
+                    '${widget.months}',
+                    maxLines: 1,
+                    style: TextStyle(
+                      fontSize: AppDouyuChatBadge.medalSuffixMonthFontSize,
+                      height: 1,
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                      shadows: [
+                        Shadow(
+                          color: Colors.black.withValues(alpha: 0.45),
+                          blurRadius: 1.5,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 /// 斗鱼至尊大钻石徽章（官网 lit 组件 `dy-supreme-medal`）。
