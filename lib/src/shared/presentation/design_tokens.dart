@@ -228,13 +228,13 @@ abstract final class AppHuyaChatBadge {
   /// 等级数字字号 `0.58em`。
   static const double levelTextFontSize = 0.58 * AppChatBadge.em;
 
-  /// 等级胶囊**裁剪后**宽度（用户口径 2026-09-26）。
+  /// 等级胶囊**裁剪后**宽度（用户口径 2026-09-27：背景太宽，进一步收紧）。
   ///
-  /// 官方 45px(=2.25em + 1.23em) 宽里，右半段是**纯渐变空底**：实测官方图
-  /// `consumeLevelBadgeV2` 90×40@2x 逐列像素，CSS 22..40 段色数仅 3-4、
-  /// 无任何内容，专门留给叠在上面的等级数字。右侧裁掉 7px 后为 38px，
-  /// 仍容得下「20px 宝石区 + ~14px 数字 + 4px 右余量」。
-  static const double levelWidthCropped = 38;
+  /// 官方 45px(90×40@2x) 宽里，左半段是宝石图标、右半段是**纯渐变空底**
+  /// （专门留给叠在上面的等级数字）。此前裁到 38px 用户仍反馈太宽；现裁到
+  /// 32px：保留「~20px 宝石区 + ~10px 数字位 + 2px 右余量」，正好贴住内容、
+  /// 不再拖空渐变长尾。叠字仍由 Flutter 按 `levelTextRight/Bottom` 压在右下角。
+  static const double levelWidthCropped = 32;
 
   /// 胶囊右圆角半径：裁掉右侧 7px 后右圆头已被切掉，用与左端同半径补回。
   static const double levelRadius = 10;

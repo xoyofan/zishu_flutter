@@ -965,7 +965,9 @@ class _UserLevelBadgeState extends State<_UserLevelBadge> {
           key: const Key('huya-user-level-fallback'),
           child: _BadgeBox(
             height: kHuyaConsumeLevelBadgeHeight,
-            minWidth: kHuyaConsumeLevelBadgeWidth,
+            // 与官方图裁剪后同宽(32)——不撑成 45px 空胶囊(用户 2026-09-27
+            // 反馈背景太宽)。
+            minWidth: AppHuyaChatBadge.levelWidthCropped,
             radius: AppRadius.pill,
             color: context.tokens.surfaceRaised,
             child: Text(
@@ -1115,8 +1117,9 @@ class _UserLevelBadgeState extends State<_UserLevelBadge> {
       return image;
     }
     // 抖音:honor 整图(等级绘在图内);失败/超 75 档回落紫粉渐变数字。
-    // 素材是 96×48 的长胶囊(内容只占 x 16..86),限宽到内容区,避免背景
-    // 拖出一条长尾(见 [kDouyinHonorBadgeAspectRatio])。
+    // 素材是 96×48 的长胶囊(内容只占 x 16..86),两侧半透明留白是素材本身的
+    // 一部分:曾按内容区裁到 76/48(高 21 → 33.25px),实测会把图标与数字
+    // 边缘切掉,2026-09-27 回退为原比例整图(高 21 → 42px)。
     if (site == 'douyin' &&
         !_imgFailed &&
         badgeAssetPath(
@@ -1129,8 +1132,6 @@ class _UserLevelBadgeState extends State<_UserLevelBadge> {
         kind: ChatBadgeKind.userLevel,
         level: level,
         height: 21,
-        maxAspectRatio: kDouyinHonorBadgeAspectRatio,
-        cropAlignment: kDouyinHonorBadgeCropAlignment,
         onFail: _markImgFailed,
       );
     }

@@ -471,7 +471,12 @@ void main() {
       expect(fallback, findsOneWidget, reason: '官方图加载失败 → 降级数字胶囊');
       final levelRect = tester.getRect(fallback);
       expect(levelRect.height, 20, reason: '降级胶囊高 = 官方图等效高 20');
-      expect(levelRect.width, 45, reason: '降级胶囊宽 = 官方图等效宽 45');
+      expect(
+        levelRect.width,
+        lessThanOrEqualTo(34),
+        reason: '降级胶囊宽不再撑到 45px 空胶囊(用户 2026-09-27 反馈背景太宽),'
+            '与官方图裁剪后同宽(32,含亚像素/描边)',
+      );
       expect(find.descendant(of: fallback, matching: find.text('30')), findsOneWidget);
 
       // 粉丝牌：web 口径（高 1.15em、2px 圆角），含圆形等级徽记(12)、团名、官方身份图
@@ -578,14 +583,14 @@ void main() {
       );
     });
 
-    testWidgets('douyinHonorWidth:honor 素材按内容区裁切,不再拖出半透明长尾', (
+    testWidgets('douyinHonorFullAsset:honor 素材按原比例整图渲染,左右不裁切', (
       tester,
     ) async {
       // 官方 `new_user_grade_level_v1_*`(CDN)与本地 `douyin/honor/*.png` 同为
-      // 96×48 长胶囊:逐像素实测 10 个等级的内容只占 x 16..86(图标 16 起、
-      // 两位数数字止 86),左右各留 16/10px 纯半透明背景。按原比例渲染时
-      // (高 21 → 宽 42px)背景拖出一条长尾 → 用户 2026-09-26 报「粉丝徽章
-      // 背景太宽」。本用例钉死裁切口径,防止回退成原比例。
+      // 96×48 长胶囊,左右那段半透明背景是素材本身的一部分。2026-09-26 曾按
+      // 内容区裁到 76/48(高 21 → 宽 33.25px),用户反馈图标与数字被裁掉,
+      // 2026-09-27 明确回退为「原比例整图 + BoxFit.contain」。本用例钉死
+      // 整图口径,防止再次引入裁切。
       final connector = _FakeDanmakuConnector();
       await _pumpPanel(tester, 'douyin', connector: connector);
       final session = _connected(connector);
@@ -598,21 +603,18 @@ void main() {
         assetPath: 'assets/badges/douyin/honor/30.png',
       );
       expect(honor, isNotNull, reason: '抖音平台等级走本地 honor 整图');
-      expect(honor!.maxAspectRatio, kDouyinHonorBadgeAspectRatio);
-      expect(honor.cropAlignment, kDouyinHonorBadgeCropAlignment);
+      final honorW = honor!;
 
-      final rect = tester.getRect(find.byWidget(honor));
+      final rect = tester.getRect(find.byWidget(honorW));
       expect(rect.height, closeTo(21, 0.01));
-      expect(
-        rect.width,
-        closeTo(21 * kDouyinHonorBadgeAspectRatio, 0.01),
-        reason: '裁到内容区 + 3px 内边距:高 21 → 宽 33.25',
+      // 素材未解码时 RawImage 拿不到宽(测试环境 0),所以钉死的是「不限宽 +
+      // contain」这两个输入,而不是渲染后的像素宽。
+      final image = tester.widget<Image>(
+        find.descendant(of: find.byWidget(honorW), matching: find.byType(Image)),
       );
-      expect(
-        rect.width,
-        lessThan(38),
-        reason: '不得再按 96×48 原比例渲染出 42px 的半透明长尾',
-      );
+      expect(image.width, isNull, reason: '不限宽:按素材自身 96×48 比例渲染');
+      expect(image.fit, BoxFit.contain, reason: '整图 contain,左右不裁切');
+      expect(image.alignment, Alignment.centerLeft);
     });
   });
 }
