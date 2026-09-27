@@ -1,7 +1,7 @@
 [CmdletBinding()]
 param(
     # Full path to flutter.bat. Override with -Flutter or $env:ZISHU_FLUTTER.
-    [string] $Flutter = 'D:\flutter-sdk\flutter-3.47.0\flutter\bin\flutter.bat',
+    [string] $Flutter = 'F:\flutter\bin\flutter.bat',
 
     # Full path to dart.bat (guard / 子包 pub get 需要). 缺省取 flutter.bat 同目录下的 dart.bat;
     # 可用 -Dart 或 $env:ZISHU_DART 覆盖.
