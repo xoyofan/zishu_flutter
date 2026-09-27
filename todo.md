@@ -866,6 +866,12 @@ live_parser 260 passed;App 全量 312 passed(改动前基线)。Release 已带�
 - [ ] OBS-WIN-PLAY-001 youtube HOY 频道流拉不动(观察)
 - [ ] OBS-WIN-OVERLAY-001 飘屏多轨重叠(低优先)
 
+## 2026-09-27 抖音表情聊天 [看] 括号码不渲染(完成)
+
+**根因**:WebcastEmojiChatMessage 的 default_content(#5) 只有 `[看]` 纯文本括号码、协议不携带图片 URL;web 真源(SFVideoLive)靠静态贴图映射表 douyin-emoji-map.json(222 条)渲染,zishu 解析层无此表且 Unicode 表未收录「看」等名 → 保留 `[看]` 字面。
+
+- [x] PARSER-GAP-002(部分):抖音表情聊天括号码还原原版贴图。新增 `packages/live_parser/.../douyin/emoji_image_data.dart`(222 条,与 web json 同源,CDN 签名至 2035);parseDouyinBracketEmoji 命中贴图表产出带 url emoji 段(段文本 Unicode 优先/未收录留 `[名]` 字面);_parseTextPiece 协议无 url 时静态表补全;UI 链路零改动(url→WidgetSpan 图,errorBuilder→段文本兜底)。commit `89e83ba` 已推 master;live_parser 574 tests + analyze 0,主工程 analyze 0 + 表情 UI 测试 43 passed。剩余:kuaishou 表情 URL 抓包、twitch emote。
+
 ## 2026-09-20 smoke 待修清单处理(用户口径 6 项,完成)
 
 **结论**:6 项修复全部完成并真机复验。全量门禁全绿:app-test **656**、analyze 双 0、parser **384/10skip**。release 重建后真机确认:控件强调色全紫(slider/开关/激活态)、主题深⇄浅二态无「金色」、全新房间音量默认 100(不再继承上一房 36.8)、douyu 切房返回弹幕自动重连(A→B→A 直接已连接+飘屏,无需手动刷新)。
