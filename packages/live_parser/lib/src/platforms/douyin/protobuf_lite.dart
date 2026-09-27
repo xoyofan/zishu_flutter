@@ -8,6 +8,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import '../../models/models.dart';
+import 'emoji_image_data.dart';
+import 'emoji_map.dart';
 
 /// 一个 protobuf 字段:wire=0 时 value 为 int,wire=2 时为 [Uint8List]。
 class PbField {
@@ -317,9 +319,17 @@ String _firstHttpUrl(List<PbField> imageFields) {
         final display = trimmed.startsWith('[') && trimmed.endsWith(']')
             ? trimmed
             : '[$trimmed]';
+        // 兜底文案优先用 Unicode 字形(离线可渲染、两端通用);未收录的表情名
+        // 退回 [name] 文本。CDN 图加载失败时 UI 的 errorWidget 即显示此值,
+        // 避免回退成裸括号码。见 emoji_map.dart。
+        final fallbackText = douyinEmojiUnicode(trimmed) ?? display;
+        // 协议未携带图片 URL 时用静态贴图映射表补全(web douyinEmoji.ts
+        // normalizeEmojiSegment 的 resolveEmojiUrl 兜底同语义),表情聊天
+        // 括号码(如 [看])由此还原成原版贴图。
+        final resolvedUrl = url.isNotEmpty ? url : (douyinEmojiImage(trimmed) ?? '');
         return (
-          display,
-          DanmakuSegment.emoji(text: display, url: url, name: trimmed),
+          fallbackText,
+          DanmakuSegment.emoji(text: fallbackText, url: resolvedUrl, name: trimmed),
         );
       }
     }
@@ -396,6 +406,15 @@ DouyinChatItem? parseDouyinChatPayload(Uint8List payload) {
   }
   if (text.isEmpty) text = pbFieldString(fields, 5);
   if (text.isEmpty) return null;
+
+  // 纯文本路径(含 #3/#5 兜底,以及 #22/#4 富文本里没有任何 image 表情段的
+  // 情形)segments 为空:把正文里的裸括号表情码 [赞] 转成 emoji 段,使 UI
+  // 渲染 Unicode 而非原样文字。富文本已带表情 image 段时不重复解析。
+  if (segments.isEmpty) {
+    final parsed = parseDouyinBracketEmoji(text);
+    text = parsed.text;
+    segments = parsed.segments;
+  }
 
   final userBuf = pbFieldBytes(fields, 2);
   final user = _parseUserName(userBuf);

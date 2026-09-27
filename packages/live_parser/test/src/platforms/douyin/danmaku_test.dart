@@ -4,6 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:live_parser/live_parser.dart';
+import 'package:live_parser/src/platforms/douyin/emoji_image_data.dart';
 import 'package:live_parser/src/platforms/douyin/protobuf_lite.dart';
 import 'package:test/test.dart';
 
@@ -306,10 +307,10 @@ void main() {
       await Future<void>.delayed(const Duration(milliseconds: 20));
 
       expect(received, hasLength(1));
-      expect(received.single.text, '你好[呲牙]哈哈', reason: '表情名以 [名] 形态拼入正文');
+      expect(received.single.text, '你好😁哈哈', reason: '表情名映射 Unicode 字形拼入正文');
       expect(received.single.segments, [
         const DanmakuSegment.text('你好'),
-        const DanmakuSegment.emoji(text: '[呲牙]', url: emojiUrl, name: '呲牙'),
+        const DanmakuSegment.emoji(text: '😁', url: emojiUrl, name: '呲牙'),
         const DanmakuSegment.text('哈哈'),
       ], reason: 'text/emoji 段按协议顺序保留');
 
@@ -329,6 +330,157 @@ void main() {
       expect(received, hasLength(2));
       expect(received.last.text, '纯文本弹幕');
       expect(received.last.segments, isEmpty);
+
+      await subscription.cancel();
+      await session.close();
+    });
+
+    test('纯文本裸括号表情码 [赞] 解析为 emoji 段(渲染 Unicode,不依赖 CDN)', () async {
+      final fake = FakeDouyinApi()
+        ..enterResponse = douyinFixture('enter_live.json');
+      final transport = _FakeTransport();
+      final connector = DouyinDanmakuConnector(
+        DouyinClient(httpClient: fake),
+        transport: transport,
+        heartbeatInterval: const Duration(seconds: 30),
+      );
+      final session = await connector.connect(
+        const DanmakuSessionRequest(site: 'douyin', roomId: '123456'),
+      );
+      final socket = transport.sockets.single;
+      final received = <DanmakuMessage>[];
+      final subscription = session.messages.listen(received.add);
+
+      // #3 纯文本兜底路径:正文里混有 [赞][火] 裸括号码,此前被当原样文字;
+      // 现应解析成 emoji 段(url 空,UI 直接渲染 Unicode)。
+      socket.push(
+        _pushFrame(
+          _response(
+            message: _message(
+              'WebcastChatMessage',
+              _chatPayload(
+                text: '[赞]主播好厉害[火]',
+                nick: '观众丙',
+                userId: 79,
+              ),
+            ),
+          ),
+          logId: 6,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(received, hasLength(1));
+      expect(
+        received.single.text,
+        '👍主播好厉害🔥',
+        reason: '命中表情名替换为 Unicode,未命中保留原样',
+      );
+      // [赞] 同时命中静态贴图表与 Unicode 表 → emoji 段挂 CDN 图 url、
+      // 文本用 Unicode 字形;[火] 只在 Unicode 表 → url 空,离线渲染。
+      expect(received.single.segments, hasLength(3));
+      expect(received.single.segments[0].isEmoji, isTrue);
+      expect(received.single.segments[0].text, '👍');
+      expect(received.single.segments[0].url, kDouyinEmojiImage['赞']);
+      expect(received.single.segments[1].text, '主播好厉害');
+      expect(received.single.segments[2].isEmoji, isTrue);
+      expect(received.single.segments[2].text, '🔥');
+      expect(received.single.segments[2].url, '');
+
+      // 未收录表情名保留原样,不丢字符。
+      socket.push(
+        _pushFrame(
+          _response(
+            message: _message(
+              'WebcastChatMessage',
+              _chatPayload(
+                text: '求[连麦]关注',
+                nick: '观众丁',
+                userId: 80,
+              ),
+            ),
+          ),
+          logId: 7,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(received, hasLength(2));
+      expect(received.last.text, '求[连麦]关注');
+      expect(received.last.segments, isEmpty, reason: '无命中表情名则 segments 空');
+
+      // [看]:贴图表命中、Unicode 表未收录 → emoji 段挂原版贴图 url,
+      // 段文本保留 [看] 字面(图片加载失败时 UI 的兜底文案)。
+      socket.push(
+        _pushFrame(
+          _response(
+            message: _message(
+              'WebcastChatMessage',
+              _chatPayload(text: '[看]主播[捂脸]', nick: '观众戊', userId: 81),
+            ),
+          ),
+          logId: 8,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(received, hasLength(3));
+      expect(received.last.text, '[看]主播[捂脸]');
+      expect(received.last.segments, hasLength(3));
+      expect(received.last.segments[0].isEmoji, isTrue);
+      expect(received.last.segments[0].text, '[看]');
+      expect(received.last.segments[0].url, kDouyinEmojiImage['看']);
+      expect(received.last.segments[0].name, '看');
+      expect(received.last.segments[1].text, '主播');
+      expect(received.last.segments[2].isEmoji, isTrue);
+      expect(received.last.segments[2].text, '[捂脸]');
+      expect(received.last.segments[2].url, kDouyinEmojiImage['捂脸']);
+
+      await subscription.cancel();
+      await session.close();
+    });
+
+    test('表情聊天 WebcastEmojiChatMessage:#5 default_content [看] 还原为原版贴图段', () async {
+      final fake = FakeDouyinApi()
+        ..enterResponse = douyinFixture('enter_live.json');
+      final transport = _FakeTransport();
+      final connector = DouyinDanmakuConnector(
+        DouyinClient(httpClient: fake),
+        transport: transport,
+        heartbeatInterval: const Duration(seconds: 30),
+      );
+      final session = await connector.connect(
+        const DanmakuSessionRequest(site: 'douyin', roomId: '123456'),
+      );
+      final socket = transport.sockets.single;
+      final received = <DanmakuMessage>[];
+      final subscription = session.messages.listen(received.add);
+
+      // 表情聊天实际形态:default_content(#5) = [看] 纯文本括号码,
+      // 协议无图片 URL;经静态贴图表还原成带 url 的 emoji 段。
+      socket.push(
+        _pushFrame(
+          _response(
+            message: _message(
+              'WebcastEmojiChatMessage',
+              _chatPayload(
+                text: '',
+                nick: '表情哥',
+                userId: 82,
+                defaultContent: '[看]',
+              ),
+            ),
+          ),
+          logId: 9,
+        ),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+
+      expect(received, hasLength(1));
+      expect(received.single.text, '[看]');
+      expect(received.single.segments, hasLength(1));
+      expect(received.single.segments.single.isEmoji, isTrue);
+      expect(received.single.segments.single.text, '[看]');
+      expect(received.single.segments.single.url, kDouyinEmojiImage['看']);
+      expect(received.single.segments.single.name, '看');
 
       await subscription.cancel();
       await session.close();
@@ -370,6 +522,7 @@ List<int> _chatPayload({
   String honorIconUrl = '',
   bool honorBadgeInBadgeList = false,
   List<int> richText = const [],
+  String defaultContent = '',
 }) {
   final user = [
     ..._pbUint(1, userId),
@@ -441,6 +594,9 @@ List<int> _chatPayload({
     // Text 富文本(#22):web 真源 parseChatMessage 的首选路径
     // (packages/shared/src/protocol/douyin/protobuf-lite.ts:530-551)。
     if (richText.isNotEmpty) ..._pbBytes(22, richText),
+    // default_content(#5):WebcastEmojiChatMessage 的纯文本括号码兜底
+    // (web 真源 parseEmojiChatMessage 首选字段,protobuf-lite.ts:551-567)。
+    if (defaultContent.isNotEmpty) ..._pbString(5, defaultContent),
   ];
 }
 
