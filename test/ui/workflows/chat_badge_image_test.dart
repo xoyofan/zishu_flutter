@@ -543,10 +543,10 @@ void main() {
       session.push(_chat('抖神', '超档', userLevel: 76));
       await _pumpStable(tester);
 
-      // 回归：抖音粉丝牌必须用官方 `fansclub_level_v6_N.png`（150×48，
-      // 心形+等级在左、右侧留白给团名），且**优先用协议下发的图 URL**。
-      // 误用 `fansclub_new_advanced_badge_N_xmp`（60×48 紧凑款）会让粉丝牌
-      // 退化成与平台等级 honor 同款的「彩色圆角块+数字」，且丢掉团名位。
+      // 回归：抖音粉丝牌**优先用协议下发的图 URL**;无协议时回落官方
+      // `ranklist_fansclub_pop_super_badge_N.png`(60×48 紧凑款,2026-09-27
+      // 用户口径 dyx-compare.png:三模板统一最右紧凑款)。本地
+      // `assets/badges/douyin/fans/*` 是粉翼大摆台错图,不得渲染。
       expect(
         _badgeImage(tester, assetPath: 'assets/badges/douyin/fans/10.png'),
         isNull,
@@ -571,15 +571,17 @@ void main() {
           .map((w) => w.src)
           .toList();
       expect(
-        badgeSrcs.any((s) => s.contains('fansclub_new_badge_10_xmp.png')),
+        badgeSrcs.any(
+          (s) => s.contains('ranklist_fansclub_pop_super_badge_10.png'),
+        ),
         isTrue,
-        reason: '粉丝牌协议无 url 时回落官方 new_badge(90×48);'
-            '不用 level_v6(150×48 长条)',
+        reason: '粉丝牌协议无 url 时回落官方 pop_super 紧凑款(60×48);'
+            '不用 level_v6(150×48 长条)与 new_badge(90×48 中等款)',
       );
       expect(
         badgeSrcs.any((s) => s.contains('new_advanced_badge')),
         isFalse,
-        reason: '不得再用 60x48 紧凑款（无团名位、且与平台等级同款观感）',
+        reason: 'new_advanced 族是灰图/废弃款,不得直接渲染',
       );
     });
 

@@ -461,20 +461,30 @@ void main() {
     );
   });
 
-  test('抖音粉丝牌:协议图优先 + 灰图换彩色 + 兜底 new_badge(web 口径)', () {
-    // 口径抄 web `resolveDouyinBadgeBgUrl` / `resolveDouyinColoredFansBadgeUrl`:
+  test('抖音粉丝牌:协议图优先 + 灰图换彩色 + 兜底统一 pop_super 紧凑款', () {
+    // 2026-09-27 用户口径(dyx-compare.png 三模板实测对比):同一等级官方 CDN
+    // 有三种宽度——level_v6(150×48 → 65.6px 长条)、new_badge(90×48 →
+    // 39.4px 中等)、ranklist_fansclub_pop_super_badge(60×48 → 26.2px 紧凑款),
+    // 抖音聊天间实际展示**最右的紧凑款**;兜底与灰图换彩统一用 pop_super,
+    // 消除同房间 39.4/26.2 两种宽度的混排。
     // 1) 协议 URL 优先,但 `pop_gray_super_badge` 要换成同尺寸彩色款
     //    (实测真实弹幕 513 条里 152 条是未点亮灰图);
-    // 2) 无协议 URL 回落官方 `fansclub_new_badge`(90×48 → 高 21 时 39.4px),
+    // 2) 无协议 URL 回落官方紧凑款 `ranklist_fansclub_pop_super_badge`,
     //    **不是** `fansclub_level_v6`(150×48 → 65.6px 长条,用户 2026-09-26
     //    报「粉丝牌背景太长」)。
     expect(
       douyinFansBadgeUrl(9),
       'https://p3-webcast.douyinpic.com/img/webcast/'
-      'fansclub_new_badge_9_xmp.png~tplv-obj.image',
+      'ranklist_fansclub_pop_super_badge_9.png~tplv-obj.image',
     );
-    expect(douyinFansBadgeUrl(1), contains('fansclub_new_badge_1_xmp.png'));
-    expect(douyinFansBadgeUrl(20), contains('fansclub_new_badge_20_xmp.png'));
+    expect(
+      douyinFansBadgeUrl(1),
+      contains('ranklist_fansclub_pop_super_badge_1.png'),
+    );
+    expect(
+      douyinFansBadgeUrl(20),
+      contains('ranklist_fansclub_pop_super_badge_20.png'),
+    );
     expect(douyinFansBadgeUrl(0), isEmpty, reason: '无等级不出图');
     expect(douyinFansBadgeUrl(21), isEmpty, reason: '超档位(实测 404)不出图');
     for (final lv in [1, 9, 20]) {
@@ -482,6 +492,11 @@ void main() {
         douyinFansBadgeUrl(lv),
         isNot(contains('level_v6')),
         reason: 'level_v6 是 150×48 长条,与协议主流 60×48 差 2.5 倍',
+      );
+      expect(
+        douyinFansBadgeUrl(lv),
+        isNot(contains('new_badge')),
+        reason: 'new_badge 是 90×48 中等款,与协议主流 60×48 宽窄不一',
       );
     }
 
@@ -498,7 +513,7 @@ void main() {
     // 彩色图原样透传(主播定制款不能被改写)。
     const custom = 'https://example.com/my_fans_badge.png';
     expect(douyinFansColoredBadgeUrl(custom, 5), custom);
-    // 其他灰图族(advanced_gray)→ 官方 new_badge 兜底。
+    // 其他灰图族(advanced_gray)→ 官方 pop_super 紧凑款兜底。
     expect(
       douyinFansColoredBadgeUrl(
         'https://p3-webcast.douyinpic.com/img/webcast/'
