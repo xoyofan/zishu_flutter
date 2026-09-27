@@ -26,17 +26,61 @@ import 'app_version.dart';
 /// 路由语义与 SFVideoLive 对齐(implementation-plan 6.3)。
 /// route 参数只存 site/id/cid,不传大型对象。
 
-/// 启动路由:exe 命令行 `--route <path>` 指定初始路由,供真机自动化验证
-/// 直达目标页面(普通启动无此参数,行为不变)。Flutter 桌面下命令行参数经
+/// 启动路由:exe 命令行指定初始路由,供真机自动化验证直达目标页面
+/// (普通启动无此参数,行为不变)。Flutter 桌面下命令行参数经
 /// `main(List<String> args)` 注入,由 [configure] 在启动最早期登记。
+///
+/// 三种形态(优先级从高到低):
+/// - `--route <path>`:直接指定任意路由(如 `--route /soop/category`);
+/// - `--site <平台> --room <房间号>`:直达播放页,如 `--site douyin --room 123456`;
+/// - `--room <直播间URL>`:URL 自带平台域名时自动推断平台并提取尾段房间号,
+///   如 `--room https://live.douyin.com/123456`(各平台房间号均在 path 尾段)。
 class StartupRoute {
   static String value = '/all';
 
   static void configure(List<String> args) {
-    final i = args.indexOf('--route');
-    if (i >= 0 && i + 1 < args.length && args[i + 1].startsWith('/')) {
-      value = args[i + 1];
+    final route = _flag(args, '--route');
+    if (route != null && route.startsWith('/')) {
+      value = route;
+      return;
     }
+    final room = _flag(args, '--room');
+    if (room == null || room.trim().isEmpty) return;
+    final (site, roomId) = _resolveStartupRoom(room.trim(), _flag(args, '--site'));
+    if (site.isEmpty || roomId.isEmpty) return;
+    value = '/$site/play/$roomId';
+  }
+
+  /// 解析 `--site`/`--room` 为 (平台, 房间号):
+  /// - `--site` 显式给定时优先;
+  /// - room 为 http(s) URL 时按域名推断平台([siteHintFromInput]),房间号取
+  ///   path 尾段(URL 不进路由参数,规避 encode/路径分裂,行为与搜索框输入
+  ///   等价);
+  /// - 两处都拿不到平台或房间号 → 返回空对,调用方保持默认首页。
+  static (String, String) _resolveStartupRoom(String room, String? siteArg) {
+    var site = siteArg?.trim() ?? '';
+    var roomId = room;
+    final uri = Uri.tryParse(room);
+    if (uri != null && (uri.scheme == 'http' || uri.scheme == 'https')) {
+      final inferred = siteHintFromInput(room);
+      if (inferred.isNotEmpty) site = inferred;
+      final segments = <String>[
+        for (final segment in uri.path.split('/'))
+          if (segment.trim().isNotEmpty) segment.trim(),
+      ];
+      roomId = segments.isEmpty ? '' : segments.last;
+    }
+    return (site, roomId);
+  }
+
+  /// 取 `--name value` 或 `--name=value` 形式的参数值;缺失返回 null。
+  static String? _flag(List<String> args, String name) {
+    for (var i = 0; i < args.length; i++) {
+      final arg = args[i];
+      if (arg == name && i + 1 < args.length) return args[i + 1];
+      if (arg.startsWith('$name=')) return arg.substring(name.length + 1);
+    }
+    return null;
   }
 }
 
