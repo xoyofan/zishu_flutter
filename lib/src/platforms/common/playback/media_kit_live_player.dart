@@ -6,11 +6,19 @@ library;
 import 'dart:async';
 import 'dart:io';
 
-import 'package:flutter/widgets.dart' show BoxFit, Color, Widget;
+import 'package:flutter/widgets.dart'
+    show
+        AppLifecycleState,
+        BoxFit,
+        Color,
+        Widget,
+        WidgetsBinding,
+        WidgetsBindingObserver;
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:live_parser/live_parser.dart' show StreamLine, UpstreamProxy;
-import 'package:window_manager/window_manager.dart' show DragToResizeArea;
+import 'package:window_manager/window_manager.dart'
+    show DragToResizeArea, WindowListener, windowManager;
 
 import 'buffering_stall_tracker.dart';
 import 'live_player.dart';
@@ -47,6 +55,7 @@ bool needsVideoKick({
 }
 
 class MediaKitLivePlayer
+    with WidgetsBindingObserver
     implements LivePlayer, LineRecoveryAware, VideoHardwareAccelerationAware {
   /// [player] 是单测注入点:VM 测试无法加载原生 libmpv(`Player()` 会构造
   /// `NativePlayer` 并 `DynamicLibrary.open`),只能注入 `Player(platformPlayer:)`
@@ -67,6 +76,8 @@ class MediaKitLivePlayer
     _recoveryPolicy = recoveryPolicy;
     _resiliencePolicy = resiliencePolicy;
     _wire();
+    _windowListener = _WindowLifecycleListener(_logWindowEvent);
+    _observeLifecycle();
     // 参照 pure_live 的直播卡顿根治:mpv 属性调优让断流/卡死的直播流
     // 主动报错而非无限缓冲,再由错误/看门狗路径重连。属性调优失败不阻断播放。
     unawaited(_applyLiveTuning());
@@ -109,6 +120,11 @@ class MediaKitLivePlayer
   /// 已释放标记:app 退出时根容器可能先销毁播放器再触发页面级 stop,
   /// 此标记保证 stop 不会打到已释放的原生播放内核。
   bool _disposed = false;
+
+  /// 原生窗口事件转发器([WindowListener] 是普通 class,不能 `with`,用转发类
+  /// 持有回调)。最小化/隐藏是「后端自暂停」首要嫌疑,事件落盘后可与
+  /// `play_state source=external` 时间对齐。
+  late final _WindowLifecycleListener _windowListener;
 
   /// 生命周期串行队列:open / stop / play / pause 依调用顺序逐条执行。
   ///
@@ -160,6 +176,17 @@ class MediaKitLivePlayer
   /// 本次 open 是否已 kick 过:置位后不再武装(一次 open 至多一次)。
   /// open 时 reset。
   bool _videoKicked = false;
+
+  /// 播放/暂停归因标记:底层 `playing` 事件变 false/true 时,区分是**本地指令**
+  /// (play()/pause() 或视频 kick)触发的,还是**后端自暂停**(如窗口隐藏/最小化
+  /// 时 mpv 自己停)。
+  ///
+  /// 2026-09-27 诊断背景:一次「房间仍开着、宽高齐全,却在播状态变 false 且
+  /// 无 play_cmd 日志」的暂停,根因无法定位(全仓无 AppLifecycleState 监听,
+  /// 也无窗口显隐监听)。加此埋点后,下次可直接从 `play_state source=` 判定是
+  /// local(ui / video_kick)还是 external(后端/系统)。值随对应 playing 事件消费后清空。
+  String? _pauseReason;
+  String? _playReason;
 
   /// kick 观察窗:给 mpv 补报 video-params 留时间,避免把正常起播误踢。
   static const Duration _videoKickDelay = Duration(milliseconds: 1500);
@@ -324,12 +351,24 @@ class MediaKitLivePlayer
     }
 
     bind(events.playing, (s, v) {
-      PlaybackLog.write('play_state', {
+      // 归因:本次 playing 翻转由本地指令还是后端自暂停触发(见 [_pauseReason])。
+      final reason = v ? _playReason : _pauseReason;
+      final source = reason == null ? 'external' : 'local:$reason';
+      if (v) {
+        _playReason = null;
+      } else {
+        _pauseReason = null;
+      }
+      final appState = _appLifecycleName();
+      final fields = <String, Object?>{
         'playing': v,
+        'source': source,
         'buffering': _latest.buffering,
         'width': _latest.width,
         'height': _latest.height,
-      });
+      };
+      if (appState != null) fields['app_state'] = appState;
+      PlaybackLog.write('play_state', fields);
       if (v) _onPlaying();
       return s.copyWith(playing: v);
     });
@@ -684,11 +723,15 @@ class MediaKitLivePlayer
   /// 这是实测手动恢复动作(暂停→播放)的自动化,只此一次,不进生命周期
   /// 队列(队列此时可能被新 open 占用,而 kick 只针对当前底层会话)。
   Future<void> _runVideoKick() async {
+    _pauseReason = 'video_kick';
+    _playReason = 'video_kick';
     try {
       await _player.pause();
       await _player.play();
     } catch (_) {
       // 底层已释放/切源时的竞态:kick 是尽力恢复,失败不得影响主链路。
+      _pauseReason = null;
+      _playReason = null;
     }
   }
 
@@ -1077,6 +1120,7 @@ class MediaKitLivePlayer
   @override
   Future<void> play() => _enqueueLifecycle(() async {
     PlaybackLog.write('play_cmd', {'action': 'play'});
+    _playReason = 'ui';
     await _player.play();
     // 用户口径(2026-09-20 播放/暂停判断错):UI 反馈不等底层 playing 事件
     // 回流 —— media-kit 暂停后不一定再吐 playing 事件,回流也可能被时序
@@ -1088,6 +1132,7 @@ class MediaKitLivePlayer
   @override
   Future<void> pause() => _enqueueLifecycle(() async {
     PlaybackLog.write('play_cmd', {'action': 'pause'});
+    _pauseReason = 'ui';
     await _player.pause();
     _emit((snapshot) => snapshot.copyWith(playing: false));
   });
@@ -1234,6 +1279,16 @@ class MediaKitLivePlayer
         await subscription.cancel();
       }
       _subscriptions.clear();
+      try {
+        WidgetsBinding.instance.removeObserver(this);
+      } catch (_) {
+        // 无 binding / 未注册:忽略。
+      }
+      try {
+        windowManager.removeListener(_windowListener);
+      } catch (_) {
+        // 插件未初始化:忽略。
+      }
       await _output.close();
       await _adFilter.dispose();
     }
@@ -1245,4 +1300,76 @@ class MediaKitLivePlayer
   void dispose() {
     unawaited(releaseNative());
   }
+
+  // ---- 应用生命周期 / 窗口可见性埋点 --------------------------------------
+  //
+  // 归因「后端自暂停」用:2026-09-27 前一次播放无故暂停,日志里既无 play_cmd
+  // (排除 UI 按钮/Space),也无任何 error/buffering,唯一嫌疑是窗口被隐藏/最小化
+  // 时 mpv 自己停了。此前全仓没有这两类监听,无从证实。下面把生命周期与窗口
+  // 显隐事件落盘,下次暂停可直接与 `play_state source=external` 时间对齐。
+  // 原生/无窗口环境(VM 测试、Web、插件未就绪)一律静默降级。
+
+  /// 注册应用生命周期 + 原生窗口事件监听。
+  void _observeLifecycle() {
+    try {
+      WidgetsBinding.instance.addObserver(this);
+    } catch (_) {
+      // 纯 VM 测试未 pump binding:跳过。
+    }
+    try {
+      windowManager.addListener(_windowListener);
+    } catch (_) {
+      // window_manager 插件未初始化:跳过。
+    }
+  }
+
+  String? _appLifecycleName() {
+    try {
+      return WidgetsBinding.instance.lifecycleState?.name;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    PlaybackLog.write('app_lifecycle', {
+      'state': state.name,
+      'playing': _latest.playing,
+    });
+  }
+
+  void _logWindowEvent(String kind) {
+    if (_disposed) return;
+    PlaybackLog.write('window_event', {
+      'kind': kind,
+      'playing': _latest.playing,
+    });
+  }
+}
+
+/// 原生窗口事件 → 日志的薄转发:[WindowListener] 是普通 class(非 mixin),
+/// 播放器无法 `with`,故用此小类持有回调转发。窗口最小化/隐藏是「后端自暂停」
+/// 的首要嫌疑,这些事件落盘后可与 `play_state source=external` 时间对齐。
+class _WindowLifecycleListener extends WindowListener {
+  _WindowLifecycleListener(this._onEvent);
+
+  final void Function(String) _onEvent;
+
+  @override
+  void onWindowMinimize() => _onEvent('minimize');
+  @override
+  void onWindowRestore() => _onEvent('restore');
+  @override
+  void onWindowMaximize() => _onEvent('maximize');
+  @override
+  void onWindowUnmaximize() => _onEvent('unmaximize');
+  @override
+  void onWindowEnterFullScreen() => _onEvent('enter_fullscreen');
+  @override
+  void onWindowLeaveFullScreen() => _onEvent('leave_fullscreen');
+  @override
+  void onWindowFocus() => _onEvent('focus');
+  @override
+  void onWindowBlur() => _onEvent('blur');
 }
