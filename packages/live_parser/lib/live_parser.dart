@@ -9,6 +9,7 @@ export 'src/catalog/cross_hot_categories_generated.dart';
 export 'src/contracts/contracts.dart';
 export 'src/platforms/huya/huya_chat_badges.dart';
 export 'src/platforms/huya/huya_fans_badge_resource.dart';
+export 'src/platforms/douyu/fans_medal_assets.dart';
 export 'src/cross/cross_browse.dart';
 export 'src/http/danmaku_transport.dart';
 export 'src/http/parser_http.dart';

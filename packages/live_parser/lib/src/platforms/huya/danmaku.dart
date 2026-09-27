@@ -370,16 +370,43 @@ class HuyaDanmakuSession implements DanmakuSession {
     // 拼出,放在 `DanmakuBadge.url`(UI 粉丝牌胶囊的官方底图位);拿不到
     // 资源时留空串,UI 沿用自绘渐变胶囊。`<identity>` 取官网
     // `sfid || type`:优先 `tExternal.iFansIdentity`,否则 `iBadgeType`。
+    //
+    // **定制牌**(iCustomBadgeFlag==1)官网走 NewFloor 空底框
+    // (`<size>_<ua>_<status>_<sfmark>_<level>`)并叠独立等级数字图
+    // (`AppLevel <ua>_<level>.png`),与通用 DefaultFloor(等级已烘焙)
+    // 完全不同(2026-09-27 房间 518518 官网 shadow DOM 取证)。status:
+    // 官网按 per-badge `iSFEffectLevel` 判特效档,定制包未下发控制时
+    // 实测超粉恒 2 / 非超粉恒 1 —— 按 sfMark 近似。
     final resource = _fansBadgeResource;
+    final isCustom = badgeCustom == 1;
+    final safeSize = badgeSize <= 0 ? kHuyaFansBadgeDefaultSize : badgeSize;
+    final sfMark = badgeSuperFans > 0 ? 1 : 0;
+    final customFloorUrl = !isCustom || resource == null
+        ? ''
+        : huyaCustomBadgeFloorUrl(
+            template: resource.customFloorTemplate,
+            level: badgeLevel,
+            size: safeSize,
+            sfMark: sfMark,
+            status: sfMark > 0 ? 2 : 1,
+          );
+    final customLevelUrl = !isCustom || resource == null
+        ? ''
+        : huyaCustomBadgeLevelUrl(
+            template: resource.customLevelUrlTemplate,
+            level: badgeLevel,
+          );
     final floorUrl = resource == null
         ? ''
-        : huyaFansBadgeFloorUrl(
-            template: resource.floorUrlTemplate,
-            level: badgeLevel,
-            identity: badgeIdentity > 0 ? badgeIdentity : badgeType,
-            size: badgeSize <= 0 ? kHuyaFansBadgeDefaultSize : badgeSize,
-            dark: badgeExtinguished,
-          );
+        : isCustom && customFloorUrl.isNotEmpty
+            ? customFloorUrl
+            : huyaFansBadgeFloorUrl(
+                template: resource.floorUrlTemplate,
+                level: badgeLevel,
+                identity: badgeIdentity > 0 ? badgeIdentity : badgeType,
+                size: safeSize,
+                dark: badgeExtinguished,
+              );
 
     final badge = badgeName.isNotEmpty && badgeLevel > 0
         ? DanmakuBadge(
@@ -390,13 +417,13 @@ class HuyaDanmakuSession implements DanmakuSession {
             // 虎牙 `DanmakuBadge.url` = 官方粉丝牌**底图**(非图标);
             // 与其它平台的 `url` 语义不同,只由虎牙分支消费。
             url: floorUrl,
+            // 定制牌的独立等级数字图(NewFloor 底框不含数字),UI 叠加。
+            levelUrl: customLevelUrl,
             identity: badgeIdentity,
-            badgeSize: badgeSize > 0
-                ? badgeSize
-                : kHuyaFansBadgeDefaultSize,
+            badgeSize: safeSize,
             floorUrlTemplate: resource?.floorUrlTemplate ?? '',
             extinguished: badgeExtinguished,
-            custom: badgeCustom == 1,
+            custom: isCustom,
           )
         : null;
     return DanmakuMessage(

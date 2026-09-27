@@ -699,6 +699,7 @@ class DanmakuBadge {
     this.kind = '',
     this.url = '',
     this.iconUrl = '',
+    this.levelUrl = '',
     this.vFlag = 0,
     this.vLogo = '',
     this.identity = 0,
@@ -709,6 +710,8 @@ class DanmakuBadge {
     this.custom = false,
     this.badgeRoomId = 0,
     this.badgeCheckCode = '',
+    this.months = 0,
+    this.diamondIconId = 0,
   });
 
   final String name;
@@ -748,10 +751,32 @@ class DanmakuBadge {
   /// 在拿到证据前不得用它改变现有渲染行为。
   final int badgeRoomId;
 
+  /// 虎牙**定制粉丝牌**的独立等级数字图(官网 `<img class=Lv>` =
+  /// `web_admin_badgeAppLevelResource/{hash}/<ua>_<level>.png`;NewFloor
+  /// 空底框不含数字,必须叠加)。非定制牌为空串。
+  final String levelUrl;
+
   /// 徽章校验码（斗鱼 chatmsg `hc`，32 位 hex）。
   ///
   /// 官方用于校验徽章图与粉丝团的一致性；本项目暂只透传，不参与渲染判定。
   final String badgeCheckCode;
+
+  /// 斗鱼**钻粉成长月数**（chatmsg `dfgm`，挂在本条粉丝牌徽章上）。
+  ///
+  /// 官网口径（2026-09-27 房间 96555 实测）：`diaf=1`（钻粉身份）且 `dfgm>0`
+  /// 时，粉丝牌右侧叠加钻粉 suffix 图（默认款 PNG / 主播购买款动图 webp）+
+  /// 月数小字，容器加宽 66→84（computed 实测）。0 = 非钻粉/无月数，不加 suffix。
+  final int months;
+
+  /// 斗鱼**钻粉 suffix 装扮 id**（chatmsg `diafid`）。
+  ///
+  /// 不是粉丝牌等级：是主播侧购买/活动的「钻粉发言后缀」装扮 id。官网
+  /// `getDiamondIconExt({diafid})` 查 `inter_com_w_anchor_rights.json` 的
+  /// `list[diafid].webPic`（`vswitch.web==1` 才启用），如 126→中秋活动款、
+  /// 100085→常驻千钻尾拖。0/缺失 → 默认款
+  /// (`diamond_list[1].web_medal_pic`)。URL 解析见
+  /// `DouyuFansMedalConfig.diamondSuffixUrl`。
+  final int diamondIconId;
   final String kind;
 
   /// 徽章主体/图标 URL。SOOP 订阅等平台可同时使用 [url] 与 [iconUrl]。

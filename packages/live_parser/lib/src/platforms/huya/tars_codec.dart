@@ -316,7 +316,10 @@ class TarsReader {
       final int len;
       switch (head.type) {
         case TarsType.string1:
-          len = _readRaw(1);
+          // TARS 的 STRING1 长度是 **无符号单字节**(0..255);官网模板 URL
+          // 常 128-255 字符(如 biz12 定制牌 NewFloor 模板 139 字符),按有
+          // 符号读会得到负数 → 误判 out of range(2026-09-27 实测修复)。
+          len = _readRaw(1) & 0xff;
         case TarsType.string4:
           len = _readRaw(4);
         default:

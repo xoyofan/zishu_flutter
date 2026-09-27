@@ -176,7 +176,7 @@ void main() {
         'type@=chatmsg/rid@=252140/uid@=2/nn@=有牌有钻粉/txt@=B/dms@=4/'
         'level@=39/sahf@=0/bnn@=金咕咕/bl@=25/brid@=252140/'
         'hc@=a076681f25802f44186cd03eef12333c/fl@=25/'
-        'diaf@=1/cdiaf@=1/dfgm@=24/ds@=1025/ail@=6065@S4144@S/tfid@=723/',
+        'diaf@=1/cdiaf@=1/dfgm@=24/diafid@=126/ds@=1025/ail@=6065@S4144@S/tfid@=723/',
       );
       socket.pushPacket(
         'type@=chatmsg/rid@=252140/uid@=3/nn@=无牌/txt@=C/dms@=4/'
@@ -201,14 +201,58 @@ void main() {
       expect(received[0].nobleLevel, 0);
       expect(received[0].supremeLevel, 0);
 
-      // 样本 2：粉丝牌 + 钻粉(diaf/cdiaf 任一为 1)
-      expect(received[1].badges.map((b) => b.kind), ['', 'diamondfan']);
-      expect(received[1].badges.last.name, '钻粉');
+      // 样本 2：粉丝牌 + 钻粉(diaf/cdiaf 任一为 1) + 成长月数 dfgm。
+      // 官网口径(2026-09-27):diaf=1 且 dfgm>0 → 钻粉作为粉丝牌 suffix 层
+      // 结合在牌后(月数挂在粉丝牌徽章上),**不再出独立钻粉 chip**。
+      expect(received[1].badges.map((b) => b.kind), ['']);
+      expect(received[1].badges.single.name, '金咕咕');
+      expect(received[1].badges.single.months, 24);
+      // diafid = 钻粉 suffix 装扮 id(查 inter_com_w_anchor_rights 装扮表)。
+      expect(received[1].badges.single.diamondIconId, 126);
       expect(received[1].diamondFan, isTrue);
 
       // 样本 3：无团名/无等级 → 不出粉丝牌徽章（brid/hc 随之不落库）
       expect(received[2].badges, isEmpty);
       expect(received[2].badgeLevel, 0);
+
+      await msgSub.cancel();
+      await session.close();
+    });
+
+    test('钻粉 chip 兜底口径:dfgm 缺失/为 0 出 chip;dfgm>0 无牌不出', () async {
+      // 官网聊天行把 diaf=1 && dfgm>0 的钻粉画成粉丝牌 suffix 层(无独立
+      // chip);无牌/无月数时官网同样不渲染任何钻粉标记,chip 仅为本项目
+      // 无牌场景的行为兜底。
+      final session = await connector.connect(
+        const DanmakuSessionRequest(site: 'douyu', roomId: '252140'),
+      );
+      final socket = transport.sockets.single;
+      final received = <DanmakuMessage>[];
+      final msgSub = session.messages.listen(received.add);
+
+      // diaf=1 但 dfgm 缺失 → 月数 0,保留 chip 兜底。
+      socket.pushPacket(
+        'type@=chatmsg/rid@=252140/nn@=月数缺失/txt@=A/dms@=4/'
+        'bnn@=金咕咕/bl@=10/brid@=252140/diaf@=1/cdiaf@=1/',
+      );
+      // diaf=1、dfgm=0 → 同上。
+      socket.pushPacket(
+        'type@=chatmsg/rid@=252140/nn@=月数为零/txt@=B/dms@=4/'
+        'bnn@=金咕咕/bl@=11/brid@=252140/diaf@=1/dfgm@=0/',
+      );
+      // dfgm>0 但无粉丝牌(bnn 空) → 官网无渲染载体,不出任何徽章。
+      socket.pushPacket(
+        'type@=chatmsg/rid@=252140/nn@=无牌钻粉/txt@=C/dms@=4/'
+        'bnn@=/bl@=0/brid@=0/diaf@=1/dfgm@=12/',
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 10));
+
+      expect(received, hasLength(3));
+      expect(received[0].badges.first.months, 0);
+      expect(received[0].badges.map((b) => b.kind), ['', 'diamondfan']);
+      expect(received[1].badges.first.months, 0);
+      expect(received[1].badges.map((b) => b.kind), ['', 'diamondfan']);
+      expect(received[2].badges, isEmpty);
 
       await msgSub.cancel();
       await session.close();

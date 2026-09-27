@@ -59,6 +59,15 @@ void main() {
     test('字符串与转义内容', () {
       final w = TarsWriter()..writeString('弹幕@内容/', 0);
       expect(TarsReader(w.takeBytes()).readString(0), '弹幕@内容/');
+
+      // STRING1 长度是**无符号单字节**:128-255 字符的串(官网模板 URL 常见,
+      // 如 biz12 定制牌 NewFloor 模板 139 字符)曾按有符号读成负数 → 误判
+      // out of range。回归:139 字符(≥128)必须原样读回。
+      final longUrl = 'https://fileserver.cdn.huya.com/web_admin_badgeNewFloorResource/'
+          '5f84f95775344a1aa5c5ff4903f85818/<size>_<ua>_<status>_<sfmark>_<level>.webp';
+      expect(longUrl.length, greaterThan(128));
+      final w2 = TarsWriter()..writeString(longUrl, 0);
+      expect(TarsReader(w2.takeBytes()).readString(0), longUrl);
     });
 
     test('bytes(SimpleList)', () {

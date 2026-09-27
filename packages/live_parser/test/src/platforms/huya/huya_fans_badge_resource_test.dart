@@ -95,6 +95,44 @@ const String kIdentityTemplate =
     'https://fileserver.cdn.huya.com/web_admin_badgeDefaultIdentityUrl/'
     'b42f4df0d47540c28e11b1b10b57e870/<ua>_<dark>_<identity>.name';
 
+const String kCustomFloorTemplate =
+    'https://fileserver.cdn.huya.com/web_admin_badgeNewFloorResource/'
+    '5f84f95775344a1aa5c5ff4903f85818/'
+    '<size>_<ua>_<status>_<sfmark>_<level>.webp';
+const String kCustomLevelTemplate =
+    'https://fileserver.cdn.huya.com/web_admin_badgeAppLevelResource/'
+    '6f5084cf61994f2f94c6b7aedef71c05/<ua>_<level>.png';
+
+/// 定制粉丝牌模板包(实测 biz12,房间 518518 探针 2026-09-27):
+/// `{0 iMaxBadgeLevel, 1 tCommonBadge{0,1}, 2 tCustomBadgeComm{0 sLevelUrl,
+/// 1 sSFUrl, 2 sFloorAstrict}}`。
+Uint8List _customFansBadgeSplit() => (TarsWriter()
+      ..writeStruct((r) {
+        r.writeInt(52, 0);
+        r.writeStruct((common) {
+          common.writeString(
+            'https://fileserver.cdn.huya.com/web_admin_badgeNewIdentityResource/'
+            'ab7c89464fce42c3a59cd607e0eeed74/<size>_<ua>_<identity>_<dark>_<level>.name',
+            0,
+          );
+          common.writeString(
+            'https://fileserver.cdn.huya.com/web_admin_badgeNewAppIdentityResource/'
+            '48eba877febe4ca1b0253c7e5c6eda40.zip',
+            1,
+          );
+        }, 1);
+        r.writeStruct((customComm) {
+          customComm.writeString(kCustomLevelTemplate, 0);
+          customComm.writeString(
+            'https://fileserver.cdn.huya.com/web_admin_badgeNewSfResource/'
+            '5550ce1b7e2849938bab38b14e84d870/<size>_<ua>_<sfflag>.png',
+            1,
+          );
+          customComm.writeString(kCustomFloorTemplate, 2);
+        }, 2);
+      }, 0))
+    .takeBytes();
+
 void main() {
   group('getResourceInfo 请求', () {
     test('只发 tUserId{tag3} + sScene@1="web",不编造 lPid 字段号', () {
@@ -181,6 +219,76 @@ void main() {
         ),
         isNull,
       );
+    });
+
+    test('biz12 定制模板与 biz14 通用模板合并产出', () {
+      final tRsp14 = _rsp(
+        bizType: 14,
+        dataType: 14,
+        payload: _commonFansBadgeSplit(
+          floorUrl: kFloorTemplate,
+          identityUrl: kIdentityTemplate,
+        ),
+      );
+      // biz12 在响应里是独立 resource 项;把两项拼进同一个 vResource。
+      final tRsp12 = _rsp(bizType: 12, dataType: 12, payload: _customFansBadgeSplit());
+      // 简化:分别解析,断言合并语义(custom 字段随 common 一起返回)。
+      final common = parseHuyaResourceInfoResponse(tRsp14);
+      final custom = parseHuyaResourceInfoResponse(tRsp12);
+      expect(common, isNotNull);
+      expect(custom, isNotNull);
+      expect(custom!.customFloorTemplate, kCustomFloorTemplate);
+      expect(custom.customLevelUrlTemplate, kCustomLevelTemplate);
+      expect(common!.customFloorTemplate, isEmpty,
+          reason: 'biz14 单独出现时定制模板为空,调用方降级');
+    });
+  });
+
+  group('定制牌 URL 拼装(纯函数)', () {
+    test('NewFloor 底图:status/sfmark/size/ua/level 全替换', () {
+      expect(
+        huyaCustomBadgeFloorUrl(
+          template: kCustomFloorTemplate,
+          level: 25,
+          size: 3,
+          sfMark: 1,
+          status: 2,
+        ),
+        'https://fileserver.cdn.huya.com/web_admin_badgeNewFloorResource/'
+            '5f84f95775344a1aa5c5ff4903f85818/3_3_2_1_25.webp',
+        reason: '官网房间 518518 实测 Floor src,200(image/webp)',
+      );
+      expect(
+        huyaCustomBadgeFloorUrl(
+          template: kCustomFloorTemplate,
+          level: 22,
+          sfMark: 0,
+          status: 1,
+        ),
+        'https://fileserver.cdn.huya.com/web_admin_badgeNewFloorResource/'
+            '5f84f95775344a1aa5c5ff4903f85818/2_3_1_0_22.webp',
+      );
+    });
+
+    test('AppLevel 等级数字图:<ua>_<level>', () {
+      expect(
+        huyaCustomBadgeLevelUrl(template: kCustomLevelTemplate, level: 25),
+        'https://fileserver.cdn.huya.com/web_admin_badgeAppLevelResource/'
+            '6f5084cf61994f2f94c6b7aedef71c05/3_25.png',
+        reason: '官网房间 518518 实测 Lv src,200(image/png)',
+      );
+    });
+
+    test('模板缺 <status>/<level> 或等级非法 → 空串(降级,不自造)', () {
+      expect(
+        huyaCustomBadgeFloorUrl(
+          template: 'https://x.test/<size>_<ua>_<level>.png',
+          level: 10,
+        ),
+        isEmpty,
+      );
+      expect(huyaCustomBadgeFloorUrl(template: kCustomFloorTemplate, level: 0), isEmpty);
+      expect(huyaCustomBadgeLevelUrl(template: '', level: 10), isEmpty);
     });
   });
 

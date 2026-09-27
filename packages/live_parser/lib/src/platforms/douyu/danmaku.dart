@@ -225,6 +225,13 @@ class DouyuDanmakuSession implements DanmakuSession {
     // 口径待定；启用前保持零行为变化。
     final badgeRoomId = int.tryParse(stt['brid']?.toString().trim() ?? '') ?? 0;
     final badgeCheckCode = stt['hc']?.toString().trim() ?? '';
+    // 钻粉成长月数(chatmsg `dfgm`)。官网口径(2026-09-27 房间 96555 实测):
+    // `diaf=1` 且 `dfgm>0` → 粉丝牌右侧叠钻粉 suffix 图 + 月数字,容器加宽
+    // 66→84(computed 实测);`ail`(`@S` 分隔)是特效码列表(medal-attribute),
+    // 先不入库。suffix 图按 `diafid` 查主播装扮表(inter_com_w_anchor_rights
+    // .json),无 diafid 用默认款,解析见 DouyuFansMedalConfig.diamondSuffixUrl。
+    final diamondFanMonths = _sttInt(stt['dfgm']);
+    final badgeDiamondIconId = _sttInt(stt['diafid']);
     final badge = badgeName.isNotEmpty && badgeLevel > 0
         ? DanmakuBadge(
             name: badgeName,
@@ -233,6 +240,8 @@ class DouyuDanmakuSession implements DanmakuSession {
             url: badgeUrl,
             badgeRoomId: badgeRoomId,
             badgeCheckCode: badgeCheckCode,
+            months: diamondFanMonths,
+            diamondIconId: badgeDiamondIconId,
           )
         : null;
     // 官网聊天行的 4 类徽章:LV / 粉丝牌 / 至尊大钻石 / 贵族(+超粉、钻粉两个
@@ -267,7 +276,10 @@ class DouyuDanmakuSession implements DanmakuSession {
         // 超粉/钻粉是**身份标记**而非等级，level 恒 0（UI 只看 kind 分档）。
         if (superFan)
           const DanmakuBadge(name: '超粉', level: 0, kind: 'superfan'),
-        if (diamondFan)
+        // 钻粉:官网聊天行不单独渲染钻粉标记 —— `diaf=1 && dfgm>0` 时钻粉
+        // 已作为粉丝牌的 suffix 层结合在牌后(见 [DanmakuBadge.months])。
+        // 仅在无牌/无月数(无法结合)时保留独立 chip 兜底,避免行为回退。
+        if (diamondFan && diamondFanMonths <= 0)
           const DanmakuBadge(name: '钻粉', level: 0, kind: 'diamondfan'),
       ],
       userLevel: int.tryParse(
