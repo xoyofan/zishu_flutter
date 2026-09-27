@@ -18,16 +18,24 @@
 /// PlayView)各自注册落地,注销随其 dispose。
 ///
 /// 放在应用根部包住路由内容,所有页面共享同一份实现,避免每页各写一遍。
-/// 后退判定直接走 GoRouter 自身的 `canPop()`:栈内有上一页才 pop,栈底静默
-/// 不动作(与浏览器停在历史起点时一致),既不误退也不会抛
-/// `GoError: There is nothing to pop`。
 ///
-/// **前进栈**(go_router 无 forward 概念,由本组件自维护 [_forwardStack]):
-/// - 后退时把当前 location 入栈,前进时取出 `go()` 回去,浏览器同语义;
-/// - 除 back/forward 外的路由变化(点导航 / 进房)视为新会话,清空前进栈;
-/// - 栈空时前进静默不动作。
+/// ## 历史栈(2026-09-27 重写:浏览器式双栈,不再依赖 Navigator 栈)
 ///
-/// **Alt+鼠标点击的独占**:[_NavGate] 在 Alt 按下时阻断子树命中测试,该
+/// 旧实现的病根:后退用 `canPop()+pop()`(Navigator 栈),前进用 `go()`;
+/// 而本仓路由全是**顶层平铺路由**,`go()` 会把 Navigator 栈重建成单页 ——
+/// 于是「后退→前进」两步之后栈被 go 清空,`canPop()` 永远 false,后退彻底
+/// 失效(实测操作两步就无法了)。
+///
+/// 现在由 [AppNavHistory] 完全自管理(浏览器同款双栈):
+/// - `back`/`forward` 双栈存 location,**两个方向都用 `go()`** 导航,
+///   与 Navigator 栈彻底解耦 —— 多层后退/前进、前进后再后退都成立;
+/// - 自家动作(back/forward/home)以外的一切路由变化(点导航 / push 进房 /
+///   pop 返回 / 搜索跳转)都视为「走到新分支」:当前页入 back 栈、清空
+///   forward 栈,浏览器同语义;
+/// - 双栈皆空时静默不动作,永不调 `pop()`,不存在
+///   `GoError: There is nothing to pop`。
+///
+/// **Alt+鼠标点击的独占**:[_NavGate] 在 Alt 按下时阻断子树命中,该
 /// pointer 只到达本层 [Listener] —— 否则 Alt+点房间卡会同时触发「后退」与
 /// 「进房」两个动作(Listener 无法取消子组件已收到的 pointer)。
 ///
@@ -42,6 +50,140 @@ import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../shared/application/global_actions.dart';
+
+/// 应用级浏览器式导航历史(后退/前进双栈)。
+///
+/// 单例([instance])由两方共享:
+/// - [AppNavShortcuts](builder 层)负责挂接路由监听并驱动 Alt 快捷键/鼠标侧键;
+/// - 播放页等 Router 内组件可读 `canBack` 并调用 [back]/[forward],在
+///   Navigator 栈没有上一层(go 重建的单页栈)时也能正确回退。
+///
+/// location 一律存 `state.uri.toString()`(含 query),回跳时 `go()` 原样
+/// 还原;`matchedLocation` 会丢 query,深链参数会静默丢失,不能用。
+class AppNavHistory {
+  AppNavHistory._();
+
+  static final AppNavHistory instance = AppNavHistory._();
+
+  GoRouter? _router;
+
+  /// 后退栈:走过的 location,栈顶是「来路」。
+  final List<String> _back = [];
+
+  /// 前进栈:被后退放弃的 location,栈顶是最近的那个。
+  final List<String> _forward = [];
+
+  /// 最近一次路由变化后的 location(监听器在变化**之后**触发,只能靠
+  /// 自己记住上一站,才能在用户导航时把「来路」压进后退栈)。
+  String? _current;
+
+  /// 本次路由变化由 [back]/[forward]/[home] 发起的标记:路由监听器据此
+  /// 区分「自家动作」与「用户导航」,只有后者才改写双栈。
+  ///
+  /// go_router 的 go 会同步通知 routerDelegate,标志在同一次调用里被
+  /// 消费,不存在悬挂窗口(行为由 back_shortcuts_test 钉住)。
+  bool _selfNavigation = false;
+
+  /// 后退栈非空(Alt+← 可用)。
+  bool get canBack => _back.isNotEmpty;
+
+  /// 前进栈非空(Alt+→ 可用)。
+  bool get canForward => _forward.isNotEmpty;
+
+  /// 挂接路由并开始监听。应用内只有一处调用(AppNavShortcuts);
+  /// 重复 attach 同一 router 幂等,换 router 则先解绑旧的。
+  ///
+  /// 换 router(应用重建/测试换宿主)时必须**重置历史**:栈里存的是旧
+  /// router 的 location,跨 router 沿用会让新会话凭空多出「来路」,第一次
+  /// 后退就跳回旧会话的页面(测试套件里已实测)。
+  void attach(GoRouter router) {
+    if (identical(_router, router)) return;
+    detach();
+    _router = router;
+    _back.clear();
+    _forward.clear();
+    _current = null;
+    _selfNavigation = false;
+    router.routerDelegate.addListener(_onRouteChanged);
+  }
+
+  /// 解除监听(随 AppNavShortcuts dispose;历史栈内容保留,热重建不丢)。
+  void detach() {
+    final router = _router;
+    if (router == null) return;
+    router.routerDelegate.removeListener(_onRouteChanged);
+    _router = null;
+  }
+
+  /// 安全读取当前 location。
+  ///
+  /// go_router 16 的 `GoRouter.state` 实现是 `currentConfiguration.last...`
+  /// —— 路由重建/过渡的短暂窗口里 match 列表为空,直接读会抛
+  /// `Bad state: No element`(实测:错误兜底页点「回到首页」必现)。此时
+  /// 返回 null,调用方把这次通知当 no-op 处理即可。
+  String? get _location {
+    final router = _router;
+    if (router == null) return null;
+    try {
+      return router.state.uri.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _onRouteChanged() {
+    final location = _location;
+    if (location == null) return;
+    final previous = _current;
+    _current = location;
+    if (_selfNavigation) {
+      _selfNavigation = false;
+      return;
+    }
+    // 首次记录(启动)与原地重复通知不构成历史边。
+    if (previous == null || previous == location) return;
+    // 用户自行导航(点导航 / push 进房 / 返回按钮 pop / 搜索跳转):
+    // 当前站成为「来路」入后退栈,前进语义失效 —— 浏览器同款开新分支。
+    _forward.clear();
+    if (_back.isEmpty || _back.last != previous) {
+      _back.add(previous);
+    }
+  }
+
+  /// 后退:回「来路」。双栈皆由本类维护,与 Navigator 栈无关 ——
+  /// go 重建过的单页栈也能多层后退。
+  void back() {
+    if (_back.isEmpty) return;
+    final current = _location;
+    if (current == null) return;
+    final target = _back.removeLast();
+    if (current != target) _forward.add(current);
+    _selfNavigation = true;
+    _router!.go(target);
+  }
+
+  /// 前进:回到最近一次被后退放弃的页面;栈空静默。
+  void forward() {
+    if (_forward.isEmpty) return;
+    final current = _location;
+    if (current == null) return;
+    final target = _forward.removeLast();
+    if (current != target) _back.add(current);
+    _selfNavigation = true;
+    _router!.go(target);
+  }
+
+  /// 首页:`go('/all')`。与浏览器 Alt+Home 同语义 —— **不清前进栈**
+  /// (Alt+Home 后仍可 Alt+→ 回到刚才的房间),同时把当前站压入后退栈,
+  /// 回首页后仍能 Alt+← 原路返回。
+  void home() {
+    final current = _location;
+    if (current == null || current == '/all') return;
+    if (_back.isEmpty || _back.last != current) _back.add(current);
+    _selfNavigation = true;
+    _router!.go('/all');
+  }
+}
 
 class AppNavShortcuts extends StatefulWidget {
   const AppNavShortcuts({super.key, required this.router, required this.child});
@@ -58,60 +200,23 @@ class AppNavShortcuts extends StatefulWidget {
 }
 
 class _AppNavShortcutsState extends State<AppNavShortcuts> {
-  /// 前进栈:后退入栈、前进出栈,浏览器同语义(go_router 本身无 forward)。
-  final List<String> _forwardStack = [];
-
-  /// 本次路由变化由本组件发起(back/forward/首页)的标记:路由监听器据此
-  /// 区分「自家动作」与「用户点了导航」,只有后者才清空前进栈。
-  ///
-  /// go_router 的 pop/go 会同步通知 routerDelegate,故标志在同一次调用里
-  /// 被消费,不存在悬挂窗口(行为由 back_shortcuts_test 钉住)。
-  bool _selfNavigation = false;
-
   @override
   void initState() {
     super.initState();
-    widget.router.routerDelegate.addListener(_onRouteChanged);
+    AppNavHistory.instance.attach(widget.router);
   }
 
   @override
   void dispose() {
-    widget.router.routerDelegate.removeListener(_onRouteChanged);
+    AppNavHistory.instance.detach();
     super.dispose();
   }
 
-  void _onRouteChanged() {
-    if (_selfNavigation) {
-      _selfNavigation = false;
-      return;
-    }
-    // 用户自行导航(点菜单 / 进房 / 切平台):前进语义失效,浏览器同款清空。
-    _forwardStack.clear();
-  }
+  void _back() => AppNavHistory.instance.back();
 
-  /// 后退:栈内有上一页才 pop;当前页同时入前进栈。
-  void _back() {
-    if (!widget.router.canPop()) return;
-    _forwardStack.add(widget.router.state.matchedLocation);
-    _selfNavigation = true;
-    widget.router.pop();
-  }
+  void _forward() => AppNavHistory.instance.forward();
 
-  /// 前进:前进栈非空则 go 回上一个后退点;栈空静默。
-  void _forward() {
-    if (_forwardStack.isEmpty) return;
-    final target = _forwardStack.removeLast();
-    _selfNavigation = true;
-    widget.router.go(target);
-  }
-
-  /// 首页:go 到 `/all`。标记为自家动作 —— 前进栈保留,Alt+Home 后仍可
-  /// `Alt+→` 回到刚才的房间(浏览器 Alt+Home 同样不清历史)。
-  void _home() {
-    if (widget.router.state.matchedLocation == '/all') return;
-    _selfNavigation = true;
-    widget.router.go('/all');
-  }
+  void _home() => AppNavHistory.instance.home();
 
   /// Ctrl+F / Ctrl+K = 全局搜索。实现由 Router 内的壳层经 [GlobalActions]
   /// 注册(builder 层 context 无 Navigator/GoRouterState 可用),防重入随

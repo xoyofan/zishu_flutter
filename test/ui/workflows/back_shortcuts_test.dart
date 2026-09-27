@@ -111,15 +111,19 @@ Future<({GoRouter router, ProviderContainer container})> _pumpApp(
 /// 不用 `routeInformationProvider.value.uri`:命令式 push 之后它报告的是 base
 /// 位置(栈底那条声明式路由),不是真实栈顶 —— 用它断言会得到「推了却还说在
 /// 首页」的假结论。这里直接按渲染出的页面判定,与用户所见一致。
+///
+/// 连续 push 多个播放页时,栈下旧页面的子树仍挂在 Overlay 里(multi-step
+/// 历史测试会触发),`tester.widget` 单数断言会抛 Too many elements ——
+/// 用 widgetList 取 overlay 顺序的最后一个(即栈顶)。
 String _visiblePage(WidgetTester tester) {
-  final play = find.byType(PlayView);
-  if (play.evaluate().isNotEmpty) {
-    final view = tester.widget<PlayView>(play);
+  final plays = tester.widgetList<PlayView>(find.byType(PlayView)).toList();
+  if (plays.isNotEmpty) {
+    final view = plays.last;
     return '/${view.site}/play/${view.roomId}';
   }
-  final home = find.byType(HomeView);
-  if (home.evaluate().isNotEmpty) {
-    final view = tester.widget<HomeView>(home);
+  final homes = tester.widgetList<HomeView>(find.byType(HomeView)).toList();
+  if (homes.isNotEmpty) {
+    final view = homes.last;
     return view.site == 'all' ? '/all' : '/${view.site}';
   }
   return '(unknown)';
@@ -217,23 +221,66 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('栈底无上一页:快捷键静默不动作,不抛 GoError', (tester) async {
+  testWidgets('go 直达播放页:后退回米路(浏览器地址栏语义),不抛 GoError', (tester) async {
     final app = await _pumpApp(tester);
-    // 直达播放页(栈底),此时没有可 pop 的上一页。
+    // 从首页 go 到播放页(等价地址栏输入):后退栈由宿主自维护,
+    // 与 Navigator 栈无关 —— 后退应回到来路 /all。
     app.router.go('/douyu/play/63136');
     await _pumpFrames(tester, 4);
     expect(_visiblePage(tester), '/douyu/play/63136');
 
     await _pressAltLeft(tester);
+    expect(_visiblePage(tester), '/all', reason: 'go 导航也进历史,后退回米路');
+    expect(
+      tester.takeException(),
+      isNull,
+      reason: '历史栈走 go(),不得抛 GoError: There is nothing to pop',
+    );
+  });
+
+  testWidgets('命令行深链直达(真栈底):后退/前进静默,不抛 GoError', (tester) async {
+    StartupRoute.value = '/douyu/play/63136';
+    addTearDown(() => StartupRoute.value = '/all');
+    await _pumpApp(tester);
+    await _pumpFrames(tester, 2);
+    expect(_visiblePage(tester), '/douyu/play/63136');
+
+    // 启动即播放页,无任何历史:后退/前进都静默(浏览器停在历史起点同款)。
+    await _pressAltLeft(tester);
+    expect(_visiblePage(tester), '/douyu/play/63136');
+    await _pressAltRight(tester);
     expect(_visiblePage(tester), '/douyu/play/63136');
     expect(
       tester.takeException(),
       isNull,
-      reason: '栈底按后退应静默,不得抛 GoError: There is nothing to pop',
+      reason: '真栈底(无历史)后退/前进应静默,不得抛 GoError',
     );
+  });
 
-    await _clickBackMouseButton(tester);
-    expect(_visiblePage(tester), '/douyu/play/63136');
+  testWidgets('多层历史:后退两步→前进两步→再后退(旧实现第二步后退即死)', (tester) async {
+    final app = await _pumpApp(tester);
+    // /all → push p1 → push p2:历史深度 3。
+    app.router.go('/all');
+    await _pumpFrames(tester, 3);
+    app.router.push('/douyu/play/111');
+    await _pumpFrames(tester, 4);
+    app.router.push('/huya/play/222');
+    await _pumpFrames(tester, 4);
+    expect(_visiblePage(tester), '/huya/play/222');
+
+    await _pressAltLeft(tester);
+    expect(_visiblePage(tester), '/douyu/play/111', reason: '后退第 1 步到 p1');
+    await _pressAltLeft(tester);
+    expect(_visiblePage(tester), '/all', reason: '后退第 2 步到米路(旧实现此处已死)');
+
+    await _pressAltRight(tester);
+    expect(_visiblePage(tester), '/douyu/play/111', reason: '前进第 1 步回 p1');
+    await _pressAltRight(tester);
+    expect(_visiblePage(tester), '/huya/play/222', reason: '前进第 2 步回 p2');
+
+    // 关键回归:前进过后后退不得残废(旧实现 go 重建栈导致 canPop 永假)。
+    await _pressAltLeft(tester);
+    expect(_visiblePage(tester), '/douyu/play/111', reason: '前进后再后退仍可用');
     expect(tester.takeException(), isNull);
   });
 
