@@ -32,6 +32,7 @@ class PlaybackRetryPolicy {
     this.stepDelay = const Duration(seconds: 4),
     this.maxDelay = const Duration(seconds: 30),
     this.healthWindow = const Duration(seconds: 10),
+    this.deadOpenGrace = const Duration(seconds: 9),
   });
 
   /// 连续失败次数上限:达到即放弃自动重试。
@@ -49,6 +50,12 @@ class PlaybackRetryPolicy {
   /// 判定"这条流真的健康了"所需的持续出帧时长。
   /// 未满该时长就中断的播放**不算**成功,不重置计数(见库注释第 1 条)。
   final Duration healthWindow;
+
+  /// 死开流宽限期:open 后 mpv 已起播但 [Duration] 内仍收不到有效视频参数
+  /// (width>0)即判定"死开流"(连接成功、mpv 静默读数据却永远不出画面,
+  /// 实测 2026-09-27 20:54 douyu 9999 黑屏 2m13s,同节点手动重开 300ms 恢复),
+  /// 同线路重开一次。9s = 3s 首帧观察 + 6s 余量,覆盖慢启动的正常开流。
+  final Duration deadOpenGrace;
 
   /// 已用 [attempts] 次后是否还可继续自动重试。
   bool canRetry(int attempts) => attempts < maxAttempts;

@@ -4,13 +4,16 @@ library;
 /// 决定看门狗到期时应重开旧 URL，还是重新解析新签名地址。
 class PlaybackResiliencePolicy {
   const PlaybackResiliencePolicy({
-    this.sourceOpenFailureThreshold = 2,
+    this.sourceOpenFailureThreshold = 1,
   });
 
   /// 连续出现多少次「打开源失败」后提前请求新地址。
   ///
-  /// 1 次保留给 mpv/playlist 自愈及短时网络抖动；达到 2 次说明当前 URL 组
-  /// 已连续失效，继续重放旧签名只会累积退避。
+  /// 旧值 2 的理由是"给 mpv/playlist 自愈留 1 次",但实测(2026-09-27 18:23
+  /// 虎牙事故)签名 URL 一旦失效,重开必然再次失败:同一 wsSecret 盲重试 4 次
+  /// 白烧 ~39s,而 re-resolve 路径 613ms 出帧。`source_open` 是**终局**诊断
+  /// (URL 已被判死),第 1 次就该升级 re-resolve,退避等待只对"源活着只是
+  /// 抖动"的场景有意义——那种场景根本不会产生 terminal 诊断。
   final int sourceOpenFailureThreshold;
 
   bool shouldRecoverSource({

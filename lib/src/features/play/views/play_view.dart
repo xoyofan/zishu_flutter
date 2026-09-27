@@ -10,7 +10,7 @@ import 'package:live_parser/live_parser.dart' show DanmakuMessage, RoomPayload;
 
 import '../../../platforms/common/playback/idle_releasing_live_player.dart';
 import '../../../platforms/common/playback/live_player.dart'
-    show PlayerSnapshot, PlaybackNotice;
+    show PlayerSnapshot, PlaybackNotice, RecoveryCancellable;
 import '../../../platforms/common/playback/playback_log.dart';
 import '../../../platforms/common/playback/playback_retry.dart'
     show retryProgressLabel;
@@ -490,6 +490,16 @@ class _PlayViewState extends ConsumerState<PlayView> {
               showDanmaku: showDanmaku,
               onRetry: () =>
                   ref.read(playControllerProvider(_params).notifier).retry(),
+              // 卡顿浮层 X:让播放器停掉重试/恢复闩锁,不换线路。
+              // 能力探测:测试替身等不支持取消的实现静默跳过。
+              // if-case 绑定而非 `is` 提升:RecoveryCancellable 与 LivePlayer
+              // 是无关接口,Dart 不做跨层级类型提升。
+              onCancelRecovery: () {
+                final player = ref.read(playerProvider);
+                if (player case RecoveryCancellable cancellable) {
+                  cancellable.cancelRecovery();
+                }
+              },
               // 沉浸态下舞台点击走「控制条/抽屉」分流,不切播放
               // (web onPlayFrameClick 沉浸分支);常规态保持切播放。
               onFrameTapUp: screen.hidesChrome ? _onImmersiveFrameTapUp : null,
@@ -1050,6 +1060,7 @@ class _VideoStage extends ConsumerStatefulWidget {
     required this.async,
     required this.showDanmaku,
     required this.onRetry,
+    required this.onCancelRecovery,
     this.onFrameTapUp,
   });
 
@@ -1059,6 +1070,9 @@ class _VideoStage extends ConsumerStatefulWidget {
   final bool showDanmaku;
 
   final VoidCallback onRetry;
+
+  /// 卡顿浮层上的 X:取消自动重连(停止重试/恢复,**不轮转线路**)。
+  final VoidCallback onCancelRecovery;
 
   /// 沉浸态舞台点击分流回调(传 `localPosition`,见播放页
   /// `_onImmersiveFrameTapUp`);为空时保持「点击切播放/暂停」。
@@ -1170,6 +1184,8 @@ class _VideoStageState extends ConsumerState<_VideoStage> {
                         snapshot.retryLimit,
                       )
                     : '',
+                // 卡顿浮层 X:取消自动重连(停止重试/恢复,不轮转线路)。
+                onCancel: widget.onCancelRecovery,
               ),
             ),
           if (snapshot.error != null && snapshot.notice == PlaybackNotice.none)
@@ -1305,11 +1321,20 @@ class _StagePlaceholder extends StatelessWidget {
 }
 
 /// 缓冲/恢复中的脱敏原因浮层。只展示稳定状态映射，不暴露 URL、token 或 mpv 日志。
+/// [onCancel] 非空时右上角显示 X:取消自动重连(停止重试/恢复,不轮转线路);
+/// 浮层本体不吸收点击(点击穿透到舞台),只有 X 按钮消费点击。
 class _PlaybackNoticeOverlay extends StatelessWidget {
-  const _PlaybackNoticeOverlay({required this.notice, this.progress = ''});
+  const _PlaybackNoticeOverlay({
+    required this.notice,
+    this.progress = '',
+    this.onCancel,
+  });
 
   final PlaybackNotice notice;
   final String progress;
+
+  /// 取消自动重连回调;null 表示不显示 X。
+  final VoidCallback? onCancel;
 
   String get _message => switch (notice) {
     PlaybackNotice.networkJitter => '网络波动，缓冲中…',
@@ -1321,46 +1346,62 @@ class _PlaybackNoticeOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: Semantics(
-        liveRegion: true,
-        child: Container(
+    return Semantics(
+      liveRegion: true,
+      child: Stack(
         key: const Key('playback-notice-overlay'),
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.lg,
-          vertical: AppSpacing.md,
-        ),
-        decoration: BoxDecoration(
-          color: context.tokens.surfaceRaised.withValues(alpha: 0.90),
-          borderRadius: AppRadius.allMd,
-          border: Border.all(color: context.tokens.border),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(strokeWidth: 2),
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg,
+              vertical: AppSpacing.md,
             ),
-            const SizedBox(height: AppSpacing.sm),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 360),
-              child: Text(
-                _message,
-                textAlign: TextAlign.center,
-                style: context.textSecondary.copyWith(
-                  color: context.tokens.textPrimary,
+            decoration: BoxDecoration(
+              color: context.tokens.surfaceRaised.withValues(alpha: 0.90),
+              borderRadius: AppRadius.allMd,
+              border: Border.all(color: context.tokens.border),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(
+                  width: 22,
+                  height: 22,
+                  child: CircularProgressIndicator(strokeWidth: 2),
                 ),
+                const SizedBox(height: AppSpacing.sm),
+                ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 360),
+                  child: Text(
+                    _message,
+                    textAlign: TextAlign.center,
+                    style: context.textSecondary.copyWith(
+                      color: context.tokens.textPrimary,
+                    ),
+                  ),
+                ),
+                if (progress.isNotEmpty) ...[
+                  const SizedBox(height: AppSpacing.xs),
+                  Text(progress, style: context.textCaption),
+                ],
+              ],
+            ),
+          ),
+          if (onCancel != null)
+            Positioned(
+              top: 0,
+              right: 0,
+              child: IconButton(
+                key: const Key('playback-notice-cancel'),
+                tooltip: '取消重连',
+                icon: const Icon(Icons.close_rounded, size: 18),
+                color: context.tokens.textSecondary,
+                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                padding: EdgeInsets.zero,
+                onPressed: onCancel,
               ),
             ),
-            if (progress.isNotEmpty) ...[
-              const SizedBox(height: AppSpacing.xs),
-              Text(progress, style: context.textCaption),
-            ],
-          ],
-        ),
-        ),
+        ],
       ),
     );
   }

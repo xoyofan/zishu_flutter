@@ -48,15 +48,16 @@ bool needsVideoKick({
 }) {
   if (alreadyKicked) return false;
   if (!playing || buffering) return false;
-  return width == null ||
-      width <= 0 ||
-      height == null ||
-      height <= 0;
+  return width == null || width <= 0 || height == null || height <= 0;
 }
 
 class MediaKitLivePlayer
     with WidgetsBindingObserver
-    implements LivePlayer, LineRecoveryAware, VideoHardwareAccelerationAware {
+    implements
+        LivePlayer,
+        LineRecoveryAware,
+        VideoHardwareAccelerationAware,
+        RecoveryCancellable {
   /// [player] 是单测注入点:VM 测试无法加载原生 libmpv(`Player()` 会构造
   /// `NativePlayer` 并 `DynamicLibrary.open`),只能注入 `Player(platformPlayer:)`
   /// 的假后端来驱动事件与命令。生产调用点一律不传,行为与原先完全一致。
@@ -70,7 +71,18 @@ class MediaKitLivePlayer
     PlaybackRecoveryPolicy recoveryPolicy = const PlaybackRecoveryPolicy(),
     PlaybackResiliencePolicy resiliencePolicy =
         const PlaybackResiliencePolicy(),
-  }) : _player = player ?? Player(),
+    this.stabilityInterval = const Duration(seconds: 5),
+  }) : _player =
+           player ??
+           // logLevel 默认为 error:media_kit 只向 mpv 请求 error 级日志,
+           // **warn 级(传输层 reconnect / hls 分段 404 / Connection reset 等
+           // 自愈消息所在级别)根本不会发出**。提到 warn 让 stream.log 能
+           // 观测到传输层自愈行为(见 [_wire] 的 mpv_log 落盘)。
+           Player(
+             configuration: const PlayerConfiguration(
+               logLevel: MPVLogLevel.warn,
+             ),
+           ),
        _adFilter = adFilter ?? TwitchAdFilter() {
     _policy = policy;
     _recoveryPolicy = recoveryPolicy;
@@ -85,6 +97,9 @@ class MediaKitLivePlayer
 
   final Player _player;
   bool videoHardwareAccelerationEnabled;
+
+  /// 视频稳定性/噪音汇总的采样周期(生产 5s;测试注入更短值以便驱动 tick)。
+  final Duration stabilityInterval;
 
   /// Twitch HLS 广告过滤代理:ttvnw.net 的线路经它改写为本地过滤地址,
   /// 非 Twitch 线路原样透传(见 [TwitchAdFilter.wrapLine])。
@@ -164,6 +179,15 @@ class MediaKitLivePlayer
   /// 缓冲看门狗:缓冲态持续超过退避时长即视为断流,自动重开。
   Timer? _stallTimer;
 
+  /// 外部自暂停恢复计时器:mpv 因流 stall / paused-for-cache 自行 pause
+  /// (`playing=false` 且 `source=external`)时挂起,到期仍 paused 则整组轮转重连。
+  ///
+  /// 与 [_stallTimer] **独立**:旧死锁根因是 buffering 看门狗被紧接着的
+  /// `buffering=false` 取消(`stall_end ms=0`),而 `playing=false` 事件又无恢复
+  /// 路径 → 永久卡 paused。此计时器不被 buffering 翻面取消,专门兜住"外部自暂停"
+  /// 这一类;playing 一旦恢复([_onPlaying])即撤销。
+  Timer? _externalPauseTimer;
+
   /// 卡顿时长记账:begin/end 配对输出每次 buffering 持续毫秒,落盘为
   /// `stall_begin` / `stall_end`。open/切源/离房/释放时重置,避免跨会话计时。
   final BufferingStallTracker _stallTracker = BufferingStallTracker();
@@ -215,11 +239,16 @@ class MediaKitLivePlayer
   /// 有界重连策略(上限 / 退避 / 健康窗口的唯一来源)。
   late final PlaybackRetryPolicy _policy;
 
-  /// 源级失败策略：连续两次确认源打不开后提前重新解析，不重放旧签名六次。
+  /// 源级失败策略：首次确认源打不开即提前重新解析，不重放旧签名六次。
   late final PlaybackResiliencePolicy _resiliencePolicy;
 
   /// 当前会话连续确认的 source_open 终局错误数。
   int _sourceOpenFailures = 0;
+
+  /// 恢复(re-resolve)在途闩锁:终局诊断可能连续多条,mpv 对同一死源会反复
+  /// 吐诊断,而 [_recoverOrGiveUp] 内部 await 期间失败计数仍在涨,不加闩锁
+  /// 会并发发起多次 re-resolve/reopen。
+  bool _recoverInFlight = false;
 
   /// 同一 URL 组的 host 健康状态。playlist 重开时优先使用未熔断 host；
   /// 即使全部熔断也保留候选，避免无线路可开。
@@ -232,12 +261,16 @@ class MediaKitLivePlayer
   ///
   /// 缓冲上限的语义与取值依据(mpv 手册,DOCS/man/options.rst),恢复自
   /// 2026-09-19 的稳定配置(b6be087):
-  /// - `cache=yes` + `cache-secs=60`:网络流启用有界前向缓存,避免 HLS 短时
-  ///   抖动直接把画面抽干;60s 是上限而非起播等待时间。
+  /// - `cache=yes` + `cache-secs=20`:网络流启用有界前向缓存,避免 HLS 短时
+  ///   抖动直接把画面抽干;20s 是上限而非起播等待时间。曾是 60s,但实测
+  ///   CDN 假时间线(21214s)下缓存层朝 60s 目标无意义预读,是内存爬升
+  ///   (+200MB/10min)的主要推手,压到 20s 仍留足 2 倍 readahead 余量。
   /// - `video-sync=audio`:直播以音频为同步基准,避免视频按显示时钟追帧造成
   ///   周期性小回退。
-  /// - `demuxer-max-bytes=33554432`(32 MiB) / `demuxer-max-back-bytes=4194304`
+  /// - `demuxer-max-bytes=67108864`(64 MiB) / `demuxer-max-back-bytes=4194304`
   ///   (4 MiB):前向与回看均有字节上限,不恢复后续被删除的主机深缓冲分档。
+  ///   前向 64MiB 配合 `demuxer-readahead-secs=10`:预读秒数才是实际封顶项
+  ///   (实测 2s 预读时 demuxer_cache_duration 恒≈2.3s,字节上限够不着),
   static const List<(String, String)> kLiveTuningProperties = [
     ('force-seekable', 'yes'),
     (
@@ -256,10 +289,29 @@ class MediaKitLivePlayer
     ('video-sync', 'audio'),
     ('volume-max', '100'),
     ('cache', 'yes'),
-    ('demuxer-max-bytes', '33554432'),
+    // 2026-09-27 缓存抽干加厚:实测日志 demuxer_cache_duration≈2.3s —— 前向
+    // 缓冲被 readahead-secs=2 封顶,32MiB/60s 上限形同虚设,任何 >2s 的网络
+    // 抖动即抽干缓存触发卡顿重连。提至 10s 预读(1080p@6Mbps≈7.5MiB)并在
+    // 64MiB 字节预算内留足余量;直播播放位置贴实时边沿,加大预读不增加延迟。
+    ('demuxer-max-bytes', '67108864'),
     ('demuxer-max-back-bytes', '4194304'),
-    ('demuxer-readahead-secs', '2'),
-    ('cache-secs', '60'),
+    ('demuxer-readahead-secs', '10'),
+    // 2026-09-27 二次收敛:60s → 20s。cache-secs 是流缓存层的预读目标,
+    // 直播假时间线下该层朝目标无界预读(实测 +200MB/10min),重放型坏流
+    // 的重复数据也滞留在窗口里。20s 覆盖 readahead(10s)的 2 倍抖动余量。
+    ('cache-secs', '20'),
+    // mpv 默认 cache-pause=yes:demuxer 缓存抽干(demuxer_cache_duration→0)时
+    // **自动置 pause=yes**——这是"播放无故自暂停"的 origin(2026-09-27 实测
+    // playback.log 16:33:14:playing=false source=external,无 play_cmd,缓存
+    // 恰好归零)。直播下该行为有害:缓存一旦断供(源卡死/边沿推进),pause
+    // 可能永远不恢复。关掉后 mpv 不再自暂停,断流走 buffering 事件 + 看门狗
+    // 重连的外部自暂停恢复计时器兜底,卡死收敛为可观测的重连。
+    ('cache-pause', 'no'),
+    // 2026-09-27 晚间对齐 pure_live:**刻意不设 stream-lavf-o reconnect**。
+    // 传输层透明重连会对卡死连接原地无限重试——日志里 "Will reconnect at
+    // <offset>" 的偏移不前进、重发旧数据把 FLV 时间戳打回跳,即用户看到的
+    // "重复播放"循环。pure_live 不开这层:坏流让 ffmpeg 立即报错上抛,由
+    // 上层**有界**看门狗(退避 + 上限 + 健康窗)收敛,坏连接绝不赖在原地。
   ];
 
   /// 恢复重解析的节流策略:避免"重试→恢复→重试"高速空转。
@@ -275,7 +327,38 @@ class MediaKitLivePlayer
   /// 上一次已落日志的 mpv 原始诊断:mpv 对同一故障会反复吐同一条日志行,
   /// 不去重会把文件日志灌满同一条噪音。换房/主动开流时重置。
   String? _lastLoggedDiag;
+
+  /// mpv warn 日志的按型抑制表(归一化 key → 已抑制条数)与各型首条原文:
+  /// media_kit 的 stream.log 自带严格相等 distinct,但 CDN 抖动行内嵌变化的
+  /// byte offset("Will reconnect at 701644...")永不相等,逐字去重拦不住。
+  /// 这里把数字归一为 `#` 后按型比对:每种型只落第一条原文,其余计数抑制,
+  /// 换型/5s 稳定性采样/open 重置时补 `mpv_log_suppressed` 汇总。
+  ///
+  /// 2026-09-27 19:41 实测教训:不能用"单一 last key"——cplayer 的
+  /// Invalid video timestamp 与 ad 的 Invalid audio PTS **交替刷屏**,单键
+  /// 每次换型都把上一型当"已汇总"、把新型当"首条原文",A/B 轮替下全部
+  /// 落盘。必须每型独立计数槽。
+  final Map<String, int> _warnCounts = {};
+
+  /// 各抑制型的首条原文(prefix, text),供汇总落盘还原现场。
+  final Map<String, (String, String)> _warnShapes = {};
+
+  /// 抑制表容量上限:归一化后的型数量理论有界(故障文案就那几类),
+  /// 但仍封顶防御异常源吐海量不同型行撑爆内存。超限后新型静默丢弃。
+  static const int _warnShapeCap = 128;
   VideoParams? _lastVideoParams;
+
+  /// 本代源是否已收到有效视频参数(width>0)。open 时随 [_lastVideoParams] 复位。
+  bool _videoParamsSeen = false;
+
+  /// 死开流看门狗:open 后 mpv 起播但 [PlaybackRetryPolicy.deadOpenGrace] 内
+  /// 无有效视频参数 → 同线路重开(黑屏 2 分钟无人管的根因修复)。
+  Timer? _deadOpenTimer;
+
+  /// 死开流重开计数(独立于 [_stallRetries]:症状不同——卡顿是"播着断了",
+  /// 死开流是"连上却永远不出画面")。有效参数一到即清零。
+  int _deadOpenRetries = 0;
+
   Timer? _videoStabilityTimer;
   int? _firstFrameWatchGeneration;
 
@@ -289,6 +372,124 @@ class MediaKitLivePlayer
   /// 超长诊断截断,防止单条 mpv 日志把文件撑爆。
   static String _clamp(String text) =>
       text.length > 160 ? '${text.substring(0, 160)}…' : text;
+
+  /// warn 日志噪音归一:数字序列替换为 `#` 后转小写。
+  ///
+  /// 传输层重连行内嵌持续变化的 byte offset/秒数("Will reconnect at
+  /// 701644 in 0 second(s)"),逐字比对永不相等;归一后同型行折叠为一条。
+  /// 首条原文仍全量落盘,归一只影响抑制判定,不丢信息。
+  static String _normalizeLogText(String text) =>
+      text.toLowerCase().replaceAll(RegExp(r'\d+'), '#');
+
+  /// 落盘所有已抑制型别的汇总(新型出现 / open 重置 / 5s 稳定性采样时调用)。
+  ///
+  /// 每型独立计数:某型 5s 窗口内达到 [_transportFlapThreshold](≥50 条,即
+  /// 传输层重连风暴)时追加一条 `transport_flap`:CDN 节点对本机连接持续
+  /// reset、mpv ffmpeg 层 0 间隔重连的成功-被断循环(实测 2026-09-27 19:16
+  /// hwa.douyucdn2.cn)。流本身仍在自愈供数,故只落观测事件不触发重开;
+  /// 排查时按该事件名一击定位,不必翻几百行噪音。
+  ///
+  /// 时间戳混沌型(invalid video/audio timestamp、playback reset)合计达到
+  /// [_decodeFlapThreshold] 时追加 `decode_flap`:CDN 数据涓流把 FLV 时间戳
+  /// 打乱、mpv 反复 "Reset playback due to audio timestamp reset"(实测
+  /// 2026-09-27 19:55-19:56 同节点 38s 内重置 5 次,肉眼即连续卡顿)。
+  /// 流 technically 在播、看门狗不触发,此前对这种劣化完全失明——先落观测
+  /// 事件量化,是否升级为自动换线待数据说话。
+  ///
+  /// 汇总只清计数、不清型表:型一旦见过,后续同型行永远只计数不再落原文,
+  /// 否则 A/B 轮替噪音会借"换型"反复重打原文(单键版的实际翻车点)。
+  void _flushWarnSuppression() {
+    _settleDecodeChaosWindow();
+    if (_warnCounts.isEmpty) return;
+    for (final key in _warnCounts.keys.toList(growable: false)) {
+      final count = _warnCounts[key]!;
+      if (count == 0) continue;
+      _warnCounts[key] = 0;
+      final shape = _warnShapes[key];
+      if (shape == null) continue;
+      PlaybackLog.write('mpv_log_suppressed', {
+        'prefix': shape.$1,
+        'text': _clamp(shape.$2),
+        'count': count,
+      });
+      if (count >= _transportFlapThreshold) {
+        PlaybackLog.write('transport_flap', {
+          'host': _currentHost,
+          'count': count,
+          'text': _clamp(shape.$2),
+        });
+      }
+    }
+  }
+
+  /// 时间戳混沌累计计数器(逐行累加,达阈值结算后清零开新窗):
+  /// 不搭车在 flush 的 per-型计数里算——那些计数每次 flush 都清零,新型出现
+  /// 会把窗口切碎,cplayer/ad/reset 三型轮替下每段只剩零头,阈值永远凑不齐。
+  /// 这里跨 flush 累计;flush 至少每 5s 一次(tick 兜底),检测延迟 ≤5s。
+  int _decodeChaosCount = 0;
+
+  /// 时间戳混沌型判定(归一化 key,已小写):PTS 回跳/重置类 warn。
+  static bool _isDecodeChaosKey(String key) =>
+      key.contains('invalid video timestamp') ||
+      key.contains('invalid audio pts') ||
+      key.contains('timestamp reset');
+
+  /// 5s 汇总窗口内同型 warn 条数达到该值即视为传输层重连风暴。
+  static const int _transportFlapThreshold = 50;
+
+  /// 时间戳混沌行累计达到该值即视为解码级劣化。
+  ///
+  /// 实测校准(2026-09-27 19:55 用户可感知卡顿档):cplayer+ad 合计约 5 条/5s,
+  /// 一次 playback reset 独立计入。取 12(约 2.5 倍)只标记"明显更糟"的风暴,
+  /// 避免常规抖动刷事件。
+  static const int _decodeFlapThreshold = 12;
+
+  /// 上一次播放时钟采样(time-pos):直播播放位置应单调推进,回跳即
+  /// "重复播放"的直接信号(mpv Reset playback / 上游重发旧数据)。
+  double? _lastStabilityTimePos;
+
+  /// 采样间 time-pos 回跳超过该秒数即视为内容重放(纯**观测**阈值)。
+  ///
+  /// 正常直播在 [stabilityInterval](5s)窗口内 time-pos 推进约 5s;播放
+  /// 时钟由解码 PTS 驱动,>2s 的回跳不可能来自网络抖动,只有时间戳重置
+  /// 后上游重发旧数据(重放)才会造成。
+  static const double _timePosRegressionThreshold = 2.0;
+
+  /// 结算混沌窗口:累计达阈值落 `decode_flap` **观测事件**并清零开新窗。
+  ///
+  /// 2026-09-27 晚间对齐 pure_live:自动重试类操作全部下线,解码混沌只
+  /// 观测不重开——坏流收敛交给 mpv 主动报错 + 有界看门狗(退避 + 上限 +
+  /// 健康窗);该事件仅用于事后归因("这段时间画面为什么烂")。
+  void _settleDecodeChaosWindow() {
+    final count = _decodeChaosCount;
+    if (count < _decodeFlapThreshold) return;
+    _decodeChaosCount = 0;
+    PlaybackLog.write('decode_flap', {'host': _currentHost, 'count': count});
+  }
+
+  /// 死开流看门狗到期:mpv 自称在播却始终没有有效视频参数(黑屏),
+  /// 同线路重开;重试预算耗尽则升级 re-resolve。gen 归属校验防旧代计时器
+  /// 打新代;用户主动暂停(playing=false)归 stall/外部暂停看门狗管辖,不抢。
+  void _onDeadOpenTimeout(int gen) {
+    _deadOpenTimer = null;
+    if (_disposed || gen != _sourceGeneration || _givenUp) return;
+    final p = _lastVideoParams;
+    if ((p?.dw ?? p?.w ?? _player.state.width ?? 0) > 0) return;
+    if (!_player.state.playing) return;
+    if (!_policy.canRetry(_deadOpenRetries)) {
+      PlaybackLog.write('dead_open_recover', {'retries': _deadOpenRetries});
+      unawaited(_recoverOrGiveUp());
+      return;
+    }
+    _deadOpenRetries++;
+    PlaybackLog.write('dead_open_reopen', {
+      'attempt': _deadOpenRetries,
+      'gen': gen,
+      'host': _hostOf(_currentLines.first),
+    });
+    _emit((s) => s.copyWith(notice: PlaybackNotice.reconnecting));
+    unawaited(open(_currentLines.first, _currentLines.skip(1).toList(), false));
+  }
 
   @override
   void setLineRecovery(LineRecoveryHandler? handler) => _lineRecovery = handler;
@@ -328,9 +529,43 @@ class MediaKitLivePlayer
   void _wire() {
     final events = _player.stream;
     _subscriptions.add(
-      _player.stream.videoParams.map<void>((value) {
-        if (!_eventsFenced) _logVideoParams(value);
-      }).listen((_) {}),
+      _player.stream.videoParams
+          .map<void>((value) {
+            if (!_eventsFenced) _logVideoParams(value);
+          })
+          .listen((_) {}),
+    );
+    // mpv warn 级日志落盘(2026-09-27):PlayerConfiguration.logLevel 提到 warn
+    // 后,stream.log 会送来传输层自愈的第一手证据——stream-lavf-o 的
+    // "Connection reset by peer, retrying..."、HLS 分段 404、demuxer 异常等。
+    // error 级仍走 events.error → mpv_diag(含分类),这里只落 warn,避免重复。
+    // 连续重复去重(同 prefix+text),防同一瞬断反复重连把日志刷成噪音。
+    _subscriptions.add(
+      _player.stream.log.listen((entry) {
+        if (entry.level != 'warn') return;
+        final key = '${entry.prefix}|${_normalizeLogText(entry.text)}';
+        // 混沌窗口逐行累加(含各型首条),只在 5s tick 结算——不搭车
+        // _flushWarnSuppression,否则新型 flush 会把窗口切碎。
+        if (_isDecodeChaosKey(key)) _decodeChaosCount++;
+        final known = _warnCounts[key];
+        if (known != null) {
+          // 已见过的型(仅数字不同的重连行等):计数抑制,不落盘。
+          _warnCounts[key] = known + 1;
+          return;
+        }
+        if (_warnCounts.length >= _warnShapeCap) {
+          // 防御:异常源吐海量不同型行时静默丢弃,不落盘也不撑表。
+          return;
+        }
+        // 新型:先汇总既有各型的抑制量,再落本型首条原文。
+        _flushWarnSuppression();
+        _warnCounts[key] = 0;
+        _warnShapes[key] = (entry.prefix, entry.text);
+        PlaybackLog.write('mpv_log', {
+          'prefix': entry.prefix,
+          'text': _clamp(entry.text),
+        });
+      }),
     );
     void bind<T>(
       Stream<T> source,
@@ -358,6 +593,10 @@ class MediaKitLivePlayer
         _playReason = null;
       } else {
         _pauseReason = null;
+        // 外部自暂停(mpv 因流 stall / paused-for-cache 自行 pause,非 UI / 视频
+        // kick 触发):旧实现无恢复路径 → 死锁卡在 paused。挂独立恢复计时器
+        // (不被 buffering 翻面取消),到期仍 paused 则整组轮转重连。
+        if (reason == null) _scheduleExternalPauseRecovery();
       }
       final appState = _appLifecycleName();
       final fields = <String, Object?>{
@@ -420,6 +659,25 @@ class MediaKitLivePlayer
           'count': _sourceOpenFailures,
           'host': failedHost,
         });
+        if (_resiliencePolicy.shouldRecoverSource(
+          consecutiveSourceOpenFailures: _sourceOpenFailures,
+        )) {
+          // 首次终局 source_open 失败即升级 re-resolve,不再等下一轮退避重开:
+          // 签名 URL 失效后重开必然再失败,盲重试只烧退避预算(2026-09-27
+          // 18:23 虎牙事故:同一 wsSecret 重试 4 次白烧 39s,recover 613ms 出帧)。
+          // 节流仍由 [_recoveryPolicy.minInterval] 把关,不会高频空转。
+          _stallTimer?.cancel();
+          _stallTimer = null;
+          _externalPauseTimer?.cancel();
+          _externalPauseTimer = null;
+          PlaybackLog.write('recover_early', {
+            'reason': 'source_open',
+            'failures': _sourceOpenFailures,
+            'host': failedHost,
+            'trigger': 'immediate',
+          });
+          unawaited(_recoverOrGiveUp());
+        }
       }
       _onTerminalError(classification);
       return s.copyWith(
@@ -464,12 +722,47 @@ class MediaKitLivePlayer
     }
   }
 
+  /// 外部自暂停(`playing=false` 且 `source=external`)的恢复计时器。
+  ///
+  /// mpv 因流 stall / paused-for-cache 自行 pause 时,Dart 层没有对应的
+  /// `play()` 指令,而缓冲看门狗又被紧接着的 `buffering=false` 取消
+  /// (`stall_end ms=0`)→ 永久卡在 paused(见 playback.log 16:33:14 死锁)。
+  /// 这里挂一个**独立**计时器(不被 buffering 翻面取消),到期读底层 state:
+  /// 已自行恢复则只补快照,仍 paused 则走 [_reopenIfStalled] 整组轮转重连。
+  /// 退避沿用 [_policy] 同一档(首连 8s),与卡顿看门狗口径一致。
+  void _scheduleExternalPauseRecovery() {
+    if (_disposedOrEmpty || _givenUp) return;
+    _externalPauseTimer?.cancel();
+    final backoff = _policy.backoffFor(_stallRetries);
+    _externalPauseTimer = Timer(backoff, () {
+      _externalPauseTimer = null;
+      if (_disposedOrEmpty || _givenUp) return;
+      final state = _player.state;
+      if (state.playing) {
+        _resyncAfterOpen();
+        return;
+      }
+      PlaybackLog.write('external_pause_recover', {
+        'host': _currentHost,
+        'retries': _stallRetries,
+      });
+      _reopenIfStalled();
+    });
+    PlaybackLog.write('external_pause_watchdog', {
+      'armed': true,
+      'backoffMs': backoff.inMilliseconds,
+      'retries': _stallRetries,
+    });
+  }
+
   /// 出帧开始播放:撤看门狗、清残留错误文案(自动切到下一条线路后 mpv 未必
   /// 主动清空 error 属性),并启动健康观察窗 —— 只有持续播满观察窗才把连续
   /// 失败计数归零,避免"短暂出帧即视为康复"导致重试上限形同虚设。
   void _onPlaying() {
     _stallTimer?.cancel();
     _stallTimer = null;
+    _externalPauseTimer?.cancel();
+    _externalPauseTimer = null;
     _startVideoStabilitySampling();
     _emit((s) => s.copyWith(error: null, notice: PlaybackNotice.none));
     final retries = _stallRetries;
@@ -495,6 +788,16 @@ class MediaKitLivePlayer
   }
 
   void _logVideoParams(VideoParams value) {
+    final valid = (value.dw ?? value.w ?? 0) > 0;
+    if (valid && !_videoParamsSeen) {
+      _videoParamsSeen = true;
+      _deadOpenTimer?.cancel();
+      _deadOpenTimer = null;
+      if (_deadOpenRetries > 0) {
+        _deadOpenRetries = 0;
+        PlaybackLog.write('dead_open_resolved', {'host': _currentHost});
+      }
+    }
     if (_lastVideoParams == value) return;
     _lastVideoParams = value;
     PlaybackLog.write('video_params', {
@@ -506,21 +809,63 @@ class MediaKitLivePlayer
   }
 
   void _startVideoStabilitySampling() {
-    final platform = _player.platform;
-    if (platform is! NativePlayer) return;
     _videoStabilityTimer?.cancel();
     final generation = _sourceGeneration;
-    unawaited(_logVideoStability(platform, generation));
-    _videoStabilityTimer = Timer.periodic(
-      const Duration(seconds: 5),
-      (_) => unawaited(_logVideoStability(platform, generation)),
-    );
+    final platform = _player.platform;
+    final native = platform is NativePlayer ? platform : null;
+    // 计时器无条件启动:除稳定性快照外,它还承担 warn 噪音汇总与解码混沌
+    // 的观测结算(测试 fake 不是 NativePlayer,但观测路径必须可被驱动)。
+    if (native != null) unawaited(_logVideoStability(native, generation));
+    _videoStabilityTimer = Timer.periodic(stabilityInterval, (_) {
+      // 每 5s 先落被抑制的 warn 噪音汇总:持续刷屏型故障(传输层重连风暴)
+      // 的汇总行不必等"换型"才出现,汇总窗口封顶 5s。
+      _flushWarnSuppression();
+      if (native != null) unawaited(_logVideoStability(native, generation));
+      // 播放时钟采样对任意平台执行:回跳观测(fake 平台也要能驱动测试)
+      // 依赖它;不支持的实现 getProperty 抛错即静默跳过。
+      unawaited(_samplePlaybackClock(generation));
+      // 解码混沌观测窗口结算(纯观测,不触发任何自动重开)。
+      _settleDecodeChaosWindow();
+    });
   }
 
-  Future<void> _logVideoStability(
-    NativePlayer platform,
-    int generation,
-  ) async {
+  /// 播放时钟采样:直播位置应单调推进,回跳即"重复播放"直接信号。
+  ///
+  /// PlatformPlayer 未声明 getProperty(NativePlayer 独有),走动态分发:
+  /// 生产为 NativePlayer 正常取值,测试 fake 有自己的实现;两者都不支持
+  /// 时抛错被吞,采样静默降级为 no-op,不影响其余看门狗。
+  Future<void> _samplePlaybackClock(int generation) async {
+    if (_disposed || generation != _sourceGeneration) return;
+    double? timePos;
+    try {
+      final raw = await (_player.platform as dynamic).getProperty('time-pos');
+      timePos = double.tryParse('$raw');
+    } catch (_) {
+      return;
+    }
+    _onPlaybackClockSample(timePos);
+  }
+
+  /// 消费一次时钟采样:维护基线并判定回跳。基线无条件更新(暂停时
+  /// time-pos 冻结也不影响下次恢复后的差值判定——恢复推进只会更大)。
+  ///
+  /// 回跳 = 内容在重复播放(上游重发旧数据)。2026-09-27 晚间对齐 pure_live:
+  /// 只落 `time_pos_regression` **观测事件**,不做自动重开——重开属于重试类
+  /// 自动操作;坏流收敛交给 mpv 主动报错 + 有界看门狗。
+  void _onPlaybackClockSample(double? timePos) {
+    if (timePos == null) return;
+    final last = _lastStabilityTimePos;
+    _lastStabilityTimePos = timePos;
+    if (last == null) return;
+    if (timePos >= last - _timePosRegressionThreshold) return;
+    PlaybackLog.write('time_pos_regression', {
+      'host': _currentHost,
+      'from': last,
+      'to': timePos,
+    });
+  }
+
+  Future<void> _logVideoStability(NativePlayer platform, int generation) async {
     if (_disposed || generation != _sourceGeneration) return;
     try {
       final values = await Future.wait([
@@ -760,6 +1105,8 @@ class MediaKitLivePlayer
   void _reopenIfStalled() {
     if (_disposedOrEmpty || _givenUp) return;
     _stallTimer = null;
+    _externalPauseTimer?.cancel();
+    _externalPauseTimer = null;
     // buffering 事件可能在 open 围栏内丢失；计时到期必须复核底层状态，
     // 已恢复播放时只补发快照，不能机械重开视频管线。
     final state = _player.state;
@@ -821,6 +1168,25 @@ class MediaKitLivePlayer
   /// (宿主不支持 / 解析失败 / 尚在节流窗口内)→ 发出终局错误卡片交出控制权。
   /// 恢复失败仍要走终止路径:既不返回新地址又不报错会把用户悬在"缓冲中"。
   Future<void> _recoverOrGiveUp() async {
+    if (_recoverInFlight) return;
+    _recoverInFlight = true;
+    try {
+      await _recoverOrGiveUpInner();
+    } finally {
+      _recoverInFlight = false;
+    }
+  }
+
+  Future<void> _recoverOrGiveUpInner() async {
+    // 撤销"出帧即康复"的假阳性记账:mpv 对打不开的源也会先发 playing(旧帧 /
+    // vo 复位触发),随后才吐终局诊断(实测 2026-09-27 18:23:58 playing_ok 后
+    // 99ms 即 source_open_failure)。健康观察窗未走完就收到终局错误,必须撤回
+    // ——否则观察窗到期会把失败计数清零,重试上限形同虚设。
+    if (_healthTimer != null || _playingSince != null) {
+      _cancelHealthTimer();
+      _playingSince = null;
+      PlaybackLog.write('playing_ok_revoked', {'host': _currentHost});
+    }
     final handler = _lineRecovery;
     final now = DateTime.now();
     final canAttempt =
@@ -840,7 +1206,7 @@ class MediaKitLivePlayer
         failReason = 'error: ${_clamp('$error')}';
         fresh = null;
       }
-      if (!_disposed && fresh != null && fresh.isNotEmpty) {
+      if (!_disposed && !_givenUp && fresh != null && fresh.isNotEmpty) {
         PlaybackLog.write('recover_ok', {
           'lines': fresh.length,
           'host': _hostOf(fresh.first),
@@ -852,7 +1218,9 @@ class MediaKitLivePlayer
         return;
       }
       PlaybackLog.write('recover_fail', {
-        'reason': failReason ?? 'empty_lines',
+        'reason': _givenUp
+            ? 'cancelled_by_user'
+            : (failReason ?? 'empty_lines'),
       });
     } else {
       PlaybackLog.write('recover_skip', {
@@ -972,6 +1340,13 @@ class MediaKitLivePlayer
     // 覆盖了本次指令,直接作废(不写快照、不动计时器)。
     final myGen = ++_sourceGeneration;
     _lastVideoParams = null;
+    // 死开流看门狗随代际重布防:上代的计时器作废,新代在宽限期后复核参数。
+    _deadOpenTimer?.cancel();
+    _deadOpenTimer = Timer(
+      _policy.deadOpenGrace,
+      () => _onDeadOpenTimeout(myGen),
+    );
+    _videoParamsSeen = false;
     _videoStabilityTimer?.cancel();
     _videoStabilityTimer = null;
     // kick 计时与 flag 同步段 reset(先于入队):排队中的旧会话计时不得
@@ -1037,6 +1412,9 @@ class MediaKitLivePlayer
       await _applyProxyForLine(line);
       // 新会话从"无广告等待"开始记账。
       _adHoldSince = null;
+      // 新会话重建播放时钟基线:重开/换源后 time-pos 时间线不同,旧基线
+      // 会造成一次假回跳判定。任何 open(含自动重开)都算新会话。
+      _lastStabilityTimePos = null;
       if (resetRetries) {
         _stallRetries = 0;
         _sourceOpenFailures = 0;
@@ -1044,6 +1422,10 @@ class MediaKitLivePlayer
         _givenUp = false;
         // 新会话(进房/切线/换新地址)重置诊断去重:不同故障的同文案也该再记。
         _lastLoggedDiag = null;
+        _flushWarnSuppression();
+        _warnCounts.clear();
+        _warnShapes.clear();
+        _decodeChaosCount = 0;
         PlaybackLog.write('open', {
           'lines': _currentLines.length,
           'host': _hostOf(line),
@@ -1138,6 +1520,37 @@ class MediaKitLivePlayer
   });
 
   @override
+  void cancelRecovery() {
+    if (_disposed) return;
+    // 停掉所有会触发重开/恢复的计时器:卡顿看门狗、外部自暂停看门狗、
+    // 健康观察窗(取消后无需再确认康复,失败计数也不再清零)。
+    _stallTimer?.cancel();
+    _stallTimer = null;
+    _externalPauseTimer?.cancel();
+    _externalPauseTimer = null;
+    _deadOpenTimer?.cancel();
+    _deadOpenTimer = null;
+    _cancelHealthTimer();
+    _playingSince = null;
+    // 与重试耗尽同一闩锁:置位后看门狗/终局错误/列表结束都不再重开,
+    // 仅由 open(resetRetries: true)(手动 retry/切源)解除。**不轮转线路**。
+    _givenUp = true;
+    PlaybackLog.write('recovery_cancelled', {
+      'host': _currentHost,
+      'retries': _stallRetries,
+    });
+    _emit(
+      (s) => s.copyWith(
+        buffering: false,
+        notice: PlaybackNotice.none,
+        retryAttempt: 0,
+        error: '已取消自动重连，点击重试恢复播放',
+        errorKind: PlayerErrorKind.network,
+      ),
+    );
+  }
+
+  @override
   Future<void> stop() {
     // 同步自增代际:作废在途的 open —— 离房后旧的 open 不得再把源挂上。
     _sourceGeneration++;
@@ -1145,6 +1558,9 @@ class MediaKitLivePlayer
     _videoKickTimer?.cancel();
     _videoKickTimer = null;
     _videoKicked = false;
+    // 死开流看门狗同理:离房后黑屏复核已无对象。
+    _deadOpenTimer?.cancel();
+    _deadOpenTimer = null;
     return _enqueueLifecycle(() async {
       if (_disposed) return;
       // 若上一个被作废的 open 死在围栏里,这里负责解围栏。
@@ -1268,10 +1684,14 @@ class MediaKitLivePlayer
       _disposed = true;
       _stallTimer?.cancel();
       _stallTimer = null;
+      _externalPauseTimer?.cancel();
+      _externalPauseTimer = null;
       _videoStabilityTimer?.cancel();
       _videoStabilityTimer = null;
       _videoKickTimer?.cancel();
       _videoKickTimer = null;
+      _deadOpenTimer?.cancel();
+      _deadOpenTimer = null;
       _cancelHealthTimer();
       _stallTracker.reset();
       _currentLines = const [];

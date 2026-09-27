@@ -98,7 +98,9 @@ class PlayerSnapshot {
     int? retryLimit,
     PlaybackNotice? notice,
   }) {
-    final clearing = identical(error, _kErrorUnset) ? this.error == null : error == null;
+    final clearing = identical(error, _kErrorUnset)
+        ? this.error == null
+        : error == null;
     return PlayerSnapshot(
       playing: playing ?? this.playing,
       buffering: buffering ?? this.buffering,
@@ -107,9 +109,7 @@ class PlayerSnapshot {
       width: width ?? this.width,
       height: height ?? this.height,
       error: identical(error, _kErrorUnset) ? this.error : error as String?,
-      errorKind: clearing
-          ? PlayerErrorKind.none
-          : errorKind ?? this.errorKind,
+      errorKind: clearing ? PlayerErrorKind.none : errorKind ?? this.errorKind,
       retryAttempt: retryAttempt ?? this.retryAttempt,
       retryLimit: retryLimit ?? this.retryLimit,
       notice: notice ?? this.notice,
@@ -180,6 +180,10 @@ abstract class LivePlayer {
 
   Future<void> pause();
 
+  /// [LivePlayer] 不直接承载"取消自动重连":接口新增成员会波及全部
+  /// `implements` 替身(测试里有 25+ 个)。改为能力接口 [RecoveryCancellable],
+  /// UI 用 `is` 探测后调用,不支持该能力的实现(含替身)零改动。
+
   /// 停止并卸载当前媒体源(画面与声音一并退出),但保留播放器实例以便复用。
   /// 离开播放页时由控制器调用,避免直播在后台继续出声。
   Future<void> stop();
@@ -240,4 +244,14 @@ abstract interface class LineRecoveryAware {
 abstract interface class VideoHardwareAccelerationAware {
   /// enabled=true 使用 `hwdec=auto-safe`；false 强制 `hwdec=no`。
   void setVideoHardwareAcceleration(bool enabled);
+}
+
+/// 可选能力:用户主动取消自动重连(卡顿浮层上的 X)。
+///
+/// 语义:停止当前卡顿重试/恢复流程并置闩锁,**不轮转线路、不重新解析**;
+/// 之后的 [LivePlayer.play] / 手动 retry / `open(resetRetries: true)` 解除。
+/// 同 [LineRecoveryAware] 的理由做成独立接口:UI 用 `is` 探测后调用,
+/// 不支持的实现(含全部测试替身)零改动。
+abstract interface class RecoveryCancellable {
+  void cancelRecovery();
 }

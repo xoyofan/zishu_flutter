@@ -8,7 +8,8 @@ import 'playback_log.dart';
 import 'media_kit_live_player.dart';
 
 /// 稳定播放器代理，通过活动房间租约管理 native 播放器生命周期。
-class IdleReleasingLivePlayer implements LivePlayer, LineRecoveryAware {
+class IdleReleasingLivePlayer
+    implements LivePlayer, LineRecoveryAware, RecoveryCancellable {
   IdleReleasingLivePlayer({
     required LivePlayer Function() createPlayer,
     Future<void> Function(LivePlayer)? releasePlayer,
@@ -215,6 +216,14 @@ class IdleReleasingLivePlayer implements LivePlayer, LineRecoveryAware {
   @override
   Future<void> pause() async {
     await _inner?.pause();
+  }
+
+  @override
+  void cancelRecovery() {
+    final inner = _inner;
+    if (inner case RecoveryCancellable cancellable) {
+      cancellable.cancelRecovery();
+    }
   }
 
   @override

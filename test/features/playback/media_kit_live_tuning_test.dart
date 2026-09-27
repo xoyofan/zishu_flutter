@@ -14,17 +14,44 @@ void main() {
   };
 
   group('稳定缓冲配置(恢复 b6be087 长期稳定状态)', () {
-    test('cache 开启且 60s 封顶,前向仍保持 32MiB / 2s 预读', () {
+    test('cache 开启且 20s 封顶,前向 64MiB / 10s 预读(假时间线收敛)', () {
       final properties = asMap();
       expect(properties['cache'], 'yes');
-      expect(properties['cache-secs'], '60');
-      expect(properties['demuxer-max-bytes'], '33554432');
-      expect(properties['demuxer-readahead-secs'], '2');
+      // 60s → 20s(2026-09-27):CDN 假时间线下流缓存层朝 60s 目标无意义
+      // 预读,是内存爬升(+200MB/10min)推手;20s 仍是 readahead(10s)
+      // 的 2 倍抖动余量。
+      expect(properties['cache-secs'], '20');
+      expect(properties['demuxer-max-bytes'], '67108864');
+      // 预读秒数是前向缓冲的实际封顶项(字节上限很难够着);2s 时任何 >2s
+      // 的网络抖动即抽干缓存触发重连,故提到 10s。
+      expect(properties['demuxer-readahead-secs'], '10');
     });
 
     test('回看缓冲保持 4MiB 有界', () {
       final properties = asMap();
       expect(properties['demuxer-max-back-bytes'], '4194304');
+    });
+
+    test('禁用缓存抽干自动暂停(cache-pause=no,堵死 mpv 自暂停源头)', () {
+      // mpv 默认 cache-pause=yes:demuxer 缓存归零时自动置 pause=yes,表现为
+      // "播放无故自暂停"(playback.log 16:33:14 实测,playing=false 且无
+      // play_cmd)。直播下该暂停可能永不恢复,必须禁用,断流改由
+      // buffering 看门狗 + 外部自暂停恢复计时器收敛。
+      expect(asMap()['cache-pause'], 'no');
+    });
+
+    test('不做传输层透明重连(对齐 pure_live,坏流立即上抛)', () {
+      // 2026-09-27 晚间下线 stream-lavf-o reconnect 四件套:透明重连会对
+      // 卡死连接原地无限重试("Will reconnect at <offset>" 偏移不前进),
+      // 重发旧数据把 FLV 时间戳打回跳 → mpv Reset playback 循环 = 用户
+      // 看到的"重复播放"。pure_live 不开这层:坏流让 ffmpeg 立即报错,
+      // 由上层有界看门狗(退避 + 上限 + 健康窗)收敛,坏连接不赖在原地。
+      final properties = asMap();
+      expect(properties['stream-lavf-o'], isNull);
+      final source = File(
+        'lib/src/platforms/common/playback/media_kit_live_player.dart',
+      ).readAsStringSync();
+      expect(source, isNot(contains('reconnect_streamed')));
     });
 
     test('不按线路主机切换深缓冲配置', () {

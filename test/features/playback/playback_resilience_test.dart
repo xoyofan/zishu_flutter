@@ -4,9 +4,9 @@ import 'package:zishu_flutter/src/platforms/common/playback/playback_resilience.
 void main() {
   group('源级失败阈值', () {
     const policy = PlaybackResiliencePolicy();
-    test('第一次保留给 playlist 自愈，第二次提前恢复', () {
+    test('首次终局 source_open 失败即提前恢复(签名 URL 失效重开必然再失败)', () {
       expect(policy.shouldRecoverSource(consecutiveSourceOpenFailures: 0), isFalse);
-      expect(policy.shouldRecoverSource(consecutiveSourceOpenFailures: 1), isFalse);
+      expect(policy.shouldRecoverSource(consecutiveSourceOpenFailures: 1), isTrue);
       expect(policy.shouldRecoverSource(consecutiveSourceOpenFailures: 2), isTrue);
     });
   });
