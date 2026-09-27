@@ -53,6 +53,11 @@ class _ChatRow extends StatelessWidget {
                 width: emojiSide,
                 height: emojiSide,
                 fit: BoxFit.contain,
+                // 表情源图 96×96(抖音官方贴图固定档),显示尺寸 = 字号×1.15
+                // (~14-28 逻辑像素),是 3-6 倍下采样;默认 FilterQuality.low
+                // 双线性采样会发虚/带锯齿,与徽章图(chat_badges 1414)同口径
+                // 用 medium(mipmap) 保下采样清晰度。
+                filterQuality: FilterQuality.medium,
                 placeholder: (_, _) => SizedBox(
                   width: emojiSide,
                   height: emojiSide,
@@ -130,6 +135,7 @@ class _ChatRow extends StatelessWidget {
                 colorBorder: data.badgeColorBorder,
                 textColor: data.badgeTextColor,
                 levelColor: data.badgeColorLevel,
+                brid: badge.badgeRoomId,
               ),
             ),
           ),
