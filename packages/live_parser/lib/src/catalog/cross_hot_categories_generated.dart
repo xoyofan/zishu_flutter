@@ -53,7 +53,7 @@ const List<HotCrossSeed> kGeneratedHotCrossCategories = [
   HotCrossSeed(
     key: 'hpjy',
     name: '和平精英',
-    aliases: ['和平精英', '绝地求生', 'pubg', '吃鸡'],
+    aliases: ['和平精英', '吃鸡'],
     siteCids: {'douyu': ['270'], 'huya': ['3203'], 'bilibili': ['256']},
   ),
   HotCrossSeed(

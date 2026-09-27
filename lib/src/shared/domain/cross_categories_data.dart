@@ -6,7 +6,7 @@ library;
 
 import 'cross_categories_data_models.dart';
 
-/// 328 条跨平台分类映射(按 key 排序,保证生成结果稳定)。
+/// 329 条跨平台分类映射(按 key 排序,保证生成结果稳定)。
 const List<CrossCategoryEntry> kCrossCategories = [
   CrossCategoryEntry(
     key: '14',
@@ -2276,7 +2276,7 @@ const List<CrossCategoryEntry> kCrossCategories = [
   CrossCategoryEntry(
     key: 'hpjy',
     name: '和平精英',
-    aliases: ['和平精英', '绝地求生', 'pubg', '吃鸡'],
+    aliases: ['和平精英', '吃鸡'],
     siteCids: {'bilibili': ['256']},
     douyu: '270',
     huya: '3203',
@@ -2308,6 +2308,13 @@ const List<CrossCategoryEntry> kCrossCategories = [
     douyu: '2556',
     huya: '7185',
     douyin: '1010055',
+  ),
+  CrossCategoryEntry(
+    key: 'jdqs',
+    name: '绝地求生',
+    aliases: ['绝地求生', 'PUBG', 'PUBG: BATTLEGROUNDS'],
+    siteCids: {'twitch': ['pubg-battlegrounds'], 'soop': ['00040066']},
+    douyin: '1010026',
   ),
   CrossCategoryEntry(
     key: 'jj',

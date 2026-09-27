@@ -859,8 +859,6 @@
     "name": "和平精英",
     "aliases": [
       "和平精英",
-      "绝地求生",
-      "pubg",
       "吃鸡"
     ],
     "douyu": "270",
@@ -1506,6 +1504,25 @@
     },
     "douyin": "1011000",
     "douyinPid": "1"
+  },
+  {
+    "key": "jdqs",
+    "name": "绝地求生",
+    "aliases": [
+      "绝地求生",
+      "PUBG",
+      "PUBG: BATTLEGROUNDS"
+    ],
+    "douyin": "1010026",
+    "douyinPid": "1",
+    "sites": {
+      "twitch": {
+        "cid": "pubg-battlegrounds"
+      },
+      "soop": {
+        "cid": "00040066"
+      }
+    }
   },
   {
     "key": "jql",
