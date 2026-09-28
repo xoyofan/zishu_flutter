@@ -186,9 +186,10 @@ void main() {
 
     test('启用升级 + 单线路 → 更快档位且封顶更低', () {
       const policy = PlaybackRetryPolicy(escalateSingleLine: true);
-      expect(policy.backoffForWithLines(0, 1), const Duration(seconds: 4));
-      expect(policy.backoffForWithLines(1, 1), const Duration(seconds: 8));
-      expect(policy.backoffForWithLines(2, 1), const Duration(seconds: 12));
+      // 首档 2s(2026-09-28 死节点实测下调,见 singleLineBaseDelay 注释)。
+      expect(policy.backoffForWithLines(0, 1), const Duration(seconds: 2));
+      expect(policy.backoffForWithLines(1, 1), const Duration(seconds: 6));
+      expect(policy.backoffForWithLines(2, 1), const Duration(seconds: 10));
       // 封顶到 singleLineMaxDelay,不再随次数增长。
       expect(policy.backoffForWithLines(10, 1), const Duration(seconds: 12));
     });

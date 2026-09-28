@@ -37,7 +37,7 @@ class PlaybackRetryPolicy {
     // 否则所有既有单测(默认策略 + 单线路 fixture)的退避契约保持不变。
     this.escalateSingleLine = false,
     this.escalateResolveAfter = 2,
-    this.singleLineBaseDelay = const Duration(seconds: 4),
+    this.singleLineBaseDelay = const Duration(seconds: 2),
     this.singleLineStepDelay = const Duration(seconds: 4),
     this.singleLineMaxDelay = const Duration(seconds: 12),
   });
@@ -67,11 +67,16 @@ class PlaybackRetryPolicy {
   final bool escalateSingleLine;
 
   /// 单线路源在第几次同 URL 重开后升级 re-resolve(从 1 起)。
-  /// 默认 2:先做一次快速同 URL 重开(给 CDN 自恢复留 ~4s 窗口,实测斗鱼会自愈),
-  /// 第 2 次即升级 re-resolve,把最坏等待从 30s+ 压到 ~4s。
+  /// 默认 2:先做一次快速同 URL 重开(给 CDN 自恢复留 ~2s 窗口,实测斗鱼会自愈),
+  /// 第 2 次即升级 re-resolve,把最坏等待从 30s+ 压到 ~2s 起步。
   final int escalateResolveAfter;
 
   /// 单线路源的退避档位(更快,避免长退避空耗已被钉死的死节点)。
+  ///
+  /// 首档由 4s 下调到 2s(2026-09-28 斗鱼 9999 实测):死节点(`hwa.douyucdn2.cn`
+  /// 断供)的失败是**持续性**的,重开同 URL 必然再失败,4s 纯属空等;而自愈型
+  /// 抖动(实测 130~330ms,占绝大多数)在首档退避内早已恢复,不会多消耗重连
+  /// 预算。降档把"卡顿→落到健康节点"的端到端时间从 ~4.7s 压到 ~2.7s。
   final Duration singleLineBaseDelay;
   final Duration singleLineStepDelay;
   final Duration singleLineMaxDelay;

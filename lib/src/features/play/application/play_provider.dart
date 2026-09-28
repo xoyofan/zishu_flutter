@@ -4,6 +4,7 @@
 library;
 
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:live_parser/live_parser.dart';
@@ -16,7 +17,9 @@ import '../../../platforms/common/playback/playback_log.dart';
 import '../../../shared/application/browse_source.dart';
 import '../../../shared/application/providers.dart';
 import '../../follow/application/settings_provider.dart';
+import 'host_avoidlist.dart';
 import 'play_selection.dart';
+import 'recovery_lines.dart';
 import 'room_volume_provider.dart';
 
 /// 共享播放器上的最新开流操作 token。不同房间的 family controller 共用同一
@@ -140,6 +143,48 @@ class PlayController extends AsyncNotifier<PlayState> {
   /// 后台预取全部作废(用户口径 2026-09-21:其他线路必须后台加载完)。
   int _prefetchToken = 0;
 
+  /// 死节点负缓存(host → 失败 epoch ms),磁盘加载、逃离时写入。
+  /// 见 [host_avoidlist.dart]:跨重启避让首撞死节点。
+  Map<String, int>? _hostAvoidlist;
+
+  Map<String, int> _loadHostAvoidlist({bool refresh = false}) {
+    final cached = _hostAvoidlist;
+    if (!refresh && cached != null) {
+      return pruneHostAvoidlist(cached, nowMs: _nowMs());
+    }
+    Map<String, int> loaded = {};
+    try {
+      loaded = decodeHostAvoidlist(
+        File(hostAvoidlistFilePath()).readAsStringSync(),
+      );
+    } catch (_) {
+      // 读不到/读失败:按无负缓存处理,不影响正常选线。
+    }
+    return _hostAvoidlist = loaded;
+  }
+
+  /// 逃离死节点:记录失败 host 并异步落盘(乐观记录,口径见库文档)。
+  void _avoidFailedHost(String? failedUrl) {
+    final host = Uri.tryParse(failedUrl ?? '')?.host ?? '';
+    if (host.isEmpty) return;
+    final avoidlist = _loadHostAvoidlist()..[host] = _nowMs();
+    _hostAvoidlist = avoidlist;
+    PlaybackLog.write('host_avoid_recorded', {'host': host});
+    unawaited(() async {
+      try {
+        final file = File(hostAvoidlistFilePath());
+        await file.parent.create(recursive: true);
+        await file.writeAsString(
+          encodeHostAvoidlist(pruneHostAvoidlist(avoidlist, nowMs: _nowMs())),
+        );
+      } catch (error) {
+        PlaybackLog.write('host_avoid_persist_error', {'error': '$error'});
+      }
+    }());
+  }
+
+  static int _nowMs() => DateTime.now().millisecondsSinceEpoch;
+
   @override
   FutureOr<PlayState> build() async {
     final generation = ++_generation;
@@ -214,7 +259,21 @@ class PlayController extends AsyncNotifier<PlayState> {
     }
     final quality = _pickPlayableQuality(payload, preferredQuality);
     // 传入 site:白名单站点 auto 起播优选 FLV(首帧提速,见 play_selection)。
-    final line = pickStreamLine(quality, preferredFormat, site: params.site);
+    final picked = pickStreamLine(quality, preferredFormat, site: params.site);
+    // 自动进房选线避开负缓存内的死节点(只作用于自动选线;用户手动切线/切档
+    // 不经过这里,2026-09-26「不偷换用户线路」口径不受影响)。
+    final line = avoidFlaggedLine(
+      picked,
+      quality?.lines ?? const [],
+      _loadHostAvoidlist(),
+      nowMs: _nowMs(),
+    );
+    if (picked != null && line != picked) {
+      PlaybackLog.write('host_avoid_applied', {
+        'from': Uri.tryParse(picked.url)?.host,
+        'to': Uri.tryParse(line?.url ?? '')?.host,
+      });
+    }
     final next = PlayState(
       payload: payload,
       quality: quality,
@@ -552,27 +611,39 @@ class PlayController extends AsyncNotifier<PlayState> {
         });
         return const [];
       }
+      // 恢复路径返回该画质全部兄弟线路,并逃离被钉死的死节点(见 [recoveryLinesFor])。
+      final recovery = recoveryLinesFor(next, current.line);
+      // 成功逃离到不同 host:把死节点记入负缓存,后续进房/重启不再首撞它
+      // (乐观记录,口径见 host_avoidlist.dart)。
+      final escapedHost = Uri.tryParse(current.line?.url ?? '')?.host ?? '';
+      final recoveryHost =
+          Uri.tryParse(recovery.firstOrNull?.url ?? '')?.host ?? '';
+      if (escapedHost.isNotEmpty &&
+          recoveryHost.isNotEmpty &&
+          recoveryHost != escapedHost) {
+        _avoidFailedHost(current.line?.url);
+      }
       // 新地址落回状态:用户随后手动切线路 / 切档时用的才是同一批,
       // 否则又会退回那批过期地址。generation 推进以作废旧异步结果。
       PlaybackLog.write('resolve_ok', {
         'site': params.site,
         'room': params.roomId,
         'quality': next?.name,
-        'lines': 1 + _fallbackLines(next, line).length,
-        'host': Uri.tryParse(line.url)?.host,
+        'lines': recovery.length,
+        'host': Uri.tryParse(recovery.firstOrNull?.url ?? '')?.host,
       });
       state = AsyncData(
         current.copyWith(
           payload: payload,
           quality: next,
-          line: line,
+          line: recovery.firstOrNull ?? line,
           generation: ++_generation,
         ),
       );
       // 恢复重解析由播放器内部随后重新 open,先把当前房间的音量/静音语义
       // 套回底层,避免恢复路径只更新线路而丢失控制条状态。
       await _applyRoomVolume(ref.read(playerProvider));
-      return [line, ..._fallbackLines(next, line)];
+      return recovery;
     } catch (error) {
       PlaybackLog.write('resolve_fail', {
         'site': params.site,
