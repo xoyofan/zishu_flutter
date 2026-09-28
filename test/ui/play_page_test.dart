@@ -102,7 +102,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
   }
 
-  testWidgets('纯展示遮罩使用 IgnorePointer 避免拦截按钮', (tester) async {
+  testWidgets('暂停遮罩用 IgnorePointer 防拦截;提示遮罩保留取消按钮可点', (tester) async {
     await pumpPlayView(tester);
 
     final source = File(
@@ -117,7 +117,11 @@ void main() {
       source.indexOf('/// 解析中/失败/fixture'),
     );
 
-    expect(noticeClass, contains('return IgnorePointer('));
+    // 2026-09-28 裁决:_PlaybackNoticeOverlay 自 f00e6a1 起带「取消重连」X 按钮
+    // (playback-notice-cancel),是可交互浮层,禁止整体 IgnorePointer 吞掉点击;
+    // 纯展示的 _PausedOverlay 仍必须 IgnorePointer 避免拦截播放页按钮。
+    expect(noticeClass, isNot(contains('IgnorePointer')));
+    expect(noticeClass, contains("Key('playback-notice-cancel')"));
     expect(pausedClass, contains('return IgnorePointer('));
   });
 
