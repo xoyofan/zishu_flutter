@@ -22,6 +22,7 @@ import 'package:window_manager/window_manager.dart'
 
 import 'buffering_stall_tracker.dart';
 import 'live_player.dart';
+import 'live_tuning_config.dart';
 import 'playback_log.dart';
 import 'playback_retry.dart';
 import 'playback_resilience.dart';
@@ -254,22 +255,25 @@ class MediaKitLivePlayer
   /// 即使全部熔断也保留候选，避免无线路可开。
   final CdnCircuitBreaker _cdnCircuitBreaker = CdnCircuitBreaker();
 
-  /// 直播 mpv 属性调优表:构造期([_applyLiveTuning])按序逐条 setProperty,
-  /// 对此后每一次 open/起播生效(playerProvider 是 app 单例,构造先于任何
-  /// 开流;mpv 属性在 loadfile 前设置即约束该次会话)。抽成常量表是让配置
-  /// 可被单测直接断言(VM 测试无法实例化 NativePlayer)。
+  /// 直播 mpv 属性调优表:**内置默认值**;构造期([_applyLiveTuning])先读
+  /// 外部配置 `config/mpv_tuning.json` 逐键覆盖(见 live_tuning_config.dart),
+  /// 再按序逐条 setProperty,对此后每一次 open/起播生效(playerProvider 是 app
+  /// 单例,构造先于任何开流;mpv 属性在 loadfile 前设置即约束该次会话)。
+  /// 抽成常量表是让默认配置可被单测直接断言(VM 测试无法实例化 NativePlayer)。
   ///
-  /// 缓冲上限的语义与取值依据(mpv 手册,DOCS/man/options.rst),恢复自
-  /// 2026-09-19 的稳定配置(b6be087):
-  /// - `cache=yes` + `cache-secs=20`:网络流启用有界前向缓存,避免 HLS 短时
-  ///   抖动直接把画面抽干;20s 是上限而非起播等待时间。曾是 60s,但实测
-  ///   CDN 假时间线(21214s)下缓存层朝 60s 目标无意义预读,是内存爬升
-  ///   (+200MB/10min)的主要推手,压到 20s 仍留足 2 倍 readahead 余量。
+  /// 缓冲上限的语义与取值依据(mpv 手册,DOCS/man/options.rst):
+  /// - `cache=yes` + `cache-secs=10`:网络流启用有界前向缓存,避免 HLS 短时
+  ///   抖动直接把画面抽干;10s 是上限而非起播等待时间。历史:60s → 20s →
+  ///   10s——CDN 假时间线(21214s)下缓存层朝目标无意义预读是内存爬升
+  ///   (+200MB/10min)的主要推手;新窗口 8~12s 取 10s,与 readahead=10s
+  ///   对齐(流缓存层与 demuxer 层预读目标一致,不叠加双层余量)。
   /// - `video-sync=audio`:直播以音频为同步基准,避免视频按显示时钟追帧造成
-  ///   周期性小回退。
-  /// - `demuxer-max-bytes=67108864`(64 MiB) / `demuxer-max-back-bytes=4194304`
-  ///   (4 MiB):前向与回看均有字节上限,不恢复后续被删除的主机深缓冲分档。
-  ///   前向 64MiB 配合 `demuxer-readahead-secs=10`:预读秒数才是实际封顶项
+  ///   周期性小回退;配合 `framedrop=yes` 视频落后时丢帧保音频流畅。
+  /// - `demuxer-thread=yes`:demuxer 独立线程读流,解码卡顿时 IO 不被阻塞
+  ///   (mpv 默认即 yes,此处显式固化防止平台差异回退)。
+  /// - `demuxer-max-bytes=134217728`(128 MiB) / `demuxer-max-back-bytes=8388608`
+  ///   (8 MiB):前向与回看均有字节上限,不恢复后续被删除的主机深缓冲分档。
+  ///   前向 128MiB 配合 `demuxer-readahead-secs=10`:预读秒数才是实际封顶项
   ///   (实测 2s 预读时 demuxer_cache_duration 恒≈2.3s,字节上限够不着),
   static const List<(String, String)> kLiveTuningProperties = [
     ('force-seekable', 'yes'),
@@ -289,17 +293,26 @@ class MediaKitLivePlayer
     ('video-sync', 'audio'),
     ('volume-max', '100'),
     ('cache', 'yes'),
-    // 2026-09-27 缓存抽干加厚:实测日志 demuxer_cache_duration≈2.3s —— 前向
-    // 缓冲被 readahead-secs=2 封顶,32MiB/60s 上限形同虚设,任何 >2s 的网络
-    // 抖动即抽干缓存触发卡顿重连。提至 10s 预读(1080p@6Mbps≈7.5MiB)并在
-    // 64MiB 字节预算内留足余量;直播播放位置贴实时边沿,加大预读不增加延迟。
-    ('demuxer-max-bytes', '67108864'),
-    ('demuxer-max-back-bytes', '4194304'),
+    // 缓存抽干加厚沿袭(实测 demuxer_cache_duration 曾被 readahead-secs=2
+    // 封顶,任何 >2s 网络抖动即抽干触发卡顿重连)。前向字节上限提到 128MiB:
+    // 1080p@6Mbps≈0.75MiB/s,10s 预读仅 ≈7.5MiB,字节上限远够不着,纯粹是
+    // 高码率/多倍率流的兜底预算;实际封顶项仍是下方 readahead-secs。
+    ('demuxer-max-bytes', '134217728'),
+    // 回看缓冲 8MiB:直播贴实时边沿,回看窗口仅作 seek 抖动余量,
+    // 上限有界防止坏流回灌数据无限滞留。
+    ('demuxer-max-back-bytes', '8388608'),
+    // 预读秒数是前向缓冲的实际封顶项(字节上限够不着),窗口 8~12 取 10s。
     ('demuxer-readahead-secs', '10'),
-    // 2026-09-27 二次收敛:60s → 20s。cache-secs 是流缓存层的预读目标,
-    // 直播假时间线下该层朝目标无界预读(实测 +200MB/10min),重放型坏流
-    // 的重复数据也滞留在窗口里。20s 覆盖 readahead(10s)的 2 倍抖动余量。
-    ('cache-secs', '20'),
+    // cache-secs 是流缓存层的预读目标,直播假时间线下该层朝目标无界预读
+    // (实测 +200MB/10min),重放型坏流的重复数据也滞留在窗口里。窗口
+    // 8~12s 取 10s,与 readahead=10s 对齐,不叠加双层预读余量。
+    ('cache-secs', '10'),
+    // demuxer 独立线程:解码/渲染卡顿时网络读流不被阻塞(mpv 默认 yes,
+    // 显式固化防平台默认值差异)。
+    ('demuxer-thread', 'yes'),
+    // 视频落后时丢帧(yes):直播卡顿时保音频连续,画面追帧而不是整流
+    // 停顿。与 video-sync=audio 成对生效。
+    ('framedrop', 'yes'),
     // mpv 默认 cache-pause=yes:demuxer 缓存抽干(demuxer_cache_duration→0)时
     // **自动置 pause=yes**——这是"播放无故自暂停"的 origin(2026-09-27 实测
     // playback.log 16:33:14:playing=false source=external,无 play_cmd,缓存
@@ -1244,18 +1257,25 @@ class MediaKitLivePlayer
   }
 
   /// 参照 pure_live 的直播卡顿根治方案:直接给 mpv 设属性,而非只靠 Flutter
-  /// 侧轮询。核心是把 demuxer 缓存设为统一的有界低延迟(32MiB 前向 /
-  /// 4MiB 回退 / 2s 预读 / 60s 封顶),并把网络超时压到 15s——这样断流或卡死的
+  /// 侧轮询。核心是把 demuxer 缓存设为统一的有界低延迟(128MiB 前向 /
+  /// 8MiB 回退 / 10s 预读 / 10s 封顶),并把网络超时压到 15s——这样断流或卡死的
   /// 直播流会主动抛 error(而非无限缓冲把画面冻住)。单条线路断流先由 mpv
   /// 播放列表内部自动跳下一条,全组耗尽(events.completed)或冻结卡顿(缓冲看门狗)
   /// 时再由 [_reopenIfStalled] 整组轮转。
   /// 另外 `demuxer-lavf-*` 加速探测、缓存落临时目录避免原生内存爬升。
+  ///
+  /// 属性表来源:`config/mpv_tuning.json` 逐键覆盖内置默认(见
+  /// live_tuning_config.dart),首次运行先写模板文件。
   Future<void> _applyLiveTuning() async {
     final platform = _player.platform;
     if (platform is! NativePlayer) return; // Web/测试等非原生后端跳过。
     try {
       await platform.waitForPlayerInitialization;
-      for (final (name, value) in kLiveTuningProperties) {
+      ensureLiveTuningConfigExists();
+      final tuning = resolveLiveTuningProperties(
+        jsonContent: readLiveTuningFile(),
+      );
+      for (final (name, value) in tuning) {
         await platform.setProperty(name, value);
       }
       await _applyHardwareAcceleration(
@@ -1265,7 +1285,8 @@ class MediaKitLivePlayer
       // 把实际生效的缓冲参数落盘:下一次会话可直接核对"配置是否真的注入",
       // 不必再从二进制/源码反推(排查卡顿时缺的正是这一环)。
       PlaybackLog.write('mpv_tuning', {
-        for (final (name, value) in kLiveTuningProperties) name: value,
+        'config_path': liveTuningConfigFilePath(),
+        for (final (name, value) in tuning) name: value,
       });
       // 每次 open 只按当前线路主机重设代理,避免上一个源的代理策略残留。
       final cacheDir =

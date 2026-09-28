@@ -14,22 +14,32 @@ void main() {
   };
 
   group('稳定缓冲配置(恢复 b6be087 长期稳定状态)', () {
-    test('cache 开启且 20s 封顶,前向 64MiB / 10s 预读(假时间线收敛)', () {
+    test('cache 开启且 10s 封顶,前向 128MiB / 10s 预读(假时间线收敛)', () {
       final properties = asMap();
       expect(properties['cache'], 'yes');
-      // 60s → 20s(2026-09-27):CDN 假时间线下流缓存层朝 60s 目标无意义
-      // 预读,是内存爬升(+200MB/10min)推手;20s 仍是 readahead(10s)
-      // 的 2 倍抖动余量。
-      expect(properties['cache-secs'], '20');
-      expect(properties['demuxer-max-bytes'], '67108864');
-      // 预读秒数是前向缓冲的实际封顶项(字节上限很难够着);2s 时任何 >2s
-      // 的网络抖动即抽干缓存触发重连,故提到 10s。
+      // 历史 60s → 20s → 10s(窗口 8~12 取 10):CDN 假时间线下流缓存层朝
+      // 目标无意义预读,是内存爬升(+200MB/10min)推手;取 10s 与
+      // readahead(10s) 对齐,不叠加双层预读余量。
+      expect(properties['cache-secs'], '10');
+      // 窗口内前向字节上限提到 128MiB(高码率兼底),实际封顶项仍是 readahead。
+      expect(properties['demuxer-max-bytes'], '134217728');
+      // 预读秒数是前向缓冲的实际封顶项(字节上限很难够着);窗口 8~12 取 10s。
       expect(properties['demuxer-readahead-secs'], '10');
     });
 
-    test('回看缓冲保持 4MiB 有界', () {
+    test('回看缓冲 8MiB 有界', () {
       final properties = asMap();
-      expect(properties['demuxer-max-back-bytes'], '4194304');
+      expect(properties['demuxer-max-back-bytes'], '8388608');
+    });
+
+    test('demuxer 独立线程读流(demuxer-thread=yes)', () {
+      expect(asMap()['demuxer-thread'], 'yes');
+    });
+
+    test('丢帧策略 framedrop=yes(视频落后丢帧,与 video-sync=audio 成对)', () {
+      final properties = asMap();
+      expect(properties['framedrop'], 'yes');
+      expect(properties['video-sync'], 'audio');
     });
 
     test('禁用缓存抽干自动暂停(cache-pause=no,堵死 mpv 自暂停源头)', () {
@@ -81,7 +91,6 @@ void main() {
       expect(properties['force-seekable'], 'yes');
       expect(properties['hwdec-software-fallback'], '1');
       expect(properties['volume-max'], '100');
-      expect(properties['video-sync'], 'audio');
     });
 
     test('硬解开启:auto-safe 与软解回退必须成对出现(修 CPU 42% 软解占用)', () {
