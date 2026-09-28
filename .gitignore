@@ -68,3 +68,6 @@ tool/screenshots/sfvideo_session.json
 .flutter_tool_state
 build_realparser_log.txt
 packages/live_parser/build/
+
+# playwright-cli 本机会话产物(控制台日志/页面快照,不入库)
+.playwright-cli/
