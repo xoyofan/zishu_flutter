@@ -307,12 +307,16 @@ class MediaKitLivePlayer
     // 回看缓冲 8MiB:直播贴实时边沿,回看窗口仅作 seek 抖动余量,
     // 上限有界防止坏流回灌数据无限滞留。
     ('demuxer-max-back-bytes', '8388608'),
-    // 预读秒数是前向缓冲的实际封顶项(字节上限够不着),窗口 8~12 取 10s。
-    ('demuxer-readahead-secs', '10'),
+    // 预读秒数是前向缓冲的实际封顶项(字节上限够不着)。对齐斗鱼官方 web
+    // 播放器缓冲窗口(2026-09-28 实测 getH5PlayV1 p2pMeta:max_play_buffer_ms
+    // =6000/best=5000,超窗 1.05x 追帧):窗口取 6s。此前 10s 比官方深 4s,
+    // 断流发现晚、追回实时边沿也慢;URL 预刷新上线后不再依赖深缓冲硬撑过期
+    // token,窗口回落官方口径。
+    ('demuxer-readahead-secs', '6'),
     // cache-secs 是流缓存层的预读目标,直播假时间线下该层朝目标无界预读
-    // (实测 +200MB/10min),重放型坏流的重复数据也滞留在窗口里。窗口
-    // 8~12s 取 10s,与 readahead=10s 对齐,不叠加双层预读余量。
-    ('cache-secs', '10'),
+    // (实测 +200MB/10min),重放型坏流的重复数据也滞留在窗口里。与
+    // readahead=6s 对齐,不叠加双层预读余量。
+    ('cache-secs', '6'),
     // demuxer 独立线程:解码/渲染卡顿时网络读流不被阻塞(mpv 默认 yes,
     // 显式固化防平台默认值差异)。
     ('demuxer-thread', 'yes'),

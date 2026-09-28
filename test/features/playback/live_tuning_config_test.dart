@@ -99,7 +99,7 @@ void main() {
         jsonContent: jsonEncode({'cache-secs': ''}),
       );
       // 剔除后该项回落到内置默认而非消失。
-      expect(asMap(resolved)['cache-secs'], '10');
+      expect(asMap(resolved)['cache-secs'], '6');
     });
 
     test('内置表属性名不重复(覆盖以文件值为准的前提)', () {

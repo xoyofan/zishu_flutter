@@ -289,7 +289,9 @@ void main() {
       await pumpEventQueue();
 
       final mpvLogs = logLines().where(
-        (l) => l.contains('mpv_log prefix=ffmpeg'),
+        // 'mpv_log cat=' 精确匹配事件名(排除 mpv_log_suppressed 汇总行,
+        // 后者携带首条原文但属于抑制产物)。
+        (l) => l.contains('mpv_log cat=') && l.contains('prefix=ffmpeg'),
       );
       expect(
         mpvLogs.where((l) => l.contains('Will reconnect')).length,
@@ -359,7 +361,7 @@ void main() {
       );
       await pumpEventQueue();
 
-      final mpvLogs = logLines().where((l) => l.contains('mpv_log prefix='));
+      final mpvLogs = logLines().where((l) => l.contains('mpv_log cat=') && l.contains('prefix='));
       expect(
         mpvLogs.where((l) => l.contains('Invalid video timestamp')).length,
         1,

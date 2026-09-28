@@ -38,11 +38,24 @@
 位置:`%APPDATA%\zishu_flutter\logs\playback.log`(超 2MB 轮转为
 `playback.old.log`)。每次启动先写一条 `app_start`(含 `proxy=`),用它切分不同运行。
 
+行格式:`HH:MM:SS.mmm <event> cat=<分类> key=val ...`。`cat` 是按调试场景的
+事件分类,一条 grep 拉出一类:
+
+| cat | 场景 | 示例 |
+|---|---|---|
+| `recovery` | 卡顿/重开/升级 re-resolve/放弃 | `Select-String -Path $log -Pattern 'cat=recovery'` |
+| `line` | 选线/死节点避让/URL 寿命重签(`url_refresh*`/`host_avoid_*`) | 同上换 `cat=line` |
+| `resolve` | 进房/重解析/画质预取 | 同上换 `cat=resolve` |
+| `stream` | 首帧/解码/缓冲健康度(`video_stability` 等) | 同上换 `cat=stream` |
+| `mpv` | mpv 原始/诊断日志 | 同上换 `cat=mpv` |
+| `lifecycle` / `resource` / `player` | 生命周期/资源采样/播放器错误 | — |
+
 ```powershell
 $log = Join-Path $env:APPDATA 'zishu_flutter\logs\playback.log'
 Select-String -Path $log -Pattern 'app_start|caption_' | Select-Object -Last 60   # 字幕链路
 Select-String -Path $log -Pattern 'prefetch_' | Select-Object -Last 40           # 后台预取线路
 Select-String -Path $log -Pattern 'resolve_|give_up|stall' | Select-Object -Last 40
+Select-String -Path $log -Pattern 'cat=line' | Select-Object -Last 40            # 选线与 URL 重签
 ```
 
 关键事件速查:

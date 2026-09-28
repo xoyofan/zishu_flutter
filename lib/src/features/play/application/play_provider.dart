@@ -21,6 +21,7 @@ import 'host_avoidlist.dart';
 import 'play_selection.dart';
 import 'recovery_lines.dart';
 import 'room_volume_provider.dart';
+import 'url_refresh.dart';
 
 /// 共享播放器上的最新开流操作 token。不同房间的 family controller 共用同一
 /// `LivePlayer`，局部 generation 只能保护单个 controller，不能阻止旧房间的
@@ -147,6 +148,80 @@ class PlayController extends AsyncNotifier<PlayState> {
   /// 见 [host_avoidlist.dart]:跨重启避让首撞死节点。
   Map<String, int>? _hostAvoidlist;
 
+  /// URL 寿命预刷新计时器:在流 URL 的 `expire`(斗鱼实测 300s)到点前
+  /// 主动重签,消除"token 过期 → CDN reset → 卡顿 → 升级换线"的整段
+  /// 被动恢复。任何一次 open 成功后按新 URL 重新排期。
+  Timer? _urlRefreshTimer;
+
+  /// 按 URL 寿命的 80% 排预刷新;fixture 不排。
+  ///
+  /// fixture 由 [_open] 调用点显式传入而非读 state:进房首开 8~40ms 即完成,
+  /// 此时 `build()` 可能尚未 return(state 仍为 loading),读 `state.value`
+  /// 会拿到 null 把排期整个跳过(2026-09-28 真机实测预刷新未生效的根因)。
+  void _scheduleUrlRefresh(StreamLine line, bool fixture) {
+    _urlRefreshTimer?.cancel();
+    _urlRefreshTimer = null;
+    if (fixture) return;
+    final ttl = urlTtlSeconds(line.url);
+    // 短签名(实测斗鱼主播切档后部分线路 expire=30)不排预刷新:token 只
+    // 管建连,连接建立后过期无碍(官方 web 单连接实测存活 6.5min+);按 30s
+    // 的 80% 重签反而每 24s 主动换一次线,制造持续的换线抖动
+    // (2026-09-28 真机 00:39-00:41 实测两节点 ping-pong)。断流由
+    // 播放器 stall→recover 链路兜底。
+    if (ttl < 120) {
+      PlaybackLog.write('url_refresh_skip', {
+        'site': params.site,
+        'room': params.roomId,
+        'reason': 'short_ttl',
+        'ttl_s': ttl,
+      });
+      return;
+    }
+    PlaybackLog.write('url_refresh_scheduled', {
+      'site': params.site,
+      'room': params.roomId,
+      'ttl_s': ttl,
+      'host': Uri.tryParse(line.url)?.host,
+    });
+    _urlRefreshTimer = Timer(
+      Duration(milliseconds: ttl * 800),
+      _refreshUrlBeforeExpire,
+    );
+  }
+
+  /// 到点重签:复用恢复重解析(绕短缓存、全线路、逃离死节点),新 URL
+  /// 不同则静默重开;未轮换则短周期后再试,不等 expire 边缘。
+  Future<void> _refreshUrlBeforeExpire() async {
+    if (!ref.mounted) return;
+    final current = state.value;
+    if (current == null || current.isFixture) return;
+    final before = current.line?.url;
+    final recovery =
+        await _recoverLines(recordAvoid: false, keepCurrentHost: true);
+    if (!ref.mounted) return;
+    final next = recovery.firstOrNull;
+    if (next == null || next.url == before) {
+      PlaybackLog.write('url_refresh_skip', {
+        'site': params.site,
+        'room': params.roomId,
+        'reason': next == null ? 'no_line' : 'url_unchanged',
+      });
+      _urlRefreshTimer = Timer(
+        const Duration(seconds: 60),
+        _refreshUrlBeforeExpire,
+      );
+      return;
+    }
+    PlaybackLog.write('url_refresh', {
+      'site': params.site,
+      'room': params.roomId,
+      'old_host': Uri.tryParse(before ?? '')?.host,
+      'new_host': Uri.tryParse(next.url)?.host,
+      'ttl_s': urlTtlSeconds(next.url),
+    });
+    _open(next, recovery.skip(1).toList());
+  }
+
   Map<String, int> _loadHostAvoidlist({bool refresh = false}) {
     final cached = _hostAvoidlist;
     if (!refresh && cached != null) {
@@ -195,6 +270,8 @@ class PlayController extends AsyncNotifier<PlayState> {
     final player = ref.read(playerProvider);
     final token = player is IdleReleasingLivePlayer ? player.enterRoom() : null;
     ref.onDispose(() {
+      _urlRefreshTimer?.cancel();
+      _urlRefreshTimer = null;
       // 先注销恢复回调再 stop:回调是播放器持有的**指向本 controller** 的活引用,
       // autoDispose 后播放器仍可能在自动重连里调用它,而那时 ref/state 已失效
       // (`_recoverLines` 读 state 会报 “Cannot use Ref after dispose”)。
@@ -472,7 +549,8 @@ class PlayController extends AsyncNotifier<PlayState> {
         generation: generation,
       ),
     );
-    _open(line, _fallbackLines(effectiveQuality, line));
+    _open(line, _fallbackLines(effectiveQuality, line),
+        fixture: current.isFixture);
   }
 
   /// 同画质内切换线路。
@@ -481,7 +559,8 @@ class PlayController extends AsyncNotifier<PlayState> {
     if (current == null || current.payload == null) return;
     final generation = ++_generation;
     state = AsyncData(current.copyWith(line: line, generation: generation));
-    _open(line, _fallbackLines(current.quality, line));
+    _open(line, _fallbackLines(current.quality, line),
+        fixture: current.isFixture);
   }
 
   /// 切换舞台弹幕叠加层显隐(纯展示开关,不重开流、不换代际)。
@@ -520,7 +599,10 @@ class PlayController extends AsyncNotifier<PlayState> {
   /// 回调只能由编排层提供 —— 自动重连是播放器内部看门狗驱动的,编排层无法
   /// 感知"它已耗尽上限"。装上后,播放器在放弃前会回头向本层要一份**重新
   /// 解析**的地址(签名平台地址此时多半已过期,复用旧地址=无限重开失效源)。
-  void _open(StreamLine line, List<StreamLine> fallbacks) {
+  ///
+  /// [fixture] 由调用点显式传入(进房/恢复路径恒 false,手动切线/切档随
+  /// 当前状态):预刷新排期依赖它,且不能读 state(见 [_scheduleUrlRefresh])。
+  void _open(StreamLine line, List<StreamLine> fallbacks, {bool fixture = false}) {
     final player = ref.read(playerProvider);
     final openToken = ++_latestPlayerOpenToken;
     // LineRecoveryAware 不是 LivePlayer 的子类型,is 探测不产生类型提升,
@@ -529,7 +611,8 @@ class PlayController extends AsyncNotifier<PlayState> {
       aware.setLineRecovery(_recoverLines);
     }
     unawaited(
-      _openAndApplyVolume(player, line, fallbacks, _generation, openToken),
+      _openAndApplyVolume(player, line, fallbacks, _generation, openToken,
+          fixture),
     );
   }
 
@@ -540,6 +623,7 @@ class PlayController extends AsyncNotifier<PlayState> {
     List<StreamLine> fallbacks,
     int generation,
     int openToken,
+    bool fixture,
   ) async {
     // 音量套用不阻塞开流(对齐 pure_live:进房先开流):mpv 的 volume 是
     // 进程级属性,通常先于首帧音频落地;开流后再补一次,校正快照与迟到回流。
@@ -551,6 +635,8 @@ class PlayController extends AsyncNotifier<PlayState> {
       return;
     }
     await _applyRoomVolume(player);
+    // open 成功且仍是最新一次开流:按本 URL 寿命排预刷新(过期前重签)。
+    _scheduleUrlRefresh(line, fixture);
   }
 
   /// 把本房间的有效音量套到播放器。
@@ -571,7 +657,18 @@ class PlayController extends AsyncNotifier<PlayState> {
   /// 故意走 [RoomRecoverer](绕开短缓存)而非 `resolveRoom` —— 后者可能命中
   /// 60s 短缓存,把过期地址原样交回去。非真实解析源(fixture)或解析异常时
   /// 返回空列表,由播放器走放弃分支给出终局建议。
-  Future<List<StreamLine>> _recoverLines() async {
+  ///
+  /// [recordAvoid] 控制"逃离 host 落负缓存":故障恢复路径(默认)记录;
+  /// URL 预刷新([_refreshUrlBeforeExpire])传 false —— 预刷新换 host 是服务端
+  /// 正常轮换边缘节点(2026-09-28 实测 scdn 池 -160/-187/-242 随机分配),
+  /// 不是旧节点故障,记入会把整个 scdn 池逐个污染进负缓存。
+  ///
+  /// [keepCurrentHost] 控制 brother 线路排序:预刷新传 true(保持当前节点,
+  /// 见 [refreshedLinesFor]);故障恢复默认 false(逃离死节点)。
+  Future<List<StreamLine>> _recoverLines({
+    bool recordAvoid = true,
+    bool keepCurrentHost = false,
+  }) async {
     // 宿主已离场(autoDispose)时一律拒答:下面要读 state,而销毁后读会抛错。
     // 回调注销是主动防护,这里再兜一道 —— 注销与调用之间存在竞态窗口。
     if (!ref.mounted) return const [];
@@ -597,7 +694,10 @@ class PlayController extends AsyncNotifier<PlayState> {
         preferredQuality: quality?.name,
       );
       if (!ref.mounted) return const [];
-      final next = pickPlayQuality(payload, quality?.name);
+      // 档位回退用进房同口径(占位档回退首个有线路的档):主播切推流画质后
+      // 原档名消失,`pickPlayQuality` 只按名字回退首档,懒取流下首档常是
+      // 空线路占位 → `no_line` → give_up(2026-09-28 真机 00:37 实测)。
+      final next = _pickPlayableQuality(payload, quality?.name);
       final line = pickStreamLine(
         next,
         ref.read(settingsProvider).preferredLineFormat.value,
@@ -611,14 +711,20 @@ class PlayController extends AsyncNotifier<PlayState> {
         });
         return const [];
       }
-      // 恢复路径返回该画质全部兄弟线路,并逃离被钉死的死节点(见 [recoveryLinesFor])。
-      final recovery = recoveryLinesFor(next, current.line);
-      // 成功逃离到不同 host:把死节点记入负缓存,后续进房/重启不再首撞它
-      // (乐观记录,口径见 host_avoidlist.dart)。
+      // 全部兄弟线路:故障恢复逃离死节点(keepCurrentHost=false,默认);
+      // URL 预刷新保持当前节点只换 token(keepCurrentHost=true,服务端轮换
+      // 边缘不是故障,逃逸排序会让短 TTL 流在节点池里 ping-pong)。
+      final recovery = keepCurrentHost
+          ? refreshedLinesFor(next, current.line)
+          : recoveryLinesFor(next, current.line);
+      // 故障恢复成功逃离到不同 host:把死节点记入负缓存,后续进房/重启
+      // 不再首撞它(乐观记录,口径见 host_avoidlist.dart)。预刷新路径
+      // (recordAvoid=false)不记:那是服务端正常轮换,不是旧节点故障。
       final escapedHost = Uri.tryParse(current.line?.url ?? '')?.host ?? '';
       final recoveryHost =
           Uri.tryParse(recovery.firstOrNull?.url ?? '')?.host ?? '';
-      if (escapedHost.isNotEmpty &&
+      if (recordAvoid &&
+          escapedHost.isNotEmpty &&
           recoveryHost.isNotEmpty &&
           recoveryHost != escapedHost) {
         _avoidFailedHost(current.line?.url);
@@ -631,6 +737,9 @@ class PlayController extends AsyncNotifier<PlayState> {
         'quality': next?.name,
         'lines': recovery.length,
         'host': Uri.tryParse(recovery.firstOrNull?.url ?? '')?.host,
+        'hosts': [
+          for (final line in recovery) Uri.tryParse(line.url)?.host ?? '?',
+        ].join(','),
       });
       state = AsyncData(
         current.copyWith(

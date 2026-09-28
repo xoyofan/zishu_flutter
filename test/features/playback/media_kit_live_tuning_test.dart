@@ -13,18 +13,19 @@ void main() {
       name: value,
   };
 
-  group('稳定缓冲配置(恢复 b6be087 长期稳定状态)', () {
-    test('cache 开启且 10s 封顶,前向 128MiB / 10s 预读(假时间线收敛)', () {
+  group('稳定缓冲配置(对齐斗鱼官方 web 缓冲窗口)', () {
+    test('cache 开启且 6s 封顶,前向 128MiB / 6s 预读(官方 max_play_buffer_ms=6000)', () {
       final properties = asMap();
       expect(properties['cache'], 'yes');
-      // 历史 60s → 20s → 10s(窗口 8~12 取 10):CDN 假时间线下流缓存层朝
-      // 目标无意义预读,是内存爬升(+200MB/10min)推手;取 10s 与
-      // readahead(10s) 对齐,不叠加双层预读余量。
-      expect(properties['cache-secs'], '10');
+      // 历史 60s → 20s → 10s → 6s:CDN 假时间线下流缓存层朝目标无意义预读,
+      // 是内存爬升(+200MB/10min)推手;2026-09-28 对齐斗鱼官方 web 播放器
+      // (getH5PlayV1 p2pMeta:max=6000/best=5000,超窗 1.05x 追帧),与
+      // readahead(6s) 对齐,不叠加双层预读余量。
+      expect(properties['cache-secs'], '6');
       // 窗口内前向字节上限提到 128MiB(高码率兼底),实际封顶项仍是 readahead。
       expect(properties['demuxer-max-bytes'], '134217728');
-      // 预读秒数是前向缓冲的实际封顶项(字节上限很难够着);窗口 8~12 取 10s。
-      expect(properties['demuxer-readahead-secs'], '10');
+      // 预读秒数是前向缓冲的实际封顶项(字节上限很难够着);官方口径 6s。
+      expect(properties['demuxer-readahead-secs'], '6');
     });
 
     test('回看缓冲 8MiB 有界', () {

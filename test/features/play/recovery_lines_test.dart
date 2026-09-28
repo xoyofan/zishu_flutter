@@ -70,4 +70,36 @@ void main() {
     final result = recoveryLinesFor(q, hwa);
     expect(result.first, huosa, reason: 'host 命中优先,与列表中位置无关');
   });
+
+  group('refreshedLinesFor(预刷新:保持当前 host 优先)', () {
+    test('当前 host 在候选中:同 host 排最前,只换 token 不换节点', () {
+      final hwaNew = StreamLine(
+        name: 'hwa',
+        url: 'https://hwa.douyucdn2.cn/live/9999.flv?token=NEW',
+        format: 'flv',
+      );
+      final q = quality([huosa, hwaNew]);
+      final result = refreshedLinesFor(q, hwa);
+      expect(result.first, hwaNew, reason: '预刷新沿用当前节点的新 token URL');
+      expect(result, hasLength(2));
+    });
+
+    test('当前 host 消失:顺延候选原序(不逃逸、不跳节点)', () {
+      final hw3 = StreamLine(
+        name: 'hw3',
+        url: 'https://hw3.douyucdn2.cn/live/9999.flv',
+        format: 'flv',
+      );
+      final q = quality([huosa, hw3]);
+      final result = refreshedLinesFor(q, hwa);
+      expect(result, [huosa, hw3], reason: '当前 host 不在候选中时保持原序');
+    });
+
+    test('画质无线路 / 当前线为 null:返回空/原序', () {
+      expect(refreshedLinesFor(quality(const []), hwa), isEmpty);
+      expect(refreshedLinesFor(null, hwa), isEmpty);
+      final q = quality([hwa, huosa]);
+      expect(refreshedLinesFor(q, null), [hwa, huosa]);
+    });
+  });
 }

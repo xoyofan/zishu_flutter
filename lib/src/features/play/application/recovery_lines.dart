@@ -33,3 +33,26 @@ List<StreamLine> recoveryLinesFor(
   final rest = all.where((l) => l != primary).toList();
   return [primary, ...rest];
 }
+
+/// URL 预刷新(expire 到点重签)用的线路序列:与 [recoveryLinesFor] 相反,
+/// **保持当前 host 优先** —— 预刷新换 host 是服务端正常轮换边缘节点
+/// (2026-09-28 实测 scdn 池 -160/-236/-242 随机分配),不是旧节点故障,
+/// 沿用当前节点只换 token,避免每次重签在节点池里来回跳(实测 24s TTL 的
+/// 短签名流曾因逃逸排序在两个节点间 ping-pong)。当前 host 从候选中消失
+/// 时自然顺延下一条。
+List<StreamLine> refreshedLinesFor(
+  StreamQuality? quality,
+  StreamLine? currentLine,
+) {
+  final all = quality?.lines ?? const <StreamLine>[];
+  if (all.isEmpty) return const [];
+  final currentHost = Uri.tryParse(currentLine?.url ?? '')?.host ?? '';
+  if (currentHost.isEmpty) return all;
+  final same = <StreamLine>[];
+  final others = <StreamLine>[];
+  for (final line in all) {
+    ((Uri.tryParse(line.url)?.host ?? '') == currentHost ? same : others)
+        .add(line);
+  }
+  return [...same, ...others];
+}
