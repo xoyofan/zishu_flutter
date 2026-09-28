@@ -246,6 +246,12 @@ class MediaKitLivePlayer
   /// 当前会话连续确认的 source_open 终局错误数。
   int _sourceOpenFailures = 0;
 
+  /// 单线路升级闩锁:**每个卡顿 episode 内至多升级 re-resolve 一次**。
+  /// 防止"re-resolve 失败/节流 → 退化重开 → 又满足升级条件"形成高频空转;
+  /// 升级失败后退化回同 URL 重开走完整退避阶梯,直到重试耗尽才真放弃。
+  /// open(用户切源/重连)与健康出帧(_onPlaying)都会复位它,开启新 episode。
+  bool _singleLineEscalated = false;
+
   /// 恢复(re-resolve)在途闩锁:终局诊断可能连续多条,mpv 对同一死源会反复
   /// 吐诊断,而 [_recoverOrGiveUp] 内部 await 期间失败计数仍在涨,不加闩锁
   /// 会并发发起多次 re-resolve/reopen。
@@ -746,7 +752,7 @@ class MediaKitLivePlayer
   void _scheduleExternalPauseRecovery() {
     if (_disposedOrEmpty || _givenUp) return;
     _externalPauseTimer?.cancel();
-    final backoff = _policy.backoffFor(_stallRetries);
+    final backoff = _policy.backoffForWithLines(_stallRetries, _currentLines.length);
     _externalPauseTimer = Timer(backoff, () {
       _externalPauseTimer = null;
       if (_disposedOrEmpty || _givenUp) return;
@@ -776,6 +782,8 @@ class MediaKitLivePlayer
     _stallTimer = null;
     _externalPauseTimer?.cancel();
     _externalPauseTimer = null;
+    // 健康出帧:单线路升级 episode 结转(新健康播放周期允许再次升级)。
+    _singleLineEscalated = false;
     _startVideoStabilitySampling();
     _emit((s) => s.copyWith(error: null, notice: PlaybackNotice.none));
     final retries = _stallRetries;
@@ -972,7 +980,7 @@ class MediaKitLivePlayer
   /// 已闩锁放弃时也不再挂:自动重试已终结,挂上只会白跑一趟。
   void _armStallTimer() {
     if (_stallTimer != null || _givenUp) return;
-    final backoff = _policy.backoffFor(_stallRetries);
+    final backoff = _policy.backoffForWithLines(_stallRetries, _currentLines.length);
     _stallTimer = Timer(backoff, _reopenIfStalled);
     PlaybackLog.write('stall_watchdog', {
       'armed': true,
@@ -1127,6 +1135,24 @@ class MediaKitLivePlayer
       _resyncAfterOpen();
       return;
     }
+    // 单线路源卡顿升级:无内部回退线路时,重开同一死 URL 毫无意义,
+    // 早一点 re-resolve(换节点 / 降画质)才有机会逃出被钉死的链路。
+    // 每个 episode 至多升级一次(_singleLineEscalated 防退化重开后再触发);
+    // 多线路源不升级(交给 mpv 播放列表内部跳线)。
+    if (_policy.shouldEscalateToResolve(
+          attempts: _stallRetries + 1,
+          lineCount: _currentLines.length,
+        ) &&
+        !_singleLineEscalated) {
+      _singleLineEscalated = true;
+      PlaybackLog.write('single_line_escalate', {
+        'attempt': _stallRetries + 1,
+        'limit': _policy.escalateResolveAfter,
+        'host': _currentHost,
+      });
+      unawaited(_escalateToResolve());
+      return;
+    }
     // 广告剔除造成的"无新段"是预期内的合法等待:按住看门狗,不计失败、
     // 不重开(广告期 playlist 全被剔除,重开只会烧掉重连预算,且恢复
     // 重解析拿到的还是同一批广告地址)。预算封顶见 [AdStallHoldPolicy]。
@@ -1173,6 +1199,67 @@ class MediaKitLivePlayer
     _settleHealthyWindow(reason: 'reopen');
     _emit((s) => s.copyWith(notice: PlaybackNotice.reconnecting));
     unawaited(open(_currentLines.first, _currentLines.skip(1).toList(), false));
+  }
+
+  /// 单线路源卡顿升级:向宿主请求**重新解析**(换节点 / 降画质),而非继续
+  /// 重开同一死节点。与 [_recoverOrGiveUp](重试耗尽后的终局恢复)的关键区别:
+  /// 这里的**节流失败 / 解析失败都不放弃**,而是退化回同 URL 重开
+  /// ([_reopenIfStalled],因 [_singleLineEscalated] 已置位不会再递归升级),
+  /// 避免把"重开死节点→re-resolve→又失败"的短暂抖动误判为"流不可救"而交出
+  /// 错误卡片。节流仍由 [_recoveryPolicy] 把关,单线路升级不会高速空转。
+  ///
+  /// 节流间隔(默认 40s)对单线路恰恰是合理节奏:re-resolve 是跳出被钉死链路的
+  /// 唯一希望,且每次解析都走 [RoomRecoverer] 绕开短缓存拿全新地址。若解析
+  /// 持续返回同一坏节点,退化回的重开会继续累积退避,直到重试耗尽才真放弃。
+  Future<void> _escalateToResolve() async {
+    if (_disposedOrEmpty || _givenUp) return;
+    final handler = _lineRecovery;
+    PlaybackLog.write('escalate_recover_request', {
+      'host': _currentHost,
+      'retries': _stallRetries,
+      'hasHandler': handler != null,
+    });
+    if (handler == null) {
+      // 宿主不支持重解析:退化回同 URL 重开,不放弃。
+      _reopenIfStalled();
+      return;
+    }
+    final now = DateTime.now();
+    if (!_recoveryPolicy.canRecover(now: now, lastRecoverAt: _lastRecoverAt)) {
+      // 节流期内:退化回同 URL 重开,避免反复打解析服务;退避仍由策略控制。
+      PlaybackLog.write('escalate_recover_throttled', {
+        'host': _currentHost,
+        'lastRecoverAt': _lastRecoverAt?.toIso8601String(),
+      });
+      _reopenIfStalled();
+      return;
+    }
+    _lastRecoverAt = now;
+    _emit((s) => s.copyWith(notice: PlaybackNotice.recoveringNewUrl));
+    List<StreamLine>? fresh;
+    try {
+      fresh = await handler();
+    } catch (_) {
+      fresh = null;
+    }
+    if (!_disposed && !_givenUp && fresh != null && fresh.isNotEmpty) {
+      PlaybackLog.write('escalate_recover_ok', {
+        'lines': fresh.length,
+        'host': _hostOf(fresh.first),
+      });
+      _stallRetries = 0;
+      _sourceOpenFailures = 0;
+      // resetRetries 默认 true:新地址开启新一轮有界重试,并复位本 episode
+      // 升级闩锁,让新线路(若解析出多线路)正常走 mpv 内部跳线。
+      await open(fresh.first, fresh.skip(1).toList());
+      return;
+    }
+    PlaybackLog.write('escalate_recover_fail', {
+      'host': _currentHost,
+      'reason': fresh == null ? 'error' : 'empty',
+    });
+    // 解析失败:退化回同 URL 重开,不放弃。
+    _reopenIfStalled();
   }
 
   /// 自动重连耗尽后的最后一步:向宿主请求**重新解析**后的线路。
@@ -1439,6 +1526,9 @@ class MediaKitLivePlayer
       if (resetRetries) {
         _stallRetries = 0;
         _sourceOpenFailures = 0;
+        // 单线路升级闩锁随新会话复位:新房/切线/换新地址都开启新 episode,
+        // 允许再次在卡顿后升级 re-resolve。
+        _singleLineEscalated = false;
         // 用户主动重试/切源是唯一的闩锁解除点。
         _givenUp = false;
         // 新会话(进房/切线/换新地址)重置诊断去重:不同故障的同文案也该再记。
@@ -1604,6 +1694,7 @@ class MediaKitLivePlayer
       _lastRecoverAt = null;
       _stallRetries = 0;
       _sourceOpenFailures = 0;
+      _singleLineEscalated = false;
       _cdnCircuitBreaker.clear();
       _givenUp = false;
       _adHoldSince = null;

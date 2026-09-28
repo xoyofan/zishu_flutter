@@ -33,6 +33,13 @@ class PlaybackRetryPolicy {
     this.maxDelay = const Duration(seconds: 30),
     this.healthWindow = const Duration(seconds: 10),
     this.deadOpenGrace = const Duration(seconds: 9),
+    // 单线路升级默认关闭:仅在生产构造点显式开启(见 play_provider.dart),
+    // 否则所有既有单测(默认策略 + 单线路 fixture)的退避契约保持不变。
+    this.escalateSingleLine = false,
+    this.escalateResolveAfter = 2,
+    this.singleLineBaseDelay = const Duration(seconds: 4),
+    this.singleLineStepDelay = const Duration(seconds: 4),
+    this.singleLineMaxDelay = const Duration(seconds: 12),
   });
 
   /// 连续失败次数上限:达到即放弃自动重试。
@@ -46,6 +53,28 @@ class PlaybackRetryPolicy {
 
   /// 退避封顶(避免对已死线路空转过密)。
   final Duration maxDelay;
+
+  /// 单线路源(无 mpv 内部回退线路)卡顿时,是否启用"快速退避 + 早升级
+  /// re-resolve"。默认关闭以兼容既有单测契约;生产在 play_provider.dart
+  /// 显式开启。
+  ///
+  /// 为什么需要它:实测 2026-09-28 斗鱼 room 9999 单线路(`lines=1`),CDN 节点
+  /// `hwa.douyucdn2.cn` 断供时,mpv 播放列表只有一条线,整组轮转重开永远回到
+  /// 同一死节点;退避阶梯(8→12→16→20→24→28→30s)爬满 6 次才轮到 re-resolve,
+  /// 于是用户被卡 50~90s。单线路重开同一死 URL 毫无意义,早一点 re-resolve
+  /// (换节点 / 降画质)才有机会逃出被钉死的链路 —— 多线路源不受影响,继续
+  /// 优先交给 mpv 播放列表内部跳下一条线。
+  final bool escalateSingleLine;
+
+  /// 单线路源在第几次同 URL 重开后升级 re-resolve(从 1 起)。
+  /// 默认 2:先做一次快速同 URL 重开(给 CDN 自恢复留 ~4s 窗口,实测斗鱼会自愈),
+  /// 第 2 次即升级 re-resolve,把最坏等待从 30s+ 压到 ~4s。
+  final int escalateResolveAfter;
+
+  /// 单线路源的退避档位(更快,避免长退避空耗已被钉死的死节点)。
+  final Duration singleLineBaseDelay;
+  final Duration singleLineStepDelay;
+  final Duration singleLineMaxDelay;
 
   /// 判定"这条流真的健康了"所需的持续出帧时长。
   /// 未满该时长就中断的播放**不算**成功,不重置计数(见库注释第 1 条)。
@@ -75,6 +104,36 @@ class PlaybackRetryPolicy {
       ),
     );
   }
+
+  /// 单线路感知的退避时长:[lineCount]<=1 且启用升级时使用更激进的档位
+  /// ([singleLineBaseDelay]/[singleLineStepDelay]/[singleLineMaxDelay]);其余
+  /// 一律退回标准 [backoffFor],确保多线路与未启用升级的单线路行为不变。
+  Duration backoffForWithLines(int attempts, int lineCount) {
+    if (!escalateSingleLine || lineCount > 1) return backoffFor(attempts);
+    if (attempts <= 0) return singleLineBaseDelay;
+    final millis =
+        singleLineBaseDelay.inMilliseconds +
+        singleLineStepDelay.inMilliseconds * attempts;
+    return Duration(
+      milliseconds: millis.clamp(
+        singleLineBaseDelay.inMilliseconds,
+        singleLineMaxDelay.inMilliseconds,
+      ),
+    );
+  }
+
+  /// 本次卡顿后是否应升级为 re-resolve(换节点 / 降画质)而非同 URL 重开。
+  ///
+  /// [attempts] 为「即将进行的重开序号」(从 1 起);[lineCount] 为当前线路数
+  /// (含回退)。仅 `lines<=1` 且无内部回退线路时触发,达到 [escalateResolveAfter]
+  /// 即升级 —— 多线路源永远返回 false(优先交给 mpv 内部跳线)。
+  bool shouldEscalateToResolve({
+    required int attempts,
+    required int lineCount,
+  }) =>
+      escalateSingleLine &&
+      lineCount <= 1 &&
+      attempts >= escalateResolveAfter;
 
   /// 供 UI 展示的重连进度文案;未开始重连时返回空串。
   String progressLabel(int attempts) =>

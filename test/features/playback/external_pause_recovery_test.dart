@@ -770,4 +770,105 @@ void main() {
       );
     });
   });
+
+  group('单线路卡顿升级 re-resolve(escalateSingleLine)', () {
+    final freshLine = StreamLine(
+      name: 'B',
+      url: 'https://b.example.com/live.m3u8',
+      format: 'hls',
+    );
+    // 升级退避压到 150ms(单线路档位),节流与死开流宽限均放宽,避免测试等待过久。
+    final escalatePolicy = PlaybackRetryPolicy(
+      escalateSingleLine: true,
+      escalateResolveAfter: 2,
+      singleLineBaseDelay: const Duration(milliseconds: 150),
+      singleLineStepDelay: Duration.zero,
+      singleLineMaxDelay: const Duration(milliseconds: 150),
+      baseDelay: const Duration(milliseconds: 150),
+      maxDelay: const Duration(milliseconds: 150),
+      deadOpenGrace: const Duration(seconds: 9),
+    );
+
+    setUp(() {
+      // 覆盖外层默认 player:本组需要启用单线路升级策略。
+      player.dispose();
+      fake = _FakePlatformPlayer();
+      player = MediaKitLivePlayer(
+        player: Player(platformPlayer: fake),
+        policy: escalatePolicy,
+      );
+      snapshots = <PlayerSnapshot>[];
+      snapshotSub = player.snapshots.listen(snapshots.add);
+    });
+
+    test('单线路第 2 次重开升级为 re-resolve,换到新节点', () async {
+      // 复现 2026-09-28 斗鱼 9999:单线路死节点重开永远回到同一地址,拖满 6 次
+      // 退避才 re-resolve。开启升级后,第 1 次先同 URL 重开(给 CDN 自愈留
+      // 窗口),第 2 次即升级 re-resolve 换节点。
+      var resolveCount = 0;
+      player.setLineRecovery(() async {
+        resolveCount++;
+        return [freshLine];
+      });
+      await enterPlaying();
+      await emitDeadlockSignature();
+
+      // 第 1 次看门狗(150ms)到期 → 同 URL 重开:不得提前升级。
+      await waitFor(
+        () => fake.calls.where((c) => c.startsWith('open:')).length >= 2,
+      );
+      expect(
+        fake.calls.where((c) => c.startsWith('open:')),
+        everyElement(contains('a.example.com')),
+        reason: '第 1 次重开必须仍是同 URL,不得提前升级',
+      );
+
+      // 第 2 次看门狗(150ms)到期 → 升级 re-resolve,换到 b.example.com。
+      await waitFor(() => resolveCount == 1);
+      await waitFor(() => fake.calls.contains('open:b.example.com'));
+
+      expect(
+        fake.calls,
+        ['open:a.example.com', 'open:a.example.com', 'open:b.example.com'],
+        reason: '单线路应在第 2 次重开升级 re-resolve 换节点,而非继续重开死节点',
+      );
+      expect(
+        logLines().any((l) => l.contains('single_line_escalate')),
+        isTrue,
+        reason: '升级动作必须留痕(single_line_escalate)',
+      );
+      expect(
+        logLines().any((l) => l.contains('escalate_recover_ok')),
+        isTrue,
+        reason: '拿到新地址必须留 escalate_recover_ok',
+      );
+    });
+
+    test('re-resolve 解析失败/空 → 退化回同 URL 重开,不放弃', () async {
+      // 解析失败不得误判为放弃:退化回同 URL 重开走完退避阶梯,让用户仍有机会。
+      player.setLineRecovery(() async => <StreamLine>[]);
+      await enterPlaying();
+      await emitDeadlockSignature();
+
+      // 第 1 次 → 同 URL 重开;第 2 次 → 升级 re-resolve(空)→ 退化回同 URL 重开。
+      await waitFor(
+        () => fake.calls.where((c) => c.startsWith('open:')).length >= 3,
+      );
+      expect(
+        fake.calls.where((c) => c.startsWith('open:')),
+        everyElement(contains('a.example.com')),
+        reason: '解析失败后必须退化回同 URL 重开,不得换节点也不得放弃',
+      );
+      expect(
+        logLines().any((l) => l.contains('escalate_recover_fail')),
+        isTrue,
+        reason: '解析失败必须留 escalate_recover_fail 证据',
+      );
+      expect(
+        logLines().any((l) => l.contains('give_up')),
+        isFalse,
+        reason: '解析失败不得误判为放弃',
+      );
+    });
+  });
 }

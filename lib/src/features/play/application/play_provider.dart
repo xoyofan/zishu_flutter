@@ -11,6 +11,7 @@ import 'package:live_parser/live_parser.dart';
 import '../../../platforms/common/playback/idle_releasing_live_player.dart';
 import '../../../platforms/common/playback/live_player.dart';
 import '../../../platforms/common/playback/media_kit_live_player.dart';
+import '../../../platforms/common/playback/playback_retry.dart';
 import '../../../platforms/common/playback/playback_log.dart';
 import '../../../shared/application/browse_source.dart';
 import '../../../shared/application/providers.dart';
@@ -31,6 +32,11 @@ final playerProvider = Provider<LivePlayer>((ref) {
       videoHardwareAccelerationEnabled: ref
           .read(settingsProvider)
           .videoHardwareAcceleration,
+      // 单线路源卡顿升级:无内部回退线路时,重开同一死 URL 无意义,早一点
+      // re-resolve(换节点 / 降画质)逃出被钉死链路。实测斗鱼 room9999 的
+      // hwa.douyucdn2.cn 断供,旧逻辑拖满 6 次退避阶梯(8→30s)才 re-resolve,
+      // 用户被卡 50~90s。开启后最坏等待压到 ~4s 第 2 次重开即升级。
+      policy: const PlaybackRetryPolicy(escalateSingleLine: true),
     ),
   );
   ref.listen<bool>(

@@ -170,6 +170,89 @@ void main() {
     });
   });
 
+  group('backoffForWithLines(单线路感知退避)', () {
+    test('默认策略未启用升级 → 单线路仍走标准退避(兼容既有契约)', () {
+      const policy = PlaybackRetryPolicy();
+      expect(policy.backoffForWithLines(0, 1), const Duration(seconds: 8));
+      expect(policy.backoffForWithLines(1, 1), const Duration(seconds: 12));
+      expect(policy.backoffForWithLines(5, 1), const Duration(seconds: 28));
+    });
+
+    test('多线路永远走标准退避(优先 mpv 内部跳线)', () {
+      const policy = PlaybackRetryPolicy(escalateSingleLine: true);
+      expect(policy.backoffForWithLines(0, 2), const Duration(seconds: 8));
+      expect(policy.backoffForWithLines(3, 5), const Duration(seconds: 20));
+    });
+
+    test('启用升级 + 单线路 → 更快档位且封顶更低', () {
+      const policy = PlaybackRetryPolicy(escalateSingleLine: true);
+      expect(policy.backoffForWithLines(0, 1), const Duration(seconds: 4));
+      expect(policy.backoffForWithLines(1, 1), const Duration(seconds: 8));
+      expect(policy.backoffForWithLines(2, 1), const Duration(seconds: 12));
+      // 封顶到 singleLineMaxDelay,不再随次数增长。
+      expect(policy.backoffForWithLines(10, 1), const Duration(seconds: 12));
+    });
+
+    test('单线路升级退避单调不减', () {
+      const policy = PlaybackRetryPolicy(escalateSingleLine: true);
+      var previous = Duration.zero;
+      for (var attempt = 0; attempt <= 20; attempt++) {
+        final current = policy.backoffForWithLines(attempt, 1);
+        expect(current >= previous, isTrue, reason: 'attempt=$attempt');
+        previous = current;
+      }
+    });
+  });
+
+  group('shouldEscalateToResolve(单线路升级判定)', () {
+    test('未启用升级 → 永不升级', () {
+      const policy = PlaybackRetryPolicy();
+      expect(
+        policy.shouldEscalateToResolve(attempts: 5, lineCount: 1),
+        isFalse,
+      );
+    });
+
+    test('多线路 → 永不升级(交给 mpv 内部跳线)', () {
+      const policy = PlaybackRetryPolicy(escalateSingleLine: true);
+      expect(
+        policy.shouldEscalateToResolve(attempts: 5, lineCount: 3),
+        isFalse,
+      );
+    });
+
+    test('启用 + 单线路 → 达到阈值才升级', () {
+      const policy = PlaybackRetryPolicy(escalateSingleLine: true);
+      expect(
+        policy.shouldEscalateToResolve(attempts: 1, lineCount: 1),
+        isFalse,
+      );
+      expect(
+        policy.shouldEscalateToResolve(attempts: 2, lineCount: 1),
+        isTrue,
+      );
+      expect(
+        policy.shouldEscalateToResolve(attempts: 6, lineCount: 1),
+        isTrue,
+      );
+    });
+
+    test('自定义阈值生效', () {
+      const policy = PlaybackRetryPolicy(
+        escalateSingleLine: true,
+        escalateResolveAfter: 3,
+      );
+      expect(
+        policy.shouldEscalateToResolve(attempts: 2, lineCount: 1),
+        isFalse,
+      );
+      expect(
+        policy.shouldEscalateToResolve(attempts: 3, lineCount: 1),
+        isTrue,
+      );
+    });
+  });
+
   group('恢复节流策略(PlaybackRecoveryPolicy)', () {
     const policy = PlaybackRecoveryPolicy();
 
