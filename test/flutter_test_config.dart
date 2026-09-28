@@ -14,6 +14,8 @@ import 'dart:io';
 import 'package:flutter/services.dart' show FontLoader, rootBundle;
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:zishu_flutter/src/platforms/common/playback/playback_log.dart';
+
 Future<void> testExecutable(Future<void> Function() testMain) async {
   // 在设置全局桩【之前】构造唯一的真实回环 client,供转发;
   // global 设置后 new HttpClient() 会递归回到桩。
@@ -27,6 +29,13 @@ Future<void> testExecutable(Future<void> Function() testMain) async {
   // TestWidgetsFlutterBinding 会自带 HttpOverrides 并覆盖这里设的值,
   // 而 twitch 广告过滤的 loopback 测试依赖本文件“回环放行”的桩。
   HttpOverrides.global = _NoNetworkHttpOverrides();
+  // 播放日志测试隔离:进程级默认测试路径 —— 未显式 initForTest 的测试
+  // (经 controller/player 间接写日志)也落临时文件,绝不混入
+  // `%APPDATA%` 真实 playback.log(曾污染真机卡顿观测窗口,room=1 等
+  // fixture 事件混进 bench 统计)。文件按 pid 隔离并行测试进程。
+  PlaybackLog.setDefaultTestPath(
+    '${Directory.systemTemp.path}/playback_test_$pid.log',
+  );
   await _loadIconFonts();
   await testMain();
 }

@@ -63,6 +63,20 @@ void main() {
     final line = file.readAsStringSync().trim();
     expect(line, matches(RegExp(r' stop cat=lifecycle$')));
   });
+
+  test('resetForTest 后未注入的写入回落默认测试路径,不落真实日志', () {
+    final fallback = File('${Directory.systemTemp.path}/playback_log_fallback_probe.log');
+    if (fallback.existsSync()) fallback.deleteSync();
+    PlaybackLog.setDefaultTestPath(fallback.path);
+    PlaybackLog.resetForTest(); // 模拟其它测试文件的 tearDown
+    PlaybackLog.write('leak_probe_event');
+    expect(fallback.existsSync(), isTrue,
+        reason: 'reset 后写入必须落在默认测试路径,绝不解析 %APPDATA% 真实日志');
+    expect(fallback.readAsStringSync(), contains('leak_probe_event'));
+    fallback.deleteSync();
+    // 还原:清掉默认路径,后续测试回到本文件的注入路径。
+    PlaybackLog.initForTest(file.path);
+  });
 }
 
 extension on File {

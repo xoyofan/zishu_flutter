@@ -22,14 +22,26 @@ class PlaybackLog {
   static File? _file;
   static bool _broken = false;
 
+  /// 进程级默认测试路径([setDefaultTestPath] 注入):让**未显式注入**的
+  /// 测试(经 controller/player 间接写日志)也落在临时文件,绝不解析
+  /// `%APPDATA%` 真实日志 —— 此前测试运行的 fixture 事件(room=1 等)
+  /// 会混进真机观测日志,污染诊断窗口。
+  static String? _defaultTestPath;
+
   /// 测试注入点;生产路径 lazily 解析 `%APPDATA%\zishu_flutter\logs\playback.log`。
   static void initForTest(String path) {
     _file = File(path);
     _broken = false;
   }
 
+  /// 设置进程级默认测试路径(见 [flutter_test_config]):[resetForTest]
+  /// 后的写入回落到这里,而不是 null(否则又解析真实 `%APPDATA%`)。
+  static void setDefaultTestPath(String path) {
+    _defaultTestPath = path;
+  }
+
   static void resetForTest() {
-    _file = null;
+    _file = _defaultTestPath != null ? File(_defaultTestPath!) : null;
     _broken = false;
   }
 
@@ -37,6 +49,10 @@ class PlaybackLog {
     if (_broken) return null;
     final injected = _file;
     if (injected != null) return injected;
+    // 测试进程兜底:设有默认测试路径时绝不解析真实 `%APPDATA%`,
+    // 覆盖「未注入、未 reset」的一切遗漏场景。
+    final defaultTest = _defaultTestPath;
+    if (defaultTest != null) return _file = File(defaultTest);
     try {
       final base = Platform.environment['APPDATA'];
       if (base == null || base.isEmpty) {
