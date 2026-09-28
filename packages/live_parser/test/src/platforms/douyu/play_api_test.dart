@@ -49,9 +49,16 @@ void main() {
       expect(flvFromApiData(data), 'https://hw-tct.douyucdn.cn/live/9527abc_0_0.flv');
     });
 
-    test('isDouyucdnUrl 过滤 edgesrv 与空串', () {
+    test('isDouyucdnUrl 接受官方 scdn 域(edgesrv.com),拒绝第三方与空串', () {
       expect(isDouyucdnUrl('https://hw-tct.douyucdn.cn/live/1.flv'), isTrue);
-      expect(isDouyucdnUrl('https://hw-tct.edgesrv.com/live/1.flv'), isFalse);
+      // 官方 web 2026-09-28 实测:scdn 智能选线的流落在 *.edgesrv.com:8443。
+      expect(
+        isDouyucdnUrl(
+          'https://stream-hefei-cmcc-39-145-3-183.edgesrv.com:8443/live/9999_4000.flv',
+        ),
+        isTrue,
+      );
+      expect(isDouyucdnUrl('https://evil.example.com/live/1.flv'), isFalse);
       expect(isDouyucdnUrl(''), isFalse);
     });
   });

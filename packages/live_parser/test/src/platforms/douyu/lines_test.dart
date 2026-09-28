@@ -24,24 +24,39 @@ PlayV1Response _resp({
 
 void main() {
   group('parseDouyuCdnList', () {
-    test('hw-h5 恒排最前,其余按 weight 降序', () {
+    test('按 re-weight 降序(对齐官方 web 2026-09-28 实测:scdn 99999 优先)', () {
       final response = PlayV1Response.fromJson(const {
         'error': 0,
         'data': {
-          'rtmp_cdn': 'hw-h5',
+          'rtmp_cdn': 'scdncmccanhhf',
           'cdnsWithName': [
-            {'name': '线路3', 'cdn': 'ali-h5', 're-weight': 90},
-            {'name': '线路1', 'cdn': 'hw-h5', 're-weight': 10},
-            {'name': '线路2', 'cdn': 'tct-h5', 'reWeight': 60},
+            {'name': '线路7', 'cdn': 'hw-h5', 're-weight': 10009},
+            {'name': '线路1', 'cdn': 'scdncmccanhhf', 're-weight': 99999},
+            {'name': '线路13', 'cdn': 'hs-h5', 're-weight': 10010},
             {'name': '坏数据', 'cdn': ''},
           ],
         },
       });
       final cdns = parseDouyuCdnList(response.data);
-      expect(cdns.map((c) => c.cdn), ['hw-h5', 'ali-h5', 'tct-h5']);
-      expect(cdns[0].weight, 10);
-      expect(cdns[1].weight, 90);
-      expect(cdns[2].name, '线路2');
+      expect(
+        cdns.map((c) => c.cdn),
+        ['scdncmccanhhf', 'hs-h5', 'hw-h5'],
+        reason: '服务端 re-weight 即选线依据,不再硬编码 hw-h5 恒最前',
+      );
+    });
+
+    test('同 weight 保持输入顺序(稳定排序)', () {
+      final response = PlayV1Response.fromJson(const {
+        'error': 0,
+        'data': {
+          'cdnsWithName': [
+            {'name': 'a', 'cdn': 'a-h5', 're-weight': 10},
+            {'name': 'b', 'cdn': 'b-h5', 're-weight': 10},
+          ],
+        },
+      });
+      final cdns = parseDouyuCdnList(response.data);
+      expect(cdns.map((c) => c.cdn), ['a-h5', 'b-h5']);
     });
 
     test('cdnsWithName 缺失时回退 rtmp_cdn', () {
@@ -58,10 +73,20 @@ void main() {
   });
 
   group('preferredDouyuCdnCode', () {
-    test('偏好命中用偏好,否则第一条', () {
-      final cdns = parseDouyuCdnList(_resp().data);
+    test('无偏好时取 weight 最高(服务端首选),显式偏好命中仍尊重', () {
+      final response = PlayV1Response.fromJson(const {
+        'error': 0,
+        'data': {
+          'rtmp_cdn': 'hw-h5',
+          'cdnsWithName': [
+            {'name': '线路7', 'cdn': 'hw-h5', 're-weight': 10009},
+            {'name': '线路1', 'cdn': 'scdncmccanhhf', 're-weight': 99999},
+          ],
+        },
+      });
+      final cdns = parseDouyuCdnList(response.data);
+      expect(preferredDouyuCdnCode(cdns), 'scdncmccanhhf');
       expect(preferredDouyuCdnCode(cdns, 'hw-h5'), 'hw-h5');
-      expect(preferredDouyuCdnCode(cdns, 'nope'), 'hw-h5');
     });
   });
 
@@ -97,9 +122,9 @@ void main() {
       expect(url, 'https://cdn.douyucdn.cn/live/mix_9527.flv');
     });
 
-    test('非 douyucdn 的混合地址回退普通拼装', () {
+    test('非官方流域名(第三方)的混合地址回退普通拼装', () {
       final url = playUrlFromResponse(
-        _resp(isMixed: true, mixedUrl: 'https://evil.edgesrv.com/x.flv'),
+        _resp(isMixed: true, mixedUrl: 'https://evil.example.com/x.flv'),
       );
       expect(url, 'https://cdn.douyucdn.cn/live/9527_0_0.flv');
     });

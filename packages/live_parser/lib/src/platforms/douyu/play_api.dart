@@ -135,6 +135,9 @@ Future<PlayV1Response> fetchH5PlayV1(
 /// 拼装 FLV 直播地址。
 String flvFromApiData(PlayV1Data data) => '${data.rtmpUrl}/${data.rtmpLive}';
 
-/// 有效斗鱼 CDN 地址:排除 edgesrv 代理线。
+/// 有效斗鱼 CDN 地址:`douyucdn*` 域,或官方 scdn 智能选线的 `edgesrv.com`
+/// 就近边缘(2026-09-28 实测官方 web 拉流落在
+/// `stream-<城市>-<运营商>-*.edgesrv.com:8443`,re-weight 99999 首选)。
+/// 此前把 edgesrv 当代理线排除,恰好挡掉了官方主力线路。
 bool isDouyucdnUrl(String url) =>
-    url.isNotEmpty && url.contains('douyucdn') && !url.contains('edgesrv.com');
+    url.isNotEmpty && (url.contains('douyucdn') || url.contains('edgesrv.com'));

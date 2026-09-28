@@ -14,14 +14,16 @@ class DouyuCdnItem {
   final int weight;
 }
 
-/// hw-h5 恒排最前,其余按 weight 降序。
+/// 按 re-weight 降序(稳定排序:同 weight 保持输入顺序)。
+///
+/// 对齐官方 web 行为(2026-09-28 实测 getH5PlayV1 响应):服务端把 scdn 智能选线
+/// (按运营商/省市就近,如 `scdncmccanhhf`)打到 re-weight 99999,hs-h5/hw-h5
+/// 仅 10009~10010。此前硬编码「hw-h5 恒排最前」把首选钉死在华为云
+/// `douyucdn2.cn` 边缘池,实测其 `hwa` 节点半死(每 5s reset),而官方用户
+/// 被 scdn 调度到 `edgesrv.com` 就近节点根本不经过它。
 List<DouyuCdnItem> sortDouyuCdnList(List<DouyuCdnItem> cdns) {
   final sorted = [...cdns];
-  sorted.sort((a, b) {
-    if (a.cdn == 'hw-h5' && b.cdn != 'hw-h5') return -1;
-    if (b.cdn == 'hw-h5' && a.cdn != 'hw-h5') return 1;
-    return b.weight - a.weight;
-  });
+  sorted.sort((a, b) => b.weight - a.weight);
   return sorted;
 }
 
@@ -41,15 +43,22 @@ List<DouyuCdnItem> parseDouyuCdnList(PlayV1Data? data) {
   return [DouyuCdnItem(name: '默认', cdn: fallback, weight: 0)];
 }
 
-/// 首选 CDN:偏好存在则用偏好,否则取排序后的第一条。
-String preferredDouyuCdnCode(List<DouyuCdnItem> cdns, [String preferred = 'hw-h5']) {
-  for (final item in cdns) {
-    if (item.cdn == preferred) return preferred;
+/// 首选 CDN:显式偏好命中则用偏好,否则取 re-weight 最高的一条
+/// (即服务端为当前网络选定的线路,scdn 优先)。
+String preferredDouyuCdnCode(List<DouyuCdnItem> cdns, [String preferred = '']) {
+  if (preferred.isNotEmpty) {
+    for (final item in cdns) {
+      if (item.cdn == preferred) return preferred;
+    }
   }
   return cdns.isEmpty ? preferred : cdns.first.cdn;
 }
 
 /// 从播放接口响应提取可用播放地址:混合流优先,普通流回退 rtmp_url/rtmp_live。
+///
+/// mixed_url 为**相对路径**时拼 base 再校验;为绝对 URL 且非官方域时直接
+/// 放弃混合流(回退普通流)——不能把第三方绝对地址拼到官方 base 后靠
+/// `contains('douyucdn')` 误放行。
 String playUrlFromResponse(PlayV1Response response) {
   final data = response.data;
   if (data == null) return '';
@@ -57,8 +66,11 @@ String playUrlFromResponse(PlayV1Response response) {
   if (data.isMixed && data.mixedUrl.isNotEmpty) {
     final mixed = data.mixedUrl;
     if (isDouyucdnUrl(mixed)) return mixed;
-    final joined = base.isEmpty ? '' : '$base/${mixed.replaceFirst(RegExp('^/+'), '')}';
-    if (isDouyucdnUrl(joined)) return joined;
+    final isAbsolute = mixed.startsWith('http://') || mixed.startsWith('https://');
+    if (!isAbsolute) {
+      final joined = base.isEmpty ? '' : '$base/${mixed.replaceFirst(RegExp('^/+'), '')}';
+      if (isDouyucdnUrl(joined)) return joined;
+    }
   }
   if (data.rtmpLive.contains('mix=1') && data.mixedUrl.isNotEmpty) {
     final mixed = data.mixedUrl;

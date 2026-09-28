@@ -244,7 +244,9 @@ class DouyuRoomResolver implements RoomResolver, RoomSummaryRefresher {
     }
 
     final cdns = parseDouyuCdnList(probeData);
-    final activeCdn = preferredDouyuCdnCode(cdns, probeCdn);
+    // 首选线路跟服务端 re-weight 走(scdn 智能选线优先,对齐官方 web);
+    // probe 仍以 [probeCdn] 请求,只为拿 multirates/cdnsWithName 与 rate=0 响应。
+    final activeCdn = preferredDouyuCdnCode(cdns);
     final rateZeroCache = <String, PlayV1Response>{probeCdn: probe};
 
     final preferred = matchQualityPreference(
