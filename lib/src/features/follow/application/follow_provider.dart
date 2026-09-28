@@ -294,10 +294,28 @@ class FollowController extends Notifier<List<FollowEntry>> {
     _persist();
   }
 
+  /// 组合同步(关注页/侧栏刷新按钮的唯一业务入口):
+  /// 导入抖音关注(实际源,新条目加入 + 与已有同 key 条目合并元信息)
+  /// + 全量刷新所有关注条目状态(覆盖 exe 内手动关注的各平台条目)。
+  ///
+  /// 两条数据路线在此汇合:exe 内手动关注走 [refreshStatuses] 的批量/
+  /// 逐房间刷新;抖音实际源走 [importDouyinFollows] 重新拉取关注列表。
+  /// 结果按 `site:roomId` 合并,重复条目不重复落库。返回本次新增条数。
+  Future<int> syncFollows({
+    void Function(FollowImportProgress progress)? onProgress,
+  }) async {
+    final added = await importDouyinFollows(onProgress: onProgress);
+    await refreshStatuses();
+    return added;
+  }
+
   /// 导入当前抖音账号的全部关注。
   ///
-  /// 导入结果先合并到本地 state,再由 [_persist] 自动写入本机并同步已登录的
-  /// data-server;已有条目的特别关注/提醒/本地元信息保持不变。
+  /// 两条路线的重复合并口径:导入结果与本地已有**同 key**(`site:roomId`)
+  /// 条目按 [_mergeImported] 合并元信息(标题/主播名/封面/头像/分类以实际
+  /// 源为准),本地特别关注/提醒/关注时间/在播状态保持不变;本地没有的
+  /// key 作为新条目追加。合并后由 [_persist] 自动写入本机并同步已登录的
+  /// data-server。
   Future<int> importDouyinFollows({
     void Function(FollowImportProgress progress)? onProgress,
   }) async {
@@ -305,9 +323,16 @@ class FollowController extends Notifier<List<FollowEntry>> {
     if (source == null) return 0;
     final imported = await source.importDouyinFollows(onProgress: onProgress);
     final existingKeys = {for (final entry in state) entry.key};
+    // 按 key 索引导入结果:同 key 重复导入项天然去重(后写赢)。
+    final freshByKey = <String, RoomSummary>{
+      for (final room in imported) '${room.site}:${room.roomId}': room,
+    };
+    // 新条目:本地没有的 key(addedKeys 再挡一层导入列表内部重复)。
+    final addedKeys = <String>{};
     final additions = <FollowEntry>[
       for (final room in imported)
-        if (!existingKeys.contains('${room.site}:${room.roomId}'))
+        if (!existingKeys.contains('${room.site}:${room.roomId}') &&
+            addedKeys.add('${room.site}:${room.roomId}'))
           FollowEntry(
             room: room,
             isSpecial: false,
@@ -315,10 +340,55 @@ class FollowController extends Notifier<List<FollowEntry>> {
             followedAt: DateTime.now(),
           ),
     ];
-    if (additions.isEmpty) return 0;
-    state = [...state, ...additions];
+    final hasMerge = freshByKey.keys.any(existingKeys.contains);
+    if (additions.isEmpty && !hasMerge) return 0;
+    state = [
+      // 已有条目:同 key 的与导入结果合并元信息(合并重复),其余原样。
+      for (final entry in state)
+        freshByKey[entry.key] == null
+            ? entry
+            : entry.copyWith(
+                room: _mergeImported(entry.room, freshByKey[entry.key]!),
+              ),
+      ...additions,
+    ];
     await _persist();
     return additions.length;
+  }
+
+  /// 导入结果与本地已有同 key 条目的房间记录合并(合并重复口径,逐字段:
+  ///
+  /// - `title`/`anchorName`/`cover`/`avatar`:导入源(实际源)非空则更新,
+  ///   空回退本地 —— 实际源元信息通常比首次手动关注时新;
+  /// - `category`:导入源非空则更新,经 [displayCategoryName] 归一为中文
+  ///   显示名(同 [_mergeRefreshed] 口径),未命中保持原名;
+  /// - `cid`:本地非空保留 —— 与刷新同口径,「加入关注时所在分类」的跳转
+  ///   上下文不得被无分类上下文的导入结果冲掉;
+  /// - `online`/`roomState`/`startedAt`/统计:保留本地 —— 关注列表接口
+  ///   不带可信在播状态,翻转交给组合同步随后的 [refreshStatuses]
+  ///   (导入源给的离线占位不得把在播条目刷成离线)。
+  static RoomSummary _mergeImported(RoomSummary current, RoomSummary fresh) {
+    final mergedCid = current.cid.isNotEmpty ? current.cid : fresh.cid;
+    return RoomSummary(
+      site: current.site,
+      roomId: current.roomId,
+      title: fresh.title.trim().isNotEmpty ? fresh.title : current.title,
+      anchorName: fresh.anchorName.trim().isNotEmpty
+          ? fresh.anchorName
+          : current.anchorName,
+      cid: mergedCid,
+      category: fresh.category.trim().isNotEmpty
+          ? displayCategoryName(current.site, fresh.category, mergedCid)
+          : current.category,
+      online: current.online,
+      cover: fresh.cover.trim().isNotEmpty ? fresh.cover : current.cover,
+      avatar: fresh.avatar.trim().isNotEmpty ? fresh.avatar : current.avatar,
+      startedAt: current.startedAt,
+      roomState: current.roomState,
+      followers: current.followers,
+      vip: current.vip,
+      diamondFans: current.diamondFans,
+    );
   }
 
   /// 导入当前抖音关注中正在直播的房间。

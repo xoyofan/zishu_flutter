@@ -164,14 +164,16 @@ void main() {
     suppressRenderFlexOverflow();
     await pumpFollowApp(tester);
 
-    expect(find.text('导入抖音关注'), findsNothing);
+    // 组合刷新按钮(导入抖音关注 + 刷新全部状态)只随抖音筛选出现,
+    // 非抖音筛选下是普通状态刷新按钮(同图标,无此 key)。
+    expect(find.byKey(const Key('follow-sync-douyin')), findsNothing);
     expect(find.text('导入直播中'), findsNothing);
 
     await tester.tap(find.text('抖音').first);
     await tester.pump(const Duration(milliseconds: 50));
     await tester.pump(const Duration(milliseconds: 50));
 
-    expect(find.text('导入抖音关注'), findsOneWidget);
+    expect(find.byKey(const Key('follow-sync-douyin')), findsOneWidget);
     expect(find.text('导入直播中'), findsOneWidget);
   });
 

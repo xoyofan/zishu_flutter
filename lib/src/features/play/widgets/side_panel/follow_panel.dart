@@ -36,6 +36,35 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
   /// 本轮待渲染的可见条目总数(由 build 写入,供滚动回调判定还有没有下一页)。
   int _visibleTotal = 0;
 
+  /// 组合同步进行中(按钮转圈防重入)。
+  bool _syncing = false;
+
+  /// 组合同步(用户口径 2026-09-28,与「我的关注」页同一业务入口):
+  /// 导入抖音关注(与已有条目合并重复)+ 刷新全部关注状态。
+  /// 侧栏密度不放进度弹窗,按钮自身转圈 + SnackBar 反馈结果。
+  Future<void> _syncDouyin() async {
+    if (_syncing) return;
+    setState(() => _syncing = true);
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      final added = await ref.read(followProvider.notifier).syncFollows();
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            added == 0 ? '没有新增抖音关注,已刷新全部状态' : '已导入 $added 个抖音关注并刷新全部状态',
+          ),
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } catch (_) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('同步失败,请检查抖音登录 Cookie')),
+      );
+    } finally {
+      if (mounted) setState(() => _syncing = false);
+    }
+  }
+
   /// 侧栏可见性口径:**只显在播**(用户口径 2026-09-19:「不用显示没开播
   /// 的」)。排序 = 超关在播 → 普通在播(follow_sort 统一档位,未开播档
   /// 自然为空)。
@@ -113,6 +142,34 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
                 ),
               ),
             ),
+            // 组合同步入口(用户口径 2026-09-28):平台筛选选中抖音时显示,
+            // 点击 = 导入抖音关注(合并重复)+ 刷新全部关注状态。
+            if (_siteFilter == 'douyin')
+              Padding(
+                padding: const EdgeInsets.only(right: AppSpacing.xs),
+                child: _syncing
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : IconButton(
+                        key: const Key('play-side-follow-sync'),
+                        tooltip: '导入抖音关注并刷新全部状态',
+                        onPressed: _syncDouyin,
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(
+                          minWidth: 22,
+                          minHeight: 22,
+                        ),
+                        focusColor: AppStateLayer.focusOf(tokens.accent),
+                        icon: Icon(
+                          Icons.refresh_rounded,
+                          size: 18,
+                          color: tokens.textSecondary,
+                        ),
+                      ),
+              ),
           ],
         ),
         Expanded(

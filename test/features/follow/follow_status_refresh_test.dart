@@ -208,6 +208,82 @@ void main() {
       expect(container.read(followProvider), hasLength(2));
       expect(container.read(followProvider).last.room.roomId, '1002');
     });
+
+    test('导入与已有条目合并重复:元信息以实际源为准,在播状态保留', () async {
+      final importer = FakeFollowImportSource([
+        // 与种子同 key(douyin:1001):合并而非追加;关注列表接口不带回
+        // 可信在播状态(online 空),不得把本地在播条目刷成离线。
+        _fresh(roomId: '1001', online: '', site: 'douyin'),
+      ]);
+      final container = await _container(
+        seed: [
+          _seedEntry(
+            roomId: '1001',
+            online: '5千',
+            site: 'douyin',
+            cid: 'cid-local',
+            followers: '654321',
+          ),
+        ],
+        followImportSource: importer,
+      );
+
+      final added = await container
+          .read(followProvider.notifier)
+          .importDouyinFollows();
+
+      expect(added, 0, reason: '同 key 已存在,不产生新增');
+      final entry = container.read(followProvider).single;
+      expect(entry, isNotNull);
+      expect(entry.room.roomId, '1001');
+      // 元信息以实际源(导入)为准:标题/封面跟随导入值。
+      expect(entry.room.title, '新标题');
+      expect(entry.room.cover, 'https://cdn/new.jpg');
+      // 在播状态保留:导入源的离线占位不翻转本地状态,交给随后刷新。
+      expect(entry.isLive, isTrue);
+      expect(entry.room.online, '5千');
+      // 统计与 cid 保留(跳转上下文 / 上游未带回不冲空)。
+      expect(entry.room.followers, '654321');
+      expect(entry.room.cid, 'cid-local');
+    });
+
+    test('syncFollows:导入 + 全量刷新一次完成,两条路线汇合', () async {
+      final importer = FakeFollowImportSource([
+        _fresh(roomId: '2001', online: '', site: 'douyin'),
+      ]);
+      // 抖音批量直播快照:2001 在播 → 导入后立即被刷新链路接上。
+      final batch = FakeFollowLiveRefresher(
+        FollowLiveSnapshot(
+          complete: true,
+          rooms: [
+            RoomRecord.fromSummary(
+              _fresh(
+                roomId: '2001',
+                online: '3万',
+                site: 'douyin',
+                roomState: RoomState.live,
+              ),
+            ),
+          ],
+        ),
+      );
+      final container = await _container(
+        seed: [_seedEntry(roomId: '1001', online: '5千')],
+        followImportSource: importer,
+        followLiveRefresher: batch,
+      );
+
+      final added = await container.read(followProvider.notifier).syncFollows();
+
+      expect(added, 1);
+      expect(importer.calls, 1, reason: '实际源导入执行一次');
+      expect(batch.calls, 1, reason: '组合同步内的全量刷新执行一次');
+      final entries = container.read(followProvider);
+      expect(entries, hasLength(2));
+      final imported = entries.firstWhere((e) => e.room.roomId == '2001');
+      expect(imported.isLive, isTrue, reason: '导入的新条目随刷新回填在播状态');
+      expect(imported.room.online, '3万');
+    });
   });
 
   group('refreshStatuses 合并语义', () {

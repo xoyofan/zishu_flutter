@@ -143,7 +143,10 @@ class _FollowViewState extends ConsumerState<FollowView> {
     );
   }
 
-  Future<void> _importDouyin() async {
+  /// 组合同步(抖音筛选下的刷新按钮):导入抖音关注(与已有条目合并重复)
+  /// + 全量刷新所有关注条目状态(含 exe 内手动关注的其他平台条目)。
+  /// 保留进度弹窗:导入分页耗时可见。
+  Future<void> _syncFollows() async {
     if (_importing) return;
     setState(() => _importing = true);
     final progress = ValueNotifier(const FollowImportProgress(page: 0, imported: 0));
@@ -154,7 +157,7 @@ class _FollowViewState extends ConsumerState<FollowView> {
         builder: (_) => ValueListenableBuilder<FollowImportProgress>(
           valueListenable: progress,
           builder: (context, value, _) => AlertDialog(
-            title: const Text('正在导入抖音关注'),
+            title: const Text('正在同步关注数据'),
             content: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -162,8 +165,8 @@ class _FollowViewState extends ConsumerState<FollowView> {
                 const SizedBox(height: AppSpacing.md),
                 Text(
                   value.refreshing
-                      ? '正在批量刷新当前直播状态…'
-                      : '第 ${value.page} 页 · 已发现 ${value.imported}${value.total > 0 ? ' / ${value.total}' : ''} 个关注',
+                      ? '正在刷新全部关注状态…'
+                      : '正在导入抖音关注:第 ${value.page} 页 · 已发现 ${value.imported}${value.total > 0 ? ' / ${value.total}' : ''} 个',
                 ),
               ],
             ),
@@ -173,22 +176,15 @@ class _FollowViewState extends ConsumerState<FollowView> {
     );
     try {
       final notifier = ref.read(followProvider.notifier);
-      final added = await notifier.importDouyinFollows(
+      final added = await notifier.syncFollows(
         onProgress: (value) => progress.value = value,
       );
-      progress.value = FollowImportProgress(
-        page: progress.value.page,
-        imported: added,
-        total: progress.value.total,
-        refreshing: true,
-      );
-      await notifier.refreshStatuses();
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pop();
-      _toast(added == 0 ? '没有新增抖音关注,已刷新直播状态' : '已导入 $added 个抖音关注并刷新状态');
+      _toast(added == 0 ? '没有新增抖音关注,已刷新全部关注状态' : '已导入 $added 个抖音关注并刷新全部状态');
     } catch (_) {
       if (mounted) Navigator.of(context, rootNavigator: true).pop();
-      if (mounted) _toast('抖音关注导入失败,请检查登录 Cookie');
+      if (mounted) _toast('同步失败,请检查抖音登录 Cookie');
     } finally {
       progress.dispose();
       if (mounted) setState(() => _importing = false);
@@ -279,6 +275,9 @@ class _FollowViewState extends ConsumerState<FollowView> {
                         ),
                       ),
                     ),
+                  // 组合刷新按钮(用户口径 2026-09-28:替代原「导入抖音关注」
+                  // 文本按钮,并与状态刷新合并):点击 = 导入抖音关注(与已有
+                  // 条目合并重复)+ 刷新全部关注状态(含其他平台手动关注)。
                   if (_importing)
                     const SizedBox(
                       width: 16,
@@ -286,37 +285,33 @@ class _FollowViewState extends ConsumerState<FollowView> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     )
                   else
-                    TextButton.icon(
-                      onPressed: _importDouyin,
+                    IconButton(
+                      key: const Key('follow-sync-douyin'),
+                      tooltip: '导入抖音关注并刷新全部状态',
+                      onPressed: _syncFollows,
                       icon: Icon(
-                        Icons.download_rounded,
-                        size: 16,
+                        Icons.refresh_rounded,
+                        size: 20,
                         color: tokens.textSecondary,
                       ),
-                      label: Text(
-                        '导入抖音关注',
-                        style: context.textBody.copyWith(
-                          color: tokens.textSecondary,
-                        ),
+                    ),
+                ] else
+                  if (_refreshing)
+                    const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  else
+                    IconButton(
+                      tooltip: '刷新封面与状态',
+                      onPressed: _refresh,
+                      icon: Icon(
+                        Icons.refresh_rounded,
+                        size: 20,
+                        color: tokens.textSecondary,
                       ),
                     ),
-                ],
-                if (_refreshing)
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else
-                  IconButton(
-                    tooltip: '刷新封面与状态',
-                    onPressed: _refresh,
-                    icon: Icon(
-                      Icons.refresh_rounded,
-                      size: 20,
-                      color: tokens.textSecondary,
-                    ),
-                  ),
                 if (_batchMode) ...[
                   TextButton(
                     onPressed: _exitBatch,
