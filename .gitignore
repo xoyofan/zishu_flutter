@@ -71,3 +71,5 @@ packages/live_parser/build/
 
 # playwright-cli 本机会话产物(控制台日志/页面快照,不入库)
 .playwright-cli/
+# playwright-mcp 同类本机会话产物
+.playwright-mcp/
