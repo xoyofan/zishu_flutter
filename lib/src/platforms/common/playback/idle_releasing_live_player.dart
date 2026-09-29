@@ -9,7 +9,8 @@ import 'media_kit_live_player.dart';
 
 /// 稳定播放器代理，通过活动房间租约管理 native 播放器生命周期。
 class IdleReleasingLivePlayer
-    implements LivePlayer, LineRecoveryAware, RecoveryCancellable {
+    implements LivePlayer, LineRecoveryAware, RecoveryCancellable,
+    StreamSourceSwitchable {
   IdleReleasingLivePlayer({
     required LivePlayer Function() createPlayer,
     Future<void> Function(LivePlayer)? releasePlayer,
@@ -173,6 +174,20 @@ class IdleReleasingLivePlayer
 
   void clearLineRecovery(int token) {
     if (_active == token) setLineRecovery(null);
+  }
+
+  /// 无感换源:当前持有的 inner 播放器支持时透传;inner 尚未创建/不支持
+  /// 返回 false(调用方回退整组重开)。
+  @override
+  Future<bool> switchStreamSource(
+    StreamLine line, [
+    List<StreamLine> fallbacks = const [],
+  ]) async {
+    final inner = _inner;
+    if (inner case StreamSourceSwitchable switchable) {
+      return switchable.switchStreamSource(line, fallbacks);
+    }
+    return false;
   }
 
   @override

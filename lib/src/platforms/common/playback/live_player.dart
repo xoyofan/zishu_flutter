@@ -255,3 +255,19 @@ abstract interface class VideoHardwareAccelerationAware {
 abstract interface class RecoveryCancellable {
   void cancelRecovery();
 }
+
+/// 可选能力:**无感换源** —— 不重开播放器,把当前流的远端地址热切换到
+/// [line](本地流代理转发,对齐官方桌面端 DySDKController 架构)。
+///
+/// 用途:斗鱼 web 契约的流 URL 带 `expire=300`,预刷新重签后新地址与旧地址
+/// 通常同 host 不同 token;旧实现只能整组 reopen(画面闪断 ~60ms),代理层
+/// 热切换则 mpv 完全无感(仅短暂消耗缓冲)。返回 `false` 表示当前实现/源
+/// 不具备该能力(非 FLV 直链 / 代理未启用),调用方应回退整组重开。
+///
+/// 同 [LineRecoveryAware] 的理由做成独立接口:能力只有真实 media_kit 实现
+/// 需要,测试替身零改动。
+abstract interface class StreamSourceSwitchable {
+  Future<bool> switchStreamSource(StreamLine line, [
+    List<StreamLine> fallbacks = const [],
+  ]);
+}

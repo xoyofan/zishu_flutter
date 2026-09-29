@@ -13,7 +13,8 @@ import 'package:flutter/widgets.dart'
         Color,
         Widget,
         WidgetsBinding,
-        WidgetsBindingObserver;
+        WidgetsBindingObserver,
+        visibleForTesting;
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import 'package:live_parser/live_parser.dart' show StreamLine, UpstreamProxy;
@@ -23,6 +24,7 @@ import 'package:window_manager/window_manager.dart'
 import 'buffering_stall_tracker.dart';
 import 'live_player.dart';
 import 'live_tuning_config.dart';
+import 'local_stream_proxy.dart';
 import 'playback_log.dart';
 import 'playback_retry.dart';
 import 'playback_resilience.dart';
@@ -58,12 +60,15 @@ class MediaKitLivePlayer
         LivePlayer,
         LineRecoveryAware,
         VideoHardwareAccelerationAware,
-        RecoveryCancellable {
+        RecoveryCancellable,
+        StreamSourceSwitchable {
   /// [player] 是单测注入点:VM 测试无法加载原生 libmpv(`Player()` 会构造
   /// `NativePlayer` 并 `DynamicLibrary.open`),只能注入 `Player(platformPlayer:)`
   /// 的假后端来驱动事件与命令。生产调用点一律不传,行为与原先完全一致。
   /// [adFilter] 同理:Twitch 广告过滤代理,生产用默认实例,测试可注入
-  /// 定制判定/上游的实例。
+  /// 定制判定/上游的实例。[streamProxy] 为 null(默认)时行为与原先完全
+  /// 一致 —— mpv 直连远端;传入后 FLV 直链经本地代理转发(对齐官方桌面端
+  /// 架构,预刷新/换源对 mpv 无感)。
   MediaKitLivePlayer({
     Player? player,
     TwitchAdFilter? adFilter,
@@ -73,6 +78,7 @@ class MediaKitLivePlayer
     PlaybackResiliencePolicy resiliencePolicy =
         const PlaybackResiliencePolicy(),
     this.stabilityInterval = const Duration(seconds: 5),
+    this.streamProxy,
   }) : _player =
            player ??
            // logLevel 默认为 error:media_kit 只向 mpv 请求 error 级日志,
@@ -98,6 +104,18 @@ class MediaKitLivePlayer
 
   final Player _player;
   bool videoHardwareAccelerationEnabled;
+
+  /// 本地流代理(可选):启用后 FLV 直链改由 mpv 打开本地地址、代理层转发
+  /// 远端,URL 预刷新/换源走 [switchStreamSource] 热切换,mpv 无感。
+  /// null = 直连(旧行为,全部既有单测的默认形态)。
+  final LocalStreamProxy? streamProxy;
+
+  /// 当前 open 的代理会话([open] 里为首选 FLV 线路创建;切源/停止释放)。
+  StreamProxySession? _proxySession;
+
+  /// 测试探针:当前代理会话(生产代码不得依赖)。
+  @visibleForTesting
+  StreamProxySession? get debugProxySession => _proxySession;
 
   /// 视频稳定性/噪音汇总的采样周期(生产 5s;测试注入更短值以便驱动 tick)。
   final Duration stabilityInterval;
@@ -732,6 +750,44 @@ class MediaKitLivePlayer
             : s.notice,
       );
     });
+  }
+
+  /// 为 [line] 创建本地代理会话(可热切换);不满足代理条件(代理未启用/
+  /// 非 FLV 直链/已在会话中打开同线路)时释放旧会话并返回 null(直连)。
+  Future<StreamProxySession?> _wrapLineWithProxy(StreamLine line) async {
+    await _disposeProxySession();
+    final proxy = streamProxy;
+    if (proxy == null || !proxy.isRunning) return null;
+    if (line.format != 'flv') return null;
+    final session = proxy.openSession(line.url);
+    _proxySession = session;
+    PlaybackLog.write('proxy_line_wrap', {
+      'host': _hostOf(line),
+      'session': session.id,
+    });
+    return session;
+  }
+
+  Future<void> _disposeProxySession() async {
+    final session = _proxySession;
+    _proxySession = null;
+    if (session != null) await session.dispose();
+  }
+
+  /// 无感换源(见 [StreamSourceSwitchable]):把当前代理会话的 upstream 热切
+  /// 到 [line],mpv 侧不重开。会话不存在/已死/非 FLV 时返回 false,调用方
+  /// 回退整组重开。
+  @override
+  Future<bool> switchStreamSource(
+    StreamLine line, [
+    List<StreamLine> fallbacks = const [],
+  ]) async {
+    final session = _proxySession;
+    if (session == null || line.format != 'flv') return false;
+    final ok = await session.switchUpstream(line.url);
+    if (!ok) return false;
+    _currentLines = [line, ...fallbacks];
+    return true;
   }
 
   /// 缓冲态切换:进入缓冲即起看门狗;退出缓冲仅撤销看门狗。
@@ -1547,6 +1603,23 @@ class MediaKitLivePlayer
       // 代理按当前线路主机取:被墙 CDN 走代理,国内可达站点显式清空
       // (mpv 选项是进程级,不重设会把上一个源的代理策略带过来)。
       await _applyProxyForLine(line);
+      // 本地流代理包装(首选 FLV 直链):mpv 打开本地地址,代理转发远端;
+      // _currentLines 保持远端原始线路(恢复重开/日志归因的语义不变),
+      // 仅 mpv 播放列表的首选 entry 换成本地 URL。对齐官方桌面端
+      // DySDKController(127.0.0.1:5001)架构。
+      var playlistLines = _currentLines;
+      final session = await _wrapLineWithProxy(_currentLines.first);
+      if (session != null) {
+        playlistLines = [
+          StreamLine(
+            name: _currentLines.first.name,
+            url: session.localUrl,
+            format: _currentLines.first.format,
+            headers: _currentLines.first.headers,
+          ),
+          ..._currentLines.skip(1),
+        ];
+      }
       // 新会话从"无广告等待"开始记账。
       _adHoldSince = null;
       // 新会话重建播放时钟基线:重开/换源后 time-pos 时间线不同,旧基线
@@ -1605,7 +1678,7 @@ class MediaKitLivePlayer
       );
       try {
         final playlist = Playlist(
-          _currentLines
+          playlistLines
               .map((item) => Media(item.url, httpHeaders: item.headers))
               .toList(growable: false),
         );
@@ -1720,6 +1793,7 @@ class MediaKitLivePlayer
       _playingSince = null;
       _stallTracker.reset();
       _openStartedAt = null;
+      await _disposeProxySession();
       _currentLines = const [];
       // 离房即重置恢复节流与重试记账:下一次进房从干净状态开始,
       // 而不是继承上一间的窗口 / 已放弃闩锁(否则重进同一间永不自动重连)。
@@ -1827,6 +1901,7 @@ class MediaKitLivePlayer
   Future<void> _releaseNativeOnce() async {
     if (!_disposed) {
       _disposed = true;
+      unawaited(_disposeProxySession());
       _stallTimer?.cancel();
       _stallTimer = null;
       _externalPauseTimer?.cancel();
