@@ -33,8 +33,14 @@ class _RecommendPanel extends StatelessWidget {
       // 切房语义与「关注」tab 完全一致:pushReplacement 只换栈顶播放页 ——
       // 旧播放页被卸载(media-kit 会话随 autoDispose 收干净),下层浏览页
       // 保留为返回目标(go 会重置整条栈,左上角「返回」将无栈可回)。
-      onTap: (room) =>
-          context.pushReplacement('/${room.site}/play/${room.roomId}'),
+      onTap: (room) {
+        PlaybackLog.logRoomNav(
+          source: 'play_recommend_panel',
+          site: room.site,
+          roomId: room.roomId,
+        );
+        context.pushReplacement('/${room.site}/play/${room.roomId}');
+      },
     );
   }
 }

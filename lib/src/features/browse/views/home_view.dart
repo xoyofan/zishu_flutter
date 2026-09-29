@@ -20,6 +20,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 
+import '../../../platforms/common/playback/playback_log.dart';
 import '../../../shared/application/global_actions.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/widgets/retry_button.dart';
@@ -277,7 +278,14 @@ class _HomeViewState extends ConsumerState<HomeView> {
         rooms: rooms,
         hasMore: hasMore,
         onLoadMore: controller.loadMore,
-        onRoomTap: (room) => context.push('/${room.site}/play/${room.roomId}'),
+        onRoomTap: (room) {
+          PlaybackLog.logRoomNav(
+            source: 'home_grid',
+            site: room.site,
+            roomId: room.roomId,
+          );
+          context.push('/${room.site}/play/${room.roomId}');
+        },
       ),
     );
   }

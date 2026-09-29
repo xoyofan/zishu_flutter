@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 
+import '../../../platforms/common/playback/playback_log.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
@@ -97,6 +98,11 @@ class _SearchViewState extends ConsumerState<SearchView> {
       return;
     }
     _inputFocus.unfocus();
+    PlaybackLog.logRoomNav(
+      source: 'search_hit',
+      site: item.site,
+      roomId: item.hit.id,
+    );
     _go('/${item.site}/play/${item.hit.id}');
   }
 
@@ -112,6 +118,11 @@ class _SearchViewState extends ConsumerState<SearchView> {
         ? 'douyu'
         : ref.read(searchProvider).site;
     _inputFocus.unfocus();
+    PlaybackLog.logRoomNav(
+      source: 'search_direct',
+      site: site,
+      roomId: target.roomId,
+    );
     _go('/$site/play/${target.roomId}');
   }
 

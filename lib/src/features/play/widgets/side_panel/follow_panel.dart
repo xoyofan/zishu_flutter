@@ -212,8 +212,14 @@ class _FollowPanelState extends ConsumerState<_FollowPanel> {
   ///   「返回」无栈可回，抛 `GoError: There is nothing to pop`，表现为点了没反应；
   /// - pushReplacement：旧播放页被卸载（会话随 autoDispose 收干净），
   ///   下层浏览页保留为返回目标 —— 两者兼得。
-  void _goRoom(RoomSummary room) =>
-      context.pushReplacement('/${room.site}/play/${room.roomId}');
+  void _goRoom(RoomSummary room) {
+    PlaybackLog.logRoomNav(
+      source: 'play_follow_panel',
+      site: room.site,
+      roomId: room.roomId,
+    );
+    context.pushReplacement('/${room.site}/play/${room.roomId}');
+  }
 }
 
 /// 侧栏关注列表底部提示:还有更多时引导滚动。

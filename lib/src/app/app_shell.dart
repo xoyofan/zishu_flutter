@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 
+import '../platforms/common/playback/playback_log.dart';
 import '../features/search/widgets/search_dialog.dart';
 import '../features/browse/application/browse_provider.dart';
 import '../features/browse/application/my_category_provider.dart';
@@ -127,6 +128,11 @@ class _AppShellState extends ConsumerState<AppShell> {
   void _openRoom(FollowEntry entry) {
     _closeAll();
     final room = entry.room;
+    PlaybackLog.logRoomNav(
+      source: 'follow_flyout',
+      site: room.site,
+      roomId: room.roomId,
+    );
     unawaited(context.push('/${room.site}/play/${room.roomId}'));
   }
 

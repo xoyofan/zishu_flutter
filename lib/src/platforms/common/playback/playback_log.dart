@@ -88,6 +88,18 @@ class PlaybackLog {
     });
   }
 
+  /// 记录一次进房导航(带来源)。真机上出现过「没操作却切到别的直播间」
+  /// (2026-09-30 01:13,8682569 播放中被导航到 252140 又切回),而
+  /// `resolve_ms`/`room_enter` 只能证明 controller 重建,无法回答「谁发起
+  /// 的导航」—— 每个导航点在这里落一条 `nav_room`,复现时 grep 即可定位。
+  static void logRoomNav({
+    required String source,
+    required String site,
+    required String roomId,
+  }) {
+    write('nav_room', {'source': source, 'site': site, 'room': roomId});
+  }
+
   /// 事件分类表:按**调试场景**聚合,`cat=` 作为首个字段附加在事件名后。
   /// 快速调试口径(2026-09-28 用户要求):一 grep 拉出一类事件,例如
   /// - `grep 'cat=recovery' playback.log` —— 卡了多久、怎么恢复的;
@@ -156,7 +168,7 @@ class PlaybackLog {
           'app_start', 'app_lifecycle', 'window_event', 'player_created',
           'player_native_disposed', 'player_idle_scheduled',
           'player_idle_cancelled', 'play_cmd', 'play_state',
-          'play_view_params', 'stop', 'caption_load_ok',
+          'play_view_params', 'stop', 'caption_load_ok', 'nav_room',
         ])
           e: 'lifecycle',
         'resource_sample': 'resource',

@@ -39,6 +39,13 @@ class IdleReleasingLivePlayer
   StreamSubscription<PlayerSnapshot>? _subscription;
   final _viewChanges = StreamController<int>.broadcast();
   LineRecoveryHandler? _recovery;
+
+  /// [_recovery] 归属的房间 token(setLineRecovery 装载时的 [_active])。
+  /// 快速换房时新房 build 先推进 _active、旧房 onDispose 后到:
+  /// 若按 `_active == token` 决定是否清回调,旧房的恢复 handler 会残留
+  /// 在全局播放器上 —— 此时断流,恢复链会拿**旧房间**的地址换源,
+  /// 画面直接变成另一个直播间。按归属清理则两种 dispose 顺序都安全。
+  int? _recoveryOwner;
   int _viewGeneration = 0;
 
   int? get activeRoomToken => _active;
@@ -118,7 +125,10 @@ class IdleReleasingLivePlayer
       await _subscription?.cancel();
       _subscription = null;
       if (player case LineRecoveryAware aware) aware.setLineRecovery(null);
-      if (releaseSequence == _sequence && _active == null) _recovery = null;
+      if (releaseSequence == _sequence && _active == null) {
+        _recovery = null;
+        _recoveryOwner = null;
+      }
       _viewGeneration++;
       if (!_viewChanges.isClosed) _viewChanges.add(_viewGeneration);
       PlaybackLog.writeResourceSample('player_dispose_start', {
@@ -172,12 +182,14 @@ class IdleReleasingLivePlayer
   }
 
   void clearLineRecovery(int token) {
-    if (_active == token) setLineRecovery(null);
+    // 按归属清理而非 `_active == token`:见 [_recoveryOwner] 的换房竞态说明。
+    if (_recoveryOwner == token) setLineRecovery(null);
   }
 
   @override
   void setLineRecovery(LineRecoveryHandler? handler) {
     _recovery = handler;
+    _recoveryOwner = handler == null ? null : _active;
     final player = _inner;
     if (player case LineRecoveryAware recoveryAware) {
       recoveryAware.setLineRecovery(handler);

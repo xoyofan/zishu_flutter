@@ -199,6 +199,53 @@ void main() {
   );
 
   test(
+    'old room recovery handler is cleared on dispose even after new room entry',
+    () async {
+      // 快速换房竞态(2026-09-30 真机 8682569 播放中被断流恢复链换成 252140
+      // 的排查结论):新房 build 先推进 _active、旧房 onDispose 后到。若按
+      // `_active == token` 决定清理,旧房的恢复 handler 会残留在全局播放器上
+      // —— 之后断流,恢复链会拿旧房间的地址换源,画面变成另一个直播间。
+      final fake = _AwareFakePlayer();
+      final player = IdleReleasingLivePlayer(createPlayer: () => fake);
+      final a = player.enterRoom();
+      await player.open(_line);
+      Future<List<StreamLine>> handlerA() async => const <StreamLine>[];
+      player.setLineRecovery(handlerA);
+      expect(player.debugRecoveryHandler, isNotNull);
+      // 换房:B 的 build 已推进 _active,但 B 的 _open 还没装上自己的 handler。
+      player.enterRoom();
+      // A 的 onDispose 此时到达:必须清掉 A 的 handler,不得残留。
+      player.clearLineRecovery(a);
+      expect(player.debugRecoveryHandler, isNull);
+      expect(fake.handler, isNull);
+      player.dispose();
+    },
+  );
+
+  test(
+    'late dispose of old room does not clear new room recovery handler',
+    () async {
+      // 反向顺序:B 的 _open 先装上 handler(归属 B),A 的 onDispose 后到
+      // —— 清理必须按归属判断,不能把 B 的 handler 误清掉。
+      final fake = _AwareFakePlayer();
+      final player = IdleReleasingLivePlayer(createPlayer: () => fake);
+      final a = player.enterRoom();
+      await player.open(_line);
+      Future<List<StreamLine>> handlerA() async => const <StreamLine>[];
+      player.setLineRecovery(handlerA);
+      final b = player.enterRoom();
+      Future<List<StreamLine>> handlerB() async => const <StreamLine>[];
+      player.setLineRecovery(handlerB);
+      player.clearLineRecovery(a);
+      expect(player.debugRecoveryHandler, same(handlerB));
+      expect(fake.handler, same(handlerB));
+      player.clearLineRecovery(b);
+      expect(player.debugRecoveryHandler, isNull);
+      player.dispose();
+    },
+  );
+
+  test(
     'opening creates one player; leave stops and expiry disposes once',
     () async {
       final fake = _FakePlayer();

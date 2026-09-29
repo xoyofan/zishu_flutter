@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 
+import '../../../platforms/common/playback/playback_log.dart';
 import '../../../shared/domain/category_display.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
@@ -499,7 +500,14 @@ class _RoomSection extends ConsumerWidget {
                   rooms: value.rooms,
                   hasMore: value.hasMore,
                   onLoadMore: controller.loadMore,
-                  onRoomTap: (room) => context.push('/${room.site}/play/${room.roomId}'),
+                  onRoomTap: (room) {
+                    PlaybackLog.logRoomNav(
+                      source: 'category_grid',
+                      site: room.site,
+                      roomId: room.roomId,
+                    );
+                    context.push('/${room.site}/play/${room.roomId}');
+                  },
                 ),
               ),
       AsyncValue(:final error?) => _ErrorRetry(

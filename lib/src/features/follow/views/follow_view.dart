@@ -11,6 +11,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../platforms/common/playback/playback_log.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../../../shared/application/browse_source.dart';
@@ -213,8 +214,14 @@ class _FollowViewState extends ConsumerState<FollowView> {
     );
   }
 
-  void _goPlay(FollowEntry entry) =>
-      context.push('/${entry.room.site}/play/${entry.room.roomId}');
+  void _goPlay(FollowEntry entry) {
+    PlaybackLog.logRoomNav(
+      source: 'follow_view',
+      site: entry.room.site,
+      roomId: entry.room.roomId,
+    );
+    context.push('/${entry.room.site}/play/${entry.room.roomId}');
+  }
 
   void _goAnchor(FollowEntry entry) =>
       context.push('/${entry.room.site}/anchor/${entry.room.anchorName}');

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:live_parser/live_parser.dart';
 
+import '../../../platforms/common/playback/playback_log.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/zishu_tokens.dart';
 import '../application/anchor_provider.dart';
@@ -25,6 +26,11 @@ class AnchorView extends ConsumerWidget {
   static const double _contentMaxWidth = 832;
 
   void _openRoom(BuildContext context, RoomSummary room) {
+    PlaybackLog.logRoomNav(
+      source: 'anchor_view',
+      site: room.site,
+      roomId: room.roomId,
+    );
     context.push('/${room.site}/play/${room.roomId}');
   }
 
