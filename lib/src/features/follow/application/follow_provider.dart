@@ -298,14 +298,35 @@ class FollowController extends Notifier<List<FollowEntry>> {
   /// 导入抖音关注(实际源,新条目加入 + 与已有同 key 条目合并元信息)
   /// + 全量刷新所有关注条目状态(覆盖 exe 内手动关注的各平台条目)。
   ///
-  /// 两条数据路线在此汇合:exe 内手动关注走 [refreshStatuses] 的批量/
-  /// 逐房间刷新;抖音实际源走 [importDouyinFollows] 重新拉取关注列表。
-  /// 结果按 `site:roomId` 合并,重复条目不重复落库。返回本次新增条数。
+  /// **双线并行**(用户口径 2026-09-29):导入(抖音分页拉关注列表)与
+  /// 全量状态刷新(逐房间/批量)同时启动,各自完成即落库显示 —— 总等待从
+  /// 「两者之和」变「两者之最」。两条线的 state 写入都是「读最新 state →
+  /// 同步块合并 → 写回」且互不覆盖:导入只追加新条目/合并已有条目元信息
+  /// (在播状态保留),刷新只 copyWith 启动快照里已有的条目。
+  ///
+  /// 汇合后合并:竞速期刷新快照不含导入中的新条目,导入有新增时对当前
+  /// 抖音条目补一轮批量快照([_refreshDouyinBatch],单次请求),让新条目
+  /// 立即带上在播状态(关注列表接口不带回可信在播状态,缺这步新条目全显
+  /// 离线)。返回本次新增条数。
   Future<int> syncFollows({
     void Function(FollowImportProgress progress)? onProgress,
   }) async {
-    final added = await importDouyinFollows(onProgress: onProgress);
-    await refreshStatuses();
+    final importFuture = importDouyinFollows(onProgress: onProgress);
+    final refreshFuture = refreshStatuses();
+    int added = 0;
+    try {
+      added = await importFuture;
+    } finally {
+      // 导入失败(cookie 失效等)也要等刷新线汇合,不让它游离。
+      await refreshFuture;
+    }
+    if (added > 0) {
+      final (updated, _) = await _refreshDouyinBatch([
+        for (final entry in state)
+          if (entry.room.site == 'douyin') entry,
+      ]);
+      await _commitStatusUpdates(updated);
+    }
     return added;
   }
 
@@ -416,6 +437,51 @@ class FollowController extends Notifier<List<FollowEntry>> {
     return additions.length;
   }
 
+  /// 抖音批量刷新段:一次 `refreshFollowLive` 快照覆盖 [douyinEntries]。
+  ///
+  /// 返回 (更新 map, 是否已由批量段处理)。批量接口失败(含无能力)返回
+  /// (空, false),调用方回退逐房间链路 —— 一次网络抖动不得丢失状态刷新。
+  /// [refreshStatuses] 传全部抖音条目走首轮;[syncFollows] 在双线汇合后
+  /// 只传当前抖音条目补一轮(竞速期快照不含导入中的新条目)。
+  Future<(Map<String, RoomSummary>, bool)> _refreshDouyinBatch(
+    List<FollowEntry> douyinEntries,
+  ) async {
+    final batch = ref.read(followLiveRefresherProvider);
+    if (batch == null || douyinEntries.isEmpty) return (const <String, RoomSummary>{}, false);
+    try {
+      final snapshot = await batch.refreshFollowLive();
+      final liveByKey = {
+        for (final room in snapshot.rooms)
+          '${room.site}:${room.roomId}': room.toSummary(),
+      };
+      final updated = <String, RoomSummary>{};
+      for (final entry in douyinEntries) {
+        final fresh = liveByKey[entry.key];
+        if (fresh != null) {
+          updated[entry.key] = _mergeRefreshed(entry.room, fresh);
+        } else if (snapshot.complete) {
+          updated[entry.key] = _mergeRefreshed(
+            entry.room,
+            RoomSummary(
+              site: entry.room.site,
+              roomId: entry.room.roomId,
+              title: '',
+              anchorName: '',
+              cid: '',
+              category: '',
+              online: '',
+              cover: '',
+              roomState: RoomState.offline,
+            ),
+          );
+        }
+      }
+      return (updated, true);
+    } catch (_) {
+      return (const <String, RoomSummary>{}, false);
+    }
+  }
+
   /// 刷新关注列表的房间状态(真实解析源才可用;无能力时返回 0)。
   ///
   /// 有界并发(4)+ 单条 10s 超时;单条失败保留原数据 —— 网络抖动不得把在播
@@ -431,43 +497,11 @@ class FollowController extends Notifier<List<FollowEntry>> {
     final entries = state;
     if ((batch == null && refresher == null) || entries.isEmpty) return 0;
 
-    final updated = <String, RoomSummary>{};
-    var batchHandledDouyin = false;
-    if (batch != null && entries.any((entry) => entry.room.site == 'douyin')) {
-      try {
-        final snapshot = await batch.refreshFollowLive();
-        final liveByKey = {
-          for (final room in snapshot.rooms)
-            '${room.site}:${room.roomId}': room.toSummary(),
-        };
-        for (final entry in entries.where(
-          (entry) => entry.room.site == 'douyin',
-        )) {
-          final fresh = liveByKey[entry.key];
-          if (fresh != null) {
-            updated[entry.key] = _mergeRefreshed(entry.room, fresh);
-          } else if (snapshot.complete) {
-            updated[entry.key] = _mergeRefreshed(
-              entry.room,
-              RoomSummary(
-                site: entry.room.site,
-                roomId: entry.room.roomId,
-                title: '',
-                anchorName: '',
-                cid: '',
-                category: '',
-                online: '',
-                cover: '',
-                roomState: RoomState.offline,
-              ),
-            );
-          }
-        }
-        batchHandledDouyin = true;
-      } catch (_) {
-        // 批量接口失败时回退原逐房间链路,避免一次网络抖动丢失状态刷新。
-      }
-    }
+    final (batchUpdated, batchHandledDouyin) = await _refreshDouyinBatch([
+      for (final entry in entries)
+        if (entry.room.site == 'douyin') entry,
+    ]);
+    final updated = <String, RoomSummary>{...batchUpdated};
 
     final activeRefresher = refresher;
     if (!batchHandledDouyin && activeRefresher == null) return 0;

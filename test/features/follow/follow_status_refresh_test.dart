@@ -10,6 +10,7 @@
 /// InMemorySharedPreferencesAsync;刷新能力用假 [RoomRefresher] 注入。
 library;
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -31,12 +32,17 @@ class FakeFollowImportSource implements FollowImportSource {
   final List<RoomSummary> rooms;
   int calls = 0;
 
+  /// 非空时挂起导入直到外部 complete:脚本化「导入慢、刷新线先行」的
+  /// 双线并行时序(syncFollows 并行口径测试用)。
+  Completer<void>? gate;
+
   @override
   Future<List<RoomSummary>> importDouyinFollows({
     void Function(FollowImportProgress progress)? onProgress,
   }) async {
     calls++;
     onProgress?.call(const FollowImportProgress(page: 1, imported: 2));
+    if (gate != null) await gate!.future;
     return rooms;
   }
 }
@@ -283,6 +289,71 @@ void main() {
       final imported = entries.firstWhere((e) => e.room.roomId == '2001');
       expect(imported.isLive, isTrue, reason: '导入的新条目随刷新回填在播状态');
       expect(imported.room.online, '3万');
+    });
+
+    test('syncFollows 双线并行:导入挂起时刷新线先行,汇合后补轮回填新条目', () async {
+      final gate = Completer<void>();
+      final importer = FakeFollowImportSource([
+        _fresh(roomId: '2001', online: '', site: 'douyin'),
+      ])..gate = gate;
+      final batch = FakeFollowLiveRefresher(
+        FollowLiveSnapshot(
+          complete: true,
+          rooms: [
+            RoomRecord.fromSummary(
+              _fresh(
+                roomId: '1001',
+                online: '1.2万',
+                site: 'douyin',
+                roomState: RoomState.live,
+              ),
+            ),
+            RoomRecord.fromSummary(
+              _fresh(
+                roomId: '2001',
+                online: '3万',
+                site: 'douyin',
+                roomState: RoomState.live,
+              ),
+            ),
+          ],
+        ),
+      );
+      final refresher = FakeRefresher(
+        results: {'3001': _fresh(roomId: '3001', online: '9千')},
+      );
+      final container = await _container(
+        seed: [
+          _seedEntry(roomId: '1001', online: '5千', site: 'douyin'),
+          _seedEntry(roomId: '3001', online: '1千'),
+        ],
+        followImportSource: importer,
+        followLiveRefresher: batch,
+        refresher: refresher,
+        overrideRefresher: true,
+      );
+
+      final sync = container.read(followProvider.notifier).syncFollows();
+      // 泵微任务让刷新线跑完 —— 导入线仍被 gate 挂起。
+      for (var i = 0; i < 200 && (batch.calls == 0 || refresher.callCount == 0); i++) {
+        await Future<void>.delayed(Duration.zero);
+      }
+      expect(batch.calls, 1, reason: '导入仍在挂起:批量刷新线已先在跑(双线并行)');
+      expect(refresher.callCount, 1, reason: '非抖音条目同步在刷,不等导入');
+
+      gate.complete();
+      expect(await sync, 1);
+      final entries = container.read(followProvider);
+      expect(entries, hasLength(3));
+      final imported = entries.firstWhere((e) => e.room.roomId == '2001');
+      expect(imported.isLive, isTrue, reason: '导入晚到的新条目由汇合后的补轮快照回填在播状态');
+      expect(imported.room.online, '3万');
+      expect(batch.calls, 2, reason: '补轮对汇合后的抖音条目再取一次批量快照');
+      // 并行写入互不覆盖:刷新线对非抖音条目的更新与补轮对新增条目的更新都在。
+      expect(
+        entries.firstWhere((e) => e.room.roomId == '3001').room.online,
+        '9千',
+      );
     });
   });
 
