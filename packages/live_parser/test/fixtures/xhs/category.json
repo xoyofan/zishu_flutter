@@ -1,0 +1,12 @@
+{
+  "success": true,
+  "code": 0,
+  "msg": "",
+  "data": {
+    "categories": [
+      { "id": 101, "desc": "恋爱" },
+      { "id": 102, "desc": "颜值" },
+      { "id": 103, "desc": "聊天/秀场" }
+    ]
+  }
+}

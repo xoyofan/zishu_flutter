@@ -177,6 +177,7 @@ void main() {
     expect(categories.groups.single.items.map((e) => e.cid), contains('lol'));
 
     final cross = all.browse! as CrossBrowseRepository;
+    // xhs 接入后具备 browse 能力,自动进入聚合尾部(canonical 九站之后)。
     expect(cross.siteIds, [
       'douyu',
       'huya',
@@ -187,6 +188,7 @@ void main() {
       'twitch',
       'soop',
       'youtube',
+      'xhs',
     ]);
     expect(
       cross.registry['douyu']?.browse,

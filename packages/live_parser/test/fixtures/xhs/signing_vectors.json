@@ -1,0 +1,171 @@
+{
+  "meta": {
+    "generator": "test/support/xhs_vector_gen.mjs",
+    "source": "F:/project/SFVideoLive/node_modules/xhshow-js/dist/index.js",
+    "note": "x-s 的 x3 payload 内嵌随机区域:seed(4..7)、fpB 时间偏移(16..23,偏移量 10..50)、seq(24..27,15..50)、windowPropsLen(28..31,900..1200),并衍生 md5^seedByte0(36..43)与校验字节(110),故 x-s 不具备逐字节确定性;确定性区域逐字节可比。",
+    "hex_key": "71a302257793271ddd273bcee3e4b98d9d7935e1da33f5765e2ea8afb6dc77a51a499d23b67c20660025860cbf13d4540d92497f58686c574e508f46e1956344f39139bf4faf22a3eef120b79258145b2feb5193b6478669961298e79bedca646e1a693a926154a5a7a1bd1cf0dedb742f917a747a1e388b234f2277",
+    "custom_base64_alphabet": "ZmserbBoHQtNP+wOcza/LpngG8yJq42KWYj0DSfdikx3VT16IlUAFM97hECvuRX5",
+    "x3_base64_alphabet": "MfgqrsbcyzPQRStuvC7mn501HIJBo2DEFTKdeNOwxWXYZap89+/A4UVLhijkl63G"
+  },
+  "xs_vectors": [
+    {
+      "name": "get_no_params",
+      "method": "GET",
+      "uri": "/api/sns/red/live/web/feed/category",
+      "params": {},
+      "a1": "18ee4d580016f0abc123def456ghi789jkl012mno34550001234",
+      "app_id": "xhs-pc-web",
+      "timestamp_ms": 1727673600000,
+      "expected_x_s": "XYS_2UQhPsHCH0c1Pjh9HjIj2erjwjQhyoPTqBPT49pjHjIj2eHjwjQgynEDJ74AHjIj2ePjwjQTJdPIPAZlg98yGLTlLFYNypPh4n8SpDuILjR9p7QYPFkG8dSawepncFTx2bSnzLLUyfEk+FDF8bW6zD4G+Azt+0YjLgSIwaTtLrYY+FRfaebjanY/nnl7zD4Q+AQyqpLlLFE3/MzTqSzgz0bDySi6zLb6zp8O4/+n8FTpPLka4MY/zbSP4pclPbz+c9EIqMQCLDkcpnbLP9IUJokDPBTnGFQP4gqMwepC//YHJeDROaHVHdWFH0ijHdF=",
+      "expected_wrapper": {
+        "x0": "4.2.6",
+        "x1": "xhs-pc-web",
+        "x2": "Windows",
+        "x4": ""
+      },
+      "expected_payload_hex": "77686029a1b1c3c612217668bb282929d6075f419201000018000000d1030000230000001d541fcf2d3f70fd3431386565346435383030313666306162633132336465663435366768693738396a6b6c3031326d6e6f33343535303030313233340a7868732d70632d7765620101d2f9416767c9b583635e0744fa84",
+      "expected_x3_raw_hex": "06cb620cd622e4dbcf064da658cc90a44b7e6aa04832f576462ea8af67df77a539499d23ab283fa92d1af6f18b22ec3168a62d4a60585c667836bf2783f65276c0f55cd97b9a14c48698178fab327f371fda63fed828b55da327a8d7abdcf8575a101152e14c24c68ad6d87ef1df098d6ef61dbdcf9d5bd5240bd8f3"
+    },
+    {
+      "name": "get_multi_params_pythonquote",
+      "method": "GET",
+      "uri": "/api/sns/red/live/search/rooms",
+      "params": {
+        "z_b": "3",
+        "keyword": "中文 直播",
+        "tags": "游戏,才艺",
+        "room_id": "123456",
+        "a_a": "1"
+      },
+      "a1": "18ee4d580016f0abc123def456ghi789jkl012mno34550001234",
+      "app_id": "xhs-pc-web",
+      "timestamp_ms": 1727673600000,
+      "expected_x_s": "XYS_2UQhPsHCH0c1Pjh9HjIj2erjwjQhyoPTqBPT49pjHjIj2eHjwjQgynEDJ74AHjIj2ePjwjQTJdPIPAZlg98yGLTlqjRD+78M4n8SpDuILjR9p7HUPFkG8dSawepn+FTx2bSmyFWUy0mF+FDF8oboJ0+OpbrFN7r6LgSIwaTtLrYY+FRfaebjanY/nnl7zD4Q+AQyqpLlLFE3/MzTqSzgz0bDySi6zLb6zp8O4/+n8FTpPLka4MY/zbSP4pclPbz+c9EIqMQCLDkcpnbLP9IUP9MDPBTnGFQP4gqMwepC//YHJeDROaHVHdWFH0ijHdF=",
+      "expected_wrapper": {
+        "x0": "4.2.6",
+        "x1": "xhs-pc-web",
+        "x2": "Windows",
+        "x4": ""
+      },
+      "expected_payload_hex": "776860293b306e1e12217668bb282929da075f4192010000140000008804000094000000b9891efc12d14e303431386565346435383030313666306162633132336465663435366768693738396a6b6c3031326d6e6f33343535303030313233340a7868732d70632d776562010148f9416767c9b583635e0744fa84",
+      "expected_x3_raw_hex": "06cb620c4ca34903cf064da658cc90a4477e6aa04832f5764a2ea8af3ed877a58e499d230ff53e9a12f4c83c8b22ec3168a62d4a60585c667836bf2783f65276c0f55cd97b9a14c48698178fab327f371fda63fed828b55da327a8d7abdcf8575a101152e14c24c68ad6d87ef1df938d6ef61dbdcf9d5bd5240bd8f3"
+    },
+    {
+      "name": "get_full_url",
+      "method": "GET",
+      "uri": "https://live-room.xiaohongshu.com/api/sns/red/live/enter_room?ignore=1",
+      "params": {
+        "room_id": "999"
+      },
+      "a1": "18ee4d580016f0abc123def456ghi789jkl012mno34550001234",
+      "app_id": "xhs-pc-web",
+      "timestamp_ms": 1727673600000,
+      "expected_x_s": "XYS_2UQhPsHCH0c1Pjh9HjIj2erjwjQhyoPTqBPT49pjHjIj2eHjwjQgynEDJ74AHjIj2ePjwjQTJdPIPAZlg98yGLTl4BSHzjul4n8SpDuILjR9p7H9PFkG8dSawepnJ04x2bSmnLWUyfh6+FDF8eY92eW7zAY/N9D7LgSIwaTtLrYY+FRfaebjanY/nnl7zD4Q+AQyqpLlLFE3/MzTqSzgz0bDySi6zLb6zp8O4/+n8FTpPLka4MY/zbSP4pclPbz+c9EIqMQCLDkcpnbLP9IUJsTDPBTnGFQP4gqMwepC//YHJeDROaHVHdWFH0ijHdF=",
+      "expected_wrapper": {
+        "x0": "4.2.6",
+        "x1": "xhs-pc-web",
+        "x2": "Windows",
+        "x4": ""
+      },
+      "expected_payload_hex": "7768602999cba43812217668bb282929d2075f41920100000f0000008c040000280000000b760f2dfbe84d983431386565346435383030313666306162633132336465663435366768693738396a6b6c3031326d6e6f33343535303030313233340a7868732d70632d7765620101eaf9416767c9b583635e0744fa84",
+      "expected_x3_raw_hex": "06cb620cee588325cf064da658cc90a44f7e6aa04832f576512ea8af3ad877a532499d23bd0a2f4bfbcdcb948b22ec3168a62d4a60585c667836bf2783f65276c0f55cd97b9a14c48698178fab327f371fda63fed828b55da327a8d7abdcf8575a101152e14c24c68ad6d87ef1df318d6ef61dbdcf9d5bd5240bd8f3"
+    },
+    {
+      "name": "get_array_param",
+      "method": "GET",
+      "uri": "/api/sns/red/live/feed",
+      "params": {
+        "ids": [
+          "7",
+          "8",
+          "9"
+        ],
+        "type": "1"
+      },
+      "a1": "18ee4d580016f0abc123def456ghi789jkl012mno34550001234",
+      "app_id": "xhs-pc-web",
+      "timestamp_ms": 1727673600000,
+      "expected_x_s": "XYS_2UQhPsHCH0c1Pjh9HjIj2erjwjQhyoPTqBPT49pjHjIj2eHjwjQgynEDJ74AHjIj2ePjwjQTJdPIPAZlg98yGLTl8DYjc9E74n8SpDuILjR9p7QYPFkG8dSawepnJ94x2bSozLWUyfh9+FDF8sV7JLzmLD49G7ZALgSIwaTtLrYY+FRfaebjanY/nnl7zD4Q+AQyqpLlLFE3/MzTqSzgz0bDySi6zLb6zp8O4/+n8FTpPLka4MY/zbSP4pclPbz+c9EIqMQCLDkcpnbLP9IUz7kDPBTnGFQP4gqMwepC//YHJeDROaHVHdWFH0ijHdF=",
+      "expected_wrapper": {
+        "x0": "4.2.6",
+        "x1": "xhs-pc-web",
+        "x2": "Windows",
+        "x4": ""
+      },
+      "expected_payload_hex": "776860296195625412217668bb282929d6075f41920100002e00000041040000270000007358feaacff598e33431386565346435383030313666306162633132336465663435366768693738396a6b6c3031326d6e6f33343535303030313233340a7868732d70632d776562010112f9416767c9b583635e0744fa84",
+      "expected_x3_raw_hex": "06cb620c16064549cf064da658cc90a44b7e6aa04832f576702ea8aff7d877a53d499d23c524decccfd01eef8b22ec3168a62d4a60585c667836bf2783f65276c0f55cd97b9a14c48698178fab327f371fda63fed828b55da327a8d7abdcf8575a101152e14c24c68ad6d87ef1dfc98d6ef61dbdcf9d5bd5240bd8f3"
+    }
+  ],
+  "xs_common_fixed_fields": {
+    "s0": 5,
+    "s1": "",
+    "x0": "1",
+    "x1": "4.2.6",
+    "x2": "Windows",
+    "x3": "xhs-pc-web",
+    "x4": "4.86.0",
+    "x6": "",
+    "x7": "",
+    "x10": 0,
+    "x11": "normal"
+  },
+  "xs_common_sample": {
+    "a1": "18ee4d580016f0abc123def456ghi789jkl012mno34550001234",
+    "web_session": "18d06c1c5c8gq0p1vbxhiqbwyy044b1fY1Xy8m1y2vQ5Q",
+    "output": "2UQAPsHC+aIjqArjwjHjNsQhPsHCH0rjNsQhPaHCH0c1Pjh9HjIj2eHjwjQgynEDJ74AHjIj2ePjwjQhyoPTqBPT49pjHjIj2ecjwjHFN0W9N0ZjNsQh+aHCH0rh8nLF8eLhPeZl+fGIGnQ0P/HA8Bpf+eL989Yk+AWEyfTVPerUJnE6PAcM+/ZIPerUPAcjNsQh+jHCHjHVHdW7H0ijHjIj2eWjwjH9npbr+LWUaoQ9qoScyLSMJn8b4r474UTi4rbw/fTraDhM/fS6yfzjtFTPJB8n+MQs8/+g/dztyd48/AppzBk7pBRm2g8aznpH/AbyJbD94/QMqdkVzsRLyB86zApeJM892dpBPA+B8L8/LSk++DVU2nHIa7WlJdmCzdStJSYD+fkn+sRe+9SM/nSE4BIA2fWEPr4020LlnfGE+F4I+rH9Gp8s2DzLtFTeyMpItFq9+9Y/2bQI8fSD2fRFJfE7ynloyfT92em6+ez3+db98gzOPbS/yLEMLSPh2nSTneQNPnY/yDT8GFRNtUTxGAmNLBMa2rYj+78G4URa8LREzdmEz/+Gne8HwBuIpnVMLfzILfYAtMQN+FIEnrlV8rz9nLkGcfTnt9+Ny0YU4LbjLMG3PL8jpFb3LpYbLdm/qB+CnD4lJAQL2suF8bY+4A8BqA+OGSmx804cz/pA/gpT2nEzJfEeng4G/e+HwBbcyDVE+9bkJF+Hy9ptyoPEqppY+rE88aRi2rYi8rl0af47Jrznc0mxP7DU2e4xLnbI2aRtJdcFnfMVnn4lJLz9/epE2BSxz/YEyLppzMbV/S+B4MkFJgiUJppbqfEep7psLr+eapz7GaRyPSzyLgzDcppEppmYydm12e4nnbk1aAzGLfYCLrz7JdYc/MDM4rzUnDkynppgO/FjNsQhwaHCN/r9P/rI+0PF+0WVHdWlPsHCPsIj2erlH0ijJfRUJnbVHdF="
+  },
+  "rc4_vectors": [
+    {
+      "plaintext": "",
+      "passphrase": "xhswebmplfbt",
+      "salt_hex": "f917138c19a9e322",
+      "key_hex": "ec73d27f0006db86c6394751ce01a8002fc572d1136deadaba0c0ef5d766a53a",
+      "ciphertext_hex": ""
+    },
+    {
+      "plaintext": "{\"x33\":\"0\",\"x82\":\"_0x17a2|_0x1954\"}",
+      "passphrase": "xhswebmplfbt",
+      "salt_hex": "7dc9854414584848",
+      "key_hex": "ef3c3ed9db75fa947e5a7f1a0d1efa0f0255040768fae07f6e45fb7d18f186a0",
+      "ciphertext_hex": "2302e16269c65c99da890fc01e2a788f552e8d1ac707478145706e125ed8da48430177"
+    },
+    {
+      "plaintext": "中文 mixed ascii 123",
+      "passphrase": "xhswebmplfbt",
+      "salt_hex": "b79a8eb5ee11689e",
+      "key_hex": "fbda49e2f2fd53bfda0ac19f7fa49fc2cadb9e74b097b1b82b2c1fbde49d4f02",
+      "ciphertext_hex": "57fc8ba34e4d8105d0de0d4521f50f0a935e96e37ecd"
+    },
+    {
+      "plaintext": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "passphrase": "xhswebmplfbt",
+      "salt_hex": "58f67b368311d840",
+      "key_hex": "465b680f0705925b47751bfb6884f7d92fab7340743476cdff912bddc598b33b",
+      "ciphertext_hex": "22547b0d5723d0676e215ae2117086d77d36f0a5b164821f33dc8c5ee80c86a554405e3ab7fd4434aeccbff9c5d94aae42aa8811d976fb668dc9c1332d7c2a86bd3d43b08e4fda617d440fe2aae47a2ac0e86cbec975a2a542f093cf0d764185035d3739834ccfb095be64d10e706018d14c3cfb81d8c0700328f6ac55f0e0bac478c0376799fc08664743a91d57bbccb0401f898d519e647eb77e807505fcd701e3effe5f1a7f14da6ffb378c5d205deed05fe3fcab3668ee8d682c3645312b7a741235597e24c2ab9eb82446249cbd4e8fa817cdab376e7eefca69114e6e12f8b2c4bc2837017ac66481c9b490e0bae8ca7b9f686aca42f30c04fc254ef0fecc6e61a1b2b325fba027f2d20b50751052eae36c3cc22f05d15e659ba90161d3e70e24cc6fa09e334bdd5bfd"
+    }
+  ],
+  "crc32_vectors": [
+    {
+      "input_utf8": "",
+      "expected": 306674911
+    },
+    {
+      "input_utf8": "hello",
+      "expected": 609737305
+    },
+    {
+      "input_utf8": "XYS_fZbGzKramg0qufeVO0R",
+      "expected": -558180273
+    },
+    {
+      "input_utf8": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+      "expected": 688305465
+    }
+  ],
+  "b3_traceid_sample": "0ea31424945c8117",
+  "xray_traceid_vector": {
+    "timestamp": 1727673600000,
+    "seq": 8388607,
+    "expected": "c920af84007fffff01feccfae4c1c1f0"
+  }
+}

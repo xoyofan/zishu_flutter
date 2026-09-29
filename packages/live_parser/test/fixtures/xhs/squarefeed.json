@@ -1,0 +1,46 @@
+{
+  "success": true,
+  "code": 0,
+  "msg": "",
+  "data": {
+    "feeds": [
+      {
+        "cursor_score": "0.9",
+        "recommend": true,
+        "model_type": "live",
+        "live": {
+          "t_live_host_info": {
+            "nickname": "主播A",
+            "avatar": "https://sns-avatar.xhscdn.com/a.jpg"
+          },
+          "t_room_info": {
+            "name": "房间A的直播",
+            "display_count": 12300,
+            "cover": "https://sns-cover.xhscdn.com/a.jpg",
+            "room_id_str": "660100000000000001"
+          }
+        }
+      },
+      {
+        "cursor_score": "0.8",
+        "model_type": "live",
+        "live": {
+          "t_live_host_info": {
+            "nickname": "主播B",
+            "avatar": "https://sns-avatar.xhscdn.com/b.jpg"
+          },
+          "t_room_info": {
+            "name": "房间B的直播",
+            "member_count": 456,
+            "cover": "https://sns-cover.xhscdn.com/b.jpg",
+            "room_id": 660100000000000002
+          }
+        }
+      },
+      {
+        "cursor_score": "0.7",
+        "model_type": "note"
+      }
+    ]
+  }
+}

@@ -34,7 +34,7 @@ void main() {
     }
   });
 
-  test('真实解析模式:已注册九站全部保留,未注册 xhs 被剔除', () {
+  test('真实解析模式:已注册十站全部保留(含 xhs),未注册平台被剔除', () {
     final platforms = PlatformBrandCatalog.filterPlatforms(
       registry: registry,
       realParser: true,
@@ -51,10 +51,11 @@ void main() {
       'yy',
       'twitch',
       'soop',
+      'xhs',
       'youtube',
     ]));
-    // xhs 仅存在于 fixture 品牌目录,真实解析下不得渲染为入口。
-    expect(ids, isNot(contains('xhs')));
+    // xhs 已接入(buildXhsRegistration,browse 能力),真实解析下是合法入口。
+    expect(ids, contains('xhs'));
     // 移除的平台不得复活。
     expect(ids, isNot(contains('iptv')));
     expect(ids, isNot(contains('cc')));

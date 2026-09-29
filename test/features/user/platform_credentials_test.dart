@@ -160,9 +160,10 @@ void main() {
     expect(brands.any((brand) => brand.id == 'youtube'), isTrue);
   });
 
-  test('isParsingImplemented:小红书未接入,YouTube 已接入', () {
+  test('isParsingImplemented:小红书/YouTube 均已接入', () {
     expect(isParsingImplemented('youtube'), isTrue);
-    expect(isParsingImplemented('xhs'), isFalse);
+    // xhs 已在 live_parser 注册(buildXhsRegistration),凭证可被解析侧消费。
+    expect(isParsingImplemented('xhs'), isTrue);
   });
 
   test('PlatformCredential:toJson/fromJson 往返 + 空值兜底', () {

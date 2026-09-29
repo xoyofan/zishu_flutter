@@ -9,8 +9,12 @@ import 'package:live_parser/live_parser.dart';
 import 'browse_source.dart';
 
 class ParserBrowseSource implements BrowseSource {
-  ParserBrowseSource({SiteRegistry? registry, String douyinCookie = ''})
-    : _registry = registry ?? buildSiteRegistry(douyinCookie: douyinCookie);
+  ParserBrowseSource({
+    SiteRegistry? registry,
+    String douyinCookie = '',
+    String xhsCookie = '',
+  }) : _registry = registry ??
+           buildSiteRegistry(douyinCookie: douyinCookie, xhsCookie: xhsCookie);
 
   final SiteRegistry _registry;
 
@@ -48,9 +52,13 @@ class ParserRoomSource
         RoomRefresher,
         FollowLiveRefresher,
         FollowImportSource {
-  ParserRoomSource({SiteRegistry? registry, String douyinCookie = ''})
-    : _registry = registry ?? buildSiteRegistry(douyinCookie: douyinCookie),
-      _douyinCookie = douyinCookie;
+  ParserRoomSource({
+    SiteRegistry? registry,
+    String douyinCookie = '',
+    String xhsCookie = '',
+  }) : _registry = registry ??
+           buildSiteRegistry(douyinCookie: douyinCookie, xhsCookie: xhsCookie),
+       _douyinCookie = douyinCookie;
 
   final SiteRegistry _registry;
   final String _douyinCookie;

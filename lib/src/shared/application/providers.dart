@@ -19,23 +19,33 @@ const bool useRealParser = bool.fromEnvironment(
 /// 栏目浏览数据源(首页/分类/搜索底卡)。
 final browseSourceProvider = Provider<BrowseSource>((ref) {
   if (!useRealParser) return const FixtureBrowseSource();
-  final cookie = ref.watch(
+  final douyinCookie = ref.watch(
     platformCredentialsProvider.select(
       (state) => state.credentialFor('douyin').value,
     ),
   );
-  return ParserBrowseSource(douyinCookie: cookie);
+  final xhsCookie = ref.watch(
+    platformCredentialsProvider.select(
+      (state) => state.credentialFor('xhs').value,
+    ),
+  );
+  return ParserBrowseSource(douyinCookie: douyinCookie, xhsCookie: xhsCookie);
 });
 
 /// 房间解析数据源(播放页)。
 final roomSourceProvider = Provider<RoomSource>((ref) {
   if (!useRealParser) return const FixtureRoomSource();
-  final cookie = ref.watch(
+  final douyinCookie = ref.watch(
     platformCredentialsProvider.select(
       (state) => state.credentialFor('douyin').value,
     ),
   );
-  return ParserRoomSource(douyinCookie: cookie);
+  final xhsCookie = ref.watch(
+    platformCredentialsProvider.select(
+      (state) => state.credentialFor('xhs').value,
+    ),
+  );
+  return ParserRoomSource(douyinCookie: douyinCookie, xhsCookie: xhsCookie);
 });
 
 /// 房间状态刷新能力:真实解析源实现 [RoomRefresher] 时暴露;

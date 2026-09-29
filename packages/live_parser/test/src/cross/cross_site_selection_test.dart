@@ -15,6 +15,8 @@ void main() {
       'twitch',
       'soop',
       'youtube',
+      // xhs 接入 browse 能力后自动进入聚合尾部(顺序同注册表)。
+      'xhs',
     ]);
     expect(all.siteIds, isNot(contains('all')));
   });

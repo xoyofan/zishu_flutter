@@ -97,7 +97,14 @@ void main() {
     expect(find.byKey(const Key('user-credential-xhs')), findsOneWidget);
     expect(find.text('YouTube'), findsOneWidget);
     expect(find.text('小红书'), findsOneWidget);
-    expect(find.text('该平台解析尚未接入'), findsOneWidget);
+    // xhs 已接入解析(live_parser 注册表),标注转「解析已接入」。
+    expect(
+      find.descendant(
+        of: find.byKey(const Key('user-credential-xhs')),
+        matching: find.text('解析已接入'),
+      ),
+      findsOneWidget,
+    );
     expect(_statusOf(tester, 'youtube'), '未配置');
     expect(tester.takeException(), isNull);
   });

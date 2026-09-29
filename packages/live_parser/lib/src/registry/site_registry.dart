@@ -13,6 +13,8 @@ import '../platforms/huya/huya_site.dart';
 import '../platforms/kuaishou/kuaishou_site.dart';
 import '../platforms/soop/soop_site.dart';
 import '../platforms/twitch/twitch_site.dart';
+import '../platforms/xhs/room_api.dart';
+import '../platforms/xhs/xhs_site.dart';
 import '../platforms/youtube/youtube_site.dart';
 import '../platforms/yy/yy_site.dart';
 
@@ -23,13 +25,16 @@ import '../platforms/yy/yy_site.dart';
 /// 旧 `registry[id]` 注册项视图保留到 Windows 切换。
 SiteRegistry buildSiteRegistry({
   String douyinCookie = '',
+  String xhsCookie = '',
   http.Client? douyinHttpClient,
+  http.Client? xhsHttpClient,
 }) {
   final registry = SiteRegistry();
   final douyinClient = DouyinClient(
     httpClient: douyinHttpClient,
     cookieOverride: douyinCookie,
   );
+  final xhsClient = XhsClient(httpClient: xhsHttpClient, credential: xhsCookie);
   registry.register(buildDouyuRegistration());
   registry.register(buildHuyaRegistration());
   registry.register(buildBilibiliRegistration());
@@ -38,6 +43,8 @@ SiteRegistry buildSiteRegistry({
   registry.register(buildSoopRegistration());
   registry.register(buildKuaishouRegistration());
   registry.register(buildDouyinRegistration(client: douyinClient));
+  // xhs 在 navPlatforms 中位于 soop 之后、youtube 之前。
+  registry.register(buildXhsRegistration(client: xhsClient));
   registry.register(buildYoutubeRegistration());
   // 全平台聚合默认只聚合前三站(斗鱼/虎牙/B站);Twitch 等海外站点由宿主按需加入。
   // 全平台聚合放最后:它引用同一 registry 实例,此前的站点都会参与聚合。
