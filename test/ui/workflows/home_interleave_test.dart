@@ -78,6 +78,50 @@ void main() {
     expect(limit, greaterThanOrEqualTo(6));
   });
 
+  testWidgets('可用宽度决定刷新条数:视口变窄 → 列数变少 → limit 变小', (tester) async {
+    // 1600(6 列)与 900(4 列)两个视口,断言容量随列数/行数变化,
+    // 且各自是列数的整数倍(整行拉取,不拉半行)。
+    // 注意:改 physicalSize 会让旧树按新尺寸重建,必须先断言完旧 source
+    // 并用空壳排空旧树,再挂新视口的 HomeView,否则旧 source 出现第二次
+    // 调用、single 断言误炸。
+    tester.view.physicalSize = const Size(1600, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+
+    final source1600 = _RecordingBrowseSource([_room('douyin', '1')]);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [browseSourceProvider.overrideWithValue(source1600)],
+        child: const MaterialApp(home: Scaffold(body: HomeView(site: 'douyin'))),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    final limit1600 = source1600.calls.single.limit;
+    expect(limit1600, isNotNull);
+    expect(limit1600! % 6, 0, reason: '1600 视口 → 6 列,整行拉取');
+
+    // 排空旧树(此时旧 source 被新尺寸多打一次,已无所谓),再挂 900 视口。
+    tester.view.physicalSize = const Size(900, 900);
+    await tester.pumpWidget(const SizedBox.shrink());
+    final source900 = _RecordingBrowseSource([_room('douyin', '1')]);
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [browseSourceProvider.overrideWithValue(source900)],
+        child: const MaterialApp(home: Scaffold(body: HomeView(site: 'douyin'))),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    final limit900 = source900.calls.single.limit;
+    expect(limit900, isNotNull);
+    expect(limit900! % 4, 0, reason: '900 视口 → 4 列,整行拉取');
+
+    expect(limit900, isNot(equals(limit1600)),
+        reason: '可用宽度不同(列数 6 vs 4),一次刷新条数必须不同');
+    expect(limit900 < limit1600, isTrue, reason: '更窄的视口刷新条数应更少');
+  });
+
   testWidgets('/all 首屏加载中:显示与真实卡等大的骨架卡(数量=首屏容量)', (tester) async {
     tester.view.physicalSize = const Size(1600, 900);
     tester.view.devicePixelRatio = 1.0;
@@ -120,7 +164,7 @@ void main() {
     );
   });
 
-  testWidgets('单平台首页:不下发 limit,保持既有单请求分页行为', (tester) async {
+  testWidgets('单平台首页:limit=首屏容量(列数×行数,按可用宽度决定刷新条数)', (tester) async {
     tester.view.physicalSize = const Size(1600, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
@@ -136,7 +180,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 50));
 
     expect(source.calls, hasLength(1));
-    expect(source.calls.single.limit, isNull, reason: '单平台页不改变既有分页行为');
+    final limit = source.calls.single.limit;
+    expect(limit, isNotNull, reason: '单平台首页同样按视口容量下发刷新条数');
+    // 1600 视口 → 6 列;容量为列数整数倍且 ≥ 列数。
+    expect(limit! % 6, 0);
+    expect(limit, greaterThanOrEqualTo(6));
   });
 }
 

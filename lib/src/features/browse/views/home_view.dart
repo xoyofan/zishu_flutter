@@ -4,8 +4,9 @@
 /// 但两件事按用户口径做了收敛:
 /// - **骨架**:首屏加载中显示与真实卡等大的骨架卡,不再空白/转圈;
 /// - **请求量**:按当前视口算「首屏能容纳多少张卡」(列数 × 首屏行数),
-///   作为 `limit` 下发到聚合查询 → 聚合层给**每个平台**各要这么多条,
-///   而不是每个平台固定 30 条。
+///   作为 `limit` 下发 —— `/all` 让聚合层给**每个平台**各要这么多条;
+///   单平台页直接作为该站首屏刷新条数(2026-09-29 用户口径:抖音首页等
+///   单平台页同样按可用宽度决定一次刷新多少个)。
 ///
 /// 平台入口锚点 [home-platform-chip-{id}] 在左侧栏(见 [BrowseSidebar]),
 /// 此处不重复渲染横向 chips 行(窄屏平台切换由 AppShell 平台条承担)。
@@ -69,36 +70,70 @@ class _HomeViewState extends ConsumerState<HomeView> {
     super.dispose();
   }
 
-  /// 首屏容量:列数 × 首屏行数。
+  /// 首屏容量 = 列数 × 首屏行数(2026-09-29 用户口径:按**当前可用宽度**
+  /// 与**单个卡片的宽高**估算一次刷新该拉多少张卡)。
   ///
-  /// 列数与卡片格高**必须与 [RoomGrid] 同源**(`AppRoomGrid.columnsFor` +
-  /// `cardWidth * 9/16 + metaHeightFor(58)`),否则请求量与实际能放下的
-  /// 卡片数不匹配,会出现「拉了一屏还空一行」或「多拉一屏浪费」。
-  static int _firstScreenCapacity(BuildContext context, BoxConstraints c) {
+  /// 三个因子与 [RoomGrid] 严格同源,否则请求量与实际能放下的卡片数不匹配:
+  /// - 列数:`AppRoomGrid.columnsFor(视口宽)` —— RoomGrid 刻意让列数跟视口
+  ///   断点走(对齐 CSS 媒体查询),左栏收窄只影响卡片实际宽,不影响列数;
+  /// - 卡宽:**内容区真实宽**([gridConstraints],已扣除左栏与分隔线)减去
+  ///   网格 padding 后按列均分(再扣列间距);
+  /// - 卡高:`cardWidth * 9/16 + metaHeightFor(58)`,行数 = 内容区真实高
+  ///   (扣纵向 padding)÷ 卡高,向上取整。
+  static int _firstScreenCapacity(
+    BuildContext context,
+    BoxConstraints gridConstraints,
+  ) {
     final viewportWidth = MediaQuery.sizeOf(context).width;
     final columns = AppRoomGrid.columnsFor(viewportWidth);
-    final padding = AppSpacing.lg * 2;
+    final paddingH = AppSpacing.lg * 2;
+    final availableWidth = gridConstraints.maxWidth - paddingH;
     final cardWidth =
-        (c.maxWidth - padding - AppSpacing.gridCrossAxisSpacing * (columns - 1)) /
+        (availableWidth - AppSpacing.gridCrossAxisSpacing * (columns - 1)) /
         columns;
-    final meta = metaHeightFor(58, context);
-    final cardHeight = cardWidth * 9 / 16 + meta;
-    final rows = math.max(1, (c.maxHeight / cardHeight).ceil());
+    final cardHeight = cardWidth * 9 / 16 + metaHeightFor(58, context);
+    final availableHeight =
+        math.max(0.0, gridConstraints.maxHeight - AppSpacing.lg * 2);
+    final rows = math.max(1, (availableHeight / cardHeight).ceil());
     return columns * rows;
   }
 
-  BrowseRoomQuery _queryFor(BuildContext context) => BrowseRoomQuery(
-    site: widget.site,
-    limit: widget.site == 'all'
-        ? _firstScreenCapacity(
-            context,
-            BoxConstraints(
-              maxWidth: MediaQuery.sizeOf(context).width,
-              maxHeight: MediaQuery.sizeOf(context).height,
-            ),
-          )
-        : null,
-  );
+  /// 桌面首页内容区估算宽:左栏按**展开态** [BrowseSidebar.width] + 1px
+  /// 分隔线扣除(首屏常态;用户收起左栏后估算卡宽偏小 ~28px/列,行数误差
+  /// ≤1 行,由滚动加载兜底,不值得为此把侧栏开合态上提成共享状态)。
+  /// phone(<768)无侧栏。
+  static double _gridAreaWidth(double windowWidth, bool isPhone) =>
+      isPhone ? windowWidth : windowWidth - BrowseSidebar.width - 1;
+
+  /// 最近一次 build 用的查询;F5 刷新回调复用,避免窗口尺寸变化后刷新量
+  /// 与屏上容量脱节。
+  BrowseRoomQuery? _latestQuery;
+
+  BrowseRoomQuery _queryFor(BuildContext context) {
+    // LayoutBuilder 每次构建都会先更新 [_latestQuery];此方法只剩 F5 回调
+    // 一条路径,首帧兜底用窗口估算(扣侧栏展开态)。
+    final cached = _latestQuery;
+    if (cached != null) return cached;
+    final isPhone = MediaQuery.sizeOf(context).width < AppBreakpoints.phone;
+    final window = MediaQuery.sizeOf(context);
+    return _buildQuery(context, window.width, window.height, isPhone);
+  }
+
+  BrowseRoomQuery _buildQuery(
+    BuildContext context,
+    double width,
+    double height,
+    bool isPhone,
+  ) {
+    final capacity = _firstScreenCapacity(
+      context,
+      BoxConstraints(
+        maxWidth: _gridAreaWidth(width, isPhone),
+        maxHeight: height,
+      ),
+    );
+    return BrowseRoomQuery(site: widget.site, limit: capacity);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -108,13 +143,31 @@ class _HomeViewState extends ConsumerState<HomeView> {
       owner: this,
       action: _refreshRooms,
     );
-    final query = _queryFor(context);
-    final roomsAsync = ref.watch(browseRoomsProvider(query));
-    final controller = ref.read(browseRoomsProvider(query).notifier);
     // 断点沿用 AppBreakpoints.phone(768):与旧 chips 行同档,避免 768–1365
     // 区间出现平台入口真空;左栏在此档出现,内容区不再渲染 chips。
     // <768:平台切换由 AppShell 平台条(nav-platform-strip)承担。
     final isPhone = MediaQuery.sizeOf(context).width < AppBreakpoints.phone;
+
+    // LayoutBuilder 提供本区域**真实约束**(HomeView 嵌在 app shell 内,
+    // MediaQuery 窗口尺寸会高估可用宽/高):容量按真实内容区宽高估算,
+    // 窗口拖动时 limit 只在行/列边界处变化 → 换 provider 重取一次首屏。
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final query = _buildQuery(
+          context,
+          constraints.maxWidth,
+          constraints.maxHeight,
+          isPhone,
+        );
+        _latestQuery = query;
+        return _buildBody(context, query, isPhone);
+      },
+    );
+  }
+
+  Widget _buildBody(BuildContext context, BrowseRoomQuery query, bool isPhone) {
+    final roomsAsync = ref.watch(browseRoomsProvider(query));
+    final controller = ref.read(browseRoomsProvider(query).notifier);
     final tokens = context.tokens;
 
     // 房间网格主体(下拉刷新 + 滚动加载 + 空态/错误)。切平台时新 provider

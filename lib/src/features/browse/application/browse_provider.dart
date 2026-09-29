@@ -17,9 +17,9 @@ class BrowseRoomQuery {
   /// 子分类 id;空表示不按分类过滤。
   final String? cid;
 
-  /// 首屏条数上限:仅 `site == 'all'` 时由首页按「当前列数 × 首屏行数」
-  /// 算出来传入,让**每个平台**只请求首屏能容纳的量(而不是固定 30)。
-  /// 单平台页为 null,保持原默认分页行为。
+  /// 首屏条数上限:由首页按「当前列数 × 首屏行数」(可用宽度→列数)算出。
+  /// `/all` 让聚合层给**每个平台**各要这么多条;单平台页作为该站首屏刷新
+  /// 条数。loadMore 不带 limit(抖音 feed 加载更多恒 8,官方 load_more 契约)。
   final int? limit;
 
   @override
@@ -88,10 +88,13 @@ class BrowseRoomController extends AsyncNotifier<RoomListResult> {
     final previous = state.value;
     state = AsyncLoading<RoomListResult>();
     try {
+      // 刷新与首屏同容量:F5/下拉刷新的条数 = 当前视口算出的首屏容量
+      // (否则刷新一回来条数漂移,首屏可能多/空一截)。
       final result = await ref.read(browseSourceProvider).fetchRooms(
             site: query.site,
             cid: query.cid,
             page: 1,
+            limit: query.limit,
           );
       state = AsyncData(result);
     } catch (error, stackTrace) {
