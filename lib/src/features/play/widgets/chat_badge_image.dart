@@ -107,6 +107,7 @@ class ChatBadgeImage extends StatefulWidget {
     required this.kind,
     required this.level,
     required this.height,
+    this.width,
     this.name,
     this.fit,
     this.src = '',
@@ -125,6 +126,13 @@ class ChatBadgeImage extends StatefulWidget {
 
   /// 渲染高度(调用方按 web 徽章高 1.15-1.48em @14px ≈ 16-21px 给定)。
   final double height;
+
+  /// 渲染宽度(可选):给定后与 [height] 组成有界框,配 `BoxFit.cover`
+  /// + 默认 `alignment: centerLeft` 实现「按内容区左对齐裁右」——
+  /// 抖音宽模板粉丝牌(150×48)内容区只有左端 ~60 源px,右侧是渐变
+  /// 延伸底,cover 左对齐正好裁掉延伸(2026-09-29 用户口径:图保留,
+  /// 只收背景宽度)。
+  final double? width;
 
   /// 覆写默认 fit(默认 fans/userLevel 均 contain)。
   final BoxFit? fit;
@@ -191,10 +199,11 @@ class _ChatBadgeImageState extends State<ChatBadgeImage> {
               imageUrl: widget.src,
               cacheKey: widget.src,
               height: widget.height,
+              width: widget.width,
               fit: fit,
               alignment: alignment,
               filterQuality: FilterQuality.medium,
-              placeholder: (_, _) => SizedBox(height: widget.height),
+              placeholder: (_, _) => SizedBox(height: widget.height, width: widget.width),
               errorWidget: (context, error, stackTrace) {
                 if (localPath.isEmpty) {
                   _reportFail();
@@ -206,6 +215,7 @@ class _ChatBadgeImageState extends State<ChatBadgeImage> {
           : Image.network(
               widget.src,
               height: widget.height,
+              width: widget.width,
               fit: fit,
               alignment: alignment,
               filterQuality: FilterQuality.medium,
@@ -239,6 +249,7 @@ class _ChatBadgeImageState extends State<ChatBadgeImage> {
     child: Image.asset(
       path,
       height: widget.height,
+      width: widget.width,
       fit: fit,
       alignment: alignment,
       filterQuality: FilterQuality.medium,

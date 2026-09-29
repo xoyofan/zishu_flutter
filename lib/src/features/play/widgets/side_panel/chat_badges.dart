@@ -38,11 +38,9 @@ String _soopSubscriberAsset(int months) {
 ///   近三成徽章显示为灰色);
 /// - 其余灰图(`advanced_gray` 等)→ 官方紧凑款 `pop_super_badge_{lv}`
 ///   (2026-09-27 用户口径:三模板统一最右紧凑款,不再用 new_badge 中等款);
-/// - **官方模板族的彩色宽图**(`fansclub_level_v6` 150×48 / `fansclub_new_badge`
-///   90×48 等)也统一紧凑款(2026-09-29 用户口径,官方实际渲染对比:宽图
-///   被原样渲染成 65.6px 长条,即「粉丝团背景太宽」的根因);level 越界
-///   (>20,紧凑款 CDN 404)保留协议原图。
-/// 其余 URL 原样返回(真·主播定制款,非模板域)。
+/// - 彩色协议图(v6 150×48 宽牌等)**原样返回**(2026-09-29 用户口径:
+///   「之前的图是对的,当前换图错了」)—— 宽度由渲染侧按内容区裁剪
+///   (见 [AppDouyinChatBadge.fanCroppedWidth]),不换图。
 String douyinFansColoredBadgeUrl(String url, int level) {
   final text = url.trim();
   if (text.isEmpty) return '';
@@ -55,13 +53,6 @@ String douyinFansColoredBadgeUrl(String url, int level) {
   if (_douyinGrayBadgePattern.hasMatch(text) && level > 0) {
     return douyinFansBadgeUrl(level);
   }
-  // 已是紧凑款(非 gray 的 pop_super)不重复改写;模板域内的彩色宽图换紧凑。
-  if (level > 0 &&
-      _isDouyinFansClubTemplateUrl(text) &&
-      !_douyinCompactBadgePattern.hasMatch(text)) {
-    final compact = douyinFansBadgeUrl(level);
-    if (compact.isNotEmpty) return compact;
-  }
   return text;
 }
 
@@ -69,19 +60,6 @@ final RegExp _douyinGrayBadgePattern = RegExp(
   r'advanced_gray|pop_gray_super_badge',
   caseSensitive: false,
 );
-
-/// 已是紧凑款模板(60×48)的命名特征。
-final RegExp _douyinCompactBadgePattern = RegExp(
-  r'pop_super_badge',
-  caseSensitive: false,
-);
-
-/// 官方粉丝团模板域(对齐 web `isDouyinFansClubBgUrl`):URL 命名含
-/// fansclub / fans_club 即模板族;域外的才是主播定制款。
-bool _isDouyinFansClubTemplateUrl(String url) {
-  final text = url.toLowerCase();
-  return text.contains('fansclub') || text.contains('fans_club');
-}
 
 /// 抖音粉丝牌官方 CDN 兜底图 URL。
 ///
@@ -324,30 +302,37 @@ class _FanBadgeState extends State<_FanBadge> {
     // 抖音:img-only 站(web `CHAT_FAN_BADGE_IMG_ONLY_SITES`)。
     // 链路:**协议图优先(先灰图换彩色)**,无协议图/灰图换彩统一回落官方
     // 紧凑款 `pop_super_badge`(60×48 → 26.2px,2026-09-27 用户口径
-    // dyx-compare.png:三模板统一最右紧凑款);高度沿用 21px(与其他平台
-    // 徽章一致),宽度按原图比例。
+    // dyx-compare.png:三模板统一最右紧凑款);失败回落红色渐变圆盘文字态。
     //
-    // 2026-09-26 用户报「粉丝牌背景太长」的根因:此前兜底模板写成
-    // `fansclub_level_v6`(150×48 → 65.6px 长条);09-27 又发现兜底/
-    // advanced_gray 换彩用的 `fansclub_new_badge`(39.4px)与协议主流图
-    // `ranklist_fansclub_pop_super_badge`(26.2px)宽窄不一,同一房间两种
-    // 宽度 —— 现统一紧凑款。
+    // 宽度口径(2026-09-29 用户口径「图是对的,只用改背景宽度」):宽模板图
+    // (v6 150×48 / new_badge 90×48)内容区(数字+装饰带)只有左端 ~60 源px,
+    // 右侧是纯渐变延伸底 → `BoxFit.cover` + 默认 `centerLeft` 左对齐裁右,
+    // 显示宽 [AppDouyinChatBadge.fanCroppedWidth](26.25,与官方紧凑款同宽);
+    // 右端补圆角(虎牙 consume 裁切同款处理);灰图换彩后的 60×48 同比例
+    // 无裁切。此前「整体换紧凑款图」被用户否决(图样式变了),只收宽度。
     if (site == 'douyin') {
       const badgeHeight = AppDouyinChatBadge.fanImageHeight;
       final officialUrl = douyinFansColoredBadgeUrl(remoteUrl, level).isNotEmpty
           ? douyinFansColoredBadgeUrl(remoteUrl, level)
           : douyinFansBadgeUrl(level);
       if (officialUrl.isNotEmpty && !_imgFailed) {
-        return ChatBadgeImage(
-          site: site,
-          kind: ChatBadgeKind.fans,
-          level: level,
-          height: badgeHeight,
-          src: officialUrl,
-          // 本地 `assets/badges/douyin/fans/*` 实为粉翼大摆台(非官网样式),
-          // 加载失败时宁可落红色渐变圆盘,也不回退到错的画风。
-          assetPathOverride: '',
-          onFail: _markImgFailed,
+        return ClipRRect(
+          borderRadius: BorderRadius.horizontal(
+            right: Radius.circular(AppDouyinChatBadge.fanCropEndRadius),
+          ),
+          child: ChatBadgeImage(
+            site: site,
+            kind: ChatBadgeKind.fans,
+            level: level,
+            height: badgeHeight,
+            width: AppDouyinChatBadge.fanCroppedWidth,
+            fit: BoxFit.cover,
+            src: officialUrl,
+            // 本地 `assets/badges/douyin/fans/*` 实为粉翼大摆台(非官网样式),
+            // 加载失败时宁可落红色渐变圆盘,也不回退到错的画风。
+            assetPathOverride: '',
+            onFail: _markImgFailed,
+          ),
         );
       }
       return _BadgeBox(

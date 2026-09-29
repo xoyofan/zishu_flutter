@@ -559,6 +559,26 @@ void main() {
       );
       // 76 > honorMax(75):无资产 → onFail 回落紫粉渐变数字文字态。
       expect(find.text('76'), findsOneWidget, reason: '超档 honor 回落文字 pill');
+      // 裁剪契约(2026-09-29 用户口径「图是对的,只用改背景宽度」):粉丝牌
+      // 图原样保留,但显示宽收窄到内容区 —— width=26.25 + BoxFit.cover
+      // (+ ChatBadgeImage 默认 alignment centerLeft)裁掉右侧渐变延伸底。
+      final fansBadge = tester
+          .widgetList<ChatBadgeImage>(find.byType(ChatBadgeImage))
+          .firstWhere((w) => w.kind == ChatBadgeKind.fans);
+      expect(fansBadge.width, AppDouyinChatBadge.fanCroppedWidth,
+          reason: '宽模板图(150×48)只显示左端内容区宽 26.25');
+      expect(fansBadge.fit, BoxFit.cover,
+          reason: 'cover+centerLeft 左对齐裁右,不压缩变形');
+      final clipRRect = tester.widget<ClipRRect>(
+        find
+            .ancestor(of: find.byWidget(fansBadge), matching: find.byType(ClipRRect))
+            .first,
+      );
+      expect(
+        (clipRRect.borderRadius as BorderRadius).bottomRight,
+        const Radius.circular(AppDouyinChatBadge.fanCropEndRadius),
+        reason: '裁切右端补小圆角(虎牙 consume 同款处理)',
+      );
       // 修正期望：ChatBadgeImage 加载失败后**仍留在 widget 树里**（只是内部
       // 渲染 SizedBox.shrink 并回调 onFail），所以这里应是 2 个：
       //   1 个粉丝牌（官方远程图）+ 1 个平台等级 honor/18.png（本地图）。
@@ -608,9 +628,12 @@ void main() {
       final honorW = honor!;
 
       final rect = tester.getRect(find.byWidget(honorW));
-      // 高度 2026-09-29 官方口径:21 → 15(粉丝牌 21 的 ~0.71,honor 明显
-      // 小于粉丝牌);宽随素材 96×48 比例(高 15 → 30px)。
+      // 高度 2026-09-29 官方口径两轮校准:21 → 15 用户反馈「太小」→ 18
+      // (粉丝牌 21 的 ~0.86,小于粉丝牌但不过分);宽随素材 96×48 比例
+      // (高 18 → 36px)。
       expect(rect.height, closeTo(AppDouyinChatBadge.honorHeight, 0.01));
+      expect(AppDouyinChatBadge.honorHeight, 18,
+          reason: '2026-09-29 用户口径:honor 小于粉丝牌但 15 太小,取 18');
       // 素材未解码时 RawImage 拿不到宽(测试环境 0),所以钉死的是「不限宽 +
       // contain」这两个输入,而不是渲染后的像素宽。
       final image = tester.widget<Image>(

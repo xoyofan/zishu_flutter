@@ -517,13 +517,27 @@ abstract final class AppDouyuChatBadge {
 
 /// 抖音聊天徽章(img-only 站,尺寸口径见 DESIGN.md §4 徽章表格)。
 abstract final class AppDouyinChatBadge {
-  /// honor 等级徽章高(官方实际渲染口径 2026-09-29:明显小于粉丝牌,
-  /// 取粉丝牌 21 的 ~0.71;此前同为 21 导致「平台背景太大」)。honor
-  /// 整图与紫粉渐变文字态兜底共用。
-  static const double honorHeight = 15;
+  /// honor 等级徽章高(官方实际渲染口径 2026-09-29:小于粉丝牌但不至于
+  /// 太小;首版 15 用户反馈「改的也太小了」,回调 18 = 粉丝牌 21 的 ~0.86)。
+  /// honor 整图与紫粉渐变文字态兜底共用。
+  static const double honorHeight = 18;
 
   /// 粉丝牌图高(pop_super 紧凑款 60×48 → 26.2px 宽)。
   static const double fanImageHeight = 21;
+
+  /// 粉丝牌宽图(v6 150×48 / new_badge 90×48)**裁剪显示宽**:官方模板的
+  /// 内容区(数字+装饰带)只有左端 ~60 源px,右侧是纯渐变延伸底(2026-09-29
+  /// 用户口径:「图是对的,只用改背景宽度」)→ cover+左对齐裁右。宽度取
+  /// **整数 26**(21×60/48 = 26.25 落在半像素栅格,插值模糊发"粗糙";
+  /// 2026-09-29 用户口径「不用缩放感,按实际大小」,整数物理对齐);
+  /// 灰图换彩后的 60×48(比例 1.25≈26/21)基本无裁切。
+  static const double fanCroppedWidth = 26;
+
+  /// 裁切后右端补的圆角半径:素材左端是半圆头(实测 v6 图四角透明,
+  /// 圆头半径 = 源高 48/2),右端裁切处必须对称补**高度一半**的圆头
+  /// (21/2 = 10.5)组成完整胶囊;首版 4px 用户反馈「右侧像截断」
+  /// (2026-09-29),同虎牙 consume 裁切「与左端同半径补回」口径。
+  static const double fanCropEndRadius = fanImageHeight / 2;
 }
 
 /// 阴影(elevation)基线。
