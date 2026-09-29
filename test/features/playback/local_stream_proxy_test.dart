@@ -189,6 +189,97 @@ void main() {
     expect(mediaTags, 5, reason: 'A 的 2 个 + B 的 3 个媒体 tag 全部到达');
   });
 
+  group('阶段2:断流换源(宿主回调)', () {
+    test('上游断开 → 回调给新地址 → 热切继续,客户端无感', () async {
+      final scriptA = <List<int>>[
+        [..._flvHeader(), ..._metaTag(), ..._seqTag()],
+        [..._videoTag(0), ..._audioTag(30)],
+      ];
+      final scriptB = <List<int>>[
+        [..._flvHeader(), ..._metaTag(), ..._seqTag()],
+        [..._videoTag(0), ..._audioTag(40)],
+      ];
+      upstreamA = await fakeUpstream(scriptA, closeAfter: 2); // 发完即断
+      upstreamB = await fakeUpstream(scriptB);
+
+      final session = proxy.openSession(
+        'http://127.0.0.1:${upstreamA!.port}/live.flv',
+      );
+      session.onUpstreamFailed = (reason) async =>
+          'http://127.0.0.1:${upstreamB!.port}/live.flv';
+      final done = readAll(Uri.parse(session.localUrl));
+
+      // A 断(done)→ 回调 → 热切 B → B 数据到达;随后主动收尾。
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      await session.dispose();
+
+      final received = await done;
+      expect(received.sublist(0, 3), [0x46, 0x4C, 0x56]);
+      expect(received.sublist(13), isNot(contains(0x46)),
+          reason: '热切后不得出现第二个 FLV header');
+      // A 两段(前导+2 媒体 tag)+ B 拼接段(2 媒体 tag):全部到达。
+      final expectedLen = scriptA.expand((c) => c).length +
+          (_videoTag(0).length + _audioTag(40).length);
+      expect(received.length, expectedLen,
+          reason: 'A 前段 + B 重写段都必须到达,一字节不丢');
+    });
+
+    test('回调返回 null → 会话终结(降级 mpv 恢复链)', () async {
+      final scriptA = <List<int>>[
+        [..._flvHeader(), ..._seqTag()],
+        [..._videoTag(0)],
+      ];
+      upstreamA = await fakeUpstream(scriptA, closeAfter: 2);
+      final session = proxy.openSession(
+        'http://127.0.0.1:${upstreamA!.port}/live.flv',
+      );
+      session.onUpstreamFailed = (reason) async => null;
+      final done = readAll(Uri.parse(session.localUrl));
+      final received = await done;
+      expect(
+        received.length,
+        _flvHeader().length + _seqTag().length + _videoTag(0).length,
+        reason: '宿主放弃恢复时客户端只收旧字节,连接关闭',
+      );
+    });
+
+    test('静默无数据超过 idleTimeout → 触发回调热切', () async {
+      final scriptA = <List<int>>[
+        [..._flvHeader(), ..._seqTag()],
+      ];
+      final scriptB = <List<int>>[
+        [..._flvHeader(), ..._seqTag()],
+        [..._videoTag(0), ..._audioTag(40)],
+      ];
+      upstreamA = await fakeUpstream(scriptA); // 发一段后静默挂住
+      upstreamB = await fakeUpstream(scriptB);
+
+      final session = proxy.openSession(
+        'http://127.0.0.1:${upstreamA!.port}/live.flv',
+      )..idleTimeout = const Duration(milliseconds: 200);
+      // 只允许恢复一次:B 的数据发完后同样静默,第二次看门狗触发时回调
+      // 返回 null → 会话终结(避免测试里无限换源)。
+      var recovered = false;
+      session.onUpstreamFailed = (reason) async {
+        if (recovered) return null;
+        recovered = true;
+        return 'http://127.0.0.1:${upstreamB!.port}/live.flv';
+      };
+      final done = readAll(Uri.parse(session.localUrl));
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      await session.dispose();
+
+      final received = await done;
+      // B 的两个媒体 tag(重写后 ts>0)必须到达 —— idle 看门狗触发了换源。
+      expect(
+        received.length,
+        _flvHeader().length + _seqTag().length +
+            _videoTag(1).length + _audioTag(41).length,
+        reason: '静默超时必须触发回调并热切到新源',
+      );
+    });
+  });
+
   test('上游连不上:客户端连接被关闭,字节只有已发部分', () async {
     final scriptA = <List<int>>[
       [..._flvHeader(), ..._seqTag()],

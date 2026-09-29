@@ -31,7 +31,7 @@ void main() {
 
   test('核心调试场景分类落位', () {
     PlaybackLog.write('resolve_ok');
-    PlaybackLog.write('url_refresh');
+    PlaybackLog.write('proxy_upstream_switch');
     PlaybackLog.write('host_avoid_applied');
     PlaybackLog.write('video_stability');
     PlaybackLog.write('mpv_log');

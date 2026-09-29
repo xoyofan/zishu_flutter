@@ -118,13 +118,23 @@ class PlaybackLog {
           'prefetch_empty',
         ])
           e: 'resolve',
-        // 线路:开流选线/死节点避让/URL 寿命重签。
+        // 线路:开流选线/死节点避让。
         for (final e in [
           'open', 'open_queue_wait', 'open_superseded', 'ad_filter_wrap',
-          'mpv_proxy', 'cdn_failover_order', 'url_refresh',
-          'url_refresh_skip', 'url_refresh_scheduled',
+          'mpv_proxy', 'cdn_failover_order',
           'host_avoid_recorded', 'host_avoid_applied',
           'host_avoid_persist_error',
+        ])
+          e: 'line',
+        // 本地流代理:会话/透传/断流换源(旧日志里的 url_refresh* 事件已随
+        // 预刷新编排移除,类别保留以兼容历史日志解析)。
+        for (final e in [
+          'proxy_started', 'proxy_stopped', 'proxy_server_error',
+          'proxy_session_open', 'proxy_session_close',
+          'proxy_client_attached', 'proxy_line_wrap',
+          'proxy_upstream_switch', 'proxy_upstream_fail',
+          'proxy_recover_ok', 'proxy_recover_fail',
+          'proxy_recover_switch', 'proxy_recover_throttled',
         ])
           e: 'line',
         // 流健康:首帧/解码/缓冲观测。

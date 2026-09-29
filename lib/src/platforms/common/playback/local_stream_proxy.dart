@@ -23,6 +23,10 @@ import 'playback_log.dart';
 /// upstream 建连(含响应头返回)超时:超过即视为该源失败。
 const Duration _connectTimeout = Duration(seconds: 10);
 
+/// upstream 失败后等宿主给出替代地址的预算:必须显著小于 mpv 缓冲
+/// (demuxer 6s),超时即放弃会话让 mpv 走既有恢复链。
+const Duration _recoverTimeout = Duration(seconds: 4);
+
 class LocalStreamProxy {
   HttpServer? _server;
   int _nextSessionId = 0;
@@ -89,7 +93,8 @@ class LocalStreamProxy {
 /// 单个播放会话:一个本地 URL ↔ 一个远端 upstream(可热切换)。
 class StreamProxySession {
   StreamProxySession._(this.id, this._proxy, String upstreamUrl)
-      : _upstreamUrl = upstreamUrl;
+      : _upstreamUrl = upstreamUrl,
+        idleTimeout = const Duration(seconds: 10);
 
   final int id;
   final LocalStreamProxy _proxy;
@@ -107,6 +112,16 @@ class StreamProxySession {
   String _upstreamUrl;
   int _generation = 0;
   bool _disposed = false;
+
+  /// upstream 失败(读错误/提前结束/静默无数据)时向宿主要一条替代地址:
+  /// 返回非空 URL 则热切继续(mpv 无感);null / 超时([_recoverTimeout])则
+  /// 会话终结(本地流断开,mpv 走既有恢复链)。由播放器层注入 re-resolve。
+  Future<String?> Function(String reason)? onUpstreamFailed;
+
+  /// 无数据看门狗:直播 FLV 正常持续有字节,静默超过此时长视为断流
+  /// (token 被掐的一种形态是连接僵死而非立刻报错)。
+  Duration idleTimeout;
+  Timer? _idleTimer;
 
   /// mpv 要打开的本地地址(懒连接:upstream 在 mpv 首次请求时才拉)。
   String get localUrl => 'http://127.0.0.1:${_proxy.port}/$id.flv';
@@ -138,6 +153,8 @@ class StreamProxySession {
     if (_disposed) return;
     _disposed = true;
     _generation++;
+    _idleTimer?.cancel();
+    _idleTimer = null;
     await _abortUpstream();
     _closeOutgoing();
     _httpClient?.close(force: true);
@@ -196,9 +213,11 @@ class StreamProxySession {
         _onUpstreamFailure(generation, 'http_${response.statusCode}');
         return;
       }
+      _armIdleWatchdog(generation);
       _upstreamSub = response.listen(
         (chunk) {
           if (_disposed || generation != _generation) return;
+          _armIdleWatchdog(generation);
           final out = secondary
               ? _splicer.feedSecondary(Uint8List.fromList(chunk))
               : _splicer.feedPrimary(Uint8List.fromList(chunk));
@@ -214,19 +233,52 @@ class StreamProxySession {
     }
   }
 
-  void _onUpstreamFailure(int generation, String reason) {
+  Future<void> _onUpstreamFailure(int generation, String reason) async {
     if (_disposed || generation != _generation) return;
+    _idleTimer?.cancel();
+    _idleTimer = null;
     PlaybackLog.write('proxy_upstream_fail', {
       'session': id,
       'upstream': upstreamHost,
       'reason': _shortReason(reason),
     });
-    // 阶段 1 语义:上游救不回来就结束本地流,让 mpv 报网络错误进入既有
+    // 先向宿主要替代地址(re-resolve):拿到就热切到新 upstream,mpv 只消耗
+    // 缓冲不报错;拿不到(不支持/节流/超时)才终结本地流,让 mpv 走既有
     // 恢复链(致命传输诊断短路 → re-resolve)。
-    unawaited(dispose());
+    final recover = onUpstreamFailed;
+    if (recover != null && _outgoing != null && !_outgoing!.isClosed) {
+      try {
+        final url = await recover(reason).timeout(_recoverTimeout);
+        if (!_disposed &&
+            generation == _generation &&
+            url != null &&
+            url.isNotEmpty) {
+          PlaybackLog.write('proxy_recover_switch', {
+            'session': id,
+            'upstream': Uri.tryParse(url)?.host,
+          });
+          if (await switchUpstream(url)) return;
+        }
+      } catch (_) {
+        // 恢复超时/异常:走终结路径。
+      }
+    }
+    if (!_disposed && generation == _generation) unawaited(dispose());
+  }
+
+  /// 无数据看门狗:每个数据块到达即重布防;到期仍无数据按断流处理。
+  void _armIdleWatchdog(int generation) {
+    _idleTimer?.cancel();
+    _idleTimer = Timer(idleTimeout, () {
+      if (!_disposed && generation == _generation) {
+        unawaited(_onUpstreamFailure(generation, 'idle_timeout'));
+      }
+    });
   }
 
   Future<void> _abortUpstream() async {
+    _idleTimer?.cancel();
+    _idleTimer = null;
     final sub = _upstreamSub;
     _upstreamSub = null;
     await sub?.cancel();

@@ -60,8 +60,7 @@ class MediaKitLivePlayer
         LivePlayer,
         LineRecoveryAware,
         VideoHardwareAccelerationAware,
-        RecoveryCancellable,
-        StreamSourceSwitchable {
+        RecoveryCancellable {
   /// [player] 是单测注入点:VM 测试无法加载原生 libmpv(`Player()` 会构造
   /// `NativePlayer` 并 `DynamicLibrary.open`),只能注入 `Player(platformPlayer:)`
   /// 的假后端来驱动事件与命令。生产调用点一律不传,行为与原先完全一致。
@@ -106,8 +105,8 @@ class MediaKitLivePlayer
   bool videoHardwareAccelerationEnabled;
 
   /// 本地流代理(可选):启用后 FLV 直链改由 mpv 打开本地地址、代理层转发
-  /// 远端,URL 预刷新/换源走 [switchStreamSource] 热切换,mpv 无感。
-  /// null = 直连(旧行为,全部既有单测的默认形态)。
+  /// 远端,断流换源(token 被掐/节点死)由代理层 re-resolve 热切兜底,
+  /// mpv 无感。null = 直连(旧行为,全部既有单测的默认形态)。
   final LocalStreamProxy? streamProxy;
 
   /// 当前 open 的代理会话([open] 里为首选 FLV 线路创建;切源/停止释放)。
@@ -761,6 +760,10 @@ class MediaKitLivePlayer
     if (line.format != 'flv') return null;
     final session = proxy.openSession(line.url);
     _proxySession = session;
+    // upstream 断流(token 被掐/节点死)时先经恢复链 re-resolve 热切新地址,
+    // mpv 无感;失败才终结本地流走既有恢复。节流与 re-resolve 恢复同源
+    // ([_recoveryPolicy]),不会高频空转。
+    session.onUpstreamFailed = _recoverProxyUpstream;
     PlaybackLog.write('proxy_line_wrap', {
       'host': _hostOf(line),
       'session': session.id,
@@ -768,26 +771,51 @@ class MediaKitLivePlayer
     return session;
   }
 
+  /// 代理 upstream 失败的恢复:向宿主要新线路,首线仍为 FLV 时返回其 URL
+  /// 热切并更新记账;非 FLV / 不支持 / 节流内返回 null(终结本地流,mpv 走
+  /// 既有恢复链整组重开)。
+  Future<String?> _recoverProxyUpstream(String reason) async {
+    if (_disposed || _givenUp) return null;
+    final now = DateTime.now();
+    if (!_recoveryPolicy.canRecover(now: now, lastRecoverAt: _lastRecoverAt)) {
+      PlaybackLog.write('proxy_recover_throttled', {'reason': reason});
+      return null;
+    }
+    final handler = _lineRecovery;
+    if (handler == null) return null;
+    _lastRecoverAt = now;
+    try {
+      final lines = await handler();
+      if (lines.isEmpty) {
+        PlaybackLog.write('proxy_recover_fail', {'reason': 'empty'});
+        return null;
+      }
+      final first = lines.first;
+      if (first.format != 'flv') {
+        // 新首选不是 FLV 直链(如主播切档后只剩 HLS):代理无法热切,
+        // 交给 mpv 恢复链整组重开。
+        PlaybackLog.write('proxy_recover_fail', {
+          'reason': 'not_flv',
+          'format': first.format,
+        });
+        return null;
+      }
+      _currentLines = lines;
+      PlaybackLog.write('proxy_recover_ok', {
+        'host': _hostOf(first),
+        'lines': lines.length,
+      });
+      return first.url;
+    } catch (error) {
+      PlaybackLog.write('proxy_recover_fail', {'reason': '$error'});
+      return null;
+    }
+  }
+
   Future<void> _disposeProxySession() async {
     final session = _proxySession;
     _proxySession = null;
     if (session != null) await session.dispose();
-  }
-
-  /// 无感换源(见 [StreamSourceSwitchable]):把当前代理会话的 upstream 热切
-  /// 到 [line],mpv 侧不重开。会话不存在/已死/非 FLV 时返回 false,调用方
-  /// 回退整组重开。
-  @override
-  Future<bool> switchStreamSource(
-    StreamLine line, [
-    List<StreamLine> fallbacks = const [],
-  ]) async {
-    final session = _proxySession;
-    if (session == null || line.format != 'flv') return false;
-    final ok = await session.switchUpstream(line.url);
-    if (!ok) return false;
-    _currentLines = [line, ...fallbacks];
-    return true;
   }
 
   /// 缓冲态切换:进入缓冲即起看门狗;退出缓冲仅撤销看门狗。

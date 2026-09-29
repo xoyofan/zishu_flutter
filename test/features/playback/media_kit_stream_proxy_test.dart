@@ -15,6 +15,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/local_stream_proxy.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/media_kit_live_player.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/playback_log.dart';
+import 'package:zishu_flutter/src/platforms/common/playback/playback_retry.dart';
 
 class _FakePlatformPlayer extends PlatformPlayer {
   _FakePlatformPlayer() : super(configuration: const PlayerConfiguration());
@@ -129,7 +130,7 @@ void main() {
     );
   });
 
-  test('switchStreamSource 热切换:mpv 不重开,会话 upstream 已更换', () async {
+  test('会话热切换(switchUpstream):mpv 不重开,upstream 已更换', () async {
     final line = StreamLine(
       name: 'A',
       url: 'http://127.0.0.1:${upstream.port}/live.flv',
@@ -147,7 +148,8 @@ void main() {
     await Future<void>.delayed(const Duration(milliseconds: 150));
     await pumpEventQueue();
 
-    final ok = await player.switchStreamSource(line);
+    final ok =
+        await player.debugProxySession!.switchUpstream(line.url);
     expect(ok, isTrue, reason: 'FLV + 活跃会话必须支持热切换');
     expect(fake.calls, hasLength(1), reason: '热切换不得触发 mpv 重开');
     expect(
@@ -163,11 +165,73 @@ void main() {
     await pumpEventQueue();
     expect(fake.calls.single, 'open:h.example.com',
         reason: '非 FLV 直链必须保持直连(代理只服务 FLV)');
-    expect(
-      await player.switchStreamSource(hlsLine),
-      isFalse,
-      reason: 'HLS 不支持热切换,调用方应回退整组重开',
+  });
+
+  test('上游断流 → 恢复链 re-resolve 热切,mpv 不重开', () async {
+    // fake 后端不会出帧:默认看门狗(2s/8s)会在等待期把 open 整组重放,
+    // 重建代理会话、打断 idle 看门狗的验证窗口 —— 本用例用慢看门狗把
+    // 播放器自身的恢复链全部压到 30s 外,12s 窗口内只有代理层在动。
+    player.dispose();
+    player = MediaKitLivePlayer(
+      player: Player(platformPlayer: fake),
+      streamProxy: proxy,
+      policy: const PlaybackRetryPolicy(
+        maxAttempts: 1,
+        baseDelay: Duration(seconds: 30),
+        maxDelay: Duration(seconds: 30),
+        deadOpenGrace: Duration(seconds: 30),
+      ),
     );
+    final line = StreamLine(
+      name: 'A',
+      url: 'http://127.0.0.1:${upstream.port}/live.flv',
+      format: 'flv',
+    );
+    final fresh = StreamLine(
+      name: 'B',
+      url: 'http://127.0.0.1:${upstream.port}/live2.flv',
+      format: 'flv',
+    );
+    await player.open(line);
+    await pumpEventQueue();
+    // 模拟 mpv 拉流(代理会话挂上 client)。
+    final puller = HttpClient();
+    unawaited(
+      puller
+          .getUrl(Uri.parse(player.debugProxySession!.localUrl))
+          .then((r) => r.close())
+          .then((r) => r.drain<void>().catchError((_) {})),
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    await pumpEventQueue();
+
+    // 宿主恢复链给新线路(FLV):上游断(本测试的假上游发完 header 即静默,
+    // 由 idle 看门狗触发)。等待恢复动作留痕。
+    player.setLineRecovery(() async => [fresh]);
+    await Future<void>.delayed(const Duration(seconds: 12));
+    await pumpEventQueue();
+
+    expect(
+      logLines().any((l) => l.contains('proxy_upstream_fail')),
+      isTrue,
+      reason: '上游断流必须留痕',
+    );
+    expect(
+      logLines().any((l) => l.contains('proxy_recover_ok')),
+      isTrue,
+      reason: '恢复链给出新 FLV 地址必须留痕',
+    );
+    expect(
+      logLines().any((l) => l.contains('proxy_recover_switch')),
+      isTrue,
+      reason: '热切动作必须留痕',
+    );
+    expect(
+      fake.calls.where((c) => c.startsWith('open:')).length,
+      1,
+      reason: '代理层恢复不得触发 mpv 重开(这正是本架构的意义)',
+    );
+    puller.close(force: true);
   });
 
   test('未启用代理(null):行为与原先完全一致', () async {
@@ -175,7 +239,6 @@ void main() {
     await bare.open(flvLine);
     await pumpEventQueue();
     expect(fake.calls.single, 'open:a.example.com');
-    expect(await bare.switchStreamSource(flvLine), isFalse);
     bare.dispose();
   });
 }

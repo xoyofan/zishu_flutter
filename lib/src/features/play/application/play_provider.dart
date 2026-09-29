@@ -22,7 +22,6 @@ import 'host_avoidlist.dart';
 import 'play_selection.dart';
 import 'recovery_lines.dart';
 import 'room_volume_provider.dart';
-import 'url_refresh.dart';
 
 /// 共享播放器上的最新开流操作 token。不同房间的 family controller 共用同一
 /// `LivePlayer`，局部 generation 只能保护单个 controller，不能阻止旧房间的
@@ -165,114 +164,7 @@ class PlayController extends AsyncNotifier<PlayState> {
   /// URL 寿命预刷新计时器:在流 URL 的 `expire`(斗鱼实测 300s)到点前
   /// 主动重签,消除"token 过期 → CDN reset → 卡顿 → 升级换线"的整段
   /// 被动恢复。任何一次 open 成功后按新 URL 重新排期。
-  Timer? _urlRefreshTimer;
 
-  /// 本 controller 最近一次 open 认领的全局 token(接管守卫依据,
-  /// 见 [_refreshUrlBeforeExpire])。
-  int _myLastOpenToken = 0;
-
-  /// 按 URL 寿命的 80% 排预刷新;fixture 不排。
-  ///
-  /// fixture 由 [_open] 调用点显式传入而非读 state:进房首开 8~40ms 即完成,
-  /// 此时 `build()` 可能尚未 return(state 仍为 loading),读 `state.value`
-  /// 会拿到 null 把排期整个跳过(2026-09-28 真机实测预刷新未生效的根因)。
-  void _scheduleUrlRefresh(StreamLine line, bool fixture) {
-    _urlRefreshTimer?.cancel();
-    _urlRefreshTimer = null;
-    if (fixture) return;
-    final ttl = urlTtlSeconds(line.url);
-    // 短签名(实测斗鱼主播切档后部分线路 expire=30)不排预刷新:token 只
-    // 管建连,连接建立后过期无碍(官方 web 单连接实测存活 6.5min+);按 30s
-    // 的 80% 重签反而每 24s 主动换一次线,制造持续的换线抖动
-    // (2026-09-28 真机 00:39-00:41 实测两节点 ping-pong)。断流由
-    // 播放器 stall→recover 链路兜底。
-    if (ttl < 120) {
-      PlaybackLog.write('url_refresh_skip', {
-        'site': params.site,
-        'room': params.roomId,
-        'reason': 'short_ttl',
-        'ttl_s': ttl,
-      });
-      return;
-    }
-    PlaybackLog.write('url_refresh_scheduled', {
-      'site': params.site,
-      'room': params.roomId,
-      'ttl_s': ttl,
-      'host': Uri.tryParse(line.url)?.host,
-    });
-    _urlRefreshTimer = Timer(
-      Duration(milliseconds: ttl * 800),
-      _refreshUrlBeforeExpire,
-    );
-  }
-
-  /// 到点重签:复用恢复重解析(绕短缓存、全线路、逃离死节点),新 URL
-  /// 不同则静默重开;未轮换则短周期后再试,不等 expire 边缘。
-  Future<void> _refreshUrlBeforeExpire() async {
-    if (!ref.mounted) return;
-    // 接管守卫:全局播放器已被其他房间接管时(用户从本页跳进了新播放页,
-    // 本 controller 仍在导航栈里存活、定时器仍在跑),预刷新绝不能把播放器
-    // 抢回来 —— 否则用户正在看的房间会被顶掉(2026-09-29 22:04 实测:虎牙
-    // 页预刷新到点,把斗鱼画面切成了虎牙)。校验口径:本 controller 最近
-    /// 一次 open 认领的 token 是否仍是全局最新。
-    if (_myLastOpenToken != _latestPlayerOpenToken) {
-      PlaybackLog.write('url_refresh_abandoned', {
-        'site': params.site,
-        'room': params.roomId,
-        'reason': 'player_taken_over',
-      });
-      return;
-    }
-    final current = state.value;
-    if (current == null || current.isFixture) return;
-    final before = current.line?.url;
-    final recovery =
-        await _recoverLines(recordAvoid: false, keepCurrentHost: true);
-    if (!ref.mounted) return;
-    final next = recovery.firstOrNull;
-    if (next == null || next.url == before) {
-      PlaybackLog.write('url_refresh_skip', {
-        'site': params.site,
-        'room': params.roomId,
-        'reason': next == null ? 'no_line' : 'url_unchanged',
-      });
-      _urlRefreshTimer = Timer(
-        const Duration(seconds: 60),
-        _refreshUrlBeforeExpire,
-      );
-      return;
-    }
-    PlaybackLog.write('url_refresh', {
-      'site': params.site,
-      'room': params.roomId,
-      'old_host': Uri.tryParse(before ?? '')?.host,
-      'new_host': Uri.tryParse(next.url)?.host,
-      'ttl_s': urlTtlSeconds(next.url),
-    });
-    // 优先本地代理热切换:mpv 无感(仅短暂消耗缓冲),不重开播放器;
-    // 不具备能力(非 FLV 直链/代理未运行/会话已死)时回退整组重开。
-    final player = ref.read(playerProvider);
-    if (player case StreamSourceSwitchable switchable) {
-      if (await switchable.switchStreamSource(
-            next,
-            recovery.skip(1).toList(),
-          )) {
-        PlaybackLog.write('url_refresh_hot_switch', {
-          'site': params.site,
-          'room': params.roomId,
-          'host': Uri.tryParse(next.url)?.host,
-        });
-        final current = state.value;
-        if (current != null && !current.isFixture) {
-          state = AsyncData(current.copyWith(line: next));
-        }
-        _scheduleUrlRefresh(next, false);
-        return;
-      }
-    }
-    _open(next, recovery.skip(1).toList());
-  }
 
   Map<String, int> _loadHostAvoidlist({bool refresh = false}) {
     final cached = _hostAvoidlist;
@@ -322,8 +214,6 @@ class PlayController extends AsyncNotifier<PlayState> {
     final player = ref.read(playerProvider);
     final token = player is IdleReleasingLivePlayer ? player.enterRoom() : null;
     ref.onDispose(() {
-      _urlRefreshTimer?.cancel();
-      _urlRefreshTimer = null;
       // 先注销恢复回调再 stop:回调是播放器持有的**指向本 controller** 的活引用,
       // autoDispose 后播放器仍可能在自动重连里调用它,而那时 ref/state 已失效
       // (`_recoverLines` 读 state 会报 “Cannot use Ref after dispose”)。
@@ -601,8 +491,7 @@ class PlayController extends AsyncNotifier<PlayState> {
         generation: generation,
       ),
     );
-    _open(line, _fallbackLines(effectiveQuality, line),
-        fixture: current.isFixture);
+    _open(line, _fallbackLines(effectiveQuality, line));
   }
 
   /// 同画质内切换线路。
@@ -611,8 +500,7 @@ class PlayController extends AsyncNotifier<PlayState> {
     if (current == null || current.payload == null) return;
     final generation = ++_generation;
     state = AsyncData(current.copyWith(line: line, generation: generation));
-    _open(line, _fallbackLines(current.quality, line),
-        fixture: current.isFixture);
+    _open(line, _fallbackLines(current.quality, line));
   }
 
   /// 切换舞台弹幕叠加层显隐(纯展示开关,不重开流、不换代际)。
@@ -652,22 +540,16 @@ class PlayController extends AsyncNotifier<PlayState> {
   /// 感知"它已耗尽上限"。装上后,播放器在放弃前会回头向本层要一份**重新
   /// 解析**的地址(签名平台地址此时多半已过期,复用旧地址=无限重开失效源)。
   ///
-  /// [fixture] 由调用点显式传入(进房/恢复路径恒 false,手动切线/切档随
-  /// 当前状态):预刷新排期依赖它,且不能读 state(见 [_scheduleUrlRefresh])。
-  void _open(StreamLine line, List<StreamLine> fallbacks, {bool fixture = false}) {
+  void _open(StreamLine line, List<StreamLine> fallbacks) {
     final player = ref.read(playerProvider);
     final openToken = ++_latestPlayerOpenToken;
-    // 认领本次 open 的全局 token:预刷新到点用它校验"本房间是否仍持有
-    // 播放器"(见 [_refreshUrlBeforeExpire] 的接管守卫)。
-    _myLastOpenToken = openToken;
     // LineRecoveryAware 不是 LivePlayer 的子类型,is 探测不产生类型提升,
     // 用 if-case 对象模式探测并绑定(免显式 as)。
     if (player case LineRecoveryAware aware) {
       aware.setLineRecovery(_recoverLines);
     }
     unawaited(
-      _openAndApplyVolume(player, line, fallbacks, _generation, openToken,
-          fixture),
+      _openAndApplyVolume(player, line, fallbacks, _generation, openToken),
     );
   }
 
@@ -678,7 +560,6 @@ class PlayController extends AsyncNotifier<PlayState> {
     List<StreamLine> fallbacks,
     int generation,
     int openToken,
-    bool fixture,
   ) async {
     // 音量套用不阻塞开流(对齐 pure_live:进房先开流):mpv 的 volume 是
     // 进程级属性,通常先于首帧音频落地;开流后再补一次,校正快照与迟到回流。
@@ -690,8 +571,6 @@ class PlayController extends AsyncNotifier<PlayState> {
       return;
     }
     await _applyRoomVolume(player);
-    // open 成功且仍是最新一次开流:按本 URL 寿命排预刷新(过期前重签)。
-    _scheduleUrlRefresh(line, fixture);
   }
 
   /// 把本房间的有效音量套到播放器。
