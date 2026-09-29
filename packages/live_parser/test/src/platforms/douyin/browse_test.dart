@@ -70,7 +70,8 @@ void main() {
       expect(request.url.queryParameters['aid'], '6383');
       expect(request.url.queryParameters['live_id'], '1');
       expect(request.url.queryParameters['enter_from'], 'link_share');
-      expect(request.url.queryParameters['custom_count'], '50');
+      // 2026-09-29 起 feed 首屏条数尊重 request.limit(首页按视口容量下发)。
+      expect(request.url.queryParameters['custom_count'], '15');
       expect(request.url.queryParameters['action'], 'load_more');
       expect(request.url.queryParameters['action_type'], 'loadmore');
       expect(request.url.queryParameters['is_ssr'], 'true');
@@ -84,6 +85,29 @@ void main() {
         request.headers['Cookie'],
         'UIFID=test-user; passport_csrf_token=test-token',
       );
+    });
+
+    test('推荐:limit 用契约默认 30,加载更多恒 8', () async {
+      fake.feedResponse = douyinFixture('feed_rooms.json');
+      final first = await browse.fetchRooms(
+        const RoomListRequest(site: 'douyin', page: 1),
+      );
+      // RoomListRequest.limit 契约默认 30:feed 尊重该值(首页会显式按
+      // 视口容量下发,分页/刷新路径落契约默认)。
+      expect(fake.requests.last.url.queryParameters['custom_count'], '30');
+      expect(first.hasMore, isTrue);
+    });
+
+    test('推荐:limit 夹取到 1..60(防异常容量值打到上游)', () async {
+      fake.feedResponse = douyinFixture('feed_rooms.json');
+      await browse.fetchRooms(
+        const RoomListRequest(site: 'douyin', page: 1, limit: 200),
+      );
+      expect(fake.requests.last.url.queryParameters['custom_count'], '60');
+      await browse.fetchRooms(
+        const RoomListRequest(site: 'douyin', page: 1, limit: 0),
+      );
+      expect(fake.requests.last.url.queryParameters['custom_count'], '1');
     });
 
     test('推荐:按 extra.has_more 加载下一页', () async {

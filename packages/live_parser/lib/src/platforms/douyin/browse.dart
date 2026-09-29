@@ -155,6 +155,7 @@ class DouyinBrowseRepository implements BrowseRepository {
         _client,
         page: request.page,
         seenRoomIds: _feedSeenRoomIds,
+        limit: request.limit,
       );
       return page.result;
     }
@@ -287,6 +288,8 @@ Future<RoomListResult> fetchDouyinRecommendRooms(DouyinClient client) async {
     client,
     page: 1,
     seenRoomIds: <String>{},
+    // 遗留入口无调用方下发容量:保持历史行为(官方默认 50)。
+    limit: 50,
   );
   return page.result;
 }
@@ -387,6 +390,7 @@ Future<_DouyinFeedPage> _fetchDouyinFeedPage(
   DouyinClient client, {
   required int page,
   required Set<String> seenRoomIds,
+  required int limit,
 }) async {
   final isFirstPage = page <= 1;
   final root = await signedDouyinGet(
@@ -414,7 +418,10 @@ Future<_DouyinFeedPage> _fetchDouyinFeedPage(
       'liveid': '1',
       'is_draw': '1',
       'inner_from_drawer': '0',
-      'custom_count': isFirstPage ? '50' : '8',
+      // 首屏条数尊重调用方下发的 limit(首页按「可用宽度→列数×行数」算
+      // 容量传入,2026-09-29 用户口径;契约默认 30)。加载更多恒 8
+      // (官方 load_more 契约)。夹取 1..60 防异常容量值打到上游。
+      'custom_count': isFirstPage ? '${limit.clamp(1, 60)}' : '8',
       'action': 'load_more',
       'action_type': 'loadmore',
       'enter_source': 'web_homepage_hot_web_live_card',
