@@ -43,14 +43,14 @@ Future<ProviderContainer> _pumpView(WidgetTester tester) async {
       overrides: [authProvider.overrideWith(_AnonymousAuthController.new)],
       child: MaterialApp(
         theme: ZishuTheme.dark(),
-        home: const Scaffold(body: UserCredentialsView()),
+        home: const Scaffold(body: UserCredentialsDialog()),
       ),
     ),
   );
   await _pumpFrames(tester, 2);
 
   final container = ProviderScope.containerOf(
-    tester.element(find.byType(UserCredentialsView)),
+    tester.element(find.byType(UserCredentialsDialog)),
   );
   for (var attempt = 0; attempt < 10; attempt++) {
     if (container.read(platformCredentialsProvider).hydrated) break;
@@ -86,12 +86,11 @@ void main() {
         InMemorySharedPreferencesAsync.withData(<String, Object>{});
   });
 
-  testWidgets('渲染:账号区匿名提示 + YouTube/小红书 平台项与未配置徽标', (tester) async {
+  testWidgets('渲染:平台凭证弹框 + YouTube/小红书 平台项与未配置徽标', (tester) async {
     await _pumpView(tester);
 
-    expect(find.byKey(const Key('user-credentials-view')), findsOneWidget);
-    expect(find.text('用户'), findsOneWidget);
-    expect(find.text('未登录 · 点顶栏头像可登录'), findsOneWidget);
+    expect(find.byKey(const Key('user-credentials-dialog')), findsOneWidget);
+    expect(find.text('平台凭证'), findsOneWidget);
 
     // 平台项:YouTube 与小红书都在(小红书解析未接入需显式标注)。
     expect(find.byKey(const Key('user-credential-youtube')), findsOneWidget);
@@ -144,6 +143,11 @@ void main() {
     final container = await _pumpView(tester);
 
     await _expand(tester, 'xhs');
+    // 展开时预填键名模板,先清空再验证空值分支。
+    await tester.enterText(
+      find.byKey(const Key('user-credential-input-xhs')),
+      '',
+    );
     await tester.tap(find.byKey(const Key('user-credential-save-xhs')));
     await _pumpFrames(tester, 2);
     expect(find.text('请先粘贴 Cookie 或 Token'), findsOneWidget);
@@ -164,6 +168,70 @@ void main() {
     expect(
       await SharedPreferencesAsync().getString('zishu.credentials.xhs'),
       isNull,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('xhs 专项:模板预填两键,未填值报错不落库,填齐才保存', (
+    tester,
+  ) async {
+    final container = await _pumpView(tester);
+
+    await _expand(tester, 'xhs');
+    // 未配置时输入框预填键名模板(两个键,用户往等号后补值)。
+    final field = tester.widget<TextField>(
+      find.byKey(const Key('user-credential-input-xhs')),
+    );
+    expect(field.controller?.text, 'a1=; web_session=');
+    // 获取方法说明走常驻 helperText(模板顶掉 hint 也能看到)。
+    expect(find.textContaining('F12'), findsOneWidget);
+
+    // 模板未填值直接保存:报错且不落库(不能因含键名而误放行)。
+    await tester.tap(find.byKey(const Key('user-credential-save-xhs')));
+    await _pumpFrames(tester, 2);
+    expect(
+      find.text('小红书 Cookie 需同时包含 a1 与 web_session 的值'),
+      findsOneWidget,
+    );
+    expect(
+      container.read(platformCredentialsProvider).configuredSites,
+      isEmpty,
+    );
+    expect(
+      await SharedPreferencesAsync().getString('zishu.credentials.xhs'),
+      isNull,
+    );
+
+    // 只粘两个键(不粘整串)也放行 —— 与参考实现 signing.ts 口径一致。
+    await tester.enterText(
+      find.byKey(const Key('user-credential-input-xhs')),
+      'a1=abcdef1234; web_session=0123456789abcdef',
+    );
+    await tester.tap(find.byKey(const Key('user-credential-save-xhs')));
+    await _pumpFrames(tester, 2);
+    expect(
+      container
+          .read(platformCredentialsProvider)
+          .credentialFor('xhs')
+          .isConfigured,
+      isTrue,
+    );
+    expect(
+      await SharedPreferencesAsync().getString('zishu.credentials.xhs'),
+      isNotNull,
+    );
+
+    // 收起再展开:回显已保存值(不再退回模板)。
+    await tester.tap(find.byKey(const Key('user-credential-toggle-xhs')));
+    await _pumpFrames(tester, 2);
+    await tester.tap(find.byKey(const Key('user-credential-toggle-xhs')));
+    await _pumpFrames(tester, 2);
+    final reopened = tester.widget<TextField>(
+      find.byKey(const Key('user-credential-input-xhs')),
+    );
+    expect(
+      reopened.controller?.text,
+      'a1=abcdef1234; web_session=0123456789abcdef',
     );
     expect(tester.takeException(), isNull);
   });

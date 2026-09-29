@@ -16,7 +16,6 @@ import 'package:zishu_flutter/src/apps/windows/windows_app.dart';
 import 'package:zishu_flutter/src/features/browse/views/home_view.dart';
 import 'package:zishu_flutter/src/features/play/application/play_provider.dart';
 import 'package:zishu_flutter/src/features/play/views/play_view.dart';
-import 'package:zishu_flutter/src/features/user/views/user_credentials_view.dart';
 import 'package:zishu_flutter/src/platforms/common/playback/live_player.dart';
 
 class _FakeLivePlayer implements LivePlayer {
@@ -111,12 +110,12 @@ void main() {
         InMemorySharedPreferencesAsync.withData(<String, Object>{});
   });
 
-  testWidgets('/user:平台凭证页可达(顶栏账号菜单入口)', (tester) async {
+  testWidgets('/user 深链:重定向回 /all(凭证已改为弹框)', (tester) async {
     final router = await _pumpApp(tester);
-    router.go('/user');
-    await tester.pump(const Duration(milliseconds: 50));
-    await tester.pump(const Duration(milliseconds: 50));
-    expect(find.byType(UserCredentialsView), findsOneWidget);
+    await _go(tester, router, '/user');
+
+    expect(_pathOf(router), '/all');
+    expect(find.byType(HomeView), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

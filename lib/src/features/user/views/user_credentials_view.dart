@@ -1,19 +1,19 @@
-/// 「用户」页:账号状态 + 平台登录态凭证(YouTube / 小红书等)。
+/// 平台凭证弹框:顶栏账号菜单「平台凭证」入口弹出的对话框。
 ///
-/// 为什么需要它:部分站点必须带登录态才能解析/取流(YouTube 出口 IP 被反爬
+/// 为什么是弹框:凭证是低频配置项,不值得占一个路由页面;web 的 `/user`
+/// 本就只是弹框,桌面端对齐(原独立页面已收编,`/user` 深链重定向 /all)。
+/// 存在原因:部分站点必须带登录态才能解析/取流(YouTube 出口 IP 被反爬
 /// 拦截、小红书需要 `a1` + `web_session`),而顶栏头像菜单只放得下账号登录。
 /// 参考实现把这类入口做成各站点的 Cookie 弹窗
-/// (`components/{youtube,xhs,douyin}/*CookieBanner.vue`),桌面端收敛到本页
+/// (`components/{youtube,xhs,douyin}/*CookieBanner.vue`),桌面端收敛到本弹框
 /// 统一管理(同一套 token 存储,后续解析侧消费)。
 ///
 /// 凭证只落本机 SharedPreferences,UI 只回显**脱敏摘要**,不整串展示。
-/// 路由(`/user`)与顶栏入口由壳层接线 —— 本页不自带 Scaffold,依赖 AppShell。
 library;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../shared/application/auth_provider.dart';
 import '../../../shared/presentation/design_tokens.dart';
 import '../../../shared/presentation/platform_brands.dart';
 import '../../../shared/presentation/widgets/platform_icon.dart';
@@ -21,110 +21,82 @@ import '../../../shared/presentation/zishu_tokens.dart';
 import '../application/platform_credentials_provider.dart';
 import '../domain/platform_credential.dart';
 
-class UserCredentialsView extends ConsumerWidget {
-  const UserCredentialsView({super.key});
+/// 顶栏账号菜单「平台凭证」入口:弹出凭证管理对话框。
+Future<void> showUserCredentialsDialog(BuildContext context) =>
+    showDialog<void>(
+      context: context,
+      builder: (_) => const UserCredentialsDialog(),
+    );
+
+/// 平台凭证对话框:平台条目渲染、粘贴 + 保存 / 清除。
+class UserCredentialsDialog extends ConsumerWidget {
+  const UserCredentialsDialog({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final tokens = context.tokens;
-    return SingleChildScrollView(
-      key: const Key('user-credentials-view'),
-      padding: const EdgeInsets.all(AppSpacing.xl),
-      child: Center(
+    return AlertDialog(
+      backgroundColor: tokens.surface,
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.allLg),
+      title: Text(
+        '平台凭证',
+        key: const Key('user-credentials-dialog'),
+        style: context.textTitle.copyWith(
+          fontSize: AppFontSize.subtitle,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      contentPadding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
+      actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 12),
+      content: SizedBox(
+        width: 640,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '用户',
-                style: context.textTitle.copyWith(
-                  fontSize: AppFontSize.headline,
-                ),
-              ),
-              const SizedBox(height: AppSpacing.lg),
-              const _Group(title: '账号', children: [_AccountRow()]),
-              _Group(
-                title: '平台登录态',
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      AppSpacing.md,
-                      0,
-                      AppSpacing.md,
-                      AppSpacing.sm,
-                    ),
-                    child: Text(
-                      '凭证仅存本机,用于解析需要登录态的站点;'
-                      '输入框只在本页可见,保存后仅显示脱敏摘要。',
-                      style: context.textCaption.copyWith(
-                        color: tokens.textSecondary,
-                      ),
+          constraints: const BoxConstraints(maxHeight: 560),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.md,
+                    0,
+                    AppSpacing.md,
+                    AppSpacing.sm,
+                  ),
+                  child: Text(
+                    '凭证仅存本机,用于解析需要登录态的站点;'
+                    '保存后仅显示脱敏摘要。',
+                    style: context.textCaption.copyWith(
+                      color: tokens.textSecondary,
                     ),
                   ),
-                  for (final brand in credentialSiteBrands())
-                    _SiteCredentialTile(
-                      key: Key('user-credential-${brand.id}'),
-                      brand: brand,
-                    ),
-                ],
-              ),
-            ],
+                ),
+                _Group(
+                  title: '平台登录态',
+                  children: [
+                    for (final brand in credentialSiteBrands())
+                      _SiteCredentialTile(
+                        key: Key('user-credential-${brand.id}'),
+                        brand: brand,
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    );
-  }
-}
-
-/// 账号行:恢复中 / 已登录(用户名 + 退出) / 匿名(提示去顶栏登录)。
-class _AccountRow extends ConsumerWidget {
-  const _AccountRow();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final tokens = context.tokens;
-    final auth = ref.watch(authProvider);
-    final username = auth.session?.username.trim().isNotEmpty == true
-        ? auth.session!.username.trim()
-        : '';
-    final authenticated = auth.phase == AuthPhase.authenticated;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.md,
-        vertical: AppSpacing.sm,
-      ),
-      child: Row(
-        children: [
-          Icon(
-            Icons.person_outline_rounded,
-            size: 18,
-            color: tokens.textSecondary,
+      actions: [
+        TextButton(
+          key: const Key('user-credentials-close'),
+          onPressed: () => Navigator.of(context).pop(),
+          style: TextButton.styleFrom(
+            foregroundColor: tokens.textSecondary,
+            minimumSize: const Size(0, 30),
           ),
-          const SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Text(
-              switch (auth.phase) {
-                AuthPhase.restoring => '登录状态恢复中…',
-                AuthPhase.authenticated => username.isEmpty ? '已登录' : username,
-                AuthPhase.anonymous => '未登录 · 点顶栏头像可登录',
-              },
-              key: const Key('user-account-username'),
-              style: context.textBody,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          if (authenticated)
-            TextButton(
-              key: const Key('user-account-logout'),
-              onPressed: () => ref.read(authProvider.notifier).logout(),
-              style: TextButton.styleFrom(foregroundColor: tokens.error),
-              child: const Text('退出登录'),
-            ),
-        ],
-      ),
+          child: const Text('关闭'),
+        ),
+      ],
     );
   }
 }
@@ -152,6 +124,16 @@ class _SiteCredentialTileState extends ConsumerState<_SiteCredentialTile> {
   /// 是否已把存储里的当前值灌进输入框(展开时做一次,避免覆盖用户编辑)。
   bool _prefilled = false;
 
+  /// 小红书键名模板:`a1` 与 `web_session` 两个键缺一不可,展开未配置时
+  /// 预填,用户往等号后补值即可(对齐参考实现 a1/web_session 双输入框)。
+  static const String _kXhsTemplate = 'a1=; web_session=';
+
+  /// 小红书获取方法(常驻 helperText:模板预填后 hint 不可见,方法说明
+  /// 必须仍可见;报错时被 errorText 顶替,可接受)。
+  static const String _kXhsHelperText =
+      '获取:浏览器登录 www.xiaohongshu.com → F12 → 网络 → 任选请求'
+      '复制整串 Cookie(含 a1 与 web_session);约 7 天过期需重新导出';
+
   @override
   void dispose() {
     _controller.dispose();
@@ -163,12 +145,19 @@ class _SiteCredentialTileState extends ConsumerState<_SiteCredentialTile> {
       _expanded = !_expanded;
       _error = '';
       if (_expanded && !_prefilled) {
-        // 展开时回显当前值(便于局部修改;凭据只在本机与本页内存里)。
-        _controller.text = credential.value;
+        // 展开时回显当前值(便于局部修改);未配置且平台有多段键时预填
+        // 键名模板,用户往等号后补值。
+        _controller.text = credential.isConfigured
+            ? credential.value
+            : _templateFor(widget.brand.id);
         _prefilled = true;
       }
     });
   }
+
+  /// 未配置时的输入框预填模板;空串 = 不预填。
+  static String _templateFor(String site) =>
+      site == 'xhs' ? _kXhsTemplate : '';
 
   Future<void> _save() async {
     final text = _controller.text.trim();
@@ -179,6 +168,22 @@ class _SiteCredentialTileState extends ConsumerState<_SiteCredentialTile> {
     if (text.length < 8) {
       setState(() => _error = '内容过短,请粘贴完整的 Cookie 串');
       return;
+    }
+    // xhs 专项校验:签名与登录态都吃 `a1` + `web_session` 两个键的**非空值**;
+    // 整串 Cookie 或只填模板两个键都放行(与参考实现 signing.ts 口径一致)。
+    // 不能用 contains('a1=') 判定 —— 会把未填值的模板 `a1=; web_session=` 放行。
+    if (widget.brand.id == 'xhs') {
+      String? valueOf(String key) =>
+          RegExp('$key=\\s*([^\\s;]+)').firstMatch(text)?.group(1);
+      final a1 = valueOf('a1');
+      final webSession = valueOf('web_session');
+      if (a1 == null ||
+          a1.isEmpty ||
+          webSession == null ||
+          webSession.isEmpty) {
+        setState(() => _error = '小红书 Cookie 需同时包含 a1 与 web_session 的值');
+        return;
+      }
     }
     setState(() => _error = '');
     final ok = await ref
@@ -194,7 +199,7 @@ class _SiteCredentialTileState extends ConsumerState<_SiteCredentialTile> {
         .clearCredential(widget.brand.id);
     if (!mounted) return;
     setState(() {
-      _controller.clear();
+      _controller.text = _templateFor(widget.brand.id);
       _error = '';
     });
     _toast('已清除该平台凭证');
@@ -297,6 +302,14 @@ class _SiteCredentialTileState extends ConsumerState<_SiteCredentialTile> {
                 decoration: InputDecoration(
                   isDense: true,
                   hintText: _hintFor(site),
+                  // xhs 的获取方法走常驻 helperText:模板预填进输入框后
+                  // hint 不可见,方法说明必须仍可见(报错时被 error 顶替)。
+                  helperText: site == 'xhs' ? _kXhsHelperText : null,
+                  helperMaxLines: 3,
+                  helperStyle: context.textCaption.copyWith(
+                    color: tokens.textSecondary,
+                  ),
+                  hintMaxLines: 3,
                   hintStyle: context.textCaption.copyWith(
                     color: tokens.textSecondary,
                   ),
@@ -366,9 +379,12 @@ class _SiteCredentialTileState extends ConsumerState<_SiteCredentialTile> {
   }
 
   /// 各站点的粘贴提示(对齐参考实现的 Cookie 弹窗说明)。
+  ///
+  /// xhs 只提示填法 —— 获取方法在常驻 helperText([_kXhsHelperText]),
+  /// 模板预填后 hint 不可见。
   static String _hintFor(String site) => switch (site) {
     'youtube' => '粘贴完整 Cookie 串(SID=...; HSID=...; ...)',
-    'xhs' => '粘贴 a1 与 web_session(如 a1=...; web_session=...)',
+    'xhs' => '整串 Cookie,或保留模板只填等号后的值',
     _ => '粘贴该平台的 Cookie 或 Token',
   };
 }

@@ -12,7 +12,6 @@ import '../features/browse/views/home_view.dart';
 import '../features/dev/views/parse_benchmark_view.dart';
 import '../features/follow/views/follow_view.dart';
 import '../features/follow/views/settings_view.dart';
-import '../features/user/views/user_credentials_view.dart';
 import '../features/play/application/play_provider.dart';
 import '../features/play/application/play_screen_provider.dart';
 import '../features/play/views/play_view.dart';
@@ -155,13 +154,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         pageBuilder: (_, state) =>
             _shellPage(state, 'all', const SettingsView(), title: '设置'),
       ),
-      // 用户/平台凭证页:保存 YouTube / 小红书 等平台的登录态 cookie/token
-      // (web 的 `/user` 只是弹登录框;桌面端收敢成一页统一管理)。
-      GoRoute(
-        path: '/user',
-        pageBuilder: (_, state) =>
-            _shellPage(state, 'all', const UserCredentialsView(), title: '平台凭证'),
-      ),
+      // 平台凭证已改为弹框(顶栏账号菜单入口,见 user_credentials_view.dart):
+      // `/user` 与 web 一样不再承载页面,保留深链兼容 → 重定向到平台首页
+      // (同 `/search` 的收编模式)。
+      GoRoute(path: '/user', redirect: (_, _) => '/all'),
       // 搜索已改为全局对话框(见 features/search/widgets/search_dialog.dart):
       // `/search` 与 web 一样不再承载页面,保留深链兼容 → 重定向到平台首页。
       // 回 `/all` 而非 web 的 `/douyu`:本仓导航以「全平台」为默认入口,且

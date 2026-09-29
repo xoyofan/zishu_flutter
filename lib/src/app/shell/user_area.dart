@@ -79,9 +79,9 @@ class _UserAvatar extends ConsumerWidget {
             return;
           }
           if (action == 'credentials') {
-            // 用户/平台凭证页:保存 YouTube / 小红书 等平台的登录态。
-            // 用 push(不重置历史栈):凭证页返回后仍能回到原页面。
-            context.push('/user');
+            // 平台凭证弹框:保存 YouTube / 小红书 等平台的登录态。
+            // 低频配置不占路由页(web 的 /user 本就只是弹框,桌面端对齐)。
+            showUserCredentialsDialog(context);
           }
         },
         itemBuilder: (_) => [

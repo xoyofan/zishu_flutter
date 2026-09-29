@@ -21,6 +21,8 @@ import '../shared/presentation/platform_brands.dart';
 import '../shared/presentation/zishu_tokens.dart';
 import '../shared/presentation/widgets/platform_icon.dart';
 import '../features/follow/views/settings_view.dart' show openSettingsDialog;
+import '../features/user/views/user_credentials_view.dart'
+    show showUserCredentialsDialog;
 import '../shared/application/global_actions.dart';
 
 part 'shell/hover_overlay.dart';
