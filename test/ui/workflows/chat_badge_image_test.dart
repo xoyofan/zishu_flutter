@@ -608,7 +608,9 @@ void main() {
       final honorW = honor!;
 
       final rect = tester.getRect(find.byWidget(honorW));
-      expect(rect.height, closeTo(21, 0.01));
+      // 高度 2026-09-29 官方口径:21 → 15(粉丝牌 21 的 ~0.71,honor 明显
+      // 小于粉丝牌);宽随素材 96×48 比例(高 15 → 30px)。
+      expect(rect.height, closeTo(AppDouyinChatBadge.honorHeight, 0.01));
       // 素材未解码时 RawImage 拿不到宽(测试环境 0),所以钉死的是「不限宽 +
       // contain」这两个输入,而不是渲染后的像素宽。
       final image = tester.widget<Image>(

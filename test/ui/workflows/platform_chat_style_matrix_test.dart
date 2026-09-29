@@ -523,6 +523,37 @@ void main() {
       douyinFansBadgeUrl(9),
     );
     expect(douyinFansColoredBadgeUrl('', 9), isEmpty);
+
+    // 2026-09-29 用户口径(官方实际渲染 vs 当前宽图对比):官方模板族的
+    // **彩色宽图**同样统一紧凑款 —— 此前只有灰图换彩/无图兜底走 pop_super,
+    // 协议彩色宽图被「原样透传(含主播定制款)」放行,渲染成 65.6px 长条
+    // (用户报「粉丝团背景太宽」)。
+    expect(
+      douyinFansColoredBadgeUrl(
+        'https://p3-webcast.douyinpic.com/img/webcast/'
+        'fansclub_level_v6_7.png~tplv-obj.image',
+        7,
+      ),
+      douyinFansBadgeUrl(7),
+      reason: 'level_v6 彩色长条(150×48)也必须换紧凑款',
+    );
+    expect(
+      douyinFansColoredBadgeUrl(
+        'https://p11-webcast.douyinpic.com/img/webcast/'
+        'fansclub_new_badge_7_xmp.png~tplv-obj.image',
+        7,
+      ),
+      douyinFansBadgeUrl(7),
+      reason: 'new_badge 彩色中等款(90×48)也统一紧凑款',
+    );
+    // 已是紧凑款(非 gray 的 pop_super):原样透传,不做无谓改写。
+    const compactColored = 'https://p11-webcast.douyinpic.com/img/webcast/'
+        'ranklist_fansclub_pop_super_badge_7.png~tplv-obj.image';
+    expect(douyinFansColoredBadgeUrl(compactColored, 7), compactColored);
+    // level 越界(紧凑款 CDN 404)保留协议原图,聊胜于无。
+    const v6Over = 'https://p3-webcast.douyinpic.com/img/webcast/'
+        'fansclub_level_v6_21.png~tplv-obj.image';
+    expect(douyinFansColoredBadgeUrl(v6Over, 21), v6Over);
   });
 
   testWidgets('ChatBadgeImage 接受协议 URL 并保留本地资源回退', (tester) async {

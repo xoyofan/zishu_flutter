@@ -37,8 +37,12 @@ String _soopSubscriberAsset(int months) {
 ///   2026-09-26 实测真实弹幕 513 条里 152 条是灰图、361 条是彩色 —— 不换则
 ///   近三成徽章显示为灰色);
 /// - 其余灰图(`advanced_gray` 等)→ 官方紧凑款 `pop_super_badge_{lv}`
-///   (2026-09-27 用户口径:三模板统一最右紧凑款,不再用 new_badge 中等款)。
-/// 其余 URL 原样返回(含主播定制款)。
+///   (2026-09-27 用户口径:三模板统一最右紧凑款,不再用 new_badge 中等款);
+/// - **官方模板族的彩色宽图**(`fansclub_level_v6` 150×48 / `fansclub_new_badge`
+///   90×48 等)也统一紧凑款(2026-09-29 用户口径,官方实际渲染对比:宽图
+///   被原样渲染成 65.6px 长条,即「粉丝团背景太宽」的根因);level 越界
+///   (>20,紧凑款 CDN 404)保留协议原图。
+/// 其余 URL 原样返回(真·主播定制款,非模板域)。
 String douyinFansColoredBadgeUrl(String url, int level) {
   final text = url.trim();
   if (text.isEmpty) return '';
@@ -51,6 +55,13 @@ String douyinFansColoredBadgeUrl(String url, int level) {
   if (_douyinGrayBadgePattern.hasMatch(text) && level > 0) {
     return douyinFansBadgeUrl(level);
   }
+  // 已是紧凑款(非 gray 的 pop_super)不重复改写;模板域内的彩色宽图换紧凑。
+  if (level > 0 &&
+      _isDouyinFansClubTemplateUrl(text) &&
+      !_douyinCompactBadgePattern.hasMatch(text)) {
+    final compact = douyinFansBadgeUrl(level);
+    if (compact.isNotEmpty) return compact;
+  }
   return text;
 }
 
@@ -58,6 +69,19 @@ final RegExp _douyinGrayBadgePattern = RegExp(
   r'advanced_gray|pop_gray_super_badge',
   caseSensitive: false,
 );
+
+/// 已是紧凑款模板(60×48)的命名特征。
+final RegExp _douyinCompactBadgePattern = RegExp(
+  r'pop_super_badge',
+  caseSensitive: false,
+);
+
+/// 官方粉丝团模板域(对齐 web `isDouyinFansClubBgUrl`):URL 命名含
+/// fansclub / fans_club 即模板族;域外的才是主播定制款。
+bool _isDouyinFansClubTemplateUrl(String url) {
+  final text = url.toLowerCase();
+  return text.contains('fansclub') || text.contains('fans_club');
+}
 
 /// 抖音粉丝牌官方 CDN 兜底图 URL。
 ///
@@ -309,7 +333,7 @@ class _FanBadgeState extends State<_FanBadge> {
     // `ranklist_fansclub_pop_super_badge`(26.2px)宽窄不一,同一房间两种
     // 宽度 —— 现统一紧凑款。
     if (site == 'douyin') {
-      const badgeHeight = 21.0;
+      const badgeHeight = AppDouyinChatBadge.fanImageHeight;
       final officialUrl = douyinFansColoredBadgeUrl(remoteUrl, level).isNotEmpty
           ? douyinFansColoredBadgeUrl(remoteUrl, level)
           : douyinFansBadgeUrl(level);
@@ -1481,7 +1505,9 @@ class _UserLevelBadgeState extends State<_UserLevelBadge> {
         site: site,
         kind: ChatBadgeKind.userLevel,
         level: level,
-        height: 21,
+        height: site == 'douyin'
+            ? AppDouyinChatBadge.honorHeight
+            : 21,
         src: remoteUrl,
         onFail: _markImgFailed,
       );
@@ -1490,7 +1516,10 @@ class _UserLevelBadgeState extends State<_UserLevelBadge> {
     // 抖音:honor 整图(等级绘在图内);失败/超 75 档回落紫粉渐变数字。
     // 素材是 96×48 的长胶囊(内容只占 x 16..86),两侧半透明留白是素材本身的
     // 一部分:曾按内容区裁到 76/48(高 21 → 33.25px),实测会把图标与数字
-    // 边缘切掉,2026-09-27 回退为原比例整图(高 21 → 42px)。
+    // 边缘切掉,2026-09-27 回退为原比例整图。
+    // 高度 2026-09-29 官方口径再缩:21 → 15(粉丝牌 21 的 ~0.71),
+    // 官方渲染里 honor 明显小于粉丝牌(用户口径「前面的平台背景和文字
+    // 也应该更小一点」),宽随原图比例 96×48 → 30px。
     if (site == 'douyin' &&
         !_imgFailed &&
         badgeAssetPath(
@@ -1502,7 +1531,7 @@ class _UserLevelBadgeState extends State<_UserLevelBadge> {
         site: site,
         kind: ChatBadgeKind.userLevel,
         level: level,
-        height: 21,
+        height: AppDouyinChatBadge.honorHeight,
         onFail: _markImgFailed,
       );
     }
@@ -1523,13 +1552,22 @@ class _UserLevelBadgeState extends State<_UserLevelBadge> {
       label = '$level';
       colors = const [Color(0xff6b7280)];
     }
+    // 抖音文字态与 honor 整图同高(官方口径:honor 明显小于粉丝牌),
+    // 字号按高度比例缩(通用 1em@20.72 → .72em)。
+    final douyinCompact = site == 'douyin';
     return _BadgeBox(
       key: const Key('other-user-level-pill'),
-      height: AppChatBadge.levelHeight,
-      minWidth: AppChatBadge.levelMinWidth,
+      height: douyinCompact
+          ? AppDouyinChatBadge.honorHeight
+          : AppChatBadge.levelHeight,
+      minWidth: douyinCompact
+          ? AppDouyinChatBadge.honorHeight
+          : AppChatBadge.levelMinWidth,
       radius: 0,
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppChatBadge.levelPadXWide,
+      padding: EdgeInsets.symmetric(
+        horizontal: douyinCompact
+            ? AppChatBadge.levelPadX
+            : AppChatBadge.levelPadXWide,
       ),
       gradient: colors.length > 1 ? colors : null,
       color: widget.color != 0
@@ -1537,8 +1575,10 @@ class _UserLevelBadgeState extends State<_UserLevelBadge> {
           : (colors.length == 1 ? colors.first : null),
       child: Text(
         label,
-        style: const TextStyle(
-          fontSize: AppChatBadge.levelFontSizeWide,
+        style: TextStyle(
+          fontSize: douyinCompact
+              ? AppChatBadge.levelFontSizeWide * 0.72
+              : AppChatBadge.levelFontSizeWide,
           height: 1,
           color: AppOnBright.white,
           fontWeight: FontWeight.w700,

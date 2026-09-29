@@ -405,7 +405,6 @@ abstract final class AppDouyuChatBadge {
   /// 胶囊高 `1.15em`（web `.chat-user-level--douyu { height: 1.15em }`
   /// 折算 16.1）。
   static const double levelHeight = 1.15 * AppChatBadge.em;
-
   /// 胶囊圆角 `2px`（web `.chat-user-level--douyu { border-radius: 2px }`）。
   static const double levelRadius = 2;
 
@@ -474,8 +473,9 @@ abstract final class AppDouyuChatBadge {
   static const double medalNameFontSize = 12;
 
   /// 等级数字字号：无前缀图时占满左区（web 用 per-level 小图，我们用文本
-  /// 近似，盒 22×19 → 数字 ~14px）；有前缀图时小盒 13×10 → ~9px。
-  static const double medalLevelFontSize = 14;
+  /// 近似，盒 22×19）。2026-09-29 用户口径「小 2 号」:14 → 12(与团名
+  /// 同字号,不再比正文 14 还大);有前缀图时小盒 13×10 → ~9px。
+  static const double medalLevelFontSize = 12;
   static const double medalLevelSmallFontSize = 9;
 
   // ---- 钻粉 suffix 层（2026-09-27 官网 shadow DOM computed 实测）----
@@ -513,6 +513,17 @@ abstract final class AppDouyuChatBadge {
   /// 至尊大钻石徽章边长（官网 `dy-supreme-medal` 的 `:host` 实测 28×28，
   /// 是四个 `dy-*` 组件里唯一的高于 16px 的）。
   static const double supremeSide = 28;
+}
+
+/// 抖音聊天徽章(img-only 站,尺寸口径见 DESIGN.md §4 徽章表格)。
+abstract final class AppDouyinChatBadge {
+  /// honor 等级徽章高(官方实际渲染口径 2026-09-29:明显小于粉丝牌,
+  /// 取粉丝牌 21 的 ~0.71;此前同为 21 导致「平台背景太大」)。honor
+  /// 整图与紫粉渐变文字态兜底共用。
+  static const double honorHeight = 15;
+
+  /// 粉丝牌图高(pop_super 紧凑款 60×48 → 26.2px 宽)。
+  static const double fanImageHeight = 21;
 }
 
 /// 阴影(elevation)基线。

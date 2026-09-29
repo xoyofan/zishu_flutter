@@ -356,6 +356,8 @@ golden 差 2074px，整块底色/描边都变）。需要更明显的交互态�
 | 粉丝牌文字 | `.9em` | 12.6 | `AppChatBadge.fanFontSize` |
 | B 站渐变牌（有协议色） | `1.48em` / `3.5em` / `.5em` | 20.72 / 49 / 7 | `AppChatBadge.biliFanHeight` / `biliFanMinWidth` / `biliFanPadX` |
 | 虎牙粉丝牌 | `1.15em` / `3.4em` / `.14em`+`.28em` | 16.1 / 47.6 / 1.96+3.92 | `AppHuyaChatBadge.fanHeight` / `fanMinWidth` / `fanPadLeft`+`fanPadRight` |
+| 抖音 honor 等级图（含文字态兜底） | `1.07em`（粉丝牌 21 的 ~0.71） | 15 | `AppDouyinChatBadge.honorHeight` |
+| 抖音粉丝牌图 | `1.5em` | 21 | `AppDouyinChatBadge.fanImageHeight` |
 | Twitch / YY 图标 | `1.15em` | 16.1 | `AppChatBadge.iconHeight` |
 
 口径说明：
@@ -368,6 +370,15 @@ golden 差 2074px，整块底色/描边都变）。需要更明显的交互态�
   虎牙是唯一叠数字的（`chatUserLevelOverlayText`），位置在官方图**右下角**
   （`right: .12em; bottom: .06em`，字号 `.58em`）。
 - 斗鱼粉丝牌的 60×19 官方 PNG 原样贴左、团名右内缩 `1.58em`(22) 见 §5.4 例外登记。
+- **抖音徽章相对尺寸**（2026-09-29 用户口径，对官方实际渲染）：粉丝牌前的
+  honor 等级徽章（背景与文字）要明显小于粉丝牌 —— honor 图/文字态兜底统一
+  高 15（粉丝牌 21 的 ~0.71，此前同为 21）；粉丝牌协议彩色宽图
+  （`fansclub_level_v6` 150×48 / `fansclub_new_badge` 90×48）统一换官方
+  紧凑款 `ranklist_fansclub_pop_super_badge`（60×48 → 26.2px），
+  背景紧贴内容，不留长条空白。
+- **斗鱼粉丝牌等级数字**（2026-09-29 用户口径「小 2 号」）：无前缀图时
+  的纯数字字号 14 → 12（与团名 `medalNameFontSize` 同号；此前 14 比弹幕
+  正文还大，视觉突兀），token `AppDouyuChatBadge.medalLevelFontSize`。
 
 ---
 
