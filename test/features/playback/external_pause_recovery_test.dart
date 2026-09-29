@@ -872,5 +872,62 @@ void main() {
         reason: '解析失败不得误判为放弃',
       );
     });
+
+    test('致命传输诊断(ffmpeg warn TLS reset)→ 第 1 次即升级 re-resolve', () async {
+      // 复现 2026-09-29 19:50 斗鱼 8682569:edgesrv 节点 TLS 连接被对端重置
+      // (warn 级)+ 死锁签名卡死。旧逻辑第 1 次先同 URL 重开 —— 节点已死,
+      // 重开 300ms 内即再失败,白烧 ~10s 才轮到 re-resolve。观测到"对端已死"
+      // 信号后,第 1 次恢复动作就必须直接换地址,不得再碰死节点。
+      var resolveCount = 0;
+      player.setLineRecovery(() async {
+        resolveCount++;
+        return [freshLine];
+      });
+      await enterPlaying();
+      fake.emitWarn(
+        'ffmpeg',
+        'tls: mbedtls_ssl_read reported connection reset by peer',
+      );
+      await pumpEventQueue();
+      await emitDeadlockSignature();
+
+      await waitFor(() => resolveCount == 1);
+      await waitFor(() => fake.calls.contains('open:b.example.com'));
+
+      expect(fake.calls, [
+        'open:a.example.com',
+        'open:b.example.com',
+      ], reason: '致命传输错误后不得先同 URL 重开死节点,必须直接 re-resolve');
+      expect(
+        logLines().any(
+          (l) => l.contains('single_line_escalate') && l.contains('fatal_transport=true'),
+        ),
+        isTrue,
+        reason: '升级必须留痕,且注明由致命传输诊断触发(事后归因依据)',
+      );
+    });
+
+    test('致命传输诊断(error 级 tcp 读失败)→ 第 1 次即升级 re-resolve', () async {
+      // 同上场景的 error 级入口:mpv 把 tcp 层读失败当 error 吐出
+      // (实测 `tcp: ffurl_read returned 0xdfb9b0bb`,旧归类落到 native 兜底)。
+      var resolveCount = 0;
+      player.setLineRecovery(() async {
+        resolveCount++;
+        return [freshLine];
+      });
+      await enterPlaying();
+      fake.setStateValues(playing: false);
+      fake.emitError('tcp: ffurl_read returned 0xdfb9b0bb');
+      await pumpEventQueue();
+      await emitDeadlockSignature();
+
+      await waitFor(() => resolveCount == 1);
+      await waitFor(() => fake.calls.contains('open:b.example.com'));
+
+      expect(fake.calls, [
+        'open:a.example.com',
+        'open:b.example.com',
+      ], reason: 'error 级致命传输诊断同样不得先同 URL 重开死节点');
+    });
   });
 }

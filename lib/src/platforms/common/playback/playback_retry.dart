@@ -132,13 +132,22 @@ class PlaybackRetryPolicy {
   /// [attempts] 为「即将进行的重开序号」(从 1 起);[lineCount] 为当前线路数
   /// (含回退)。仅 `lines<=1` 且无内部回退线路时触发,达到 [escalateResolveAfter]
   /// 即升级 —— 多线路源永远返回 false(优先交给 mpv 内部跳线)。
+  ///
+  /// [fatalTransportError] 为本会话内观测到的「对端已死」传输层诊断
+  /// (连接被对端重置/拒绝、TCP 读失败等,见 PlayerErrorClassifier
+  /// .isFatalTransportDiagnosis):这类故障是持续性的,同 URL 重开必然
+  /// 再失败(2026-09-29 19:50 斗鱼 8682569 实测:TLS reset 后第 1 次重开
+  /// 300ms 内即报 TCP 读失败,白烧 ~10s 退避才轮到 re-resolve)。此时
+  /// 短路阈值,第 1 次恢复动作就升级 —— 与官方 web 断流即重新解析拿新
+  /// 地址的口径一致。瞬时抖动(无该信号)不受影响,维持既有快速重开节奏。
   bool shouldEscalateToResolve({
     required int attempts,
     required int lineCount,
+    bool fatalTransportError = false,
   }) =>
       escalateSingleLine &&
       lineCount <= 1 &&
-      attempts >= escalateResolveAfter;
+      (fatalTransportError || attempts >= escalateResolveAfter);
 
   /// 供 UI 展示的重连进度文案;未开始重连时返回空串。
   String progressLabel(int attempts) =>

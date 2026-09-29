@@ -194,6 +194,54 @@ void main() {
     });
   });
 
+  group('致命传输诊断(isFatalTransportDiagnosis)', () {
+    test('对端已死的传输层诊断 → true(单线路首次恢复直接升级 re-resolve 的依据)', () {
+      const samples = <String>[
+        // 2026-09-29 19:50:36 斗鱼 8682569 warn 级原文:节点 TLS 连接被对端重置。
+        'tls: mbedtls_ssl_read reported connection reset by peer',
+        // 2026-09-29 19:50:44 error 级原文:同 URL 重开后 300ms 即 TCP 读失败。
+        'tcp: ffurl_read returned 0xdfb9b0bb',
+        'Connection refused',
+        'Network is unreachable',
+        'Failed to resolve cdn.example.com',
+        'TLS handshake failed',
+      ];
+      for (final raw in samples) {
+        expect(
+          PlayerErrorClassifier.isFatalTransportDiagnosis(raw),
+          isTrue,
+          reason: raw,
+        );
+      }
+    });
+
+    test('瞬时抖动类(超时/可自愈重连提示)→ false(保留快速同 URL 重开路径)', () {
+      // 自愈型抖动占绝大多数且 2s 快速重开即可恢复:这些信号不得触发立即换线。
+      const samples = <String>[
+        'Connection timed out',
+        'https: Will reconnect at 100000 in 0 second(s), error=I/O error.',
+        'Input/output error',
+        'Invalid video timestamp: 50.0 -> 40.0',
+      ];
+      for (final raw in samples) {
+        expect(
+          PlayerErrorClassifier.isFatalTransportDiagnosis(raw),
+          isFalse,
+          reason: raw,
+        );
+      }
+    });
+
+    test('tcp 读失败同时按 network/transport/terminal 归类(卡片与看门狗口径一致)', () {
+      final result = PlayerErrorClassifier.classify(
+        'tcp: ffurl_read returned 0xdfb9b0bb',
+      );
+      expect(result.kind, PlayerErrorKind.network);
+      expect(result.code, 'transport');
+      expect(result.terminal, isTrue);
+    });
+  });
+
   group('shouldSurface', () {
     test('只有终局错误才值得上报给用户', () {
       expect(PlayerErrorClassifier.shouldSurface('connection timed out'), isTrue);

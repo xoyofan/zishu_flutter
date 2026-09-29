@@ -252,6 +252,14 @@ class MediaKitLivePlayer
   /// open(用户切源/重连)与健康出帧(_onPlaying)都会复位它,开启新 episode。
   bool _singleLineEscalated = false;
 
+  /// 本源生命周期内已观测到「对端已死」的传输层诊断(连接被重置/拒绝、
+  /// TCP 读失败等,判定见 PlayerErrorClassifier.isFatalTransportDiagnosis)。
+  /// 置位后单线路源的**首次**恢复直接升级 re-resolve,跳过必然失败的同 URL
+  /// 重开(2026-09-29 19:50 斗鱼 8682569 实测:TLS reset 后同 URL 重开 300ms
+  /// 内即再失败,白烧 ~10s 退避)。新地址 open 与健康满窗(_settleHealthyWindow)
+  /// 都会清位 —— 自愈后的历史诊断不得影响下一个 episode。
+  bool _fatalTransportError = false;
+
   /// 恢复(re-resolve)在途闩锁:终局诊断可能连续多条,mpv 对同一死源会反复
   /// 吐诊断,而 [_recoverOrGiveUp] 内部 await 期间失败计数仍在涨,不加闩锁
   /// 会并发发起多次 re-resolve/reopen。
@@ -566,6 +574,12 @@ class MediaKitLivePlayer
     _subscriptions.add(
       _player.stream.log.listen((entry) {
         if (entry.level != 'warn') return;
+        // 「对端已死」传输层证据优先于去重/落盘:warn 流不走 events.error,
+        // 不在此探测则 TLS reset 这类节点死亡信号完全进不了恢复决策
+        // (2026-09-29 19:50 斗鱼 8682569 的教训)。
+        if (PlayerErrorClassifier.isFatalTransportDiagnosis(entry.text)) {
+          _fatalTransportError = true;
+        }
         final key = '${entry.prefix}|${_normalizeLogText(entry.text)}';
         // 混沌窗口逐行累加(含各型首条),只在 5s tick 结算——不搭车
         // _flushWarnSuppression,否则新型 flush 会把窗口切碎。
@@ -657,6 +671,11 @@ class MediaKitLivePlayer
       final classification = PlayerErrorClassifier.classify(v);
       if (!classification.isError) {
         return s.copyWith(error: null);
+      }
+      // 与 warn 流同一判定:致命传输诊断(error 级如 `tcp: ffurl_read
+      // returned 0x...`)置位后,单线路首次恢复跳过同 URL 重开直接 re-resolve。
+      if (PlayerErrorClassifier.isFatalTransportDiagnosis(v)) {
+        _fatalTransportError = true;
       }
       // 原始诊断去重后落文件日志:release 环境下 mpv 日志没有别的出口,
       // 这是外部诊断「为什么反复中断」的第一手材料(含可自愈噪音)。
@@ -969,6 +988,9 @@ class MediaKitLivePlayer
     if (!_policy.shouldResetOnInterrupt(DateTime.now().difference(since))) {
       return;
     }
+    // 健康满窗:观测到的致命传输诊断已随自愈失效,不再影响下一个 episode 的
+    // 首次恢复方式(否则一次历史 reset 会让之后所有首次卡顿都直接 re-resolve)。
+    _fatalTransportError = false;
     if (_stallRetries == 0) return;
     _stallRetries = 0;
     PlaybackLog.write('health_reset', {'reason': reason});
@@ -1142,10 +1164,12 @@ class MediaKitLivePlayer
     // 单线路源卡顿升级:无内部回退线路时,重开同一死 URL 毫无意义,
     // 早一点 re-resolve(换节点 / 降画质)才有机会逃出被钉死的链路。
     // 每个 episode 至多升级一次(_singleLineEscalated 防退化重开后再触发);
-    // 多线路源不升级(交给 mpv 播放列表内部跳线)。
+    // 多线路源不升级(交给 mpv 播放列表内部跳线)。观测到致命传输诊断
+    // (_fatalTransportError)时第 1 次即升级,不等第 2 次阈值。
     if (_policy.shouldEscalateToResolve(
           attempts: _stallRetries + 1,
           lineCount: _currentLines.length,
+          fatalTransportError: _fatalTransportError,
         ) &&
         !_singleLineEscalated) {
       _singleLineEscalated = true;
@@ -1153,6 +1177,7 @@ class MediaKitLivePlayer
         'attempt': _stallRetries + 1,
         'limit': _policy.escalateResolveAfter,
         'host': _currentHost,
+        if (_fatalTransportError) 'fatal_transport': true,
       });
       unawaited(_escalateToResolve());
       return;
@@ -1533,6 +1558,9 @@ class MediaKitLivePlayer
         // 单线路升级闩锁随新会话复位:新房/切线/换新地址都开启新 episode,
         // 允许再次在卡顿后升级 re-resolve。
         _singleLineEscalated = false;
+        // 新地址 = 新连接:旧连接上的致命传输诊断不再代表本次会话的链路状态
+        // (自动同 URL 重开走 resetRetries=false,刻意不清 —— 死节点证据要保持)。
+        _fatalTransportError = false;
         // 用户主动重试/切源是唯一的闩锁解除点。
         _givenUp = false;
         // 新会话(进房/切线/换新地址)重置诊断去重:不同故障的同文案也该再记。
@@ -1699,6 +1727,7 @@ class MediaKitLivePlayer
       _stallRetries = 0;
       _sourceOpenFailures = 0;
       _singleLineEscalated = false;
+      _fatalTransportError = false;
       _cdnCircuitBreaker.clear();
       _givenUp = false;
       _adHoldSince = null;

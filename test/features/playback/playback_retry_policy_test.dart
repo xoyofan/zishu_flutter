@@ -252,6 +252,47 @@ void main() {
         isTrue,
       );
     });
+
+    test('致命传输错误 → 第 1 次即升级(跳过必然失败的同 URL 重开)', () {
+      // 复现 2026-09-29 19:50 斗鱼 8682569:节点 TLS 被对端重置后,第 1 次同
+      // URL 重开 300ms 内即再失败,白烧一轮快速退避 + 一轮长退避(~10s)才
+      // 轮到 re-resolve。观测到"对端已死"信号时第 1 次就应直接换地址。
+      const policy = PlaybackRetryPolicy(escalateSingleLine: true);
+      expect(
+        policy.shouldEscalateToResolve(
+          attempts: 1,
+          lineCount: 1,
+          fatalTransportError: true,
+        ),
+        isTrue,
+      );
+    });
+
+    test('致命传输错误不越权:多线路仍交给 mpv 内部跳线', () {
+      const policy = PlaybackRetryPolicy(escalateSingleLine: true);
+      expect(
+        policy.shouldEscalateToResolve(
+          attempts: 5,
+          lineCount: 3,
+          fatalTransportError: true,
+        ),
+        isFalse,
+      );
+    });
+
+    test('未观测到致命传输错误 → 第 1 次仍先同 URL 重开', () {
+      // 自愈型抖动(130~330ms)占绝大多数且 2s 内快速重开即可恢复,
+      // 无"对端已死"证据时不得改变既有节奏。
+      const policy = PlaybackRetryPolicy(escalateSingleLine: true);
+      expect(
+        policy.shouldEscalateToResolve(
+          attempts: 1,
+          lineCount: 1,
+          fatalTransportError: false,
+        ),
+        isFalse,
+      );
+    });
   });
 
   group('恢复节流策略(PlaybackRecoveryPolicy)', () {

@@ -174,6 +174,35 @@ abstract final class PlayerErrorClassifier {
   static bool shouldSurface(String message) =>
       classify(message).terminal;
 
+  /// 判定诊断文本是否为「对端已死」的传输层错误(连接被对端重置/拒绝、
+  /// TCP 读失败、DNS 解析失败、TLS 握手失败)。
+  ///
+  /// 用途与 [_networkMarkers] 不同:那是**错误卡片与看门狗**的归类口径
+  /// (含超时);这是**单线路首次恢复是否跳过同 URL 重开、直接升级
+  /// re-resolve** 的短路信号 —— 只收录"重开同一地址必然再失败"的持续性
+  /// 故障。**刻意排除超时与 I/O 抖动**(`connection timed out` /
+  /// `error=I/O error` 的 Will reconnect 提示):自愈型抖动占绝大多数
+  /// (2026-09-28 实测 130~330ms),它们靠 2s 快速同 URL 重开恢复得最快,
+  /// 不得因过宽信号被升级成换线重解析。
+  static bool isFatalTransportDiagnosis(String message) {
+    final value = message.trim().toLowerCase();
+    if (value.isEmpty) return false;
+    return _fatalTransportMarkers.any(value.contains);
+  }
+
+  static const List<String> _fatalTransportMarkers = <String>[
+    'connection reset',
+    'connection refused',
+    'ffurl_read returned',
+    'network is unreachable',
+    'host is unreachable',
+    'failed to resolve',
+    'temporary failure in name resolution',
+    'name or service not known',
+    'tls handshake',
+    'ssl handshake',
+  ];
+
   static const List<String> _lifecycleMarkers = <String>[
     'player has been disposed',
     'player has been released',
@@ -236,6 +265,9 @@ abstract final class PlayerErrorClassifier {
     'host is unreachable',
     'connection refused',
     'connection reset',
+    // mpv tcp 层读失败(error 级原文如 `tcp: ffurl_read returned 0xdfb9b0bb`,
+    // 2026-09-29 19:50:44 实测):此前无标记落到 native 兜底,网络错误被埋没。
+    'ffurl_read returned',
     'failed to resolve',
     'temporary failure in name resolution',
     'name or service not known',
