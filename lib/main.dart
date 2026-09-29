@@ -5,11 +5,13 @@ import 'package:media_kit/media_kit.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'src/app/app_router.dart';
+import 'src/app/app_theme.dart';
 import 'src/app/app_version.dart';
 import 'src/apps/windows/windows_app.dart';
 import 'src/platforms/common/playback/playback_log.dart';
 import 'src/platforms/common/playback/window_presentation.dart';
 import 'src/platforms/common/proxy_setup.dart';
+import 'src/shared/presentation/tokens_override.dart';
 
 /// 默认产品入口：全新的 Windows UI。
 /// 命令行参数(Flutter 桌面经 main args 注入,如 `--route /soop/category`)
@@ -37,6 +39,10 @@ Future<void> main(List<String> args) async {
     // 非桌面平台或插件缺失:无需窗口管理器。
   }
   await loadAppVersion();
+  // 外置主题色 token 首帧前安装(外部 override → 打包 JSON → 代码常量,
+  // 任一层失败静默回退):晚了会先闪一帧代码默认色再切 override 色。
+  // 文件监听热更由 WindowsApp 启动(见 tokens_override.dart)。
+  ZishuTheme.tokens = await resolveZishuTokenSet();
   // 窗口几何恢复必须在 runApp(首帧)之前完成:runner 是「首帧就绪回调才
   // Show 窗口」,此刻窗口仍隐藏;隐藏期的 setSize/setPosition 不存在
   // 「先显示旧尺寸首帧、再 resize 触发 surface 重建」的白屏窗口期(冷启动

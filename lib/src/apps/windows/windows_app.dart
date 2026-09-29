@@ -11,6 +11,7 @@ import '../../features/browse/application/browse_provider.dart';
 import '../../features/browse/application/category_warmup.dart';
 import '../../features/follow/application/settings_provider.dart';
 import '../../platforms/common/playback/window_presentation.dart';
+import '../../shared/presentation/tokens_override.dart';
 
 /// Windows 产品入口 app:ZishuTheme + go_router 路由 + 全局返回快捷键。
 ///
@@ -25,13 +26,24 @@ class WindowsApp extends ConsumerStatefulWidget {
 }
 
 class _WindowsAppState extends ConsumerState<WindowsApp> with WindowListener {
-
   /// 分类预热延迟触发器:dispose 时取消,避免测试环境留下 pending timer。
   Timer? _warmupTimer;
+
+  /// 外置主题色 token 热更订阅:override 文件变更 → 重载 → 换
+  /// ZishuTheme.tokens 并重建 MaterialApp(免重打包调样式;解析失败时
+  /// 监听器不发事件,界面保持现值,见 tokens_override.dart)。
+  StreamSubscription<ZishuTokenSet>? _tokensSub;
 
   @override
   void initState() {
     super.initState();
+    // 非 Windows / Web 没有 override 文件,start 内部静默跳过。
+    ZishuTokensReloader.instance.start();
+    _tokensSub = ZishuTokensReloader.instance.changes.listen((set) {
+      if (!mounted) return;
+      ZishuTheme.tokens = set;
+      setState(() {});
+    });
     // 非桌面 / 未初始化 window_manager(VM 单测)时,下列调用在
     // WindowPresentation 内部静默降级,不抛异常。
     windowManager.addListener(this);
@@ -56,12 +68,15 @@ class _WindowsAppState extends ConsumerState<WindowsApp> with WindowListener {
   void dispose() {
     windowManager.removeListener(this);
     _warmupTimer?.cancel();
+    _tokensSub?.cancel();
+    ZishuTokensReloader.instance.stop();
     super.dispose();
   }
 
   /// 窗口尺寸/位置/最大化落定 → 采集几何(主窗口 debounce 500ms 落盘)。
   @override
-  void onWindowResized() => WindowPresentation.instance.scheduleGeometryCapture();
+  void onWindowResized() =>
+      WindowPresentation.instance.scheduleGeometryCapture();
 
   @override
   void onWindowMoved() => WindowPresentation.instance.scheduleGeometryCapture();
@@ -80,7 +95,8 @@ class _WindowsAppState extends ConsumerState<WindowsApp> with WindowListener {
 
   /// 退出路径:把 debounce 未触发的最后一次几何立即落盘,避免关窗丢失。
   @override
-  void onWindowClose() => unawaited(WindowPresentation.instance.flushGeometry());
+  void onWindowClose() =>
+      unawaited(WindowPresentation.instance.flushGeometry());
 
   @override
   Widget build(BuildContext context) {
@@ -96,8 +112,10 @@ class _WindowsAppState extends ConsumerState<WindowsApp> with WindowListener {
       routerConfig: router,
       // 全局返回(鼠标侧键 / Alt+← / Ctrl+F 搜索):包在路由内容外侧,
       // 焦点无论落在路由 Scope 还是具体控件,本层恒在焦点祖先链上。
-      builder: (context, child) =>
-          AppNavShortcuts(router: router, child: child ?? const SizedBox.shrink()),
+      builder: (context, child) => AppNavShortcuts(
+        router: router,
+        child: child ?? const SizedBox.shrink(),
+      ),
     );
   }
 }

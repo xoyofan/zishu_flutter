@@ -2,10 +2,19 @@ import 'package:flutter/material.dart';
 
 import '../features/follow/application/settings_provider.dart';
 import '../shared/presentation/design_tokens.dart';
+import '../shared/presentation/tokens_override.dart';
 import '../shared/presentation/zishu_tokens.dart';
 
 /// 应用主题:SFVideoLive 深色基线(#181818 + #f3d04e),tokens 走 ThemeExtension。
 abstract final class ZishuTheme {
+  /// 当前生效的深浅两套 token。
+  ///
+  /// 默认为代码常量;`main()` 首帧前经外置链安装(外部 override → 打包
+  /// JSON → 代码常量),WindowsApp 订阅 override 文件变更后替换本值并重建
+  /// MaterialApp —— 样式免重打包热更的落点。治理口径见 tokens_override.dart:
+  /// 代码常量仍是唯一真源,外置 JSON 只是运行时叠加层。
+  static ZishuTokenSet tokens = ZishuTokenSet.codeDefaults;
+
   /// 设置里的主题模式选择 → Flutter [ThemeMode]。
   static ThemeMode modeOf(ThemeModeChoice choice) => switch (choice) {
     ThemeModeChoice.light => ThemeMode.light,
@@ -15,12 +24,12 @@ abstract final class ZishuTheme {
 
   static ThemeData dark() {
     final base = ThemeData(brightness: Brightness.dark, useMaterial3: true);
-    return _decorate(base, ZishuTokens.dark);
+    return _decorate(base, tokens.dark);
   }
 
   static ThemeData light() {
     final base = ThemeData(brightness: Brightness.light, useMaterial3: true);
-    return _decorate(base, ZishuTokens.light);
+    return _decorate(base, tokens.light);
   }
 
   static ThemeData _decorate(ThemeData base, ZishuTokens tokens) {
