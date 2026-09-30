@@ -9,6 +9,10 @@
 
 详细目录和依赖规则见 [`docs/architecture.md`](docs/architecture.md)，完整实施路线见 [`docs/implementation-plan.md`](docs/implementation-plan.md)。
 
+## 当前支持平台
+
+内置 10 个直播平台：**斗鱼、虎牙、B站、抖音、快手、YY、Twitch、SOOP、YouTube、小红书**，外加全平台聚合首页。各站按真实能力声明——搜索、弹幕等缺失项显示 N/A，不伪造入口。
+
 ## 截图
 
 | Windows 聚合首页（多平台 tabs + 分类抽屉 + 房间卡片网格） | Windows 播放页（Twitch 真实播放 + 聊天侧栏 + 控制条） |
@@ -46,9 +50,10 @@
 - 断流恢复：致命传输诊断 → re-resolve 换线/降档，死节点负缓存；切房统一 `room_release` 资源埋点（RSS/耗时）。
 - mpv 直播调优改为外部配置文件驱动。
 
-### 语音字幕（`packages/speech2zh`，纯 Dart）
+### 特色：语音字幕与自动翻译
 
-- 流式 ASR（sherpa-onnx 可插拔）+ 模型管理 + 分句翻译流水线；采集当前走 Windows WASAPI。
+- **语音字幕**（`packages/speech2zh`，纯 Dart）：完全本地的流式语音识别（sherpa-onnx zipformer int8，音频不上传），当前支持**英语、韩语**两路；模型管理器从 HuggingFace 单文件直链下载（国内可切镜像），音频采集当前走 Windows WASAPI。流水线为 采集 → 重采样 → 流式识别 → 分句 → 翻译 → 中文字幕段；**译文就绪才上屏**（翻译失败有限次重试后丢弃该句，不显示原文），并暴露识别/翻译/音频三类诊断回调。
+- **自动翻译**（中文化协调器，纯 Dart）：覆盖**房间标题、弹幕正文（聊天侧栏 + 飘屏）、语音字幕**三条线，统一译为中文。按假名/韩文/表意文字占比自动判断是否需要翻译（日韩文本必翻、中文与纯符号 emoji 跳过）；弹幕按文本段翻译、保留表情段，配 LRU 缓存 + 串行节流队列 + 失败即回退原文，UI 永不因翻译阻塞或报错。
 
 ### 测试与 CI
 
