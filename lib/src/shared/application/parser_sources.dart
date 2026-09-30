@@ -13,8 +13,13 @@ class ParserBrowseSource implements BrowseSource {
     SiteRegistry? registry,
     String douyinCookie = '',
     String xhsCookie = '',
+    String bilibiliCookie = '',
   }) : _registry = registry ??
-           buildSiteRegistry(douyinCookie: douyinCookie, xhsCookie: xhsCookie);
+           buildSiteRegistry(
+             douyinCookie: douyinCookie,
+             xhsCookie: xhsCookie,
+             bilibiliCookie: bilibiliCookie,
+           );
 
   final SiteRegistry _registry;
 
@@ -56,8 +61,13 @@ class ParserRoomSource
     SiteRegistry? registry,
     String douyinCookie = '',
     String xhsCookie = '',
+    String bilibiliCookie = '',
   }) : _registry = registry ??
-           buildSiteRegistry(douyinCookie: douyinCookie, xhsCookie: xhsCookie),
+           buildSiteRegistry(
+             douyinCookie: douyinCookie,
+             xhsCookie: xhsCookie,
+             bilibiliCookie: bilibiliCookie,
+           ),
        _douyinCookie = douyinCookie;
 
   final SiteRegistry _registry;

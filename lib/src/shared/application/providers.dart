@@ -29,7 +29,16 @@ final browseSourceProvider = Provider<BrowseSource>((ref) {
       (state) => state.credentialFor('xhs').value,
     ),
   );
-  return ParserBrowseSource(douyinCookie: douyinCookie, xhsCookie: xhsCookie);
+  final bilibiliCookie = ref.watch(
+    platformCredentialsProvider.select(
+      (state) => state.credentialFor('bilibili').value,
+    ),
+  );
+  return ParserBrowseSource(
+    douyinCookie: douyinCookie,
+    xhsCookie: xhsCookie,
+    bilibiliCookie: bilibiliCookie,
+  );
 });
 
 /// 房间解析数据源(播放页)。
@@ -45,7 +54,19 @@ final roomSourceProvider = Provider<RoomSource>((ref) {
       (state) => state.credentialFor('xhs').value,
     ),
   );
-  return ParserRoomSource(douyinCookie: douyinCookie, xhsCookie: xhsCookie);
+  // B 站登录 Cookie(凭证页粘贴,含 SESSDATA):解锁低清晰度档 ——
+  // 匿名请求 qn=80/150 都被服务器强制回落 250 超清(2026-09-29 实测),
+  // 劣化网络下超清码率(~312KB/s)超出可用带宽会反复 stall。
+  final bilibiliCookie = ref.watch(
+    platformCredentialsProvider.select(
+      (state) => state.credentialFor('bilibili').value,
+    ),
+  );
+  return ParserRoomSource(
+    douyinCookie: douyinCookie,
+    xhsCookie: xhsCookie,
+    bilibiliCookie: bilibiliCookie,
+  );
 });
 
 /// 房间状态刷新能力:真实解析源实现 [RoomRefresher] 时暴露;

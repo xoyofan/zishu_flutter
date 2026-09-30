@@ -75,11 +75,17 @@ Future<Object?> bilibiliFetchJson(
   }
 
   final buvid3 = await buvid3Future;
+  // Cookie 组装:登录串在前(用户浏览器同源 buvid3 等指纹随之生效,服务器
+  // 取首个同名项),匿名 buvid3 兜底在后;两者皆空则不带。
+  final cookieParts = [
+    if (credentials.loginCookie.isNotEmpty) credentials.loginCookie,
+    if (buvid3.isNotEmpty) 'buvid3=$buvid3',
+  ];
   final headers = <String, String>{
     ...kBilibiliPcHeaders,
     'Referer': roomId == null ? kBilibiliPcHeaders['Referer']! : 'https://live.bilibili.com/$roomId',
     'Origin': 'https://live.bilibili.com',
-    if (buvid3.isNotEmpty) 'Cookie': 'buvid3=$buvid3',
+    if (cookieParts.isNotEmpty) 'Cookie': cookieParts.join('; '),
   };
 
   final response = await http.get(effectiveUrl, headers: headers);
@@ -301,7 +307,10 @@ List<StreamLineDraft>? bilibiliTierLines(
   final flvCodecs = _listCodecsForFormat(data, 'http_stream', 'flv', preferQn: qn);
   var hlsCodecs = _listCodecsForFormat(data, 'http_hls', 'ts', preferQn: qn);
   if (hlsCodecs.isEmpty) {
-    hlsCodecs = _listCodecsForFormat(data, 'http_stream', 'fmp4', preferQn: qn);
+    // fmp4 挂在 http_hls 协议下(2026-09-29 对 getRoomPlayInfo 实测:
+    // http_stream/flv、http_hls/ts、http_hls/fmp4),此前误查
+    // ('http_stream','fmp4') 永远落空,只有 fmp4 的房间会丢线路。
+    hlsCodecs = _listCodecsForFormat(data, 'http_hls', 'fmp4', preferQn: qn);
   }
   final lines = [..._linesFromCodecs(hlsCodecs, 'hls'), ..._linesFromCodecs(flvCodecs, 'flv')];
   return lines.isEmpty ? null : lines;
@@ -324,6 +333,26 @@ int bilibiliCurrentQn(Map<String, dynamic>? data) {
     }
   }
   return 0;
+}
+
+/// 响应内**所有** codec 实给档的最低值(worst/lowest 专用)。
+///
+/// 登录态下请求 qn=80,服务器可能对不同 codec 下发不同档(2026-09-29
+/// 实测 SESSDATA 登录:{250,150} 混合):`bilibiliCurrentQn` 取首个会拿到
+/// 高档,低码率流在 fmp4/hevc 等"靠后的 codec"里,最低值才能命中。
+int bilibiliLowestCurrentQn(Map<String, dynamic>? data) {
+  final playurl = jsonMapOf(jsonMapOf(data?['playurl_info'])['playurl']);
+  final streams = jsonListOf(playurl['stream']).whereType<Map<String, dynamic>>();
+  var lowest = 0;
+  for (final stream in streams) {
+    for (final format in jsonListOf(stream['format']).whereType<Map<String, dynamic>>()) {
+      for (final codec in jsonListOf(format['codec']).whereType<Map<String, dynamic>>()) {
+        final qn = _intOf(codec['current_qn']);
+        if (qn > 0 && (lowest == 0 || qn < lowest)) lowest = qn;
+      }
+    }
+  }
+  return lowest;
 }
 
 /// accept_qn ∩ 官方档位表(保持官网顺序)。

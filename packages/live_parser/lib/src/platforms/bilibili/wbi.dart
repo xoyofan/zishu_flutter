@@ -59,6 +59,12 @@ class BilibiliCredentials {
   String? _buvid3;
   DateTime? _buvidAt;
 
+  /// 登录 Cookie 整串(凭证页粘贴,核心是 SESSDATA)。空串 = 匿名。
+  /// 由 [BilibiliClient] 构造时注入;请求头在 bilibiliFetchJson 里与匿名
+  /// buvid3 合并(不能塞 ParserHttp 默认头:每次请求的 `Cookie: buvid3=…`
+  /// 会整键覆盖默认头,登录态就丢了)。
+  String loginCookie = '';
+
   String? peekMixinKey() => _valid(_mixinKey, _mixinKeyAt, _keysTtl);
   String? peekBuvid3() => _valid(_buvid3, _buvidAt, _buvidTtl);
 

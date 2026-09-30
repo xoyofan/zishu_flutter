@@ -41,10 +41,14 @@ class BilibiliClient {
          client: httpClient,
          defaultHeaders: {
            'Referer': 'https://live.bilibili.com/',
-           if (cookie != null && cookie.isNotEmpty) 'Cookie': cookie,
          },
        ),
-       credentials = credentials ?? BilibiliCredentials();
+       credentials = credentials ?? BilibiliCredentials() {
+    // 登录态注入 credentials(而非默认请求头):bilibiliFetchJson 每次都会
+    // 递 `Cookie: buvid3=…`,默认头会被整键覆盖,合并只能发生在请求组装处。
+    final login = cookie?.trim() ?? '';
+    this.credentials.loginCookie = login;
+  }
 
   final ParserHttp parserHttp;
   final BilibiliCredentials credentials;
@@ -191,11 +195,19 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
         : null;
     // 懒取流:偏好档(设置里的默认画质,经档位表映射成 qn)直接作为请求
     // 参数,进房即取目标档;匹配不到档位表时回退 10000(原画)。
-    final preferredRequestQn = matchQualityPreference(
-      kBilibiliQnTiers,
-      request.preferredQuality,
-      (tier) => tier.name,
-    )?.qn;
+    // `worst`/`lowest`(启动参数 --quality 的特殊值,见 app 侧
+    // StartupRoute.worstQualityFlags)映射到官方最低档(流畅 80):按名
+    // 匹配永远命中不了,此前静默回退原画,最低清晰度口径在请求层失效
+    // (2026-09-29 斗鱼劣网测试发现)。
+    final preferredName = request.preferredQuality?.trim().toLowerCase() ?? '';
+    final isWorstFlag = preferredName == 'worst' || preferredName == 'lowest';
+    final preferredRequestQn = isWorstFlag
+        ? kBilibiliQnTiers.last.qn
+        : matchQualityPreference(
+                kBilibiliQnTiers,
+                request.preferredQuality,
+                (tier) => tier.name,
+              )?.qn;
     final Future<Map<String, dynamic>>? playFuture = isLive
         ? fetchBilibiliRoomPlayInfo(
             http,
@@ -227,7 +239,28 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
       return _payload(base, isReplay ? RoomState.replay : RoomState.offline);
     }
 
-    final data = await playFuture!;
+    var data = await playFuture!;
+    // worst/lowest 二跳(2026-09-29):请求 qn=80 时,若房间 accept_qn 最低档
+    // 高于 80(如 room 6 最低 150 高清),服务器会回落给中间档(实测给 250
+    // 超清)而非最低档 —— 劣化网络下白背码率。这里用首响应的 accept_qn
+    // 求服务端真实最低档,若实给档高于它,再请求一次把流降到最低。
+    if (isWorstFlag) {
+      final available = bilibiliAvailableQualities(data);
+      final lowestQn = available.isEmpty ? null : available.last.qn;
+      final currentQn = bilibiliCurrentQn(data);
+      if (lowestQn != null && currentQn > lowestQn) {
+        try {
+          data = await fetchBilibiliRoomPlayInfo(
+            http,
+            credentials,
+            rid,
+            qn: lowestQn,
+          );
+        } on Object {
+          // 二跳失败沿用首响应:流地址仍然可播,只是档位偏高。
+        }
+      }
+    }
     final qualities = bilibiliAvailableQualities(data);
     if (qualities.isEmpty) {
       throw const ParserHttpException('未获取到可播放的 B 站流地址');
@@ -239,7 +272,12 @@ class BilibiliRoomResolver implements RoomResolver, RoomSummaryRefresher {
     // 相同,切档无效果。现在真实线路只挂服务器实给档(current_qn,可能
     // 因登录态低于请求 qn),其余档位以空线路占位供菜单列出;用户切档时
     // 由播放侧带新的 preferredQuality 重新解析取流。
-    final actualQn = bilibiliCurrentQn(data);
+    final actualQn = isWorstFlag
+        // 登录态下 worst 二跳后,响应里 codec 可能混档(2026-09-29 实测
+        // SESSDATA 登录请求 qn=80 返回 {250,150}):取实给档中最低的,
+        // 才能真拿到低码率流;非 worst 路径维持"首个 codec"口径。
+        ? bilibiliLowestCurrentQn(data)
+        : bilibiliCurrentQn(data);
     final realTier = qualities.firstWhere(
       (quality) => quality.qn == actualQn,
       orElse: () => matchQualityPreference(qualities, request.preferredQuality,

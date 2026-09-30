@@ -26,6 +26,7 @@ import '../platforms/yy/yy_site.dart';
 SiteRegistry buildSiteRegistry({
   String douyinCookie = '',
   String xhsCookie = '',
+  String bilibiliCookie = '',
   http.Client? douyinHttpClient,
   http.Client? xhsHttpClient,
 }) {
@@ -37,7 +38,10 @@ SiteRegistry buildSiteRegistry({
   final xhsClient = XhsClient(httpClient: xhsHttpClient, credential: xhsCookie);
   registry.register(buildDouyuRegistration());
   registry.register(buildHuyaRegistration());
-  registry.register(buildBilibiliRegistration());
+  // B 站登录 Cookie(凭证页粘贴,核心是 SESSDATA):解锁匿名拿不到的低档
+  // (2026-09-29 实测:匿名 qn=80/150 请求均被服务器强制回落 250 超清;
+  // 登录后可拿 150 高清/80 流畅,劣化网络下低码率档才播得动)。
+  registry.register(buildBilibiliRegistration(cookie: bilibiliCookie));
   registry.register(buildTwitchRegistration());
   registry.register(buildYyRegistration());
   registry.register(buildSoopRegistration());
