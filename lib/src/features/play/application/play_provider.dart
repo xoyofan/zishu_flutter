@@ -17,6 +17,7 @@ import '../../../platforms/common/playback/playback_retry.dart';
 import '../../../platforms/common/playback/playback_log.dart';
 import '../../../shared/application/browse_source.dart';
 import '../../../shared/application/providers.dart';
+import '../../../app/app_router.dart';
 import '../../follow/application/settings_provider.dart';
 import 'host_avoidlist.dart';
 import 'play_selection.dart';
@@ -257,19 +258,54 @@ class PlayController extends AsyncNotifier<PlayState> {
     final preferredFormat = ref.watch(
       settingsProvider.select((settings) => settings.preferredLineFormat.value),
     );
-    final preferredQuality = _qualityOverride ?? settingsQuality;
+    final preferredQuality =
+        _qualityOverride ??
+        StartupRoute.qualityOverride ??
+        settingsQuality;
     final resolveWatch = Stopwatch()..start();
-    final payload = await source.resolveRoom(
-      site: params.site,
-      roomIdOrUrl: params.roomId,
-      preferredQuality: preferredQuality,
-    );
+    // 整链截止(2026-09-29 斗鱼网络故障实测):半开连接(TCP 通、响应永不到)
+    // 下单请求超时可能不触发,build 会无限 await —— 页面既不出错也不重试,
+    // 表现为"冻住"。45s 上限兜底:超时按解析失败处理,回到错误/重试路径,
+    // 重试循环得以在网络恢复前持续存活。解析包内部超时不受影响,先到先抛。
+    final RoomPayload payload;
+    try {
+      payload = await source
+          .resolveRoom(
+            site: params.site,
+            roomIdOrUrl: params.roomId,
+            preferredQuality: preferredQuality,
+          )
+          .timeout(const Duration(seconds: 45));
+    } catch (error) {
+      PlaybackLog.write('resolve_fail', {
+        'site': params.site,
+        'room': params.roomId,
+        'reason': error is TimeoutException ? 'deadline_45s' : '$error',
+      });
+      // 解析失败自动重试(2026-09-29 斗鱼故障期实测):此前重试由间接触发,
+      // 会静默停摆 —— 页面停在错误态直到用户手动刷新,「网络恢复自动起播」
+      // 不可达。这里失败后自排 20s 重试(代际守卫:被新指令顶掉即让位),
+      // 与既有自动重连节奏一致;错误卡片 UI 照常展示。
+      unawaited(
+        Future<void>.delayed(const Duration(seconds: 20)).then((_) {
+          if (ref.mounted && generation == _generation) ref.invalidateSelf();
+        }),
+      );
+      rethrow;
+    }
     resolveWatch.stop();
     // 进房解析耗时落盘:此前只有失败才有日志,"打开慢"缺的正是这段度量。
+    // qualities 顺带落档位清单(2026-09-29):控制栏画质菜单渲染
+    // availableQualities,巡检不截屏也能从日志核对"多档是否解析出来"
+    // (B 站中小房常只有原画单档,是服务端事实,不是解析缺档)。
     PlaybackLog.write('resolve_ms', {
       'ms': resolveWatch.elapsedMilliseconds,
       'site': params.site,
       'room': params.roomId,
+      'qualities': [
+        for (final option in payload.availableQualities) option.name,
+      ].join(','),
+      'streams': payload.streams.length,
     });
 
     // generation fence:等待期间出现了更新的代际(retry 等),丢弃本次结果。
@@ -713,10 +749,27 @@ class PlayController extends AsyncNotifier<PlayState> {
   /// (懒取流:解析侧只给实给档真实线路,其余档位占位;或服务器把高请求
   /// 档降级到低档)时,回退首个有线路的档 —— 选中占位档会让 line=null,
   /// 进房黑屏且不触发懒取流。pure_live「没有才退」同口径。
+  ///
+  /// 偏好值为 worst/lowest(`--quality worst`,见 [StartupRoute.worstQualityFlags])
+  /// 时改为挑**最低码率的可播档**(rate 升序、须有线路;rate 同分取靠后 ——
+  /// 平台档位列表习惯高→低排,同 rate 视为并列低档):劣化网络下低码率流
+  /// 更容易存活(2026-09-29 斗鱼 9999 实测口径)。
   StreamQuality? _pickPlayableQuality(
     RoomPayload payload,
     String? preferredName,
   ) {
+    if (preferredName != null &&
+        StartupRoute.worstQualityFlags.contains(preferredName.toLowerCase())) {
+      final playable = payload.streams
+          .where((stream) => stream.lines.isNotEmpty)
+          .toList();
+      if (playable.isEmpty) return null;
+      playable.sort((a, b) {
+        final byRate = a.rate.compareTo(b.rate);
+        return byRate != 0 ? byRate : b.name.compareTo(a.name);
+      });
+      return playable.first;
+    }
     final selected = pickPlayQuality(payload, preferredName);
     if (selected == null || selected.lines.isNotEmpty) return selected;
     return payload.streams.firstWhere(

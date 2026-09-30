@@ -155,7 +155,7 @@ class PlaybackLog {
           'open_to_first_frame', 'video_state', 'video_params',
           'video_stability', 'video_stability_error', 'video_hwdec',
           'video_hwdec_error', 'video_kick', 'time_pos_regression',
-          'transport_flap', 'health_reset',
+          'transport_flap', 'health_reset', 'video_black_frames',
         ])
           e: 'stream',
         // mpv 原始/诊断日志。

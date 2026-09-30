@@ -112,9 +112,20 @@ class _WindowsAppState extends ConsumerState<WindowsApp> with WindowListener {
       routerConfig: router,
       // 全局返回(鼠标侧键 / Alt+← / Ctrl+F 搜索):包在路由内容外侧,
       // 焦点无论落在路由 Scope 还是具体控件,本层恒在焦点祖先链上。
-      builder: (context, child) => AppNavShortcuts(
-        router: router,
-        child: child ?? const SizedBox.shrink(),
+      //
+      // ExcludeSemantics(全树语义豁免):引擎已知 bug规避,见
+      // flutter/flutter#175041(同 #192689):UIA 客户端接入(本机为终端安全
+      // DLP 的屏幕内容采集)激活语义树后,树内"移除/重挂节点"差分在
+      // AccessibilityBridge::CreateRemoveReparentedNodesUpdate 踩空节点,
+      // 0xC0000005 读 null+0x48 —— 本机 2026-09-29 实测启动 4~6s 内必崩
+      // (2026-09-28 17:15 起的崩溃风暴同源,旧版 v1.0.2 UI 树不触发此差分
+      // 故存活)。语义树保持空,引擎差分无节点可走,崩溃路径消除;代价是
+      // 屏幕阅读器支持(直播客户端场景可接受)。引擎修复后可移除。
+      builder: (context, child) => ExcludeSemantics(
+        child: AppNavShortcuts(
+          router: router,
+          child: child ?? const SizedBox.shrink(),
+        ),
       ),
     );
   }

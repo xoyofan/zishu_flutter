@@ -84,9 +84,13 @@ class MediaKitLivePlayer
            // **warn 级(传输层 reconnect / hls 分段 404 / Connection reset 等
            // 自愈消息所在级别)根本不会发出**。提到 warn 让 stream.log 能
            // 观测到传输层自愈行为(见 [_wire] 的 mpv_log 落盘)。
+           // 2026-09-29 再提到 info:黑帧埋点(lavfi blackdetect 过滤器,经
+           // mpv_tuning.json 注入 vf)的检测报告在 info 级;info 生成噪音由
+           // 调优表 msg-level=all=warn 在 mpv 侧截住,lavfi 单独放行,IPC
+           // 实际增量≈0;Dart 侧仅识别 blackdetect 报告行,其余 info 丢弃。
            Player(
              configuration: const PlayerConfiguration(
-               logLevel: MPVLogLevel.warn,
+               logLevel: MPVLogLevel.info,
              ),
            ),
        _adFilter = adFilter ?? TwitchAdFilter() {
@@ -360,7 +364,18 @@ class MediaKitLivePlayer
     // <offset>" 的偏移不前进、重发旧数据把 FLV 时间戳打回跳,即用户看到的
     // "重复播放"循环。pure_live 不开这层:坏流让 ffmpeg 立即报错上抛,由
     // 上层**有界**看门狗(退避 + 上限 + 健康窗)收敛,坏连接绝不赖在原地。
+    // 日志噪音闸门(与播放器 logLevel=info 配套):mpv 侧只生成 warn 及以上,
+    // lavfi(blackdetect 黑帧埋点所在模块)单独放行到 info —— 不设它,info
+    // 订阅会把 demuxer/decoder 的 info 级闲话全部灌进 IPC。纯观测闸门,不影响
+    // 功能性事件(events.error 级别高于 warn,照常发出)。
+    ('msg-level', 'all=warn,lavfi=info'),
   ];
+
+  /// blackdetect 检测报告行的解析式(见 [_wire] 中 info 级日志分支)。
+  static final RegExp blackDetectPattern = RegExp(
+    r'black_start:(\d+(?:\.\d+)?)\s+black_end:(\d+(?:\.\d+)?)\s+'
+    r'black_duration:(\d+(?:\.\d+)?)',
+  );
 
   /// 恢复重解析的节流策略:避免"重试→恢复→重试"高速空转。
   late final PlaybackRecoveryPolicy _recoveryPolicy;
@@ -590,6 +605,25 @@ class MediaKitLivePlayer
     // 连续重复去重(同 prefix+text),防同一瞬断反复重连把日志刷成噪音。
     _subscriptions.add(
       _player.stream.log.listen((entry) {
+        // 黑帧埋点(2026-09-29):lavfi blackdetect 过滤器(vf 经
+        // mpv_tuning.json 注入,默认未注入)在 info 级吐检测报告,格式
+        // `black_start:<s> black_end:<s> black_duration:<s>`。命中即落
+        // video_black_frames —— 用户口中的"部分画面帧黑屏"此前无任何
+        // 一手观测,靠它把黑屏归因到流内容(报告段)而不是猜测。报告在
+        // 黑段**结束**时发出(过滤器机制),仍黑着的画面要等恢复后才见行。
+        // 其余 info 级行一概丢弃(订阅提到 info 纯为这一路)。
+        if (entry.level == 'info') {
+          final black = blackDetectPattern.firstMatch(entry.text);
+          if (black != null) {
+            PlaybackLog.write('video_black_frames', {
+              'host': _currentHost,
+              'start_s': black.group(1),
+              'end_s': black.group(2),
+              'duration_s': black.group(3),
+            });
+          }
+          return;
+        }
         if (entry.level != 'warn') return;
         // 「对端已死」传输层证据优先于去重/落盘:warn 流不走 events.error,
         // 不在此探测则 TLS reset 这类节点死亡信号完全进不了恢复决策
@@ -1008,6 +1042,17 @@ class MediaKitLivePlayer
         platform.getProperty('vo-delayed-frame-count'),
         platform.getProperty('video-codec'),
         platform.getProperty('hwdec-current'),
+        platform.getProperty('video-bitrate'),
+        // 状态判别组(2026-09-29):此前 159 条采样 12 属性全空(media_kit
+        // getProperty 属性不可用返回 ''),无法区分「在播但属性缺失」与
+        // 「根本没进 demux/没加载文件」。这 5 项任何时候都可用,能定位空值
+        // 属于哪种:path 空=open 没到 mpv;idle-active=yes=无文件;
+        // core-idle=yes+path 有值=连上了但没在播(饿死在 demux 前)。
+        platform.getProperty('path'),
+        platform.getProperty('idle-active'),
+        platform.getProperty('core-idle'),
+        platform.getProperty('paused'),
+        platform.getProperty('demuxer-via-network'),
       ]);
       if (_disposed || generation != _sourceGeneration) return;
       PlaybackLog.write('video_stability', {
@@ -1023,6 +1068,15 @@ class MediaKitLivePlayer
         'vo_delayed_frames': values[8],
         'video_codec': values[9],
         'hwdec_current': values[10],
+        // 视频码率(kbps):黑帧/冻结帧的伴生信号 —— 音频正常、连接活着,
+        // 码率塌到 0 附近即"在播但画面没内容",与 blackdetect 报告互为印证
+        // (blackdetect 只报纯黑帧,码率低但不为零的灰帧/重复帧靠它兜住)。
+        'video_bitrate': values[11],
+        'path': _clamp(values[12]),
+        'idle_active': values[13],
+        'core_idle': values[14],
+        'paused': values[15],
+        'via_network': values[16],
         'rss_mb': (ProcessInfo.currentRss / 1024 / 1024).toStringAsFixed(1),
       });
     } catch (error) {

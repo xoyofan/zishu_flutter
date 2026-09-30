@@ -14,6 +14,8 @@
 /// 探测逻辑归宿主(app 启动时读环境变量/Windows 系统代理),解析包只消费配置。
 library;
 
+import 'dart:io';
+
 class UpstreamProxy {
   const UpstreamProxy._();
 
@@ -59,14 +61,24 @@ class UpstreamProxy {
   static bool get enabled => _hostPort != null;
 
   /// 该主机是否需要走代理。未收录 = 直连(国内站点的默认路径)。
+  ///
+  /// [LIVE_PROXY_ALL]=1 时全站走代理(含国内站):供「直连路径劣化」的
+  /// 网络救急 —— 本机 2026-09-29 实测:Clash TUN 直连路到斗鱼/虎牙/抖音
+  /// 全部停滞(TCP 通、首字节永不到),而同一 Clash 的 HTTP 代理口
+  /// (127.0.0.1:7897)全部正常。此类网络下国内站也必须走代理。
   static bool needsProxy(String host) {
     if (_hostPort == null) return false;
+    if (_proxyAllHosts) return true;
     final normalized = host.toLowerCase();
     for (final suffix in proxyHostSuffixes) {
       if (normalized == suffix || normalized.endsWith('.$suffix')) return true;
     }
     return false;
   }
+
+  /// 进程级「全站走代理」开关(env `LIVE_PROXY_ALL=1`)。
+  static final bool _proxyAllHosts =
+      Platform.environment['LIVE_PROXY_ALL'] == '1';
 
   /// `HttpClient.findProxy` 的返回值:`PROXY host:port` 或 `DIRECT`。
   static String findProxyFor(Uri uri) =>

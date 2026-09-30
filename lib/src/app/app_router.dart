@@ -37,7 +37,22 @@ import 'app_version.dart';
 class StartupRoute {
   static String value = '/all';
 
+  /// `worst`/`lowest` 档位偏好标记([qualityOverride] 的特殊值,见
+  /// play_provider 的 [_pickPlayableQuality] 消费端)。
+  static const List<String> worstQualityFlags = ['worst', 'lowest'];
+
+  /// `--quality <值>` 启动画质偏好(真机自动化验证用):
+  /// - 档位名(如 `--quality 流畅`):按名匹配平台原生档;
+  /// - `worst`/`lowest`:自动挑**最低码率的可播档** —— 劣化网络下低码率流
+  ///   更容易活(2026-09-29 斗鱼测试口径)。普通启动为 null,行为不变;
+  ///   优先级低于用户在播放页手动切的档([_qualityOverride])。
+  static String? qualityOverride;
+
   static void configure(List<String> args) {
+    qualityOverride = _flag(args, '--quality')?.trim();
+    if (qualityOverride != null && qualityOverride!.isEmpty) {
+      qualityOverride = null;
+    }
     final route = _flag(args, '--route');
     if (route != null && route.startsWith('/')) {
       value = route;
