@@ -41,6 +41,13 @@
 ///
 /// 分工不变:Esc 仍由播放页自行分派(退全屏 / 画中画),Space/M/F/W 同理,
 /// 此处不抢。
+///
+/// **Windows runner 兜底通道**:鼠标手势软件模拟的 Alt+←/→/Home 到不了
+/// framework 快捷键层(引擎会剥离合成注入的 Alt 修饰,PostMessage 直投顶层
+/// 甚至不派发;定性实验见 nav_syskey_channel.dart)。runner 在消息层识别
+/// `KF_ALTDOWN`+方向键后经 `zishu/windows/nav_syskey` 直发本类同款动作,
+/// 并消费原始消息 —— Windows 上 Alt 导航实际走该单路径,下方 SingleActivator
+/// 保留作兼容兜底(测试宿主/其它平台)。
 library;
 
 import 'package:flutter/gestures.dart'
@@ -49,6 +56,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
+import '../platforms/windows/nav_syskey_channel.dart' as nav_syskey;
 import '../shared/application/global_actions.dart';
 
 /// 应用级浏览器式导航历史(后退/前进双栈)。
@@ -200,14 +208,23 @@ class AppNavShortcuts extends StatefulWidget {
 }
 
 class _AppNavShortcutsState extends State<AppNavShortcuts> {
+  /// runner 层 Alt+导航键兜底通道的清理函数(见 nav_syskey_channel.dart)。
+  VoidCallback? _navSyskeyCleanup;
+
   @override
   void initState() {
     super.initState();
     AppNavHistory.instance.attach(widget.router);
+    _navSyskeyCleanup = nav_syskey.installNavSyskeyChannel(
+      onBack: _back,
+      onForward: _forward,
+      onHome: _home,
+    );
   }
 
   @override
   void dispose() {
+    _navSyskeyCleanup?.call();
     AppNavHistory.instance.detach();
     super.dispose();
   }
